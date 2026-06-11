@@ -1,8 +1,11 @@
 import { Outlet, createRootRoute } from "@tanstack/react-router";
+import { HullBreach, WarpingIn } from "@/shell/SystemStates";
 
 export const Route = createRootRoute({
   component: RootLayout,
   notFoundComponent: LostDimension,
+  errorComponent: ({ error, reset }) => <HullBreach error={error} reset={reset} />,
+  pendingComponent: WarpingIn,
 });
 
 function RootLayout() {

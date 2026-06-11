@@ -9,50 +9,267 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppRouteImport } from './routes/_app'
+import { Route as AppIndexRouteImport } from './routes/_app/index'
+import { Route as DevHyperkitRouteImport } from './routes/dev/hyperkit'
+import { Route as AppVaultRouteImport } from './routes/_app/vault'
+import { Route as AppUplinkRouteImport } from './routes/_app/uplink'
+import { Route as AppTransmissionsRouteImport } from './routes/_app/transmissions'
+import { Route as AppSettingsRouteImport } from './routes/_app/settings'
+import { Route as AppPortalsRouteImport } from './routes/_app/portals'
+import { Route as AppEchoesRouteImport } from './routes/_app/echoes'
+import { Route as AppContinuumRouteImport } from './routes/_app/continuum'
+import { Route as AppComposeRouteImport } from './routes/_app/compose'
 
-const IndexRoute = IndexRouteImport.update({
+const AppRoute = AppRouteImport.update({
+  id: '/_app',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AppRoute,
+} as any)
+const DevHyperkitRoute = DevHyperkitRouteImport.update({
+  id: '/dev/hyperkit',
+  path: '/dev/hyperkit',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AppVaultRoute = AppVaultRouteImport.update({
+  id: '/vault',
+  path: '/vault',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppUplinkRoute = AppUplinkRouteImport.update({
+  id: '/uplink',
+  path: '/uplink',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppTransmissionsRoute = AppTransmissionsRouteImport.update({
+  id: '/transmissions',
+  path: '/transmissions',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSettingsRoute = AppSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPortalsRoute = AppPortalsRouteImport.update({
+  id: '/portals',
+  path: '/portals',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppEchoesRoute = AppEchoesRouteImport.update({
+  id: '/echoes',
+  path: '/echoes',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppContinuumRoute = AppContinuumRouteImport.update({
+  id: '/continuum',
+  path: '/continuum',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppComposeRoute = AppComposeRouteImport.update({
+  id: '/compose',
+  path: '/compose',
+  getParentRoute: () => AppRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
+  '/': typeof AppIndexRoute
+  '/compose': typeof AppComposeRoute
+  '/continuum': typeof AppContinuumRoute
+  '/echoes': typeof AppEchoesRoute
+  '/portals': typeof AppPortalsRoute
+  '/settings': typeof AppSettingsRoute
+  '/transmissions': typeof AppTransmissionsRoute
+  '/uplink': typeof AppUplinkRoute
+  '/vault': typeof AppVaultRoute
+  '/dev/hyperkit': typeof DevHyperkitRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
+  '/compose': typeof AppComposeRoute
+  '/continuum': typeof AppContinuumRoute
+  '/echoes': typeof AppEchoesRoute
+  '/portals': typeof AppPortalsRoute
+  '/settings': typeof AppSettingsRoute
+  '/transmissions': typeof AppTransmissionsRoute
+  '/uplink': typeof AppUplinkRoute
+  '/vault': typeof AppVaultRoute
+  '/dev/hyperkit': typeof DevHyperkitRoute
+  '/': typeof AppIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
+  '/_app': typeof AppRouteWithChildren
+  '/_app/compose': typeof AppComposeRoute
+  '/_app/continuum': typeof AppContinuumRoute
+  '/_app/echoes': typeof AppEchoesRoute
+  '/_app/portals': typeof AppPortalsRoute
+  '/_app/settings': typeof AppSettingsRoute
+  '/_app/transmissions': typeof AppTransmissionsRoute
+  '/_app/uplink': typeof AppUplinkRoute
+  '/_app/vault': typeof AppVaultRoute
+  '/dev/hyperkit': typeof DevHyperkitRoute
+  '/_app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/compose'
+    | '/continuum'
+    | '/echoes'
+    | '/portals'
+    | '/settings'
+    | '/transmissions'
+    | '/uplink'
+    | '/vault'
+    | '/dev/hyperkit'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/compose'
+    | '/continuum'
+    | '/echoes'
+    | '/portals'
+    | '/settings'
+    | '/transmissions'
+    | '/uplink'
+    | '/vault'
+    | '/dev/hyperkit'
+    | '/'
+  id:
+    | '__root__'
+    | '/_app'
+    | '/_app/compose'
+    | '/_app/continuum'
+    | '/_app/echoes'
+    | '/_app/portals'
+    | '/_app/settings'
+    | '/_app/transmissions'
+    | '/_app/uplink'
+    | '/_app/vault'
+    | '/dev/hyperkit'
+    | '/_app/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
+  AppRoute: typeof AppRouteWithChildren
+  DevHyperkitRoute: typeof DevHyperkitRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
+    '/_app': {
+      id: '/_app'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_app/': {
+      id: '/_app/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+      preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/dev/hyperkit': {
+      id: '/dev/hyperkit'
+      path: '/dev/hyperkit'
+      fullPath: '/dev/hyperkit'
+      preLoaderRoute: typeof DevHyperkitRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_app/vault': {
+      id: '/_app/vault'
+      path: '/vault'
+      fullPath: '/vault'
+      preLoaderRoute: typeof AppVaultRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/uplink': {
+      id: '/_app/uplink'
+      path: '/uplink'
+      fullPath: '/uplink'
+      preLoaderRoute: typeof AppUplinkRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/transmissions': {
+      id: '/_app/transmissions'
+      path: '/transmissions'
+      fullPath: '/transmissions'
+      preLoaderRoute: typeof AppTransmissionsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/settings': {
+      id: '/_app/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AppSettingsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/portals': {
+      id: '/_app/portals'
+      path: '/portals'
+      fullPath: '/portals'
+      preLoaderRoute: typeof AppPortalsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/echoes': {
+      id: '/_app/echoes'
+      path: '/echoes'
+      fullPath: '/echoes'
+      preLoaderRoute: typeof AppEchoesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/continuum': {
+      id: '/_app/continuum'
+      path: '/continuum'
+      fullPath: '/continuum'
+      preLoaderRoute: typeof AppContinuumRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/compose': {
+      id: '/_app/compose'
+      path: '/compose'
+      fullPath: '/compose'
+      preLoaderRoute: typeof AppComposeRouteImport
+      parentRoute: typeof AppRoute
     }
   }
 }
 
+interface AppRouteChildren {
+  AppComposeRoute: typeof AppComposeRoute
+  AppContinuumRoute: typeof AppContinuumRoute
+  AppEchoesRoute: typeof AppEchoesRoute
+  AppPortalsRoute: typeof AppPortalsRoute
+  AppSettingsRoute: typeof AppSettingsRoute
+  AppTransmissionsRoute: typeof AppTransmissionsRoute
+  AppUplinkRoute: typeof AppUplinkRoute
+  AppVaultRoute: typeof AppVaultRoute
+  AppIndexRoute: typeof AppIndexRoute
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppComposeRoute: AppComposeRoute,
+  AppContinuumRoute: AppContinuumRoute,
+  AppEchoesRoute: AppEchoesRoute,
+  AppPortalsRoute: AppPortalsRoute,
+  AppSettingsRoute: AppSettingsRoute,
+  AppTransmissionsRoute: AppTransmissionsRoute,
+  AppUplinkRoute: AppUplinkRoute,
+  AppVaultRoute: AppVaultRoute,
+  AppIndexRoute: AppIndexRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
+  AppRoute: AppRouteWithChildren,
+  DevHyperkitRoute: DevHyperkitRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

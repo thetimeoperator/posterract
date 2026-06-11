@@ -1,5 +1,9 @@
 @import "tailwindcss";
 @import "@posterract/hyperkit/tokens.css";
+@import "@posterract/hyperkit/hyperkit.css";
+
+/* Let Tailwind scan hyperkit component sources for utility classes */
+@source "../../../../packages/hyperkit/src";
 
 /* Map Hyperkit tokens into Tailwind v4 theme so utilities exist
    (bg-void-1, text-starlight, font-display, shadow-glow-cyan-md, ...). */

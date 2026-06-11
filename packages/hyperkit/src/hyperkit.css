@@ -1,0 +1,293 @@
+/**
+ * Hyperkit effects — keyframes and compound effects that utility classes
+ * can't express. Everything respects prefers-reduced-motion via app-level
+ * global rule.
+ */
+
+/* ── Holo shimmer sweep (cards, buttons on hover) ─────────────────── */
+.hk-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.hk-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    115deg,
+    transparent 30%,
+    rgba(94, 242, 255, 0.06) 42%,
+    rgba(139, 92, 246, 0.1) 50%,
+    rgba(255, 78, 205, 0.06) 58%,
+    transparent 70%
+  );
+  transform: translateX(-120%);
+  pointer-events: none;
+}
+.hk-shimmer:hover::after {
+  transition: transform 600ms var(--ease-warp);
+  transform: translateX(120%);
+}
+
+/* ── Corner brackets (panel HUD heritage) ─────────────────────────── */
+.hk-brackets {
+  position: relative;
+}
+.hk-brackets::before,
+.hk-brackets::after,
+.hk-brackets > .hk-bracket-b::before,
+.hk-brackets > .hk-bracket-b::after {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-color: var(--glass-border-bright);
+  border-style: solid;
+  pointer-events: none;
+}
+.hk-brackets::before {
+  top: -1px;
+  left: -1px;
+  border-width: 1.5px 0 0 1.5px;
+  border-top-left-radius: 6px;
+}
+.hk-brackets::after {
+  top: -1px;
+  right: -1px;
+  border-width: 1.5px 1.5px 0 0;
+  border-top-right-radius: 6px;
+}
+.hk-brackets > .hk-bracket-b::before {
+  bottom: -1px;
+  left: -1px;
+  border-width: 0 0 1.5px 1.5px;
+  border-bottom-left-radius: 6px;
+}
+.hk-brackets > .hk-bracket-b::after {
+  bottom: -1px;
+  right: -1px;
+  border-width: 0 1.5px 1.5px 0;
+  border-bottom-right-radius: 6px;
+}
+
+/* ── Charge sweep (primary button press) ──────────────────────────── */
+@keyframes hk-charge {
+  from {
+    transform: translateX(-110%) skewX(-12deg);
+  }
+  to {
+    transform: translateX(220%) skewX(-12deg);
+  }
+}
+.hk-charge {
+  position: relative;
+  overflow: hidden;
+}
+.hk-charge::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 45%;
+  background: linear-gradient(90deg, transparent, rgba(94, 242, 255, 0.25), transparent);
+  transform: translateX(-110%) skewX(-12deg);
+  pointer-events: none;
+}
+.hk-charge:active::before {
+  animation: hk-charge 250ms var(--ease-warp);
+}
+
+/* ── Orbiting dot (loading) ───────────────────────────────────────── */
+@keyframes hk-orbit {
+  from {
+    transform: rotate(0deg) translateX(7px) rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg) translateX(7px) rotate(-360deg);
+  }
+}
+.hk-orbit-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: currentColor;
+  animation: hk-orbit 900ms linear infinite;
+}
+
+/* ── Skeleton starlight sweep ─────────────────────────────────────── */
+@keyframes hk-skeleton {
+  from {
+    background-position: -200% 0;
+  }
+  to {
+    background-position: 200% 0;
+  }
+}
+.hk-skeleton {
+  background: linear-gradient(
+    100deg,
+    var(--void-2) 40%,
+    var(--void-3) 50%,
+    var(--void-2) 60%
+  );
+  background-size: 200% 100%;
+  animation: hk-skeleton 1.6s ease-in-out infinite;
+  border-radius: var(--radius-chip);
+}
+
+/* ── Pulse aura (transmitting states) ─────────────────────────────── */
+@keyframes hk-pulse-aura {
+  0%,
+  100% {
+    box-shadow: 0 0 12px rgba(94, 242, 255, 0.12);
+  }
+  50% {
+    box-shadow: 0 0 28px rgba(94, 242, 255, 0.35);
+  }
+}
+.hk-pulse-aura {
+  animation: hk-pulse-aura 1.8s ease-in-out infinite;
+}
+
+/* ── Redshift flicker (failed states) ─────────────────────────────── */
+@keyframes hk-flicker {
+  0%,
+  93%,
+  100% {
+    opacity: 1;
+  }
+  94% {
+    opacity: 0.55;
+  }
+  96% {
+    opacity: 0.85;
+  }
+  98% {
+    opacity: 0.6;
+  }
+}
+.hk-flicker {
+  animation: hk-flicker 3.2s linear infinite;
+}
+
+/* ── Error shake ──────────────────────────────────────────────────── */
+@keyframes hk-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-4px);
+  }
+  50% {
+    transform: translateX(4px);
+  }
+  75% {
+    transform: translateX(-2px);
+  }
+}
+.hk-shake {
+  animation: hk-shake 280ms var(--ease-warp);
+}
+
+/* ── Comet (indeterminate progress) ───────────────────────────────── */
+@keyframes hk-comet {
+  from {
+    left: -30%;
+  }
+  to {
+    left: 110%;
+  }
+}
+.hk-comet {
+  position: relative;
+  overflow: hidden;
+  background: var(--void-3);
+  border-radius: 999px;
+}
+.hk-comet::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 30%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, var(--hyper-cyan));
+  animation: hk-comet 1.2s var(--ease-warp) infinite;
+}
+
+/* ── Toast border light ───────────────────────────────────────────── */
+@keyframes hk-border-travel {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: -1000;
+  }
+}
+
+/* ── Orbit switch ─────────────────────────────────────────────────── */
+.hk-switch {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--void-3);
+  border: 1px solid var(--glass-border);
+  transition:
+    background var(--dur-1) var(--ease-warp),
+    border-color var(--dur-1) var(--ease-warp),
+    box-shadow var(--dur-1) var(--ease-warp);
+  cursor: pointer;
+  flex: none;
+}
+.hk-switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--starlight-dim);
+  transition:
+    transform var(--dur-2) var(--ease-warp),
+    background var(--dur-1) var(--ease-warp),
+    box-shadow var(--dur-1) var(--ease-warp);
+}
+.hk-switch[aria-checked="true"] {
+  background: rgba(94, 242, 255, 0.12);
+  border-color: rgba(94, 242, 255, 0.45);
+  box-shadow: var(--glow-cyan-sm);
+}
+.hk-switch[aria-checked="true"]::after {
+  transform: translateX(18px);
+  background: var(--hyper-cyan);
+  box-shadow: 0 0 8px rgba(94, 242, 255, 0.8);
+}
+
+/* ── Scanline (now-line on Continuum, tesseract overlay) ──────────── */
+@keyframes hk-scan {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 0 8px;
+  }
+}
+.hk-scanlines {
+  background-image: repeating-linear-gradient(
+    0deg,
+    rgba(94, 242, 255, 0.025) 0px,
+    rgba(94, 242, 255, 0.025) 1px,
+    transparent 1px,
+    transparent 4px
+  );
+  animation: hk-scan 0.9s linear infinite;
+}
+
+/* ── Spin (slow, for orbit rings) ─────────────────────────────────── */
+@keyframes hk-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
