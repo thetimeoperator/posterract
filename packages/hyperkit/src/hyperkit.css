@@ -1,7 +1,6 @@
 /**
  * Hyperkit effects — keyframes and compound effects that utility classes
- * can't express. Everything respects prefers-reduced-motion via app-level
- * global rule.
+ * can't express. Identity: black void · neon green · white.
  */
 
 /* ── Holo shimmer sweep (cards, buttons on hover) ─────────────────── */
@@ -16,9 +15,9 @@
   background: linear-gradient(
     115deg,
     transparent 30%,
-    rgba(94, 242, 255, 0.06) 42%,
-    rgba(139, 92, 246, 0.1) 50%,
-    rgba(255, 78, 205, 0.06) 58%,
+    rgba(101, 255, 154, 0.07) 42%,
+    rgba(124, 247, 255, 0.09) 50%,
+    rgba(255, 255, 255, 0.06) 58%,
     transparent 70%
   );
   transform: translateX(-120%);
@@ -29,7 +28,7 @@
   transform: translateX(120%);
 }
 
-/* ── Corner brackets (panel HUD heritage) ─────────────────────────── */
+/* ── Corner brackets (HUD heritage) ───────────────────────────────── */
 .hk-brackets {
   position: relative;
 }
@@ -88,7 +87,7 @@
   position: absolute;
   inset: 0 auto 0 0;
   width: 45%;
-  background: linear-gradient(90deg, transparent, rgba(94, 242, 255, 0.25), transparent);
+  background: linear-gradient(90deg, transparent, rgba(101, 255, 154, 0.28), transparent);
   transform: translateX(-110%) skewX(-12deg);
   pointer-events: none;
 }
@@ -134,14 +133,14 @@
   border-radius: var(--radius-chip);
 }
 
-/* ── Pulse aura (transmitting states) ─────────────────────────────── */
+/* ── Pulse aura (transmitting states — reactor green) ─────────────── */
 @keyframes hk-pulse-aura {
   0%,
   100% {
-    box-shadow: 0 0 12px rgba(94, 242, 255, 0.12);
+    box-shadow: 0 0 12px rgba(101, 255, 154, 0.14);
   }
   50% {
-    box-shadow: 0 0 28px rgba(94, 242, 255, 0.35);
+    box-shadow: 0 0 28px rgba(101, 255, 154, 0.4);
   }
 }
 .hk-pulse-aura {
@@ -211,18 +210,8 @@
   bottom: 0;
   width: 30%;
   border-radius: 999px;
-  background: linear-gradient(90deg, transparent, var(--hyper-cyan));
+  background: linear-gradient(90deg, transparent, var(--neon));
   animation: hk-comet 1.2s var(--ease-warp) infinite;
-}
-
-/* ── Toast border light ───────────────────────────────────────────── */
-@keyframes hk-border-travel {
-  from {
-    stroke-dashoffset: 0;
-  }
-  to {
-    stroke-dashoffset: -1000;
-  }
 }
 
 /* ── Orbit switch ─────────────────────────────────────────────────── */
@@ -255,17 +244,17 @@
     box-shadow var(--dur-1) var(--ease-warp);
 }
 .hk-switch[aria-checked="true"] {
-  background: rgba(94, 242, 255, 0.12);
-  border-color: rgba(94, 242, 255, 0.45);
-  box-shadow: var(--glow-cyan-sm);
+  background: rgba(101, 255, 154, 0.12);
+  border-color: rgba(101, 255, 154, 0.45);
+  box-shadow: var(--glow-neon-sm);
 }
 .hk-switch[aria-checked="true"]::after {
   transform: translateX(18px);
-  background: var(--hyper-cyan);
-  box-shadow: 0 0 8px rgba(94, 242, 255, 0.8);
+  background: var(--neon);
+  box-shadow: 0 0 8px rgba(101, 255, 154, 0.8);
 }
 
-/* ── Scanline (now-line on Continuum, tesseract overlay) ──────────── */
+/* ── Scanline ─────────────────────────────────────────────────────── */
 @keyframes hk-scan {
   from {
     background-position: 0 0;
@@ -277,8 +266,8 @@
 .hk-scanlines {
   background-image: repeating-linear-gradient(
     0deg,
-    rgba(94, 242, 255, 0.025) 0px,
-    rgba(94, 242, 255, 0.025) 1px,
+    rgba(101, 255, 154, 0.02) 0px,
+    rgba(101, 255, 154, 0.02) 1px,
     transparent 1px,
     transparent 4px
   );

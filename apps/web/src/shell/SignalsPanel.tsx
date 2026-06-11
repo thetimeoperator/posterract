@@ -18,7 +18,7 @@ function toneFor(type: EventDTO["type"]): string {
   if (type.includes("failed") || type.includes("error")) return "var(--redshift)";
   if (type.includes("live")) return "var(--auroral)";
   if (type.includes("reauth") || type.includes("warn")) return "var(--solar)";
-  return "var(--hyper-cyan)";
+  return "var(--neon)";
 }
 
 /**
@@ -42,13 +42,13 @@ export function SignalsPanel() {
           <button
             aria-label="Close Signals"
             tabIndex={-1}
-            className="absolute inset-0 cursor-default bg-[rgba(2,1,10,0.5)]"
+            className="absolute inset-0 cursor-default bg-[rgba(5,8,11,0.5)]"
             onClick={() => setSignalsOpen(false)}
           />
           <motion.aside
             role="dialog"
             aria-label="Signals — notifications"
-            className="absolute bottom-0 right-0 top-0 flex w-96 flex-col border-l border-[var(--glass-border)] bg-[rgba(6,4,21,0.92)] backdrop-blur-2xl"
+            className="absolute bottom-0 right-0 top-0 flex w-96 flex-col border-l border-[var(--glass-border)] bg-[rgba(7,13,17,0.92)] backdrop-blur-2xl"
             initial={{ x: 60, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: 40, opacity: 0 }}

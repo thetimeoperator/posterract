@@ -22,7 +22,7 @@ export function ProgressBeam({
       className={clsx("h-1.5 w-full overflow-hidden rounded-full bg-void-3", className)}
     >
       <div
-        className="h-full rounded-full bg-gradient-to-r from-hyper-cyan via-ultraviolet to-singularity shadow-glow-cyan-sm transition-[width] duration-300"
+        className="h-full rounded-full bg-gradient-to-r from-neon via-neon to-pure shadow-glow-neon-sm transition-[width] duration-300"
         style={{ width: `${pct}%` }}
       />
     </div>
@@ -83,12 +83,12 @@ export function OrbitRing({
           strokeLinecap="round"
           strokeDasharray={c}
           strokeDashoffset={c * (1 - pct)}
-          style={{ transition: "stroke-dashoffset 300ms var(--ease-warp)", filter: "drop-shadow(0 0 4px rgba(94,242,255,0.5))" }}
+          style={{ transition: "stroke-dashoffset 300ms var(--ease-warp)", filter: "drop-shadow(0 0 4px rgba(101,255,154,0.5))" }}
         />
         <defs>
           <linearGradient id="hk-orbit-grad" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor="#5EF2FF" />
-            <stop offset="1" stopColor="#8B5CF6" />
+            <stop offset="0" stopColor="#65ff9a" />
+            <stop offset="1" stopColor="#7cf7ff" />
           </linearGradient>
         </defs>
       </svg>

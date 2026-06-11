@@ -18,7 +18,7 @@ export type ModalProps = {
 
 /**
  * Portal modal — backdrop deep-blurs the void; the panel scales in from 0.96
- * with an iridescent edge flash.
+ * with an aurora edge flash.
  */
 export function Modal({ open, onClose, kicker, title, children, footer, width = "max-w-lg" }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -65,7 +65,7 @@ export function Modal({ open, onClose, kicker, title, children, footer, width = 
         >
           <button
             aria-label="Close"
-            className="absolute inset-0 cursor-default bg-[rgba(2,1,10,0.7)] backdrop-blur-md"
+            className="absolute inset-0 cursor-default bg-[rgba(5,8,11,0.7)] backdrop-blur-md"
             onClick={onClose}
             tabIndex={-1}
           />

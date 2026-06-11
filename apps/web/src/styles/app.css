@@ -6,17 +6,16 @@
 @source "../../../../packages/hyperkit/src";
 
 /* Map Hyperkit tokens into Tailwind v4 theme so utilities exist
-   (bg-void-1, text-starlight, font-display, shadow-glow-cyan-md, ...). */
+   (bg-void-1, text-starlight, text-neon, shadow-glow-neon-md, ...). */
 @theme inline {
   --color-void-0: var(--void-0);
   --color-void-1: var(--void-1);
   --color-void-2: var(--void-2);
   --color-void-3: var(--void-3);
 
-  --color-hyper-cyan: var(--hyper-cyan);
-  --color-ultraviolet: var(--ultraviolet);
-  --color-ultraviolet-soft: var(--ultraviolet-soft);
-  --color-singularity: var(--singularity);
+  --color-neon: var(--neon);
+  --color-ice: var(--ice);
+  --color-pure: var(--pure);
 
   --color-starlight: var(--starlight);
   --color-starlight-dim: var(--starlight-dim);
@@ -34,12 +33,12 @@
   --radius-card: var(--radius-card);
   --radius-chip: var(--radius-chip);
 
-  --shadow-glow-cyan-sm: var(--glow-cyan-sm);
-  --shadow-glow-cyan-md: var(--glow-cyan-md);
-  --shadow-glow-cyan-lg: var(--glow-cyan-lg);
-  --shadow-glow-violet-sm: var(--glow-violet-sm);
-  --shadow-glow-violet-md: var(--glow-violet-md);
-  --shadow-glow-violet-lg: var(--glow-violet-lg);
+  --shadow-glow-neon-sm: var(--glow-neon-sm);
+  --shadow-glow-neon-md: var(--glow-neon-md);
+  --shadow-glow-neon-lg: var(--glow-neon-lg);
+  --shadow-glow-ice-sm: var(--glow-ice-sm);
+  --shadow-glow-ice-md: var(--glow-ice-md);
+  --shadow-glow-ice-lg: var(--glow-ice-lg);
   --shadow-glow-auroral-md: var(--glow-auroral-md);
   --shadow-glow-redshift-md: var(--glow-redshift-md);
 
@@ -66,12 +65,12 @@ body {
 }
 
 ::selection {
-  background: rgba(94, 242, 255, 0.25);
+  background: rgba(101, 255, 154, 0.25);
 }
 
 /* Visible focus, always */
 :focus-visible {
-  outline: 2px solid var(--hyper-cyan);
+  outline: 2px solid var(--neon);
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -93,9 +92,8 @@ body {
   background: transparent;
 }
 
-/* ── Shared primitives used across the app ───────────────────────── */
+/* ── Shared primitives ────────────────────────────────────────────── */
 
-/* Kicker: small uppercase label in display font */
 .kicker {
   font-family: var(--font-display);
   font-size: 11px;
@@ -105,7 +103,6 @@ body {
   color: var(--starlight-dim);
 }
 
-/* Glass panel */
 .glass {
   background: var(--glass-bg);
   backdrop-filter: blur(var(--blur-3));
@@ -114,26 +111,71 @@ body {
   border-radius: var(--radius-panel);
 }
 
-/* Iridescent border via padding-box/border-box gradient trick */
-.border-iridescent {
+/* Aurora border via padding-box/border-box gradient trick */
+.border-aurora {
   border: 1px solid transparent;
   background:
     linear-gradient(var(--void-2), var(--void-2)) padding-box,
-    var(--iridescent) border-box;
+    var(--aurora) border-box;
 }
 
-.text-iridescent {
-  background: var(--iridescent);
+.text-aurora {
+  background: var(--aurora);
   background-clip: text;
   -webkit-background-clip: text;
   color: transparent;
 }
 
-/* Mono data readouts */
 .telemetry {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
+}
+
+/* ── The chamber — Posterract's signature background stack ────────── */
+/* Heritage: original Vidtryx shell (center green glow + 84px grid).   */
+.chamber {
+  background:
+    radial-gradient(circle at 50% 42%, rgba(101, 255, 154, 0.12), transparent 28%),
+    radial-gradient(circle at 50% 100%, rgba(255, 255, 255, 0.04), transparent 38%),
+    var(--void-0);
+}
+
+.chamber-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(101, 255, 154, 0.06) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(101, 255, 154, 0.05) 1px, transparent 1px);
+  background-size: 84px 84px;
+  mask-image: radial-gradient(circle at center, black 0%, transparent 72%);
+  -webkit-mask-image: radial-gradient(circle at center, black 0%, transparent 72%);
+  opacity: 0.45;
+}
+
+/* Core readout — the big glowing title over the device (heritage). */
+.core-readout {
+  text-align: center;
+  text-transform: uppercase;
+  color: var(--starlight);
+  text-shadow: 0 0 20px rgba(101, 255, 154, 0.55);
+  pointer-events: none;
+}
+.core-readout .core-readout-title {
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  line-height: 1;
+}
+.core-readout .core-readout-status {
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--neon);
 }
 
 @media (prefers-reduced-motion: reduce) {

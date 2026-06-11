@@ -61,9 +61,15 @@ export function Navigator() {
       })),
       {
         id: "dev-hyperkit",
-        label: "Hyperkit Gallery",
-        sub: "Design system reference",
+        label: "Dev: Hyperkit gallery",
+        sub: "Internal — design system reference",
         run: go("/dev/hyperkit"),
+      },
+      {
+        id: "dev-core",
+        label: "Dev: Core lab",
+        sub: "Internal — device state test bench",
+        run: go("/dev/core"),
       },
     ];
   }, [navigate, setNavigatorOpen]);
@@ -118,7 +124,7 @@ export function Navigator() {
           <button
             aria-label="Close Navigator"
             tabIndex={-1}
-            className="absolute inset-0 cursor-default bg-[rgba(2,1,10,0.66)] backdrop-blur-sm"
+            className="absolute inset-0 cursor-default bg-[rgba(5,8,11,0.66)] backdrop-blur-sm"
             onClick={() => setNavigatorOpen(false)}
           />
           <motion.div
@@ -157,10 +163,10 @@ export function Navigator() {
                     onMouseEnter={() => setIndex(i)}
                     className={clsx(
                       "flex w-full items-center gap-3 rounded-[10px] px-3 py-2.5 text-left transition-colors",
-                      i === index ? "bg-[rgba(94,242,255,0.07)]" : "hover:bg-[rgba(139,92,246,0.06)]",
+                      i === index ? "bg-[rgba(101,255,154,0.07)]" : "hover:bg-[rgba(155,255,197,0.06)]",
                     )}
                   >
-                    <span className={clsx("text-starlight-dim", i === index && "text-hyper-cyan")}>
+                    <span className={clsx("text-starlight-dim", i === index && "text-neon")}>
                       {cmd.icon}
                     </span>
                     <span className="min-w-0 flex-1">

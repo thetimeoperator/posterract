@@ -86,7 +86,7 @@ export function PlatformRuneRow({
                   "absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full",
                   dot === "live" && "bg-auroral",
                   dot === "failed" && "bg-redshift",
-                  dot === "transmitting" && "bg-hyper-cyan hk-pulse-aura",
+                  dot === "transmitting" && "bg-neon hk-pulse-aura",
                   dot === "pending" && "bg-starlight-faint",
                 )}
               />

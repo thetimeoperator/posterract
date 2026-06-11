@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as DevHyperkitRouteImport } from './routes/dev/hyperkit'
+import { Route as DevCoreRouteImport } from './routes/dev/core'
 import { Route as AppVaultRouteImport } from './routes/_app/vault'
 import { Route as AppUplinkRouteImport } from './routes/_app/uplink'
 import { Route as AppTransmissionsRouteImport } from './routes/_app/transmissions'
@@ -33,6 +34,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
 const DevHyperkitRoute = DevHyperkitRouteImport.update({
   id: '/dev/hyperkit',
   path: '/dev/hyperkit',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DevCoreRoute = DevCoreRouteImport.update({
+  id: '/dev/core',
+  path: '/dev/core',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppVaultRoute = AppVaultRouteImport.update({
@@ -86,6 +92,7 @@ export interface FileRoutesByFullPath {
   '/transmissions': typeof AppTransmissionsRoute
   '/uplink': typeof AppUplinkRoute
   '/vault': typeof AppVaultRoute
+  '/dev/core': typeof DevCoreRoute
   '/dev/hyperkit': typeof DevHyperkitRoute
 }
 export interface FileRoutesByTo {
@@ -97,6 +104,7 @@ export interface FileRoutesByTo {
   '/transmissions': typeof AppTransmissionsRoute
   '/uplink': typeof AppUplinkRoute
   '/vault': typeof AppVaultRoute
+  '/dev/core': typeof DevCoreRoute
   '/dev/hyperkit': typeof DevHyperkitRoute
   '/': typeof AppIndexRoute
 }
@@ -111,6 +119,7 @@ export interface FileRoutesById {
   '/_app/transmissions': typeof AppTransmissionsRoute
   '/_app/uplink': typeof AppUplinkRoute
   '/_app/vault': typeof AppVaultRoute
+  '/dev/core': typeof DevCoreRoute
   '/dev/hyperkit': typeof DevHyperkitRoute
   '/_app/': typeof AppIndexRoute
 }
@@ -126,6 +135,7 @@ export interface FileRouteTypes {
     | '/transmissions'
     | '/uplink'
     | '/vault'
+    | '/dev/core'
     | '/dev/hyperkit'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -137,6 +147,7 @@ export interface FileRouteTypes {
     | '/transmissions'
     | '/uplink'
     | '/vault'
+    | '/dev/core'
     | '/dev/hyperkit'
     | '/'
   id:
@@ -150,12 +161,14 @@ export interface FileRouteTypes {
     | '/_app/transmissions'
     | '/_app/uplink'
     | '/_app/vault'
+    | '/dev/core'
     | '/dev/hyperkit'
     | '/_app/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
+  DevCoreRoute: typeof DevCoreRoute
   DevHyperkitRoute: typeof DevHyperkitRoute
 }
 
@@ -180,6 +193,13 @@ declare module '@tanstack/react-router' {
       path: '/dev/hyperkit'
       fullPath: '/dev/hyperkit'
       preLoaderRoute: typeof DevHyperkitRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dev/core': {
+      id: '/dev/core'
+      path: '/dev/core'
+      fullPath: '/dev/core'
+      preLoaderRoute: typeof DevCoreRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/vault': {
@@ -269,6 +289,7 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
+  DevCoreRoute: DevCoreRoute,
   DevHyperkitRoute: DevHyperkitRoute,
 }
 export const routeTree = rootRouteImport

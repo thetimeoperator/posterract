@@ -52,7 +52,7 @@ export function Starfield({ className }: { className?: string }) {
       for (const s of dim) {
         const x = ((s.x + t * s.v * 0.01) % 1) * w;
         ctx.globalAlpha = s.a;
-        ctx.fillStyle = "#8E8AB8";
+        ctx.fillStyle = "#9ccbb0";
         ctx.beginPath();
         ctx.arc(x, s.y * h, s.r, 0, Math.PI * 2);
         ctx.fill();
@@ -61,7 +61,7 @@ export function Starfield({ className }: { className?: string }) {
         const x = ((s.x + t * s.v * 0.01) % 1) * w;
         const twinkle = 0.75 + 0.25 * Math.sin(t * 0.8 + s.tw);
         ctx.globalAlpha = s.a * twinkle;
-        ctx.fillStyle = "#EDEBFF";
+        ctx.fillStyle = "#eafff3";
         ctx.beginPath();
         ctx.arc(x, s.y * h, s.r, 0, Math.PI * 2);
         ctx.fill();

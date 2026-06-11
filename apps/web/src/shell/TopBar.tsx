@@ -10,7 +10,7 @@ export function TopBar() {
   const item = navItemForPath(pathname);
 
   return (
-    <header className="sticky top-0 z-[var(--z-topbar)] flex h-16 items-center gap-3 border-b border-[var(--glass-border)] bg-[rgba(2,1,10,0.6)] px-6 backdrop-blur-xl">
+    <header className="sticky top-0 z-[var(--z-topbar)] flex h-16 items-center gap-3 border-b border-[var(--glass-border)] bg-[rgba(5,8,11,0.6)] px-6 backdrop-blur-xl">
       <div className="min-w-0 flex-1">
         {item && (
           <>
@@ -42,7 +42,7 @@ export function TopBar() {
         <Bell size={15} />
         <span
           aria-hidden
-          className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-hyper-cyan shadow-glow-cyan-md"
+          className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-neon shadow-glow-neon-md"
         />
       </button>
 

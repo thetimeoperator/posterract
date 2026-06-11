@@ -49,7 +49,7 @@ export function Tabs<T extends string>({
             {active && (
               <motion.span
                 layoutId="hk-tab-underline"
-                className="absolute inset-x-1 -bottom-px h-px bg-hyper-cyan shadow-glow-cyan-md"
+                className="absolute inset-x-1 -bottom-px h-px bg-neon shadow-glow-neon-md"
                 transition={{ type: "spring", bounce: 0.18, duration: 0.45 }}
                 aria-hidden
               />

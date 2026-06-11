@@ -3,7 +3,7 @@ import type { InputHTMLAttributes, TextareaHTMLAttributes, ReactNode } from "rea
 import clsx from "clsx";
 
 const WELL_CLASSES =
-  "w-full rounded-[10px] border border-[rgba(139,92,246,0.25)] bg-void-2 px-3.5 text-[13px] text-starlight placeholder:text-starlight-faint transition-all duration-200 focus:border-[rgba(94,242,255,0.6)] focus:shadow-glow-cyan-sm focus:outline-none disabled:opacity-45";
+  "w-full rounded-[10px] border border-[rgba(155,255,197,0.25)] bg-void-2 px-3.5 text-[13px] text-starlight placeholder:text-starlight-faint transition-all duration-200 focus:border-[rgba(101,255,154,0.6)] focus:shadow-glow-neon-sm focus:outline-none disabled:opacity-45";
 
 export type FieldShellProps = {
   label?: string;
@@ -71,7 +71,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
           id={id}
           aria-describedby={describedBy}
           aria-invalid={error ? true : undefined}
-          className={clsx(WELL_CLASSES, "h-10", error && "border-[rgba(255,92,122,0.5)]")}
+          className={clsx(WELL_CLASSES, "h-10", error && "border-[rgba(255,113,143,0.5)]")}
           {...rest}
         />
       )}
@@ -106,7 +106,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
           value={value}
           aria-describedby={describedBy}
           aria-invalid={error ? true : undefined}
-          className={clsx(WELL_CLASSES, "min-h-24 resize-y py-2.5 leading-relaxed", error && "border-[rgba(255,92,122,0.5)]")}
+          className={clsx(WELL_CLASSES, "min-h-24 resize-y py-2.5 leading-relaxed", error && "border-[rgba(255,113,143,0.5)]")}
           {...rest}
         />
       )}

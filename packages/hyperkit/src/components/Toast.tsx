@@ -38,7 +38,7 @@ export function pushSignal(signal: Omit<Signal, "id">) {
 }
 
 const TONE_ACCENT: Record<SignalTone, string> = {
-  info: "var(--hyper-cyan)",
+  info: "var(--ice)",
   success: "var(--auroral)",
   warning: "var(--solar)",
   danger: "var(--redshift)",

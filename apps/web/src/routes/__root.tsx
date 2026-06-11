@@ -23,7 +23,7 @@ function LostDimension() {
       <h1 className="font-display text-2xl text-starlight">
         Lost in a dimension that doesn&apos;t exist.
       </h1>
-      <a href="/" className="text-hyper-cyan underline underline-offset-4">
+      <a href="/" className="text-neon underline underline-offset-4">
         Return to the Bridge
       </a>
     </main>

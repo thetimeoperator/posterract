@@ -20,13 +20,13 @@ const SIZE_CLASSES: Record<ButtonSize, string> = {
 
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
   primary:
-    "border-iridescent hk-charge text-starlight hover:shadow-glow-violet-md active:scale-[0.99]",
+    "border-aurora hk-charge text-starlight hover:shadow-glow-violet-md active:scale-[0.99]",
   secondary:
     "border border-[var(--glass-border)] bg-[var(--glass-bg)] text-starlight hover:border-[var(--glass-border-bright)] hover:shadow-glow-violet-sm",
   tertiary:
-    "text-starlight-dim hover:text-hyper-cyan underline-offset-4 hover:underline bg-transparent",
+    "text-starlight-dim hover:text-neon underline-offset-4 hover:underline bg-transparent",
   destructive:
-    "border border-[rgba(255,92,122,0.35)] bg-[rgba(255,92,122,0.08)] text-redshift hover:border-redshift hover:shadow-glow-redshift-md",
+    "border border-[rgba(255,113,143,0.35)] bg-[rgba(255,113,143,0.08)] text-redshift hover:border-redshift hover:shadow-glow-redshift-md",
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(

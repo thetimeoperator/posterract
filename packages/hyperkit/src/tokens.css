@@ -1,39 +1,39 @@
 /**
  * Hyperkit tokens — the Posterract design language.
- * "The void and the glow": deep indigo voids, iridescent cyan→violet→magenta.
- * Source of truth for every color, glow, blur, radius, and motion curve.
+ * Identity: black void · neon green · white. Cyan as secondary signal.
+ * (Founder-locked palette — never reintroduce purple. The Posterract is a
+ * legendary device: obsidian glass, chrome, green reactor light.)
  */
 :root {
-  /* ── Void stack (backgrounds, darkest → raised) ─────────────────── */
-  --void-0: #02010a;
-  --void-1: #060415;
-  --void-2: #0b0822;
-  --void-3: #131032;
+  /* ── Void stack (backgrounds, darkest → raised; green-tinted blacks) ── */
+  --void-0: #05080b;
+  --void-1: #070d11;
+  --void-2: #0a1418;
+  --void-3: #102028;
 
-  /* ── The spectrum (brand accents) ───────────────────────────────── */
-  --hyper-cyan: #5ef2ff;
-  --ultraviolet: #8b5cf6;
-  --ultraviolet-soft: #a78bfa;
-  --singularity: #ff4ecd;
-  --iridescent: linear-gradient(135deg, #5ef2ff 0%, #8b5cf6 50%, #ff4ecd 100%);
-  --iridescent-soft: linear-gradient(
+  /* ── Accents ────────────────────────────────────────────────────── */
+  --neon: #65ff9a; /* THE accent — reactor green */
+  --ice: #7cf7ff; /* secondary — motion/transmit */
+  --pure: #ffffff; /* rare emphasis */
+  --aurora: linear-gradient(135deg, #65ff9a 0%, #7cf7ff 55%, #ffffff 100%);
+  --aurora-soft: linear-gradient(
     135deg,
-    rgba(94, 242, 255, 0.35),
-    rgba(139, 92, 246, 0.35),
-    rgba(255, 78, 205, 0.35)
+    rgba(101, 255, 154, 0.35),
+    rgba(124, 247, 255, 0.3),
+    rgba(255, 255, 255, 0.25)
   );
 
   /* ── Starlight (text) ───────────────────────────────────────────── */
-  --starlight: #edebff;
-  --starlight-dim: #8e8ab8;
-  --starlight-faint: #514d78;
+  --starlight: #eafff3;
+  --starlight-dim: #9ccbb0;
+  --starlight-faint: #54756a;
 
   /* ── Semantic ───────────────────────────────────────────────────── */
-  --auroral: #46f5b1; /* success / live */
-  --solar: #ffc857; /* warning / partial */
-  --redshift: #ff5c7a; /* danger / failed */
+  --auroral: #65ff9a; /* success / live */
+  --solar: #ffcc66; /* warning / partial */
+  --redshift: #ff718f; /* danger / failed */
 
-  /* ── Platform accents ───────────────────────────────────────────── */
+  /* ── Platform accents (functional identity — unchanged) ────────── */
   --platform-instagram: #ff0069;
   --platform-instagram-2: #7638fa;
   --platform-tiktok: #25f4ee;
@@ -44,23 +44,23 @@
   --platform-youtube: #ff0033;
 
   /* ── Glass ──────────────────────────────────────────────────────── */
-  --glass-bg: rgba(11, 8, 34, 0.55);
-  --glass-bg-raised: rgba(19, 16, 50, 0.65);
-  --glass-border: rgba(139, 92, 246, 0.18);
-  --glass-border-bright: rgba(139, 92, 246, 0.4);
+  --glass-bg: rgba(7, 13, 17, 0.55);
+  --glass-bg-raised: rgba(10, 20, 24, 0.68);
+  --glass-border: rgba(155, 255, 197, 0.16);
+  --glass-border-bright: rgba(155, 255, 197, 0.42);
   --blur-1: 8px;
   --blur-2: 16px;
   --blur-3: 24px;
 
   /* ── Glow (state, not decoration: idle → hover → active) ───────── */
-  --glow-cyan-sm: 0 0 12px rgba(94, 242, 255, 0.08);
-  --glow-cyan-md: 0 0 20px rgba(94, 242, 255, 0.2);
-  --glow-cyan-lg: 0 0 36px rgba(94, 242, 255, 0.35);
-  --glow-violet-sm: 0 0 12px rgba(139, 92, 246, 0.08);
-  --glow-violet-md: 0 0 20px rgba(139, 92, 246, 0.2);
-  --glow-violet-lg: 0 0 36px rgba(139, 92, 246, 0.35);
-  --glow-auroral-md: 0 0 20px rgba(70, 245, 177, 0.25);
-  --glow-redshift-md: 0 0 20px rgba(255, 92, 122, 0.25);
+  --glow-neon-sm: 0 0 12px rgba(101, 255, 154, 0.1);
+  --glow-neon-md: 0 0 20px rgba(101, 255, 154, 0.22);
+  --glow-neon-lg: 0 0 36px rgba(101, 255, 154, 0.38);
+  --glow-ice-sm: 0 0 12px rgba(124, 247, 255, 0.1);
+  --glow-ice-md: 0 0 20px rgba(124, 247, 255, 0.22);
+  --glow-ice-lg: 0 0 36px rgba(124, 247, 255, 0.38);
+  --glow-auroral-md: 0 0 20px rgba(101, 255, 154, 0.28);
+  --glow-redshift-md: 0 0 20px rgba(255, 113, 143, 0.25);
 
   /* ── Radii ──────────────────────────────────────────────────────── */
   --radius-panel: 16px;
@@ -76,9 +76,9 @@
 
   /* ── Motion ─────────────────────────────────────────────────────── */
   --ease-warp: cubic-bezier(0.16, 1, 0.3, 1);
-  --dur-1: 200ms; /* micro */
-  --dur-2: 400ms; /* component */
-  --dur-3: 700ms; /* scene */
+  --dur-1: 200ms;
+  --dur-2: 400ms;
+  --dur-3: 700ms;
 
   /* ── Z layers ───────────────────────────────────────────────────── */
   --z-starfield: 0;

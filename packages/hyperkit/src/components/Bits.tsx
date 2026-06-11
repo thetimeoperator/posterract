@@ -84,9 +84,9 @@ export function ConstellationGlyph({ size = 72 }: { size?: number }) {
         [58, 42],
         [88, 12],
       ].map(([x, y], i) => (
-        <circle key={i} cx={x} cy={y} r="2.5" fill="var(--ultraviolet-soft)" opacity={0.8} />
+        <circle key={i} cx={x} cy={y} r="2.5" fill="var(--ice)" opacity={0.8} />
       ))}
-      <circle cx={34} cy={30} r="5.5" stroke="var(--hyper-cyan)" strokeWidth="0.75" opacity={0.5} />
+      <circle cx={34} cy={30} r="5.5" stroke="var(--neon)" strokeWidth="0.75" opacity={0.5} />
     </svg>
   );
 }
@@ -108,7 +108,7 @@ export function Countdown({ to, className, prefix = "T-" }: { to: number; classN
   const text =
     days > 0 ? `${prefix}${days}d ${pad(h)}:${pad(m)}` : `${prefix}${pad(h)}:${pad(m)}:${pad(sec)}`;
   return (
-    <span className={clsx("telemetry text-hyper-cyan", className)} title={new Date(to).toLocaleString()}>
+    <span className={clsx("telemetry text-neon", className)} title={new Date(to).toLocaleString()}>
       {text}
     </span>
   );

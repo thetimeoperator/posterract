@@ -26,7 +26,7 @@ export function GridHorizon({ className, height = 220 }: { className?: string; h
           const t = i / (lines - 1);
           const y = 220 - 220 * t * t;
           return (
-            <line key={`h${i}`} x1="0" x2="1000" y1={y} y2={y} stroke="rgba(139,92,246,0.14)" strokeWidth="1" />
+            <line key={`h${i}`} x1="0" x2="1000" y1={y} y2={y} stroke="rgba(155,255,197,0.14)" strokeWidth="1" />
           );
         })}
         {Array.from({ length: verticals }, (_, i) => {
@@ -40,7 +40,7 @@ export function GridHorizon({ className, height = 220 }: { className?: string; h
               y1="220"
               x2={xTop}
               y2="0"
-              stroke="rgba(139,92,246,0.1)"
+              stroke="rgba(155,255,197,0.1)"
               strokeWidth="1"
             />
           );

@@ -10,7 +10,7 @@ export function HullBreach({ error, reset }: { error: Error; reset?: () => void 
       <p className="max-w-md text-[13px] text-starlight-dim">
         Something failed while rendering this dimension. The rest of the ship is unaffected.
       </p>
-      <pre className="telemetry max-w-lg overflow-x-auto rounded-[10px] border border-[rgba(255,92,122,0.25)] bg-void-1 px-4 py-2 text-left text-[11px] text-redshift">
+      <pre className="telemetry max-w-lg overflow-x-auto rounded-[10px] border border-[rgba(255,113,143,0.25)] bg-void-1 px-4 py-2 text-left text-[11px] text-redshift">
         {error.message}
       </pre>
       <div className="flex gap-2">
@@ -37,9 +37,9 @@ export function WarpingIn() {
         </g>
         <defs>
           <linearGradient id="warp-irid" x1="0" y1="0" x2="120" y2="120">
-            <stop offset="0" stopColor="#5EF2FF" />
-            <stop offset="0.5" stopColor="#8B5CF6" />
-            <stop offset="1" stopColor="#FF4ECD" />
+            <stop offset="0" stopColor="#65ff9a" />
+            <stop offset="0.5" stopColor="#7cf7ff" />
+            <stop offset="1" stopColor="#ffffff" />
           </linearGradient>
         </defs>
       </svg>

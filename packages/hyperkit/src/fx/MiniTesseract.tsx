@@ -79,10 +79,10 @@ export function MiniTesseract({
       const flicker = s === "error" && Math.sin(t * 24) > 0.6 ? 0.45 : 1;
       const color =
         s === "error"
-          ? `rgba(255,92,122,${0.9 * flicker})`
+          ? `rgba(255,113,143,${0.9 * flicker})`
           : s === "transmitting"
-            ? "rgba(94,242,255,0.95)"
-            : "rgba(167,139,250,0.9)";
+            ? "rgba(101,255,154,0.95)"
+            : "rgba(156,203,176,0.9)";
 
       ctx.lineWidth = 1;
       ctx.lineCap = "round";

@@ -48,7 +48,7 @@ export function Segmented<T extends string>({
             {active && (
               <motion.span
                 layoutId="hk-segment-glow"
-                className="absolute inset-0 rounded-[7px] border border-[rgba(94,242,255,0.4)] bg-[rgba(94,242,255,0.08)] shadow-glow-cyan-sm"
+                className="absolute inset-0 rounded-[7px] border border-[rgba(101,255,154,0.4)] bg-[rgba(101,255,154,0.08)] shadow-glow-neon-sm"
                 transition={{ type: "spring", bounce: 0.18, duration: 0.45 }}
                 aria-hidden
               />

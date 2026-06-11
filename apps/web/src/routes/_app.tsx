@@ -1,40 +1,40 @@
 import { Outlet, createFileRoute, useRouterState } from "@tanstack/react-router";
+import clsx from "clsx";
 import { motion, AnimatePresence } from "framer-motion";
 import { SignalHost, Starfield } from "@posterract/hyperkit";
 import { Spine } from "@/shell/Spine";
 import { TopBar } from "@/shell/TopBar";
 import { Navigator } from "@/shell/Navigator";
 import { SignalsPanel } from "@/shell/SignalsPanel";
+import { useUI } from "@/state/ui";
 
 export const Route = createFileRoute("/_app")({
   component: AppShell,
 });
 
 /**
- * The Posterract shell: void gradient → starfield → Spine + TopBar → page.
- * Pages transition with the "dimensional shift".
+ * The Posterract shell: the chamber (black + green core glow + 84px grid,
+ * original Vidtryx heritage) → starfield → Spine + TopBar → page.
  */
 function AppShell() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const collapsed = useUI((s) => s.spineCollapsed);
 
   return (
-    <div className="relative min-h-screen bg-void-0">
-      {/* Nebula wash */}
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-0"
-        style={{
-          background:
-            "radial-gradient(900px 600px at 75% -10%, rgba(139,92,246,0.07), transparent 60%), radial-gradient(700px 500px at 15% 110%, rgba(94,242,255,0.05), transparent 60%)",
-        }}
-      />
+    <div className="chamber relative min-h-screen">
+      <div className="chamber-grid fixed inset-0" aria-hidden />
       <div className="pointer-events-none fixed inset-0">
         <Starfield />
       </div>
 
       <Spine />
 
-      <div className="relative z-[var(--z-content)] pl-16">
+      <div
+        className={clsx(
+          "relative z-[var(--z-content)] transition-[padding] duration-300 ease-[var(--ease-warp)]",
+          collapsed ? "pl-16" : "pl-60",
+        )}
+      >
         <TopBar />
         <AnimatePresence mode="popLayout" initial={false}>
           <motion.main
