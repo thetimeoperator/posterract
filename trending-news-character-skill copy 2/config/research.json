@@ -1,0 +1,64 @@
+{
+  "mode": "manual_topic",
+  "manual_topic_notes": "Use this mode when the user already supplied the topic and X should be skipped.",
+  "x": {
+    "hours": 8,
+    "exclude_replies": true,
+    "sort_orders": [
+      "relevancy"
+    ],
+    "posts_per_sort": 30,
+    "posts_per_keyword_cap": 30,
+    "daily_post_cap": 60,
+    "max_pages": 1,
+    "max_api_calls": 2,
+    "keywords": [
+      "ai video",
+      "creator tools"
+    ],
+    "list_ids": [],
+    "accounts": []
+  },
+  "topics": [
+    {
+      "keyword": "ai video",
+      "event_terms": [
+        "launch",
+        "workflow",
+        "editing",
+        "avatar",
+        "automation"
+      ]
+    },
+    {
+      "keyword": "creator tools",
+      "event_terms": [
+        "launch",
+        "update",
+        "workflow",
+        "distribution",
+        "automation"
+      ]
+    },
+    {
+      "keyword": "short-form video",
+      "event_terms": [
+        "editing",
+        "caption",
+        "retention",
+        "hook",
+        "template"
+      ]
+    },
+    {
+      "keyword": "ai agent",
+      "event_terms": [
+        "workflow",
+        "automation",
+        "tool",
+        "research",
+        "render"
+      ]
+    }
+  ]
+}

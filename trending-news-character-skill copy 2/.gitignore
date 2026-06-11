@@ -1,0 +1,11 @@
+.env
+.DS_Store
+__pycache__/
+*.pyc
+output/drafts/*
+output/approved/*
+output/published/*
+!output/drafts/.gitkeep
+!output/approved/.gitkeep
+!output/published/.gitkeep
+memory/research-budget.json

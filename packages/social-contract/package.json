@@ -1,0 +1,13 @@
+{
+  "name": "@vidtryx/social-contract",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./platformCapabilities": "./src/platformCapabilities.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}

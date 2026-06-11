@@ -1,0 +1,9 @@
+{
+  "project_name": "AI Agent Video Content Engine Template",
+  "character_name": "Replace With Character Name",
+  "page_name": "Replace With Channel Or Page Name",
+  "primary_goal": "Turn fast-moving narratives into distinctive short-form character videos.",
+  "primary_audience": "Replace with your audience description",
+  "default_output_subdir": "drafts",
+  "timezone": "UTC"
+}

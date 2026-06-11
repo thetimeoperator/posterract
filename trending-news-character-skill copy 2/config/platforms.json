@@ -1,0 +1,12 @@
+{
+  "targets": [
+    "instagram",
+    "tiktok",
+    "youtube-shorts"
+  ],
+  "notes": {
+    "instagram": "Short warning/reporting videos with strong first line and clean title.",
+    "tiktok": "Keep pacing tight and the hook immediate.",
+    "youtube-shorts": "Prefer clarity and headline discipline over slang."
+  }
+}

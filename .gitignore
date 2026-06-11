@@ -1,0 +1,13 @@
+node_modules/
+dist/
+build/
+.DS_Store
+*.local
+.env
+.env.*
+!.env.example
+coverage/
+playwright-report/
+test-results/
+.convex/
+.wrangler/
