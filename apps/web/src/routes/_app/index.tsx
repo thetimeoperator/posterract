@@ -15,7 +15,7 @@ import { PLATFORM_CAPABILITIES } from "@posterract/contract";
 import type { PlatformId } from "@posterract/contract";
 import type { CellVisualState } from "@/tesseract/Tesseract";
 import { DeviceStage } from "@/core3d/DeviceStage";
-import { mockEvents, mockPortals, mockTransmissions } from "@/mock/data";
+import { useEvents, usePortals, useProjections, useTransmissions } from "@/engine/useEngine";
 
 export const Route = createFileRoute("/_app/")({
   component: Bridge,
@@ -27,24 +27,33 @@ export const Route = createFileRoute("/_app/")({
  * right = task queue + output, bottom = signals + portal health.
  */
 function Bridge() {
-  const upcoming = mockTransmissions
+  const transmissions = useTransmissions();
+  const projections = useProjections();
+  const events = useEvents();
+  const portals = usePortals();
+
+  const upcoming = transmissions
     .filter((t) => t.status === "scheduled" || t.status === "transmitting")
     .sort((a, b) => (a.scheduledFor ?? 0) - (b.scheduledFor ?? 0))
     .slice(0, 4);
 
-  const transmitting = mockTransmissions.find((t) => t.status === "transmitting");
-  const scheduledCount = mockTransmissions.filter((t) => t.status === "scheduled").length;
-  const liveCount = mockTransmissions.filter((t) => t.status === "live" || t.status === "partial").length;
-  const healthyPortals = mockPortals.filter((p) => p.status === "connected").length;
+  const transmitting = transmissions.find((t) => t.status === "transmitting");
+  const scheduledCount = transmissions.filter((t) => t.status === "scheduled").length;
+  const liveCount = transmissions.filter((t) => t.status === "live" || t.status === "partial").length;
+  const healthyPortals = portals.filter((p) => p.status === "connected").length;
   const next = upcoming.find((t) => t.status === "scheduled");
+  const platformsOf = (txId: string) => projections.filter((p) => p.transmissionId === txId).map((p) => p.provider);
 
   const mode = transmitting ? "publishing" : next ? "scheduled" : "idle";
   const cellStates: Partial<Record<PlatformId, CellVisualState>> = {};
-  for (const portal of mockPortals) {
+  for (const portal of portals) {
     cellStates[portal.provider] = portal.status === "connected" ? "connected" : "dark";
   }
   if (transmitting) {
-    for (const p of transmitting.platforms) cellStates[p] = "igniting";
+    for (const projection of projections.filter((x) => x.transmissionId === transmitting.id)) {
+      cellStates[projection.provider] =
+        projection.status === "live" ? "live" : projection.status === "failed" ? "failed" : "igniting";
+    }
   }
 
   return (
@@ -68,7 +77,7 @@ function Bridge() {
 
         <Panel kicker="Portal alignment">
           <ul className="space-y-1.5">
-            {mockPortals.map((p) => {
+            {portals.map((p) => {
               const caps = PLATFORM_CAPABILITIES[p.provider];
               return (
                 <li key={p.id} className="flex items-center justify-between gap-2">
@@ -152,7 +161,7 @@ function Bridge() {
                   >
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[12.5px] font-medium text-starlight">{t.title}</p>
-                      <PlatformRuneRow platforms={t.platforms} className="mt-1" />
+                      <PlatformRuneRow platforms={platformsOf(t.id)} className="mt-1" />
                     </div>
                     <div className="flex flex-none flex-col items-end gap-1">
                       <StatusBadge status={t.status} size="sm" />
@@ -169,7 +178,7 @@ function Bridge() {
 
         <Panel kicker="Neural activity" title="Signals">
           <ul className="space-y-1.5">
-            {mockEvents.slice(0, 5).map((ev) => (
+            {events.slice(0, 5).map((ev) => (
               <li key={ev.id} className="flex items-baseline gap-2.5 text-[12px]">
                 <span className="telemetry flex-none text-[9px] text-starlight-faint">
                   {new Date(ev.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}

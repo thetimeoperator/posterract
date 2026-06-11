@@ -4,7 +4,7 @@ import { X } from "lucide-react";
 import { EmptyState } from "@posterract/hyperkit";
 import type { EventDTO } from "@posterract/contract";
 import { useUI } from "@/state/ui";
-import { mockEvents } from "@/mock/data";
+import { useEvents } from "@/engine/useEngine";
 
 function timeAgo(at: number): string {
   const s = Math.floor((Date.now() - at) / 1000);
@@ -23,11 +23,11 @@ function toneFor(type: EventDTO["type"]): string {
 
 /**
  * Signals — slide-over activity feed: publish results, token warnings,
- * platform cap warnings. (Mock data until Phase 4.)
+ * platform cap warnings. Live from the engine.
  */
 export function SignalsPanel() {
   const { signalsOpen, setSignalsOpen } = useUI();
-  const events = mockEvents;
+  const events = useEvents();
 
   return createPortal(
     <AnimatePresence>

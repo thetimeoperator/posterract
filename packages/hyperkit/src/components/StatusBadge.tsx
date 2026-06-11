@@ -90,6 +90,7 @@ export function StatusBadge({
   const spec = SPECS[status];
   return (
     <span
+      data-status={status}
       className={clsx(
         "inline-flex items-center gap-1.5 rounded-full border font-display font-medium",
         size === "sm" ? "h-5 px-2 text-[10px]" : "h-6 px-2.5 text-[11px]",

@@ -7,6 +7,7 @@ import { TopBar } from "@/shell/TopBar";
 import { Navigator } from "@/shell/Navigator";
 import { SignalsPanel } from "@/shell/SignalsPanel";
 import { useUI } from "@/state/ui";
+import { useEngineBoot } from "@/engine/useEngine";
 
 export const Route = createFileRoute("/_app")({
   component: AppShell,
@@ -19,6 +20,7 @@ export const Route = createFileRoute("/_app")({
 function AppShell() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const collapsed = useUI((s) => s.spineCollapsed);
+  useEngineBoot();
 
   return (
     <div className="chamber relative min-h-screen">

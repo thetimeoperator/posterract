@@ -33,8 +33,9 @@ export const NAV_ITEMS: NavItem[] = [
   { path: "/settings", alien: "Ship Systems", plain: "Settings", icon: Settings, section: "system" },
 ];
 
-export function navItemForPath(pathname: string): NavItem | undefined {
+export function navItemForPath(pathname: string): Pick<NavItem, "alien" | "plain"> | undefined {
   if (pathname === "/") return NAV_ITEMS[0];
+  if (pathname.startsWith("/compose")) return { alien: "New Transmission", plain: "Compose" };
   return NAV_ITEMS.filter((item) => item.path !== "/").find((item) =>
     pathname.startsWith(item.path),
   );
