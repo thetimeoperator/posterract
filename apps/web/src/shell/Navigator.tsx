@@ -47,15 +47,15 @@ export function Navigator() {
     return [
       {
         id: "compose",
-        label: "New Transmission",
-        sub: "Compose and schedule a post",
+        label: "New Post",
+        sub: "Compose and schedule",
         run: go("/compose"),
         icon: <Plus size={14} />,
       },
       ...NAV_ITEMS.filter((i) => !i.locked).map((i) => ({
         id: i.path,
-        label: i.alien,
-        sub: i.plain,
+        label: i.label,
+        sub: i.flavor,
         run: go(i.path),
         icon: <i.icon size={14} />,
       })),
@@ -131,7 +131,7 @@ export function Navigator() {
             role="dialog"
             aria-modal="true"
             aria-label="Navigator"
-            className="glass relative w-full max-w-xl overflow-hidden rounded-[var(--radius-panel)] shadow-glow-violet-md"
+            className="glass relative w-full max-w-xl overflow-hidden rounded-[var(--radius-panel)] shadow-glow-neon-md"
             initial={{ scale: 0.97, y: -8, opacity: 0 }}
             animate={{ scale: 1, y: 0, opacity: 1 }}
             exit={{ scale: 0.98, y: -6, opacity: 0 }}

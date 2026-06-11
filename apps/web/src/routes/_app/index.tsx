@@ -56,7 +56,24 @@ function Bridge() {
     }
   }
 
+  const nextPost = upcoming.find((t) => t.status === "scheduled");
+  const weekStartTs = (() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime() - ((d.getDay()+6)%7)*86400_000; })();
+  const postedThisWeek = transmissions.filter(
+    (t) => (t.status === "live" || t.status === "partial") && (t.scheduledFor ?? 0) >= weekStartTs,
+  ).length;
+
   return (
+    <div className="space-y-4">
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <KpiChip label="Scheduled ahead" value={String(scheduledCount)} />
+      <KpiChip label="Posted this week" value={String(postedThisWeek)} />
+      <KpiChip label="Published all-time" value={String(liveCount)} />
+      <KpiChip
+        label="Next post"
+        value={nextPost?.scheduledFor ? undefined : "—"}
+        countdownTo={nextPost?.scheduledFor}
+      />
+    </div>
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[260px_1fr_300px]">
       {/* ── Left HUD column ── */}
       <div className="order-2 flex flex-col gap-4 xl:order-1">
@@ -190,5 +207,19 @@ function Bridge() {
         </Panel>
       </div>
     </div>
+    </div>
+  );
+}
+
+function KpiChip({ label, value, countdownTo }: { label: string; value?: string; countdownTo?: number }) {
+  return (
+    <Panel className="!p-3.5">
+      {countdownTo ? (
+        <Countdown to={countdownTo} className="!text-[20px] font-medium" />
+      ) : (
+        <p className="telemetry text-[20px] font-medium text-starlight">{value}</p>
+      )}
+      <p className="kicker mt-0.5 !text-[9px]">{label}</p>
+    </Panel>
   );
 }

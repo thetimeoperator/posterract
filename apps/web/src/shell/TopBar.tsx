@@ -1,5 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { Bell, Plus, Search } from "lucide-react";
+import { AccountMenu } from "./AccountMenu";
 import { Button } from "@posterract/hyperkit";
 import { useUI } from "@/state/ui";
 import { navItemForPath } from "./nav";
@@ -14,8 +15,8 @@ export function TopBar() {
       <div className="min-w-0 flex-1">
         {item && (
           <>
-            <p className="kicker">{item.alien}</p>
-            <p className="-mt-0.5 text-[12px] text-starlight-faint">{item.plain}</p>
+            <p className="kicker !text-starlight">{item.label}</p>
+            <p className="-mt-0.5 text-[11px] uppercase tracking-[0.1em] text-starlight-faint">{item.flavor}</p>
           </>
         )}
       </div>
@@ -48,9 +49,11 @@ export function TopBar() {
 
       <Link to="/compose">
         <Button variant="primary" size="md" icon={<Plus size={15} />}>
-          New Transmission
+          New Post
         </Button>
       </Link>
+
+      <AccountMenu />
     </header>
   );
 }

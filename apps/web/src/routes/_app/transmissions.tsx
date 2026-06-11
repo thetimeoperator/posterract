@@ -71,7 +71,7 @@ function Transmissions() {
             detail="Compose one — upload a video, pick platforms, choose a time."
             action={
               <Link to="/compose">
-                <Button variant="primary">New Transmission</Button>
+                <Button variant="primary">New Post</Button>
               </Link>
             }
           />

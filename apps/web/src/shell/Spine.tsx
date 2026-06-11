@@ -27,7 +27,7 @@ export function Spine() {
       <Link
         to="/"
         className="flex h-16 flex-none items-center gap-3 overflow-hidden border-b border-[var(--glass-border)] px-[19px]"
-        aria-label="Posterract — The Bridge"
+        aria-label="Posterract — Dashboard"
       >
         <MiniTesseract size={26} state={systemState} />
         {!collapsed && (
@@ -46,7 +46,7 @@ export function Spine() {
           <Plus size={18} className="flex-none text-neon" />
           {!collapsed && (
             <span className="whitespace-nowrap font-display text-[12px] font-semibold tracking-wide">
-              New Transmission
+              New Post
             </span>
           )}
         </Link>
@@ -129,14 +129,14 @@ function SpineItem({
         <span className="flex min-w-0 flex-col">
           <span
             className={clsx(
-              "truncate font-display text-[12px] font-semibold tracking-wide",
+              "truncate font-display text-[12.5px] font-semibold tracking-wide",
               active ? "text-starlight" : "text-starlight-dim group-hover/item:text-starlight",
             )}
           >
-            {item.alien}
+            {item.label}
           </span>
-          <span className="truncate text-[10px] uppercase tracking-[0.12em] text-starlight-faint">
-            {item.locked ? item.locked : item.plain}
+          <span className="truncate text-[9.5px] uppercase tracking-[0.12em] text-starlight-faint">
+            {item.locked ? item.locked : item.flavor}
           </span>
         </span>
       )}
@@ -147,7 +147,7 @@ function SpineItem({
     return (
       <span
         aria-disabled
-        title={`${item.alien} — ${item.locked}`}
+        title={`${item.label} — ${item.locked}`}
         className="group/item relative flex h-11 flex-none cursor-not-allowed items-center gap-3 rounded-[10px] px-[11px] opacity-45"
       >
         {inner}
@@ -159,7 +159,7 @@ function SpineItem({
     <Link
       to={item.path}
       aria-current={active ? "page" : undefined}
-      title={collapsed ? `${item.alien} — ${item.plain}` : undefined}
+      title={collapsed ? `${item.label} (${item.flavor})` : undefined}
       className={clsx(
         "group/item relative flex h-11 flex-none items-center gap-3 rounded-[10px] px-[11px] transition-colors duration-200",
         active ? "bg-[rgba(101,255,154,0.06)]" : "hover:bg-[rgba(101,255,154,0.05)]",

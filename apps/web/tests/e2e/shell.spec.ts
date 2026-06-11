@@ -8,7 +8,7 @@ test.describe("Posterract shell", () => {
     await page.goto("/");
     await expect(page.getByRole("navigation", { name: "Primary" })).toBeVisible();
     await expect(page.getByRole("banner").getByText("The Bridge")).toBeVisible();
-    await expect(page.getByRole("link", { name: /New Transmission/i }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: /New Post/i }).first()).toBeVisible();
     expect(errors).toEqual([]);
   });
 

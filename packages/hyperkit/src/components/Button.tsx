@@ -20,9 +20,9 @@ const SIZE_CLASSES: Record<ButtonSize, string> = {
 
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
   primary:
-    "border-aurora hk-charge text-starlight hover:shadow-glow-violet-md active:scale-[0.99]",
+    "border-aurora hk-charge text-starlight hover:shadow-glow-neon-md active:scale-[0.99]",
   secondary:
-    "border border-[var(--glass-border)] bg-[var(--glass-bg)] text-starlight hover:border-[var(--glass-border-bright)] hover:shadow-glow-violet-sm",
+    "border border-[var(--glass-border)] bg-[var(--glass-bg)] text-starlight hover:border-[var(--glass-border-bright)] hover:shadow-glow-neon-sm",
   tertiary:
     "text-starlight-dim hover:text-neon underline-offset-4 hover:underline bg-transparent",
   destructive:

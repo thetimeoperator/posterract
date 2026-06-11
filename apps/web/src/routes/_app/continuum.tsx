@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import clsx from "clsx";
-import { Button, EmptyState, Panel, PlatformRuneRow, StatusBadge } from "@posterract/hyperkit";
+import { Button, EmptyState, Panel, PlatformRuneRow, Segmented, StatusBadge } from "@posterract/hyperkit";
 import type { PlatformId } from "@posterract/contract";
 import { ArtifactThumb } from "@/components/ArtifactThumb";
 import { useProjections, useTransmissions } from "@/engine/useEngine";
@@ -30,6 +30,7 @@ function Continuum() {
   const transmissions = useTransmissions();
   const projections = useProjections();
   const [weekStart, setWeekStart] = useState(() => startOfWeek(Date.now()));
+  const [view, setView] = useState<"week" | "month">("week");
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
@@ -61,14 +62,25 @@ function Continuum() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <Button size="sm" variant="secondary" aria-label="Previous week" onClick={() => setWeekStart((w) => w - 7 * DAY)}>
+      <div className="flex flex-wrap items-center gap-3">
+        <Segmented
+          aria-label="Calendar view"
+          value={view}
+          onChange={setView}
+          options={[
+            { value: "week", label: "Week" },
+            { value: "month", label: "Month" },
+          ]}
+        />
+        <Button size="sm" variant="secondary" aria-label="Previous" onClick={() => setWeekStart((w) => w - (view === "week" ? 7 : 28) * DAY)}>
           <ChevronLeft size={14} />
         </Button>
-        <Button size="sm" variant="secondary" aria-label="Next week" onClick={() => setWeekStart((w) => w + 7 * DAY)}>
+        <Button size="sm" variant="secondary" aria-label="Next" onClick={() => setWeekStart((w) => w + (view === "week" ? 7 : 28) * DAY)}>
           <ChevronRight size={14} />
         </Button>
-        <p className="font-display text-[15px] font-semibold text-starlight">{weekLabel}</p>
+        <p className="font-display text-[15px] font-semibold text-starlight">
+          {view === "week" ? weekLabel : new Date(weekStart).toLocaleDateString([], { month: "long", year: "numeric" })}
+        </p>
         {!isThisWeek && (
           <Button size="sm" variant="tertiary" onClick={() => setWeekStart(startOfWeek(Date.now()))}>
             Back to this week
@@ -79,6 +91,17 @@ function Continuum() {
         </p>
       </div>
 
+      {view === "month" ? (
+        <MonthView
+          anchor={weekStart}
+          now={now}
+          transmissions={transmissions}
+          onPickDay={(day) => {
+            setWeekStart(startOfWeek(day));
+            setView("week");
+          }}
+        />
+      ) : (
       <div className="grid grid-cols-7 gap-2">
         {days.map((day) => {
           const isToday = now >= day && now < day + DAY;
@@ -161,20 +184,91 @@ function Continuum() {
           );
         })}
       </div>
+      )}
 
-      {total === 0 && (
+      {total === 0 && view === "week" && (
         <Panel>
           <EmptyState
             title="Nothing in this week's continuum."
             detail="Schedule a transmission into any docking bay above, or compose one from scratch."
             action={
               <Link to="/compose">
-                <Button variant="primary">New Transmission</Button>
+                <Button variant="primary">New Post</Button>
               </Link>
             }
           />
         </Panel>
       )}
+    </div>
+  );
+}
+
+
+function MonthView({
+  anchor,
+  now,
+  transmissions,
+  onPickDay,
+}: {
+  anchor: number;
+  now: number;
+  transmissions: ReturnType<typeof useTransmissions>;
+  onPickDay: (day: number) => void;
+}) {
+  const anchorDate = new Date(anchor);
+  const first = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1).getTime();
+  const gridStart = startOfWeek(first);
+  const cells = Array.from({ length: 42 }, (_, i) => gridStart + i * DAY);
+  const month = anchorDate.getMonth();
+
+  const countFor = (day: number) =>
+    transmissions.filter(
+      (t) => t.scheduledFor && t.status !== "draft" && t.scheduledFor >= day && t.scheduledFor < day + DAY,
+    );
+
+  return (
+    <div>
+      <div className="mb-1 grid grid-cols-7 gap-1.5 px-0.5">
+        {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
+          <p key={d} className="kicker !text-[9px] text-center">{d}</p>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-1.5">
+        {cells.map((day) => {
+          const inMonth = new Date(day).getMonth() === month;
+          const isToday = now >= day && now < day + DAY;
+          const items = countFor(day);
+          return (
+            <button
+              key={day}
+              onClick={() => onPickDay(day)}
+              className={clsx(
+                "flex min-h-[92px] flex-col rounded-[10px] border p-1.5 text-left transition-colors hover:border-[var(--glass-border-bright)]",
+                isToday ? "border-[rgba(101,255,154,0.45)] shadow-glow-neon-sm" : "border-[var(--glass-border)]",
+                inMonth ? "bg-[var(--glass-bg)]" : "bg-transparent opacity-40",
+              )}
+              aria-label={new Date(day).toDateString()}
+            >
+              <span className={clsx("telemetry text-[11px]", isToday ? "text-neon" : "text-starlight-faint")}>
+                {new Date(day).getDate()}
+              </span>
+              <span className="mt-1 flex flex-col gap-0.5">
+                {items.slice(0, 2).map((t) => (
+                  <span key={t.id} className="truncate rounded-[5px] bg-[rgba(101,255,154,0.08)] px-1 py-0.5 text-[9.5px] text-starlight-dim">
+                    <span className="telemetry text-neon">
+                      {new Date(t.scheduledFor!).toLocaleTimeString([], { hour: "numeric" })}
+                    </span>{" "}
+                    {t.title.replace(/^Sample: /, "")}
+                  </span>
+                ))}
+                {items.length > 2 && (
+                  <span className="px-1 text-[9px] text-starlight-faint">+{items.length - 2} more</span>
+                )}
+              </span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

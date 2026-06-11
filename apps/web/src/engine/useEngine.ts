@@ -12,7 +12,7 @@ import { startSimulator } from "./simulator";
 export function useEngineBoot() {
   const hydrate = useEngineStore((s) => s.hydrate);
   useEffect(() => {
-    void hydrate();
+    void hydrate().then(() => import("./samples").then((m) => m.seedSamplesOnce()));
     const stop = startSimulator();
     if (import.meta.env.DEV) {
       // Console/e2e access: window.__engine.getState().addArtifact(...) etc.

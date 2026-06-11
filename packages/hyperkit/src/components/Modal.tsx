@@ -74,7 +74,7 @@ export function Modal({ open, onClose, kicker, title, children, footer, width = 
             role="dialog"
             aria-modal="true"
             aria-label={typeof title === "string" ? title : kicker}
-            className={clsx("glass relative w-full rounded-[var(--radius-panel)] shadow-glow-violet-md", width)}
+            className={clsx("glass relative w-full rounded-[var(--radius-panel)] shadow-glow-neon-md", width)}
             initial={{ scale: 0.96, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.97, opacity: 0 }}
