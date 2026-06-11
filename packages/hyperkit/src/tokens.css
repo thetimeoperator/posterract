@@ -1,0 +1,92 @@
+/**
+ * Hyperkit tokens — the Posterract design language.
+ * "The void and the glow": deep indigo voids, iridescent cyan→violet→magenta.
+ * Source of truth for every color, glow, blur, radius, and motion curve.
+ */
+:root {
+  /* ── Void stack (backgrounds, darkest → raised) ─────────────────── */
+  --void-0: #02010a;
+  --void-1: #060415;
+  --void-2: #0b0822;
+  --void-3: #131032;
+
+  /* ── The spectrum (brand accents) ───────────────────────────────── */
+  --hyper-cyan: #5ef2ff;
+  --ultraviolet: #8b5cf6;
+  --ultraviolet-soft: #a78bfa;
+  --singularity: #ff4ecd;
+  --iridescent: linear-gradient(135deg, #5ef2ff 0%, #8b5cf6 50%, #ff4ecd 100%);
+  --iridescent-soft: linear-gradient(
+    135deg,
+    rgba(94, 242, 255, 0.35),
+    rgba(139, 92, 246, 0.35),
+    rgba(255, 78, 205, 0.35)
+  );
+
+  /* ── Starlight (text) ───────────────────────────────────────────── */
+  --starlight: #edebff;
+  --starlight-dim: #8e8ab8;
+  --starlight-faint: #514d78;
+
+  /* ── Semantic ───────────────────────────────────────────────────── */
+  --auroral: #46f5b1; /* success / live */
+  --solar: #ffc857; /* warning / partial */
+  --redshift: #ff5c7a; /* danger / failed */
+
+  /* ── Platform accents ───────────────────────────────────────────── */
+  --platform-instagram: #ff0069;
+  --platform-instagram-2: #7638fa;
+  --platform-tiktok: #25f4ee;
+  --platform-tiktok-2: #fe2c55;
+  --platform-facebook: #0866ff;
+  --platform-threads: #ffffff;
+  --platform-x: #e7e9ea;
+  --platform-youtube: #ff0033;
+
+  /* ── Glass ──────────────────────────────────────────────────────── */
+  --glass-bg: rgba(11, 8, 34, 0.55);
+  --glass-bg-raised: rgba(19, 16, 50, 0.65);
+  --glass-border: rgba(139, 92, 246, 0.18);
+  --glass-border-bright: rgba(139, 92, 246, 0.4);
+  --blur-1: 8px;
+  --blur-2: 16px;
+  --blur-3: 24px;
+
+  /* ── Glow (state, not decoration: idle → hover → active) ───────── */
+  --glow-cyan-sm: 0 0 12px rgba(94, 242, 255, 0.08);
+  --glow-cyan-md: 0 0 20px rgba(94, 242, 255, 0.2);
+  --glow-cyan-lg: 0 0 36px rgba(94, 242, 255, 0.35);
+  --glow-violet-sm: 0 0 12px rgba(139, 92, 246, 0.08);
+  --glow-violet-md: 0 0 20px rgba(139, 92, 246, 0.2);
+  --glow-violet-lg: 0 0 36px rgba(139, 92, 246, 0.35);
+  --glow-auroral-md: 0 0 20px rgba(70, 245, 177, 0.25);
+  --glow-redshift-md: 0 0 20px rgba(255, 92, 122, 0.25);
+
+  /* ── Radii ──────────────────────────────────────────────────────── */
+  --radius-panel: 16px;
+  --radius-card: 12px;
+  --radius-chip: 8px;
+  --radius-pill: 999px;
+
+  /* ── Type ───────────────────────────────────────────────────────── */
+  --font-display: "Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif;
+  --font-body: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
+  --tracking-kicker: 0.14em;
+
+  /* ── Motion ─────────────────────────────────────────────────────── */
+  --ease-warp: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-1: 200ms; /* micro */
+  --dur-2: 400ms; /* component */
+  --dur-3: 700ms; /* scene */
+
+  /* ── Z layers ───────────────────────────────────────────────────── */
+  --z-starfield: 0;
+  --z-content: 10;
+  --z-spine: 20;
+  --z-topbar: 30;
+  --z-overlay: 40;
+  --z-modal: 50;
+  --z-toast: 60;
+  --z-navigator: 70;
+}

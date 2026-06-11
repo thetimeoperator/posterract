@@ -1,0 +1,143 @@
+@import "tailwindcss";
+@import "@posterract/hyperkit/tokens.css";
+
+/* Map Hyperkit tokens into Tailwind v4 theme so utilities exist
+   (bg-void-1, text-starlight, font-display, shadow-glow-cyan-md, ...). */
+@theme inline {
+  --color-void-0: var(--void-0);
+  --color-void-1: var(--void-1);
+  --color-void-2: var(--void-2);
+  --color-void-3: var(--void-3);
+
+  --color-hyper-cyan: var(--hyper-cyan);
+  --color-ultraviolet: var(--ultraviolet);
+  --color-ultraviolet-soft: var(--ultraviolet-soft);
+  --color-singularity: var(--singularity);
+
+  --color-starlight: var(--starlight);
+  --color-starlight-dim: var(--starlight-dim);
+  --color-starlight-faint: var(--starlight-faint);
+
+  --color-auroral: var(--auroral);
+  --color-solar: var(--solar);
+  --color-redshift: var(--redshift);
+
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
+  --font-mono: var(--font-mono);
+
+  --radius-panel: var(--radius-panel);
+  --radius-card: var(--radius-card);
+  --radius-chip: var(--radius-chip);
+
+  --shadow-glow-cyan-sm: var(--glow-cyan-sm);
+  --shadow-glow-cyan-md: var(--glow-cyan-md);
+  --shadow-glow-cyan-lg: var(--glow-cyan-lg);
+  --shadow-glow-violet-sm: var(--glow-violet-sm);
+  --shadow-glow-violet-md: var(--glow-violet-md);
+  --shadow-glow-violet-lg: var(--glow-violet-lg);
+  --shadow-glow-auroral-md: var(--glow-auroral-md);
+  --shadow-glow-redshift-md: var(--glow-redshift-md);
+
+  --ease-warp: var(--ease-warp);
+}
+
+/* ── Base ─────────────────────────────────────────────────────────── */
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--void-0);
+  color: var(--starlight);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+  overflow-x: hidden;
+}
+
+::selection {
+  background: rgba(94, 242, 255, 0.25);
+}
+
+/* Visible focus, always */
+:focus-visible {
+  outline: 2px solid var(--hyper-cyan);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Scrollbars styled for the void */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--void-3) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--void-3);
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ── Shared primitives used across the app ───────────────────────── */
+
+/* Kicker: small uppercase label in display font */
+.kicker {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: var(--tracking-kicker);
+  text-transform: uppercase;
+  color: var(--starlight-dim);
+}
+
+/* Glass panel */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--blur-3));
+  -webkit-backdrop-filter: blur(var(--blur-3));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-panel);
+}
+
+/* Iridescent border via padding-box/border-box gradient trick */
+.border-iridescent {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--void-2), var(--void-2)) padding-box,
+    var(--iridescent) border-box;
+}
+
+.text-iridescent {
+  background: var(--iridescent);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+/* Mono data readouts */
+.telemetry {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

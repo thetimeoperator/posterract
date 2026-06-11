@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "posterract-web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@posterract/web", "dev"],
+      "port": 5173
+    }
+  ]
+}
