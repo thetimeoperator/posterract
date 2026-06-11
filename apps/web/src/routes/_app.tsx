@@ -38,13 +38,13 @@ function AppShell() {
         )}
       >
         <TopBar />
-        <AnimatePresence mode="popLayout" initial={false}>
+        <AnimatePresence mode="wait" initial={false}>
           <motion.main
             key={pathname}
             initial={{ opacity: 0, scale: 1.01, filter: "blur(6px)" }}
             animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
             exit={{ opacity: 0, scale: 0.99, filter: "blur(6px)" }}
-            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
             className="mx-auto min-h-[calc(100vh-4rem)] w-full max-w-7xl px-6 py-6"
           >
             <Outlet />

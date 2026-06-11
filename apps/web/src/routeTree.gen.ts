@@ -21,6 +21,7 @@ import { Route as AppPortalsRouteImport } from './routes/_app/portals'
 import { Route as AppEchoesRouteImport } from './routes/_app/echoes'
 import { Route as AppContinuumRouteImport } from './routes/_app/continuum'
 import { Route as AppComposeRouteImport } from './routes/_app/compose'
+import { Route as AppAutomationsRouteImport } from './routes/_app/automations'
 
 const AppRoute = AppRouteImport.update({
   id: '/_app',
@@ -81,9 +82,15 @@ const AppComposeRoute = AppComposeRouteImport.update({
   path: '/compose',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAutomationsRoute = AppAutomationsRouteImport.update({
+  id: '/automations',
+  path: '/automations',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
+  '/automations': typeof AppAutomationsRoute
   '/compose': typeof AppComposeRoute
   '/continuum': typeof AppContinuumRoute
   '/echoes': typeof AppEchoesRoute
@@ -96,6 +103,7 @@ export interface FileRoutesByFullPath {
   '/dev/hyperkit': typeof DevHyperkitRoute
 }
 export interface FileRoutesByTo {
+  '/automations': typeof AppAutomationsRoute
   '/compose': typeof AppComposeRoute
   '/continuum': typeof AppContinuumRoute
   '/echoes': typeof AppEchoesRoute
@@ -111,6 +119,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
+  '/_app/automations': typeof AppAutomationsRoute
   '/_app/compose': typeof AppComposeRoute
   '/_app/continuum': typeof AppContinuumRoute
   '/_app/echoes': typeof AppEchoesRoute
@@ -127,6 +136,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/automations'
     | '/compose'
     | '/continuum'
     | '/echoes'
@@ -139,6 +149,7 @@ export interface FileRouteTypes {
     | '/dev/hyperkit'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/automations'
     | '/compose'
     | '/continuum'
     | '/echoes'
@@ -153,6 +164,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_app'
+    | '/_app/automations'
     | '/_app/compose'
     | '/_app/continuum'
     | '/_app/echoes'
@@ -258,10 +270,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppComposeRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/automations': {
+      id: '/_app/automations'
+      path: '/automations'
+      fullPath: '/automations'
+      preLoaderRoute: typeof AppAutomationsRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
 interface AppRouteChildren {
+  AppAutomationsRoute: typeof AppAutomationsRoute
   AppComposeRoute: typeof AppComposeRoute
   AppContinuumRoute: typeof AppContinuumRoute
   AppEchoesRoute: typeof AppEchoesRoute
@@ -274,6 +294,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppAutomationsRoute: AppAutomationsRoute,
   AppComposeRoute: AppComposeRoute,
   AppContinuumRoute: AppContinuumRoute,
   AppEchoesRoute: AppEchoesRoute,

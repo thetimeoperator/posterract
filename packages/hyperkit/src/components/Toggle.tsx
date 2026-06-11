@@ -8,10 +8,11 @@ export type ToggleProps = {
   description?: string;
   disabled?: boolean;
   className?: string;
+  "aria-label"?: string;
 };
 
 /** Orbit switch — the dot orbits from null (left) to lit (right). */
-export function Toggle({ checked, onChange, label, description, disabled, className }: ToggleProps) {
+export function Toggle({ checked, onChange, label, description, disabled, className, "aria-label": ariaLabel }: ToggleProps) {
   const id = useId();
   return (
     <div className={clsx("flex items-center justify-between gap-4", className)}>
@@ -30,6 +31,7 @@ export function Toggle({ checked, onChange, label, description, disabled, classN
         type="button"
         role="switch"
         aria-checked={checked}
+        aria-label={ariaLabel}
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={clsx("hk-switch", disabled && "cursor-not-allowed opacity-45")}

@@ -8,6 +8,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type {
   ArtifactDTO,
+  AutomationFlowDTO,
   EventDTO,
   PlatformId,
   PortalDTO,
@@ -35,6 +36,8 @@ export type CreateTransmissionInput = {
   scheduledFor: number;
 };
 
+export type FlowInput = Omit<AutomationFlowDTO, "id" | "workspaceId" | "createdAt" | "updatedAt">;
+
 type EngineState = {
   hydrated: boolean;
   artifacts: ArtifactDTO[];
@@ -42,6 +45,7 @@ type EngineState = {
   projections: ProjectionDTO[];
   events: EventDTO[];
   portals: PortalDTO[];
+  flows: AutomationFlowDTO[];
 
   hydrate: () => Promise<void>;
   addArtifact: (file: File, meta: { durationMs?: number; width?: number; height?: number }) => Promise<ArtifactDTO>;
@@ -52,6 +56,9 @@ type EngineState = {
   duplicateTransmission: (id: string) => TransmissionDTO | undefined;
   retryProjection: (projectionId: string) => void;
   setPortalStatus: (provider: PlatformId, status: PortalDTO["status"]) => void;
+  createFlow: (input: FlowInput) => AutomationFlowDTO;
+  updateFlow: (id: string, patch: Partial<FlowInput>) => void;
+  deleteFlow: (id: string) => void;
 
   /** Internal (simulator) */
   _updateProjection: (id: string, patch: Partial<ProjectionDTO>) => void;
@@ -87,6 +94,26 @@ const seedPortals: PortalDTO[] = (
     : undefined,
 }));
 
+const seedFlows: AutomationFlowDTO[] = [
+  {
+    id: "flow_sample",
+    workspaceId: WS,
+    name: "Repurpose: IG-first → X + TikTok",
+    platforms: ["instagram", "x", "tiktok"],
+    captionTemplates: {
+      instagram: "{title} — full breakdown in this clip 🎬\n\nSave this one for later.",
+      x: "{title}.\n\nThe 60-second version:",
+      tiktok: "{title} — watch till the end.",
+    },
+    baseCaption: "{title}",
+    hashtags: ["repurpose"],
+    defaultTimeOfDay: "09:00",
+    enabled: true,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  },
+];
+
 function deriveStatus(projections: ProjectionDTO[]): TransmissionStatus {
   if (projections.length === 0) return "draft";
   const states = projections.map((p) => p.status);
@@ -109,6 +136,7 @@ export const useEngineStore = create<EngineState>()(
       projections: [],
       events: [],
       portals: seedPortals,
+      flows: seedFlows,
 
       hydrate: async () => {
         // Recreate object URLs for persisted artifacts from IndexedDB.
@@ -289,6 +317,26 @@ export const useEngineStore = create<EngineState>()(
           ),
         })),
 
+      createFlow: (input) => {
+        const now = Date.now();
+        const flow: AutomationFlowDTO = {
+          ...input,
+          id: `flow_${crypto.randomUUID().slice(0, 8)}`,
+          workspaceId: WS,
+          createdAt: now,
+          updatedAt: now,
+        };
+        set((s) => ({ flows: [flow, ...s.flows] }));
+        return flow;
+      },
+
+      updateFlow: (id, patch) =>
+        set((s) => ({
+          flows: s.flows.map((f) => (f.id === id ? { ...f, ...patch, updatedAt: Date.now() } : f)),
+        })),
+
+      deleteFlow: (id) => set((s) => ({ flows: s.flows.filter((f) => f.id !== id) })),
+
       _updateProjection: (id, patch) =>
         set((s) => ({
           projections: s.projections.map((p) => (p.id === id ? { ...p, ...patch, updatedAt: Date.now() } : p)),
@@ -330,6 +378,7 @@ export const useEngineStore = create<EngineState>()(
         projections: s.projections,
         events: s.events.slice(0, 50),
         portals: s.portals,
+        flows: s.flows,
       }),
     },
   ),

@@ -27,6 +27,7 @@ export const useTransmissions = () => useEngineStore((s) => s.transmissions);
 export const useProjections = () => useEngineStore((s) => s.projections);
 export const useEvents = () => useEngineStore((s) => s.events);
 export const usePortals = () => useEngineStore((s) => s.portals);
+export const useFlows = () => useEngineStore((s) => s.flows);
 export const useEngineActions = () =>
   useEngineStore(
     useShallow((s) => ({
@@ -38,6 +39,9 @@ export const useEngineActions = () =>
       duplicateTransmission: s.duplicateTransmission,
       retryProjection: s.retryProjection,
       setPortalStatus: s.setPortalStatus,
+      createFlow: s.createFlow,
+      updateFlow: s.updateFlow,
+      deleteFlow: s.deleteFlow,
     })),
   );
 
@@ -131,4 +135,9 @@ export function computePreflight(args: {
     }
   }
   return checks;
+}
+
+/** Replace flow tokens ({title}) in a caption template. */
+export function renderTemplate(template: string, vars: { title: string }): string {
+  return template.replaceAll(/\{title\}/gi, vars.title || "Untitled");
 }
