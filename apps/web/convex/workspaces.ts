@@ -1,26 +1,34 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { authComponent } from "./auth";
+import { getOwnedWorkspace } from "./lib";
 
 /**
- * Single-workspace bootstrap until auth lands (Phase 4): get or create the
- * default workspace, seeding demo portals and the sample flow on first run.
+ * Get-or-create the signed-in user's workspace, seeding demo portals and
+ * the sample flow on first run. Called once on boot after sign-in.
  */
-export const bootstrap = mutation({
+export const ensure = mutation({
   args: { name: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    const existing = await ctx.db.query("workspaces").first();
+    const user = await authComponent.getAuthUser(ctx);
+
+    const existing = await ctx.db
+      .query("workspaces")
+      .withIndex("by_owner", (q) => q.eq("ownerId", user._id))
+      .first();
     if (existing) return existing._id;
 
     const workspaceId = await ctx.db.insert("workspaces", {
-      name: args.name ?? "Posterract HQ",
+      name: args.name ?? (user.name ? `${user.name}'s workspace` : "My workspace"),
+      ownerId: user._id,
     });
 
     // Demo portal states — replaced by real OAuth in the connector phases.
     const seeds = [
-      ["instagram", "connected"],
-      ["tiktok", "connected"],
-      ["youtube", "connected"],
-      ["x", "needs_reauth"],
+      ["instagram", "disconnected"],
+      ["tiktok", "disconnected"],
+      ["youtube", "disconnected"],
+      ["x", "disconnected"],
       ["threads", "disconnected"],
       ["facebook", "disconnected"],
     ] as const;
@@ -34,10 +42,9 @@ export const bootstrap = mutation({
       await ctx.db.insert("portals", {
         workspaceId,
         provider,
-        handle: provider === "facebook" || provider === "youtube" ? "Posterract" : "@posterract",
-        displayName: "Posterract",
+        handle: "not connected",
+        displayName: undefined,
         status,
-        tokenExpiresAt: status === "connected" ? Date.now() + 54 * 86400_000 : undefined,
         windowUsed: caps[provider] ? 0 : undefined,
         windowCap: caps[provider]?.cap,
         windowHours: caps[provider]?.hours,
@@ -60,11 +67,27 @@ export const bootstrap = mutation({
       updatedAt: Date.now(),
     });
 
+    await ctx.db.insert("events", {
+      workspaceId,
+      type: "workspace.created",
+      message: "Welcome aboard — your Posterract is online.",
+      at: Date.now(),
+    });
+
     return workspaceId;
   },
 });
 
 export const get = query({
   args: {},
-  handler: async (ctx) => ctx.db.query("workspaces").first(),
+  handler: async (ctx) => getOwnedWorkspace(ctx),
+});
+
+export const rename = mutation({
+  args: { name: v.string() },
+  handler: async (ctx, args) => {
+    const workspace = await getOwnedWorkspace(ctx);
+    if (!workspace) throw new Error("Not signed in");
+    await ctx.db.patch(workspace._id, { name: args.name });
+  },
 });

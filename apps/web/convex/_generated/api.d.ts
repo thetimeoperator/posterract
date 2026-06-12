@@ -9,9 +9,12 @@
  */
 
 import type * as artifacts from "../artifacts.js";
+import type * as auth from "../auth.js";
 import type * as crons from "../crons.js";
 import type * as events from "../events.js";
 import type * as flows from "../flows.js";
+import type * as http from "../http.js";
+import type * as lib from "../lib.js";
 import type * as portals from "../portals.js";
 import type * as publish from "../publish.js";
 import type * as publishHelpers from "../publishHelpers.js";
@@ -26,9 +29,12 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   artifacts: typeof artifacts;
+  auth: typeof auth;
   crons: typeof crons;
   events: typeof events;
   flows: typeof flows;
+  http: typeof http;
+  lib: typeof lib;
   portals: typeof portals;
   publish: typeof publish;
   publishHelpers: typeof publishHelpers;
@@ -62,4 +68,6 @@ export declare const internal: FilterApi<
   FunctionReference<any, "internal">
 >;
 
-export declare const components: {};
+export declare const components: {
+  betterAuth: import("@convex-dev/better-auth/_generated/component.js").ComponentApi<"betterAuth">;
+};

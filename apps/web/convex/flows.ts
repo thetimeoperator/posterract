@@ -1,6 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { vPlatform } from "./schema";
+import { getOwnedWorkspace, requireWorkspace } from "./lib";
 
 const flowFields = {
   name: v.string(),
@@ -13,18 +14,24 @@ const flowFields = {
 };
 
 export const list = query({
-  args: { workspaceId: v.id("workspaces") },
-  handler: async (ctx, args) =>
-    ctx.db
+  args: {},
+  handler: async (ctx) => {
+    const workspace = await getOwnedWorkspace(ctx);
+    if (!workspace) return [];
+    return ctx.db
       .query("flows")
-      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", workspace._id))
       .order("desc")
-      .collect(),
+      .collect();
+  },
 });
 
 export const create = mutation({
-  args: { workspaceId: v.id("workspaces"), ...flowFields },
-  handler: async (ctx, args) => ctx.db.insert("flows", { ...args, updatedAt: Date.now() }),
+  args: flowFields,
+  handler: async (ctx, args) => {
+    const workspace = await requireWorkspace(ctx);
+    return ctx.db.insert("flows", { ...args, workspaceId: workspace._id, updatedAt: Date.now() });
+  },
 });
 
 export const update = mutation({
@@ -39,7 +46,10 @@ export const update = mutation({
     enabled: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    const workspace = await requireWorkspace(ctx);
     const { flowId, ...patch } = args;
+    const flow = await ctx.db.get(flowId);
+    if (!flow || flow.workspaceId !== workspace._id) throw new Error("Not found");
     const clean = Object.fromEntries(Object.entries(patch).filter(([, val]) => val !== undefined));
     await ctx.db.patch(flowId, { ...clean, updatedAt: Date.now() });
   },
@@ -47,5 +57,10 @@ export const update = mutation({
 
 export const remove = mutation({
   args: { flowId: v.id("flows") },
-  handler: async (ctx, args) => ctx.db.delete(args.flowId),
+  handler: async (ctx, args) => {
+    const workspace = await requireWorkspace(ctx);
+    const flow = await ctx.db.get(args.flowId);
+    if (!flow || flow.workspaceId !== workspace._id) throw new Error("Not found");
+    await ctx.db.delete(args.flowId);
+  },
 });

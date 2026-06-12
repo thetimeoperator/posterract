@@ -1,15 +1,18 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { getOwnedWorkspace, requireWorkspace } from "./lib";
 
 /** Browser asks for a short-lived URL, PUTs the video file straight to storage. */
 export const generateUploadUrl = mutation({
   args: {},
-  handler: async (ctx) => ctx.storage.generateUploadUrl(),
+  handler: async (ctx) => {
+    await requireWorkspace(ctx);
+    return ctx.storage.generateUploadUrl();
+  },
 });
 
 export const create = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
     storageId: v.id("_storage"),
     fileName: v.string(),
     mimeType: v.string(),
@@ -19,9 +22,14 @@ export const create = mutation({
     height: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const artifactId = await ctx.db.insert("artifacts", { ...args, status: "ready" });
+    const workspace = await requireWorkspace(ctx);
+    const artifactId = await ctx.db.insert("artifacts", {
+      ...args,
+      workspaceId: workspace._id,
+      status: "ready",
+    });
     await ctx.db.insert("events", {
-      workspaceId: args.workspaceId,
+      workspaceId: workspace._id,
       type: "artifact.encapsulated",
       message: `Artifact “${args.fileName}” secured in the Library`,
       at: Date.now(),
@@ -30,13 +38,15 @@ export const create = mutation({
   },
 });
 
-/** List artifacts with resolved playback URLs. */
+/** List the caller's artifacts with resolved playback URLs. */
 export const list = query({
-  args: { workspaceId: v.id("workspaces") },
-  handler: async (ctx, args) => {
+  args: {},
+  handler: async (ctx) => {
+    const workspace = await getOwnedWorkspace(ctx);
+    if (!workspace) return [];
     const artifacts = await ctx.db
       .query("artifacts")
-      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", workspace._id))
       .order("desc")
       .collect();
     return Promise.all(
@@ -48,6 +58,9 @@ export const list = query({
 export const rename = mutation({
   args: { artifactId: v.id("artifacts"), fileName: v.string() },
   handler: async (ctx, args) => {
+    const workspace = await requireWorkspace(ctx);
+    const artifact = await ctx.db.get(args.artifactId);
+    if (!artifact || artifact.workspaceId !== workspace._id) throw new Error("Not found");
     await ctx.db.patch(args.artifactId, { fileName: args.fileName });
   },
 });
@@ -55,11 +68,12 @@ export const rename = mutation({
 export const remove = mutation({
   args: { artifactId: v.id("artifacts") },
   handler: async (ctx, args) => {
+    const workspace = await requireWorkspace(ctx);
     const artifact = await ctx.db.get(args.artifactId);
-    if (!artifact) return { ok: true as const };
+    if (!artifact || artifact.workspaceId !== workspace._id) return { ok: true as const };
     const inFlight = await ctx.db
       .query("transmissions")
-      .withIndex("by_workspace", (q) => q.eq("workspaceId", artifact.workspaceId))
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", workspace._id))
       .filter((q) =>
         q.and(
           q.eq(q.field("artifactId"), args.artifactId),

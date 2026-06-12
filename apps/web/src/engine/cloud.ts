@@ -3,7 +3,7 @@
  * data is live from the deployment, publishing runs on the cloud scheduler.
  */
 import { useEffect } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { create } from "zustand";
 import type {
   ArtifactDTO,
@@ -25,23 +25,21 @@ export const useWorkspace = create<WorkspaceState>((set) => ({
   setWorkspaceId: (workspaceId) => set({ workspaceId }),
 }));
 
-const wsArg = () => {
-  const id = useWorkspace.getState().workspaceId;
-  if (!id) throw new Error("Workspace not ready yet");
-  return { workspaceId: id as Id<"workspaces"> };
-};
+
 
 export function useEngineBoot() {
-  const bootstrap = useMutation(api.workspaces.bootstrap);
+  const { isAuthenticated } = useConvexAuth();
+  const ensure = useMutation(api.workspaces.ensure);
   const setWorkspaceId = useWorkspace((s) => s.setWorkspaceId);
   useEffect(() => {
-    void bootstrap({}).then((id) => setWorkspaceId(id as string));
-  }, [bootstrap, setWorkspaceId]);
+    if (!isAuthenticated) return;
+    void ensure({}).then((id) => setWorkspaceId(id as string));
+  }, [isAuthenticated, ensure, setWorkspaceId]);
 }
 
 function useWsQuery<T>(hook: (args: any) => T | undefined): T | undefined {
   const workspaceId = useWorkspace((s) => s.workspaceId);
-  return hook(workspaceId ? { workspaceId: workspaceId as Id<"workspaces"> } : "skip");
+  return hook(workspaceId ? {} : "skip");
 }
 
 /** Playback URLs resolved by the artifacts query, readable synchronously. */
@@ -187,7 +185,6 @@ export function useEngineActions() {
       if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
       const { storageId } = (await res.json()) as { storageId: string };
       const artifactId = await createArtifact({
-        ...wsArg(),
         storageId: storageId as Id<"_storage">,
         fileName: file.name,
         mimeType: file.type,
@@ -198,7 +195,7 @@ export function useEngineActions() {
       });
       return {
         id: artifactId as string,
-        workspaceId: wsArg().workspaceId as string,
+        workspaceId: useWorkspace.getState().workspaceId ?? "",
         fileName: file.name,
         r2Key: storageId,
         mimeType: file.type,
@@ -218,7 +215,6 @@ export function useEngineActions() {
 
     createTransmission: (input: CreateTransmissionInput) => {
       void createTx({
-        ...wsArg(),
         title: input.title,
         baseCaption: input.baseCaption,
         hashtags: input.hashtags,
@@ -238,12 +234,11 @@ export function useEngineActions() {
 
     setPortalStatus: (provider: PlatformId, status: PortalDTO["status"]) => {
       if (status === "pending_approval" || status === "error") return;
-      void setPortal({ ...wsArg(), provider, status });
+      void setPortal({ provider, status });
     },
 
     createFlow: (input: FlowInput) =>
       void createFlowMut({
-        ...wsArg(),
         ...input,
         captionTemplates: input.captionTemplates as Record<string, string>,
       }),

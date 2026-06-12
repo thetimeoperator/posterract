@@ -1,33 +1,38 @@
 import { mutation, query } from "./_generated/server";
-import { v } from "convex/values";
 import { vPlatform, vPortalStatus } from "./schema";
+import { getOwnedWorkspace, requireWorkspace } from "./lib";
 
 export const list = query({
-  args: { workspaceId: v.id("workspaces") },
-  handler: async (ctx, args) =>
-    ctx.db
+  args: {},
+  handler: async (ctx) => {
+    const workspace = await getOwnedWorkspace(ctx);
+    if (!workspace) return [];
+    return ctx.db
       .query("portals")
-      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
-      .collect(),
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", workspace._id))
+      .collect();
+  },
 });
 
 /** Demo connect/disconnect — replaced by real OAuth in the connector phases. */
 export const setStatus = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
     provider: vPlatform,
     status: vPortalStatus,
   },
   handler: async (ctx, args) => {
+    const workspace = await requireWorkspace(ctx);
     const portal = await ctx.db
       .query("portals")
-      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", workspace._id))
       .filter((q) => q.eq(q.field("provider"), args.provider))
       .first();
     if (!portal) return;
+    const connecting = args.status === "connected";
     await ctx.db.patch(portal._id, {
       status: args.status,
-      tokenExpiresAt: args.status === "connected" ? Date.now() + 60 * 86400_000 : portal.tokenExpiresAt,
+      handle: connecting ? "@you (demo link)" : "not connected",
+      tokenExpiresAt: connecting ? Date.now() + 60 * 86400_000 : undefined,
     });
   },
 });

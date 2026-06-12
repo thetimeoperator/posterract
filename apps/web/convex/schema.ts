@@ -44,7 +44,9 @@ export const vPortalStatus = v.union(
 export default defineSchema({
   workspaces: defineTable({
     name: v.string(),
-  }),
+    /** Better Auth user id of the owner. */
+    ownerId: v.string(),
+  }).index("by_owner", ["ownerId"]),
 
   portals: defineTable({
     workspaceId: v.id("workspaces"),

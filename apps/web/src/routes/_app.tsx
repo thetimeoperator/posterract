@@ -1,4 +1,5 @@
-import { Outlet, createFileRoute, useRouterState } from "@tanstack/react-router";
+import { Navigate, Outlet, createFileRoute, useRouterState } from "@tanstack/react-router";
+import { useConvexAuth } from "convex/react";
 import clsx from "clsx";
 import { motion, AnimatePresence } from "framer-motion";
 import { SignalHost, Starfield } from "@posterract/hyperkit";
@@ -7,11 +8,20 @@ import { TopBar } from "@/shell/TopBar";
 import { Navigator } from "@/shell/Navigator";
 import { SignalsPanel } from "@/shell/SignalsPanel";
 import { useUI } from "@/state/ui";
-import { useEngineBoot } from "@/engine/useEngine";
+import { ENGINE_MODE, useEngineBoot } from "@/engine/useEngine";
+import { WarpingIn } from "@/shell/SystemStates";
 
 export const Route = createFileRoute("/_app")({
-  component: AppShell,
+  component: ENGINE_MODE === "cloud" ? GuardedAppShell : AppShell,
 });
+
+/** Cloud mode: the whole app sits behind the Gate. */
+function GuardedAppShell() {
+  const { isLoading, isAuthenticated } = useConvexAuth();
+  if (isLoading) return <WarpingIn />;
+  if (!isAuthenticated) return <Navigate to="/gate" />;
+  return <AppShell />;
+}
 
 /**
  * The Posterract shell: the chamber (black + green core glow + 84px grid,

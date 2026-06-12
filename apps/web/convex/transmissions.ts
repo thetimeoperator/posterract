@@ -2,15 +2,14 @@ import { internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { vPlatform } from "./schema";
+import { getOwnedWorkspace, requireWorkspace } from "./lib";
 
 /**
  * Create a post + its per-platform projections and schedule the publish at
- * the exact time via Convex's scheduler — this is the real version of what
- * the browser demo simulated. Fires with every laptop on Earth closed.
+ * the exact time via the cloud scheduler. Fires with every laptop closed.
  */
 export const create = mutation({
   args: {
-    workspaceId: v.id("workspaces"),
     title: v.string(),
     baseCaption: v.string(),
     hashtags: v.array(v.string()),
@@ -22,10 +21,14 @@ export const create = mutation({
     source: v.optional(v.union(v.literal("ui"), v.literal("api"))),
   },
   handler: async (ctx, args) => {
+    const workspace = await requireWorkspace(ctx);
+    const artifact = await ctx.db.get(args.artifactId);
+    if (!artifact || artifact.workspaceId !== workspace._id) throw new Error("Artifact not found");
+
     const now = Date.now();
     const scheduledFor = args.scheduleMode === "now" ? now : args.scheduledFor;
     const transmissionId = await ctx.db.insert("transmissions", {
-      workspaceId: args.workspaceId,
+      workspaceId: workspace._id,
       title: args.title || "Untitled post",
       baseCaption: args.baseCaption,
       hashtags: args.hashtags,
@@ -39,13 +42,13 @@ export const create = mutation({
 
     const portals = await ctx.db
       .query("portals")
-      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", workspace._id))
       .collect();
 
     for (const provider of args.platforms) {
       await ctx.db.insert("projections", {
         transmissionId,
-        workspaceId: args.workspaceId,
+        workspaceId: workspace._id,
         portalId: portals.find((p) => p.provider === provider)?._id,
         provider,
         caption: args.perPlatformCaptions[provider] ?? args.baseCaption,
@@ -62,7 +65,7 @@ export const create = mutation({
     await ctx.db.patch(transmissionId, { scheduledFnId });
 
     await ctx.db.insert("events", {
-      workspaceId: args.workspaceId,
+      workspaceId: workspace._id,
       transmissionId,
       type: "transmission.scheduled",
       message:
@@ -77,29 +80,37 @@ export const create = mutation({
 });
 
 export const list = query({
-  args: { workspaceId: v.id("workspaces") },
-  handler: async (ctx, args) =>
-    ctx.db
+  args: {},
+  handler: async (ctx) => {
+    const workspace = await getOwnedWorkspace(ctx);
+    if (!workspace) return [];
+    return ctx.db
       .query("transmissions")
-      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", workspace._id))
       .order("desc")
-      .collect(),
+      .collect();
+  },
 });
 
 export const listProjections = query({
-  args: { workspaceId: v.id("workspaces") },
-  handler: async (ctx, args) =>
-    ctx.db
+  args: {},
+  handler: async (ctx) => {
+    const workspace = await getOwnedWorkspace(ctx);
+    if (!workspace) return [];
+    return ctx.db
       .query("projections")
-      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
-      .collect(),
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", workspace._id))
+      .collect();
+  },
 });
 
 export const cancel = mutation({
   args: { transmissionId: v.id("transmissions") },
   handler: async (ctx, args) => {
+    const workspace = await requireWorkspace(ctx);
     const t = await ctx.db.get(args.transmissionId);
-    if (!t || (t.status !== "scheduled" && t.status !== "draft")) return;
+    if (!t || t.workspaceId !== workspace._id) throw new Error("Not found");
+    if (t.status !== "scheduled" && t.status !== "draft") return;
     if (t.scheduledFnId) await ctx.scheduler.cancel(t.scheduledFnId);
     await ctx.db.patch(t._id, { status: "canceled", updatedAt: Date.now() });
     const projections = await ctx.db
@@ -116,7 +127,7 @@ export const cancel = mutation({
       }
     }
     await ctx.db.insert("events", {
-      workspaceId: t.workspaceId,
+      workspaceId: workspace._id,
       transmissionId: t._id,
       type: "transmission.canceled",
       message: `“${t.title}” canceled`,
@@ -129,8 +140,10 @@ export const cancel = mutation({
 export const reschedule = mutation({
   args: { transmissionId: v.id("transmissions"), scheduledFor: v.number() },
   handler: async (ctx, args) => {
+    const workspace = await requireWorkspace(ctx);
     const t = await ctx.db.get(args.transmissionId);
-    if (!t || t.status !== "scheduled") return;
+    if (!t || t.workspaceId !== workspace._id) throw new Error("Not found");
+    if (t.status !== "scheduled") return;
     if (t.scheduledFnId) await ctx.scheduler.cancel(t.scheduledFnId);
     const scheduledFnId = await ctx.scheduler.runAt(args.scheduledFor, internal.publish.dispatch, {
       transmissionId: t._id,
@@ -142,14 +155,15 @@ export const reschedule = mutation({
 export const duplicate = mutation({
   args: { transmissionId: v.id("transmissions") },
   handler: async (ctx, args): Promise<void> => {
+    const workspace = await requireWorkspace(ctx);
     const t = await ctx.db.get(args.transmissionId);
-    if (!t || !t.artifactId) return;
+    if (!t || t.workspaceId !== workspace._id || !t.artifactId) return;
     const projections = await ctx.db
       .query("projections")
       .withIndex("by_transmission", (q) => q.eq("transmissionId", t._id))
       .collect();
     await ctx.runMutation(internal.publishHelpers.createInternal, {
-      workspaceId: t.workspaceId,
+      workspaceId: workspace._id,
       title: `${t.title} (copy)`,
       baseCaption: t.baseCaption,
       hashtags: t.hashtags,
@@ -164,8 +178,9 @@ export const duplicate = mutation({
 export const retryProjection = mutation({
   args: { projectionId: v.id("projections") },
   handler: async (ctx, args) => {
+    const workspace = await requireWorkspace(ctx);
     const p = await ctx.db.get(args.projectionId);
-    if (!p) return;
+    if (!p || p.workspaceId !== workspace._id) throw new Error("Not found");
     await ctx.db.patch(p._id, {
       status: "scheduled",
       errorCategory: undefined,
