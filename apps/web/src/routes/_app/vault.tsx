@@ -86,8 +86,8 @@ function Vault() {
                   size="sm"
                   variant="secondary"
                   aria-label={`Delete ${a.fileName}`}
-                  onClick={() => {
-                    const res = deleteArtifact(a.id);
+                  onClick={async () => {
+                    const res = await deleteArtifact(a.id);
                     if (!res.ok) {
                       pushSignal({ tone: "warning", title: "Can’t delete", detail: res.reason });
                     } else {
