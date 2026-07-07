@@ -30,7 +30,7 @@ insights scopes get bundled into each platform’s connect flow.
 
 **X cost control (built into the design):**
 - Only poll a post while it’s “young” (views plateau) — e.g. first 14 days, then stop.
-- One check per post per day (X dedup makes extra checks free anyway).
+- One check per post per day maximum — matches the daily points cron (X’s 24h dedup makes this free-safe anyway).
 - Worst case: a power user with 100 live X posts in their 14-day window = ≤ $0.50/day for X view-tracking. Make X view-points opt-in per workspace if we ever want it strictly $0.
 
 ---
@@ -121,7 +121,7 @@ Hook the publish engine: when a projection flips to **`live`**, insert a
 connector; becomes real reach the moment real connectors land.)
 
 ### The metrics cron (view/engagement points)
-A scheduled job every ~6h:
+A scheduled job **once daily** (founder decision; can stretch to every 2 days — views are awarded as deltas, so cadence only affects how often points land, never how many):
 1. Select live projections younger than the tracking window (e.g. ≤14 days), per platform.
 2. Call that platform’s insights endpoint (§1) with the user’s token — **batch** where possible (YouTube: 50 IDs/call).
 3. Write a `metric_snapshots` row; compute `delta = new − lastCounted`.
@@ -166,6 +166,9 @@ Pure functions over `user_stats`; leaderboard = indexed query on `weekRP` /
 - **P1 needs nothing new** — it can be built now on top of the current backend.
 - **P2 rides on the real connectors** (Phase 5/6): the same OAuth that lets us *post* is extended with the read-insights scopes, and the metrics cron reuses the connector interface. So view-points naturally land as each platform goes live.
 - Backend choice (Convex managed vs Convex self-hosted vs VPS) does **not** affect this design — ledger + cron are identical everywhere.
+
+### Meta permissions (locked in at app registration)
+The Meta developer apps request the insights scopes **up front** so gamification needs no re-consent: `instagram_manage_insights`, `pages_read_engagement` + `read_insights` (FB), `threads_manage_insights`. YouTube/TikTok analytics ride on the same OAuth used for posting.
 
 *Sources for §1: X API pay-per-use pricing (docs.x.com), TikTok Display API
 overview (developers.tiktok.com), YouTube Data API 2026 quota guides. Reading
