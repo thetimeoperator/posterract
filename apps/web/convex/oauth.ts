@@ -1,9 +1,9 @@
-import { action, internalMutation, internalQuery, mutation } from "./_generated/server";
+import { action, internalAction, internalMutation, internalQuery, mutation } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { vPlatform } from "./schema";
 import { requireWorkspace } from "./lib";
-import { instagramAuthUrl, instagramExchangeCode } from "./connectors/instagram";
+import { instagramAuthUrl, instagramExchangeCode, instagramRefreshToken } from "./connectors/instagram";
 
 declare const process: { env: Record<string, string | undefined> };
 
@@ -166,5 +166,79 @@ export const disconnect = mutation({
       providerAccountId: undefined,
       tokenExpiresAt: undefined,
     });
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Token upkeep — long-lived IG tokens last 60 days; refresh before they die.
+// ---------------------------------------------------------------------------
+
+const REFRESH_WINDOW_MS = 10 * 86400_000; // start refreshing once <10 days remain
+const REAUTH_WINDOW_MS = 2 * 86400_000; // flag the portal once <2 days remain
+
+export const listExpiringTokens = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const cutoff = Date.now() + REFRESH_WINDOW_MS;
+    const tokens = await ctx.db.query("portalTokens").collect();
+    return tokens
+      .filter((t) => t.provider === "instagram" && t.expiresAt !== undefined && t.expiresAt < cutoff)
+      .map((t) => ({
+        tokenId: t._id,
+        portalId: t.portalId,
+        workspaceId: t.workspaceId,
+        accessToken: t.accessToken,
+        expiresAt: t.expiresAt!,
+      }));
+  },
+});
+
+export const applyRefreshedToken = internalMutation({
+  args: { tokenId: v.id("portalTokens"), accessToken: v.string(), expiresAt: v.number() },
+  handler: async (ctx, args) => {
+    const token = await ctx.db.get(args.tokenId);
+    if (!token) return;
+    await ctx.db.patch(args.tokenId, { accessToken: args.accessToken, expiresAt: args.expiresAt });
+    await ctx.db.patch(token.portalId, { tokenExpiresAt: args.expiresAt });
+  },
+});
+
+export const markNeedsReauth = internalMutation({
+  args: { portalId: v.id("portals"), workspaceId: v.id("workspaces"), reason: v.string() },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.portalId, { status: "needs_reauth" });
+    await ctx.db.insert("events", {
+      workspaceId: args.workspaceId,
+      type: "portal.needs_reauth",
+      message: args.reason,
+      at: Date.now(),
+    });
+  },
+});
+
+/** Daily cron: extend soon-to-expire tokens; flag portals whose refresh keeps failing. */
+export const refreshExpiringTokens = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    const expiring = await ctx.runQuery(internal.oauth.listExpiringTokens, {});
+    for (const t of expiring) {
+      try {
+        const refreshed = await instagramRefreshToken(t.accessToken);
+        await ctx.runMutation(internal.oauth.applyRefreshedToken, {
+          tokenId: t.tokenId,
+          accessToken: refreshed.accessToken,
+          expiresAt: refreshed.expiresAt,
+        });
+      } catch {
+        // Transient failures retry tomorrow; flag only when the token is nearly dead.
+        if (t.expiresAt < Date.now() + REAUTH_WINDOW_MS) {
+          await ctx.runMutation(internal.oauth.markNeedsReauth, {
+            portalId: t.portalId,
+            workspaceId: t.workspaceId,
+            reason: "Instagram token expired — reconnect the account",
+          });
+        }
+      }
+    }
   },
 });

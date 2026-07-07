@@ -130,6 +130,8 @@ export default defineSchema({
     platformPostUrl: v.optional(v.string()),
     errorCategory: v.optional(v.string()),
     errorSummary: v.optional(v.string()),
+    /** In-flight platform container/upload id — lets a retry resume instead of restarting. */
+    pendingContainerId: v.optional(v.string()),
     updatedAt: v.number(),
   })
     .index("by_transmission", ["transmissionId"])

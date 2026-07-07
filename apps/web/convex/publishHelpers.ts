@@ -92,9 +92,6 @@ export const getWork = internalQuery({
   },
 });
 
-/** Which platforms have a real connector wired (vs. the simulator). */
-export const REAL_CONNECTORS = new Set(["instagram"]);
-
 export const patchProjection = internalMutation({
   args: {
     projectionId: v.id("projections"),
@@ -104,14 +101,17 @@ export const patchProjection = internalMutation({
     platformPostUrl: v.optional(v.string()),
     errorCategory: v.optional(v.string()),
     errorSummary: v.optional(v.string()),
+    pendingContainerId: v.optional(v.string()),
     clearError: v.optional(v.boolean()),
+    clearPendingContainer: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const { projectionId, clearError, ...patch } = args;
+    const { projectionId, clearError, clearPendingContainer, ...patch } = args;
     const clean = Object.fromEntries(Object.entries(patch).filter(([, val]) => val !== undefined));
     await ctx.db.patch(projectionId, {
       ...clean,
       ...(clearError ? { errorCategory: undefined, errorSummary: undefined } : {}),
+      ...(clearPendingContainer ? { pendingContainerId: undefined } : {}),
       updatedAt: Date.now(),
     });
   },

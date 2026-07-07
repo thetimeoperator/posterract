@@ -72,7 +72,13 @@ export async function instagramExchangeCode(args: {
     expires_in?: number;
     error?: { message?: string };
   };
-  const accessToken = longJson.access_token ?? shortJson.access_token;
+  // A short-lived fallback would die in ~1h while claiming 60 days — fail loudly instead.
+  if (!longRes.ok || !longJson.access_token) {
+    throw new Error(
+      `Instagram long-lived token exchange failed: ${longJson.error?.message ?? longRes.status}`,
+    );
+  }
+  const accessToken = longJson.access_token;
   const expiresAt = Date.now() + (longJson.expires_in ?? 60 * 86400) * 1000;
 
   // 3. profile
@@ -97,9 +103,16 @@ export async function instagramRefreshToken(accessToken: string): Promise<{ acce
   url.searchParams.set("grant_type", "ig_refresh_token");
   url.searchParams.set("access_token", accessToken);
   const res = await fetch(url);
-  const json = (await res.json()) as { access_token?: string; expires_in?: number };
+  const json = (await res.json()) as {
+    access_token?: string;
+    expires_in?: number;
+    error?: { message?: string };
+  };
+  if (!res.ok || !json.access_token) {
+    throw new Error(`Instagram token refresh failed: ${json.error?.message ?? res.status}`);
+  }
   return {
-    accessToken: json.access_token ?? accessToken,
+    accessToken: json.access_token,
     expiresAt: Date.now() + (json.expires_in ?? 60 * 86400) * 1000,
   };
 }
@@ -114,24 +127,33 @@ export async function instagramPublishReel(args: {
   accessToken: string;
   videoUrl: string;
   caption: string;
+  /** Container from a previous attempt — resume polling it instead of re-uploading. */
+  resumeContainerId?: string;
+  /** Fired when a container is created, so the caller can persist it for resume. */
+  onContainer?: (containerId: string) => Promise<void> | void;
   onProgress?: PublishProgress;
 }): Promise<{ mediaId: string; permalink?: string }> {
   const { igUserId, accessToken, videoUrl, caption } = args;
 
-  // 1. container
-  await args.onProgress?.("uploading", "Creating Instagram media container");
-  const containerRes = await fetch(`${GRAPH}/${API_VERSION}/${igUserId}/media`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ media_type: "REELS", video_url: videoUrl, caption, access_token: accessToken }),
-  });
-  const container = (await containerRes.json()) as { id?: string; error?: { message?: string } };
-  if (!containerRes.ok || !container.id) {
-    throw new Error(`IG container failed: ${container.error?.message ?? containerRes.status}`);
-  }
-  const containerId = container.id;
+  // 1. container (skipped when resuming one that is still transcoding)
+  const createContainer = async (): Promise<string> => {
+    await args.onProgress?.("uploading", "Creating Instagram media container");
+    const containerRes = await fetch(`${GRAPH}/${API_VERSION}/${igUserId}/media`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ media_type: "REELS", video_url: videoUrl, caption, access_token: accessToken }),
+    });
+    const container = (await containerRes.json()) as { id?: string; error?: { message?: string } };
+    if (!containerRes.ok || !container.id) {
+      throw new Error(`IG container failed: ${container.error?.message ?? containerRes.status}`);
+    }
+    await args.onContainer?.(container.id);
+    return container.id;
+  };
+  let resumed = Boolean(args.resumeContainerId);
+  let containerId = args.resumeContainerId ?? (await createContainer());
 
-  // 2. poll status (Reels transcode — up to ~2.5 min, then defer via retryable error)
+  // 2. poll status (Reels transcode — up to ~2.5 min per attempt, then defer via retryable error)
   await args.onProgress?.("processing", "Instagram is processing the Reel");
   const deadline = Date.now() + 150_000;
   for (;;) {
@@ -142,6 +164,12 @@ export async function instagramPublishReel(args: {
     const s = (await (await fetch(statusUrl)).json()) as { status_code?: string };
     if (s.status_code === "FINISHED") break;
     if (s.status_code === "ERROR" || s.status_code === "EXPIRED") {
+      // A resumed container may have died between attempts — start a fresh one once.
+      if (resumed) {
+        resumed = false;
+        containerId = await createContainer();
+        continue;
+      }
       throw new Error(`IG processing ${s.status_code}`);
     }
     if (Date.now() > deadline) {

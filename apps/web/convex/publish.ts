@@ -72,6 +72,7 @@ export const dispatch = internalAction({
               accessToken: tokensByPortal[portal._id]?.accessToken,
               videoUrl: artifactUrl,
               caption: projection.caption,
+              pendingContainerId: projection.pendingContainerId,
             });
             return;
           }
@@ -180,6 +181,7 @@ async function runInstagramConnector(
     accessToken?: string;
     videoUrl: string | null;
     caption: string;
+    pendingContainerId?: string;
   },
 ): Promise<void> {
   const patch = (p: FunctionArgs<typeof internal.publishHelpers.patchProjection>) =>
@@ -224,6 +226,10 @@ async function runInstagramConnector(
       accessToken: job.accessToken,
       videoUrl: job.videoUrl,
       caption: job.caption,
+      resumeContainerId: job.pendingContainerId,
+      onContainer: async (containerId) => {
+        await patch({ projectionId: job.projectionId, pendingContainerId: containerId });
+      },
       onProgress: async (stage, detail) => {
         await patch({
           projectionId: job.projectionId,
@@ -238,6 +244,7 @@ async function runInstagramConnector(
       platformPostId: result.mediaId,
       platformPostUrl: result.permalink ?? `https://www.instagram.com/reel/${result.mediaId}`,
       clearError: true,
+      clearPendingContainer: true,
     });
     await emit("projection.live", `Instagram LIVE → ${(result.permalink ?? "instagram.com").replace("https://", "")}`);
   } catch (e) {
@@ -258,6 +265,7 @@ async function runInstagramConnector(
         status: "failed",
         errorCategory: "platform",
         errorSummary: message,
+        clearPendingContainer: true,
       });
       await emit("projection.failed", `Instagram failed — ${message}`);
     }
