@@ -9,6 +9,8 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TermsRouteImport } from './routes/terms'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as GateRouteImport } from './routes/gate'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
@@ -24,6 +26,16 @@ import { Route as AppContinuumRouteImport } from './routes/_app/continuum'
 import { Route as AppComposeRouteImport } from './routes/_app/compose'
 import { Route as AppAutomationsRouteImport } from './routes/_app/automations'
 
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const GateRoute = GateRouteImport.update({
   id: '/gate',
   path: '/gate',
@@ -97,6 +109,8 @@ const AppAutomationsRoute = AppAutomationsRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/gate': typeof GateRoute
+  '/privacy': typeof PrivacyRoute
+  '/terms': typeof TermsRoute
   '/automations': typeof AppAutomationsRoute
   '/compose': typeof AppComposeRoute
   '/continuum': typeof AppContinuumRoute
@@ -111,6 +125,8 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/gate': typeof GateRoute
+  '/privacy': typeof PrivacyRoute
+  '/terms': typeof TermsRoute
   '/automations': typeof AppAutomationsRoute
   '/compose': typeof AppComposeRoute
   '/continuum': typeof AppContinuumRoute
@@ -128,6 +144,8 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
   '/gate': typeof GateRoute
+  '/privacy': typeof PrivacyRoute
+  '/terms': typeof TermsRoute
   '/_app/automations': typeof AppAutomationsRoute
   '/_app/compose': typeof AppComposeRoute
   '/_app/continuum': typeof AppContinuumRoute
@@ -146,6 +164,8 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/gate'
+    | '/privacy'
+    | '/terms'
     | '/automations'
     | '/compose'
     | '/continuum'
@@ -160,6 +180,8 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/gate'
+    | '/privacy'
+    | '/terms'
     | '/automations'
     | '/compose'
     | '/continuum'
@@ -176,6 +198,8 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_app'
     | '/gate'
+    | '/privacy'
+    | '/terms'
     | '/_app/automations'
     | '/_app/compose'
     | '/_app/continuum'
@@ -193,12 +217,28 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   GateRoute: typeof GateRoute
+  PrivacyRoute: typeof PrivacyRoute
+  TermsRoute: typeof TermsRoute
   DevCoreRoute: typeof DevCoreRoute
   DevHyperkitRoute: typeof DevHyperkitRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/gate': {
       id: '/gate'
       path: '/gate'
@@ -331,6 +371,8 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   GateRoute: GateRoute,
+  PrivacyRoute: PrivacyRoute,
+  TermsRoute: TermsRoute,
   DevCoreRoute: DevCoreRoute,
   DevHyperkitRoute: DevHyperkitRoute,
 }

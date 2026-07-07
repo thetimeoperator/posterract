@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Navigate, createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Link, Navigate, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useConvexAuth } from "convex/react";
 import { Button, GridHorizon, Input, MiniTesseract, Starfield } from "@posterract/hyperkit";
 import { DeviceStage } from "@/core3d/DeviceStage";
@@ -123,6 +123,15 @@ function Gate() {
         <p className="mt-6 text-center text-[10.5px] text-starlight-faint">
           One post. Six platforms. The fourth dimension is time.
         </p>
+
+        <div className="mt-3 flex justify-center gap-4 text-[10.5px] text-starlight-faint">
+          <Link to="/privacy" className="transition-colors hover:text-neon">
+            Privacy
+          </Link>
+          <Link to="/terms" className="transition-colors hover:text-neon">
+            Terms
+          </Link>
+        </div>
       </div>
     </main>
   );
