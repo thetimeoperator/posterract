@@ -69,9 +69,31 @@ export const getWork = internalQuery({
       .withIndex("by_workspace", (q) => q.eq("workspaceId", transmission.workspaceId))
       .collect();
     const artifact = transmission.artifactId ? await ctx.db.get(transmission.artifactId) : null;
-    return { transmission, projections, portals, artifact };
+    const artifactUrl = artifact ? await ctx.storage.getUrl(artifact.storageId) : null;
+
+    // Tokens for the connected portals we may publish through (internal-only).
+    const tokens = await ctx.db
+      .query("portalTokens")
+      .withIndex("by_workspace_provider", (q) => q.eq("workspaceId", transmission.workspaceId))
+      .collect();
+    const tokensByPortal: Record<
+      string,
+      { accessToken: string; providerUserId?: string; expiresAt?: number }
+    > = {};
+    for (const t of tokens) {
+      tokensByPortal[t.portalId] = {
+        accessToken: t.accessToken,
+        providerUserId: t.providerUserId,
+        expiresAt: t.expiresAt,
+      };
+    }
+
+    return { transmission, projections, portals, artifact, artifactUrl, tokensByPortal };
   },
 });
+
+/** Which platforms have a real connector wired (vs. the simulator). */
+export const REAL_CONNECTORS = new Set(["instagram"]);
 
 export const patchProjection = internalMutation({
   args: {

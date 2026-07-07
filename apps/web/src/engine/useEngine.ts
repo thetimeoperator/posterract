@@ -23,6 +23,8 @@ export const usePortals = impl.usePortals;
 export const useFlows = impl.useFlows;
 export const useEngineActions = impl.useEngineActions;
 export const artifactUrl = impl.artifactUrl;
+export const useOAuth = impl.useOAuth;
+export const OAUTH_SUPPORTED = impl.OAUTH_SUPPORTED;
 
 // ---------------------------------------------------------------------------
 // Shared, engine-independent helpers

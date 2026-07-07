@@ -47,3 +47,14 @@ export const useEngineActions = () =>
 export function artifactUrl(artifactId: string | undefined): string | undefined {
   return artifactId ? artifactUrls.get(artifactId) : undefined;
 }
+
+/** Demo mode has no real OAuth — Portals uses the setPortalStatus toggle instead. */
+export const OAUTH_SUPPORTED = new Set<import("@posterract/contract").PlatformId>();
+export function useOAuth() {
+  return {
+    supported: OAUTH_SUPPORTED,
+    start: async () => ({ url: "" }),
+    complete: async () => ({ ok: false as const, error: "Demo mode" }),
+    disconnect: async () => {},
+  };
+}

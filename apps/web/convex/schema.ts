@@ -53,12 +53,40 @@ export default defineSchema({
     provider: vPlatform,
     handle: v.string(),
     displayName: v.optional(v.string()),
+    /** The platform's account id (e.g. Instagram user id) once connected. */
+    providerAccountId: v.optional(v.string()),
     status: vPortalStatus,
     tokenExpiresAt: v.optional(v.number()),
     windowUsed: v.optional(v.number()),
     windowCap: v.optional(v.number()),
     windowHours: v.optional(v.number()),
   }).index("by_workspace", ["workspaceId"]),
+
+  /**
+   * OAuth access tokens — server-only. Never returned by any client-facing
+   * query; read exclusively by internal publish/refresh functions.
+   * (App-level encryption is a Phase 8 hardening item; today it relies on
+   * Convex's access control + internal-only reads.)
+   */
+  portalTokens: defineTable({
+    portalId: v.id("portals"),
+    workspaceId: v.id("workspaces"),
+    provider: vPlatform,
+    accessToken: v.string(),
+    refreshToken: v.optional(v.string()),
+    expiresAt: v.optional(v.number()),
+    providerUserId: v.optional(v.string()),
+  })
+    .index("by_portal", ["portalId"])
+    .index("by_workspace_provider", ["workspaceId", "provider"]),
+
+  /** Short-lived CSRF state for OAuth connect flows. */
+  oauthStates: defineTable({
+    state: v.string(),
+    workspaceId: v.id("workspaces"),
+    provider: vPlatform,
+    createdAt: v.number(),
+  }).index("by_state", ["state"]),
 
   artifacts: defineTable({
     workspaceId: v.id("workspaces"),

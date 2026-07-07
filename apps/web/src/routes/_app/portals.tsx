@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import clsx from "clsx";
 import { Button, Panel, PlatformRune, Telemetry, pushSignal } from "@posterract/hyperkit";
 import { PLATFORM_CAPABILITIES, PLATFORM_ORDER } from "@posterract/contract";
-import { useEngineActions, usePortals } from "@/engine/useEngine";
+import { useEngineActions, useOAuth, usePortals } from "@/engine/useEngine";
 
 export const Route = createFileRoute("/_app/portals")({
   component: Portals,
@@ -16,6 +16,7 @@ export const Route = createFileRoute("/_app/portals")({
 function Portals() {
   const portals = usePortals();
   const { setPortalStatus } = useEngineActions();
+  const oauth = useOAuth();
 
   return (
     <div className="space-y-4">
@@ -103,31 +104,47 @@ function Portals() {
               </p>
 
               <div className="mt-3 flex gap-2">
-                {connected ? (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    className="flex-1"
-                    onClick={() => {
-                      setPortalStatus(provider, "disconnected");
-                      pushSignal({ tone: "info", title: `${caps.label} portal closed` });
-                    }}
-                  >
-                    Disconnect
-                  </Button>
-                ) : (
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    className="flex-1"
-                    onClick={() => {
-                      setPortalStatus(provider, "connected");
-                      pushSignal({ tone: "success", title: `${caps.label} portal opened`, detail: "Aligned and ready to receive projections." });
-                    }}
-                  >
-                    {status === "needs_reauth" ? "Re-align portal" : "Open portal"}
-                  </Button>
-                )}
+                {(() => {
+                  const real = oauth.supported.has(provider);
+                  if (connected) {
+                    return (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="flex-1"
+                        onClick={async () => {
+                          if (real) await oauth.disconnect(provider);
+                          else setPortalStatus(provider, "disconnected");
+                          pushSignal({ tone: "info", title: `${caps.label} disconnected` });
+                        }}
+                      >
+                        Disconnect
+                      </Button>
+                    );
+                  }
+                  return (
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      className="flex-1"
+                      onClick={async () => {
+                        if (real) {
+                          const { url } = await oauth.start(provider);
+                          if (url) window.location.href = url;
+                          return;
+                        }
+                        setPortalStatus(provider, "connected");
+                        pushSignal({
+                          tone: "success",
+                          title: `${caps.label} portal opened`,
+                          detail: "Demo connection — real sign-in for this platform is coming.",
+                        });
+                      }}
+                    >
+                      {status === "needs_reauth" ? "Reconnect" : real ? `Connect ${caps.label}` : "Open portal (demo)"}
+                    </Button>
+                  );
+                })()}
               </div>
             </Panel>
           );

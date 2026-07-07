@@ -3,7 +3,7 @@
  * data is live from the deployment, publishing runs on the cloud scheduler.
  */
 import { useEffect } from "react";
-import { useConvexAuth, useMutation, useQuery } from "convex/react";
+import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import { create } from "zustand";
 import type {
   ArtifactDTO,
@@ -254,4 +254,20 @@ export function useEngineActions() {
 
 export function artifactUrl(artifactId: string | undefined): string | undefined {
   return artifactId ? cloudArtifactUrls.get(artifactId) : undefined;
+}
+
+/** Providers with a real OAuth connector wired (vs. the demo toggle). */
+export const OAUTH_SUPPORTED = new Set<PlatformId>(["instagram"]);
+
+export function useOAuth() {
+  const start = useMutation(api.oauth.start);
+  const complete = useAction(api.oauth.complete);
+  const disconnect = useMutation(api.oauth.disconnect);
+  return {
+    supported: OAUTH_SUPPORTED,
+    start: (provider: PlatformId) => start({ provider }),
+    complete: (provider: PlatformId, code: string, state: string) =>
+      complete({ provider, code, state }),
+    disconnect: (provider: PlatformId) => disconnect({ provider }),
+  };
 }

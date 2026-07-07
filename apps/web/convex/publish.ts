@@ -34,7 +34,7 @@ export const dispatch = internalAction({
       transmissionId: args.transmissionId,
     });
     if (!work || work.transmission.status === "canceled") return;
-    const { transmission, projections, portals, artifact } = work;
+    const { transmission, projections, portals, artifact, artifactUrl, tokensByPortal } = work;
     const sizeMB = Math.max(8, Math.round((artifact?.sizeBytes ?? 40_000_000) / 1_000_000));
 
     await Promise.all(
@@ -57,6 +57,21 @@ export const dispatch = internalAction({
               projectionId: projection._id,
               type: "projection.failed",
               message: `${label} blocked — account not connected`,
+            });
+            return;
+          }
+
+          // Real connector for Instagram; simulator for the rest (until wired).
+          if (projection.provider === "instagram") {
+            await runInstagramConnector(ctx, {
+              workspaceId: transmission.workspaceId,
+              transmissionId: transmission._id,
+              projectionId: projection._id,
+              attempt: projection.attemptCount + 1,
+              igUserId: tokensByPortal[portal._id]?.providerUserId,
+              accessToken: tokensByPortal[portal._id]?.accessToken,
+              videoUrl: artifactUrl,
+              caption: projection.caption,
             });
             return;
           }
@@ -151,6 +166,103 @@ async function runFakeConnector(
   await patch({ status: "live", platformPostId: postId, platformPostUrl: url, clearError: true });
   await emit("projection.live", `${job.label} LIVE → ${url.replace("https://", "")}`);
   await refresh();
+}
+
+/** Real Instagram publish — container → poll → publish, with retry semantics. */
+async function runInstagramConnector(
+  ctx: ActionCtx,
+  job: {
+    workspaceId: Id<"workspaces">;
+    transmissionId: Id<"transmissions">;
+    projectionId: Id<"projections">;
+    attempt: number;
+    igUserId?: string;
+    accessToken?: string;
+    videoUrl: string | null;
+    caption: string;
+  },
+): Promise<void> {
+  const patch = (p: FunctionArgs<typeof internal.publishHelpers.patchProjection>) =>
+    ctx.runMutation(internal.publishHelpers.patchProjection, p);
+  const emit = (type: string, message: string) =>
+    ctx.runMutation(internal.publishHelpers.emit, {
+      workspaceId: job.workspaceId,
+      transmissionId: job.transmissionId,
+      projectionId: job.projectionId,
+      type,
+      message,
+    });
+
+  if (!job.accessToken || !job.igUserId) {
+    await patch({
+      projectionId: job.projectionId,
+      status: "needs_reauth",
+      errorCategory: "auth",
+      errorSummary: "Instagram token missing — reconnect the account",
+    });
+    await emit("projection.failed", "Instagram blocked — reconnect required");
+    return;
+  }
+  if (!job.videoUrl) {
+    await patch({
+      projectionId: job.projectionId,
+      status: "failed",
+      errorCategory: "validation",
+      errorSummary: "Video is not available to publish",
+    });
+    await emit("projection.failed", "Instagram blocked — video unavailable");
+    return;
+  }
+
+  await patch({ projectionId: job.projectionId, status: "uploading", attemptCount: job.attempt });
+  await ctx.runMutation(internal.publishHelpers.refreshStatus, { transmissionId: job.transmissionId });
+
+  try {
+    const { instagramPublishReel } = await import("./connectors/instagram");
+    const result = await instagramPublishReel({
+      igUserId: job.igUserId,
+      accessToken: job.accessToken,
+      videoUrl: job.videoUrl,
+      caption: job.caption,
+      onProgress: async (stage, detail) => {
+        await patch({
+          projectionId: job.projectionId,
+          status: stage === "publishing" ? "publishing" : stage === "processing" ? "processing" : "uploading",
+        });
+        if (detail) await emit(`projection.${stage}`, `${detail}…`);
+      },
+    });
+    await patch({
+      projectionId: job.projectionId,
+      status: "live",
+      platformPostId: result.mediaId,
+      platformPostUrl: result.permalink ?? `https://www.instagram.com/reel/${result.mediaId}`,
+      clearError: true,
+    });
+    await emit("projection.live", `Instagram LIVE → ${(result.permalink ?? "instagram.com").replace("https://", "")}`);
+  } catch (e) {
+    const retryable = (e as { retryable?: boolean }).retryable === true && job.attempt < 5;
+    const message = e instanceof Error ? e.message : "Instagram publish failed";
+    if (retryable) {
+      await patch({
+        projectionId: job.projectionId,
+        status: "scheduled",
+        errorCategory: "transient",
+        errorSummary: message,
+      });
+      await emit("projection.retrying", `Instagram — ${message}; retrying`);
+      await ctx.scheduler.runAfter(60_000, internal.publish.dispatch, { transmissionId: job.transmissionId });
+    } else {
+      await patch({
+        projectionId: job.projectionId,
+        status: "failed",
+        errorCategory: "platform",
+        errorSummary: message,
+      });
+      await emit("projection.failed", `Instagram failed — ${message}`);
+    }
+  }
+  await ctx.runMutation(internal.publishHelpers.refreshStatus, { transmissionId: job.transmissionId });
 }
 
 /** Cron sweeper: re-dispatch posts that are due but lost their run. */

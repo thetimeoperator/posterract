@@ -25,6 +25,7 @@ import { Route as AppEchoesRouteImport } from './routes/_app/echoes'
 import { Route as AppContinuumRouteImport } from './routes/_app/continuum'
 import { Route as AppComposeRouteImport } from './routes/_app/compose'
 import { Route as AppAutomationsRouteImport } from './routes/_app/automations'
+import { Route as OauthCallbackProviderRouteImport } from './routes/oauth.callback.$provider'
 
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
@@ -105,6 +106,11 @@ const AppAutomationsRoute = AppAutomationsRouteImport.update({
   path: '/automations',
   getParentRoute: () => AppRoute,
 } as any)
+const OauthCallbackProviderRoute = OauthCallbackProviderRouteImport.update({
+  id: '/oauth/callback/$provider',
+  path: '/oauth/callback/$provider',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
@@ -122,6 +128,7 @@ export interface FileRoutesByFullPath {
   '/vault': typeof AppVaultRoute
   '/dev/core': typeof DevCoreRoute
   '/dev/hyperkit': typeof DevHyperkitRoute
+  '/oauth/callback/$provider': typeof OauthCallbackProviderRoute
 }
 export interface FileRoutesByTo {
   '/gate': typeof GateRoute
@@ -139,6 +146,7 @@ export interface FileRoutesByTo {
   '/dev/core': typeof DevCoreRoute
   '/dev/hyperkit': typeof DevHyperkitRoute
   '/': typeof AppIndexRoute
+  '/oauth/callback/$provider': typeof OauthCallbackProviderRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -158,6 +166,7 @@ export interface FileRoutesById {
   '/dev/core': typeof DevCoreRoute
   '/dev/hyperkit': typeof DevHyperkitRoute
   '/_app/': typeof AppIndexRoute
+  '/oauth/callback/$provider': typeof OauthCallbackProviderRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -177,6 +186,7 @@ export interface FileRouteTypes {
     | '/vault'
     | '/dev/core'
     | '/dev/hyperkit'
+    | '/oauth/callback/$provider'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/gate'
@@ -194,6 +204,7 @@ export interface FileRouteTypes {
     | '/dev/core'
     | '/dev/hyperkit'
     | '/'
+    | '/oauth/callback/$provider'
   id:
     | '__root__'
     | '/_app'
@@ -212,6 +223,7 @@ export interface FileRouteTypes {
     | '/dev/core'
     | '/dev/hyperkit'
     | '/_app/'
+    | '/oauth/callback/$provider'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -221,6 +233,7 @@ export interface RootRouteChildren {
   TermsRoute: typeof TermsRoute
   DevCoreRoute: typeof DevCoreRoute
   DevHyperkitRoute: typeof DevHyperkitRoute
+  OauthCallbackProviderRoute: typeof OauthCallbackProviderRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -337,6 +350,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAutomationsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/oauth/callback/$provider': {
+      id: '/oauth/callback/$provider'
+      path: '/oauth/callback/$provider'
+      fullPath: '/oauth/callback/$provider'
+      preLoaderRoute: typeof OauthCallbackProviderRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -375,6 +395,7 @@ const rootRouteChildren: RootRouteChildren = {
   TermsRoute: TermsRoute,
   DevCoreRoute: DevCoreRoute,
   DevHyperkitRoute: DevHyperkitRoute,
+  OauthCallbackProviderRoute: OauthCallbackProviderRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
