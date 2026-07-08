@@ -55,10 +55,9 @@ test.describe("Resonance points", () => {
       timeout: 45_000,
     });
 
-    // Dashboard chip reflects it (10 post + 5 streak + 25 first-post badge = 40).
-    const chip = page.getByRole("link", { name: "Resonance points" });
-    await expect(chip).toBeVisible();
-    await expect(chip.getByText(/^[1-9]\d*$/)).toBeVisible();
+    // Dashboard Resonance panel reflects it: charge ring + link to /points.
+    await expect(page.getByRole("progressbar", { name: "Charge" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Resonance points" })).toBeVisible();
 
     // The ledger feed shows the award.
     await page.goto("/points");

@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import clsx from "clsx";
-import { PanelLeftClose, PanelLeftOpen, Plus } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Avatar, Hint, MiniTesseract } from "@posterract/hyperkit";
 import { useUI } from "@/state/ui";
 import { NAV_ITEMS } from "./nav";
@@ -37,23 +37,8 @@ export function Spine() {
         )}
       </Link>
 
-      {/* Compose CTA */}
-      <div className="px-3 pb-1 pt-3">
-        <Link
-          to="/compose"
-          className="border-aurora hk-charge flex h-10 items-center gap-2.5 overflow-hidden rounded-[10px] px-[9px] text-starlight transition-shadow hover:shadow-glow-neon-md"
-        >
-          <Plus size={18} className="flex-none text-neon" />
-          {!collapsed && (
-            <span className="whitespace-nowrap font-display text-[12px] font-semibold tracking-wide">
-              New Post
-            </span>
-          )}
-        </Link>
-      </div>
-
       {/* Items */}
-      <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden px-3 py-2">
+      <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden px-3 pb-2 pt-3">
         {NAV_ITEMS.filter((i) => i.section === "main").map((item) => (
           <SpineItem key={item.path} item={item} active={isActive(pathname, item.path)} collapsed={collapsed} />
         ))}

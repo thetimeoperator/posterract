@@ -6,6 +6,13 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@posterract/web", "dev"],
       "port": 5173
+    },
+    {
+      "name": "web-demo",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@posterract/web", "exec", "vite", "--host", "127.0.0.1", "--port", "5199"],
+      "env": { "VITE_CONVEX_URL": "" },
+      "port": 5199
     }
   ]
 }

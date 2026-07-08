@@ -4,7 +4,7 @@ import { Flame, Radio, Sparkles, TrendingUp, Zap } from "lucide-react";
 import { Button, EmptyState, OrbitRing, Panel, ProgressBeam, Telemetry } from "@posterract/hyperkit";
 import type { PointsSource } from "@posterract/contract";
 import { BADGES, RANKS, nextRank, rankFor } from "@posterract/contract";
-import { usePoints } from "@/engine/useEngine";
+import { usePoints, useTransmissions } from "@/engine/useEngine";
 
 export const Route = createFileRoute("/_app/points")({
   component: Points,
@@ -26,11 +26,24 @@ const SOURCE_LABEL: Record<PointsSource, string> = {
  */
 function Points() {
   const points = usePoints();
+  const transmissions = useTransmissions();
   const lifetimeRP = points?.lifetimeRP ?? 0;
   const weekRP = points?.weekRP ?? 0;
   const streakDays = points?.streakDays ?? 0;
   const badges = points?.badges ?? [];
   const recent = points?.recent ?? [];
+
+  // Track record — the operator's posting history at a glance.
+  const weekStartTs = (() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d.getTime() - ((d.getDay() + 6) % 7) * 86400_000;
+  })();
+  const postedThisWeek = transmissions.filter(
+    (t) => (t.status === "live" || t.status === "partial") && (t.scheduledFor ?? 0) >= weekStartTs,
+  ).length;
+  const liveCount = transmissions.filter((t) => t.status === "live" || t.status === "partial").length;
+  const scheduledCount = transmissions.filter((t) => t.status === "scheduled").length;
 
   const rank = rankFor(lifetimeRP);
   const next = nextRank(lifetimeRP);
@@ -74,6 +87,16 @@ function Points() {
                 { k: "this week", v: `${weekRP.toLocaleString()} RP`, tone: "good" },
                 { k: "streak", v: streakDays > 0 ? `${streakDays} day${streakDays > 1 ? "s" : ""}` : "—", tone: streakDays >= 3 ? "good" : undefined },
                 { k: "badges", v: String(badges.length) },
+              ]}
+            />
+          </Panel>
+
+          <Panel kicker="Track record">
+            <Telemetry
+              rows={[
+                { k: "posted this week", v: String(postedThisWeek) },
+                { k: "published all-time", v: String(liveCount), tone: "good" },
+                { k: "scheduled ahead", v: String(scheduledCount) },
               ]}
             />
           </Panel>
