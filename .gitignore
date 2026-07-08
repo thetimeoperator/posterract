@@ -11,3 +11,5 @@ playwright-report/
 test-results/
 .convex/
 .wrangler/
+.vercel
+.env*
