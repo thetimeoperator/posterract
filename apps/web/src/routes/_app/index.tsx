@@ -11,11 +11,11 @@ import {
   StatusBadge,
   Telemetry,
 } from "@posterract/hyperkit";
-import { PLATFORM_CAPABILITIES } from "@posterract/contract";
+import { PLATFORM_CAPABILITIES, rankFor } from "@posterract/contract";
 import type { PlatformId } from "@posterract/contract";
 import type { CellVisualState } from "@/tesseract/Tesseract";
 import { DeviceStage } from "@/core3d/DeviceStage";
-import { useEvents, usePortals, useProjections, useTransmissions } from "@/engine/useEngine";
+import { useEvents, usePoints, usePortals, useProjections, useTransmissions } from "@/engine/useEngine";
 
 export const Route = createFileRoute("/_app/")({
   component: Bridge,
@@ -31,6 +31,8 @@ function Bridge() {
   const projections = useProjections();
   const events = useEvents();
   const portals = usePortals();
+  const points = usePoints();
+  const lifetimeRP = points?.lifetimeRP ?? 0;
 
   const upcoming = transmissions
     .filter((t) => t.status === "scheduled" || t.status === "transmitting")
@@ -64,7 +66,10 @@ function Bridge() {
 
   return (
     <div className="space-y-4">
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <Link to="/points" aria-label="Resonance points">
+        <KpiChip label={`Resonance · ${rankFor(lifetimeRP).label}`} value={lifetimeRP.toLocaleString()} />
+      </Link>
       <KpiChip label="Scheduled ahead" value={String(scheduledCount)} />
       <KpiChip label="Posted this week" value={String(postedThisWeek)} />
       <KpiChip label="Published all-time" value={String(liveCount)} />
@@ -119,13 +124,13 @@ function Bridge() {
         </Panel>
       </div>
 
-      {/* ── Center: THE POSTERRACT ── */}
+      {/* ── Center: THE POSTERRACT — the device itself is the Create button ── */}
       <Panel brackets className="relative order-1 min-h-[480px] overflow-hidden !p-0 xl:order-2">
-        <div className="absolute inset-0">
+        <Link to="/compose" aria-label="Start a post" className="absolute inset-0 cursor-pointer">
           <DeviceStage mode={mode} cellStates={cellStates} className="h-full w-full" />
-        </div>
+        </Link>
         {/* The readout — heritage of the original core title */}
-        <div className="core-readout absolute left-1/2 top-[8%] z-10 -translate-x-1/2">
+        <div className="core-readout pointer-events-none absolute left-1/2 top-[8%] z-10 -translate-x-1/2">
           <p className="core-readout-title">
             POSTER<span style={{ color: "var(--neon)" }}>RACT</span>
           </p>

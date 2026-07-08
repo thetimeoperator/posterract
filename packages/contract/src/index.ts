@@ -300,6 +300,78 @@ export type CreateTransmissionResponse = {
 // Retry policy (shared by engine + tests)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Resonance — the points system. RP is earned when projections go live, and
+// (later) from platform-verified views/engagement deltas. One append-only
+// ledger; rank is a pure function of lifetime RP.
+// ---------------------------------------------------------------------------
+
+export const RP_PER_LIVE_PROJECTION = 10;
+/** Bonus when all six platforms are live on one transmission. */
+export const RP_HEXACAST_BONUS = 30;
+export const RP_STREAK_PER_DAY = 5;
+export const RP_STREAK_DAILY_CAP = 50;
+/** Max RP earnable per day from posting (post + streak + bonus). */
+export const RP_POSTING_DAILY_CAP = 200;
+export const RP_PER_100_VIEWS = 1;
+export const RP_PER_10_LIKES = 1;
+export const RP_PER_COMMENT = 2;
+/** Echo points only track posts younger than this. */
+export const METRICS_WINDOW_DAYS = 14;
+
+export type Rank = { id: string; label: string; minRP: number };
+
+export const RANKS: Rank[] = [
+  { id: "drifter", label: "Drifter", minRP: 0 },
+  { id: "signalman", label: "Signalman", minRP: 500 },
+  { id: "navigator", label: "Navigator", minRP: 2_500 },
+  { id: "voyager", label: "Voyager", minRP: 10_000 },
+  { id: "luminary", label: "Luminary", minRP: 40_000 },
+  { id: "ascendant", label: "Ascendant", minRP: 150_000 },
+  { id: "architect", label: "Architect", minRP: 500_000 },
+];
+
+export function rankFor(lifetimeRP: number): Rank {
+  let current = RANKS[0];
+  for (const rank of RANKS) if (lifetimeRP >= rank.minRP) current = rank;
+  return current;
+}
+
+/** The rank above the current one, or undefined at the top. */
+export function nextRank(lifetimeRP: number): Rank | undefined {
+  return RANKS.find((r) => r.minRP > lifetimeRP);
+}
+
+export type PointsSource = "post" | "bonus" | "streak" | "milestone" | "views" | "likes" | "comments";
+
+export const BADGES: Record<string, string> = {
+  first_transmission: "First Transmission",
+  hexacast: "Hexacast",
+  streak_7: "7-Day Streak",
+  streak_30: "30-Day Streak",
+  streak_100: "100-Day Streak",
+};
+
+export type PointsEntryDTO = {
+  id: string;
+  source: PointsSource;
+  amount: number;
+  note?: string;
+  at: number;
+};
+
+export type PointsSummaryDTO = {
+  lifetimeRP: number;
+  weekRP: number;
+  streakDays: number;
+  badges: string[];
+  recent: PointsEntryDTO[];
+};
+
+// ---------------------------------------------------------------------------
+// Retry policy
+// ---------------------------------------------------------------------------
+
 export const RETRY_BASE_DELAY_MS = 30_000;
 export const RETRY_MAX_DELAY_MS = 60 * 60_000;
 export const RETRY_MAX_ATTEMPTS = 5;

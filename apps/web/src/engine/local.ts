@@ -3,7 +3,7 @@
  * publish simulator). Used when no cloud deployment is configured, and by
  * e2e tests for deterministic offline runs.
  */
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { artifactUrls, useEngineStore } from "./store";
 import { startSimulator } from "./simulator";
@@ -26,6 +26,22 @@ export const useTransmissions = () => useEngineStore((s) => s.transmissions);
 export const useProjections = () => useEngineStore((s) => s.projections);
 export const useEvents = () => useEngineStore((s) => s.events);
 export const usePortals = () => useEngineStore((s) => s.portals);
+export const usePoints = () => {
+  // Select stable refs; derive the summary in a memo (a fresh object from the
+  // selector itself would loop the zustand equality check forever).
+  const stats = useEngineStore((s) => s.stats);
+  const points = useEngineStore((s) => s.points);
+  return useMemo(
+    () => ({
+      lifetimeRP: stats.lifetimeRP,
+      weekRP: stats.weekRP,
+      streakDays: stats.streakDays,
+      badges: stats.badges,
+      recent: points.slice(0, 30),
+    }),
+    [stats, points],
+  );
+};
 export const useEngineActions = () =>
   useEngineStore(
     useShallow((s) => ({

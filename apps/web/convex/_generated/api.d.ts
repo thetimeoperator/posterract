@@ -16,6 +16,7 @@ import type * as events from "../events.js";
 import type * as http from "../http.js";
 import type * as lib from "../lib.js";
 import type * as oauth from "../oauth.js";
+import type * as points from "../points.js";
 import type * as portals from "../portals.js";
 import type * as publish from "../publish.js";
 import type * as publishHelpers from "../publishHelpers.js";
@@ -37,6 +38,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   lib: typeof lib;
   oauth: typeof oauth;
+  points: typeof points;
   portals: typeof portals;
   publish: typeof publish;
   publishHelpers: typeof publishHelpers;

@@ -10,13 +10,23 @@ import type {
   ArtifactDTO,
   EventDTO,
   PlatformId,
+  PointsEntryDTO,
   PortalDTO,
   ProjectionDTO,
   ScheduleMode,
   TransmissionDTO,
   TransmissionStatus,
 } from "@posterract/contract";
-import { PLATFORM_CAPABILITIES } from "@posterract/contract";
+import {
+  BADGES,
+  PLATFORM_CAPABILITIES,
+  RP_HEXACAST_BONUS,
+  RP_PER_LIVE_PROJECTION,
+  RP_POSTING_DAILY_CAP,
+  RP_STREAK_DAILY_CAP,
+  RP_STREAK_PER_DAY,
+  rankFor,
+} from "@posterract/contract";
 import { blobStore } from "./idb";
 
 const WS = "ws_local";
@@ -35,6 +45,18 @@ export type CreateTransmissionInput = {
   scheduledFor: number;
 };
 
+/** Ledger rows keep a private refId for idempotent awarding. */
+type LedgerEntry = PointsEntryDTO & { refId?: string };
+
+type StatsState = {
+  lifetimeRP: number;
+  weekRP: number;
+  weekStartAt: number;
+  streakDays: number;
+  lastPostDay?: string;
+  badges: string[];
+};
+
 type EngineState = {
   hydrated: boolean;
   artifacts: ArtifactDTO[];
@@ -42,6 +64,8 @@ type EngineState = {
   projections: ProjectionDTO[];
   events: EventDTO[];
   portals: PortalDTO[];
+  points: LedgerEntry[];
+  stats: StatsState;
 
   hydrate: () => Promise<void>;
   addArtifact: (file: File, meta: { durationMs?: number; width?: number; height?: number }) => Promise<ArtifactDTO>;
@@ -57,7 +81,17 @@ type EngineState = {
   _updateProjection: (id: string, patch: Partial<ProjectionDTO>) => void;
   _emit: (event: Omit<EventDTO, "id" | "workspaceId" | "at"> & { at?: number }) => void;
   _refreshTransmissionStatus: (transmissionId: string) => void;
+  _awardForLive: (projectionId: string) => void;
 };
+
+const dayOf = (ts: number) => new Date(ts).toISOString().slice(0, 10);
+
+/** Monday 00:00 UTC of the week containing ts. */
+function startOfWeek(ts: number): number {
+  const d = new Date(ts);
+  d.setUTCHours(0, 0, 0, 0);
+  return d.getTime() - ((d.getUTCDay() + 6) % 7) * 86400_000;
+}
 
 const seedPortals: PortalDTO[] = (
   [
@@ -109,6 +143,8 @@ export const useEngineStore = create<EngineState>()(
       projections: [],
       events: [],
       portals: seedPortals,
+      points: [],
+      stats: { lifetimeRP: 0, weekRP: 0, weekStartAt: startOfWeek(Date.now()), streakDays: 0, badges: [] },
 
       hydrate: async () => {
         // Recreate object URLs for persisted artifacts from IndexedDB.
@@ -289,10 +325,114 @@ export const useEngineStore = create<EngineState>()(
           ),
         })),
 
-      _updateProjection: (id, patch) =>
+      _updateProjection: (id, patch) => {
         set((s) => ({
           projections: s.projections.map((p) => (p.id === id ? { ...p, ...patch, updatedAt: Date.now() } : p)),
-        })),
+        }));
+        // Resonance mirrors the cloud engine: going live earns points, once.
+        if (patch.status === "live") get()._awardForLive(id);
+      },
+
+      _awardForLive: (projectionId) => {
+        const s = get();
+        if (s.points.some((e) => e.refId === projectionId && e.source === "post")) return;
+        const projection = s.projections.find((p) => p.id === projectionId);
+        if (!projection || projection.status !== "live") return;
+        const now = Date.now();
+        const today = dayOf(now);
+
+        const dayStart = new Date(now);
+        dayStart.setUTCHours(0, 0, 0, 0);
+        const postingSoFar = s.points
+          .filter((e) => e.at >= dayStart.getTime() && (e.source === "post" || e.source === "bonus" || e.source === "streak"))
+          .reduce((sum, e) => sum + e.amount, 0);
+        let capLeft = Math.max(0, RP_POSTING_DAILY_CAP - postingSoFar);
+
+        const entries: Array<Omit<LedgerEntry, "id" | "at">> = [];
+        const pushCapped = (e: Omit<LedgerEntry, "id" | "at">) => {
+          const amount = Math.min(e.amount, capLeft);
+          if (amount <= 0) return;
+          capLeft -= amount;
+          entries.push({ ...e, amount });
+        };
+
+        pushCapped({
+          source: "post",
+          amount: RP_PER_LIVE_PROJECTION,
+          refId: projectionId,
+          note: `${PLATFORM_CAPABILITIES[projection.provider].label} projection live`,
+        });
+
+        let { streakDays, lastPostDay } = s.stats;
+        if (lastPostDay !== today) {
+          streakDays = lastPostDay === dayOf(now - 86400_000) ? streakDays + 1 : 1;
+          lastPostDay = today;
+          pushCapped({
+            source: "streak",
+            amount: Math.min(RP_STREAK_PER_DAY * streakDays, RP_STREAK_DAILY_CAP),
+            refId: `day:${today}`,
+            note: `Streak — day ${streakDays}`,
+          });
+        }
+
+        const liveProviders = new Set(
+          s.projections.filter((p) => p.transmissionId === projection.transmissionId && p.status === "live").map((p) => p.provider),
+        );
+        if (
+          liveProviders.size === 6 &&
+          !s.points.some((e) => e.refId === projection.transmissionId && e.source === "bonus")
+        ) {
+          pushCapped({
+            source: "bonus",
+            amount: RP_HEXACAST_BONUS,
+            refId: projection.transmissionId,
+            note: "Hexacast — all six live",
+          });
+        }
+
+        const badges = new Set(s.stats.badges);
+        const grant = (key: string, rp: number) => {
+          if (badges.has(key)) return;
+          badges.add(key);
+          entries.push({ source: "milestone", amount: rp, refId: `badge:${key}`, note: BADGES[key] ?? key });
+        };
+        grant("first_transmission", 25);
+        if (liveProviders.size === 6) grant("hexacast", 50);
+        if (streakDays >= 7) grant("streak_7", 50);
+        if (streakDays >= 30) grant("streak_30", 150);
+        if (streakDays >= 100) grant("streak_100", 500);
+
+        const curWeek = startOfWeek(now);
+        const weekRP = s.stats.weekStartAt < curWeek ? 0 : s.stats.weekRP;
+        const total = entries.reduce((sum, e) => sum + e.amount, 0);
+        if (total === 0) return;
+
+        const beforeRank = rankFor(s.stats.lifetimeRP);
+        const afterRank = rankFor(s.stats.lifetimeRP + total);
+        set((state) => ({
+          points: [
+            ...entries.map((e) => ({ ...e, id: `rp_${crypto.randomUUID().slice(0, 8)}`, at: now })),
+            ...state.points,
+          ].slice(0, 200),
+          stats: {
+            lifetimeRP: state.stats.lifetimeRP + total,
+            weekRP: weekRP + total,
+            weekStartAt: curWeek,
+            streakDays,
+            lastPostDay,
+            badges: [...badges],
+          },
+        }));
+        get()._emit({
+          type: "points.awarded",
+          transmissionId: projection.transmissionId,
+          projectionId,
+          message: `+${total} Resonance`,
+        });
+        if (afterRank.id !== beforeRank.id) {
+          get()._emit({ type: "points.rankup", message: `Rank ascended — ${afterRank.label}` });
+        }
+      },
 
       _emit: (event) =>
         set((s) => ({
@@ -330,6 +470,8 @@ export const useEngineStore = create<EngineState>()(
         projections: s.projections,
         events: s.events.slice(0, 50),
         portals: s.portals,
+        points: s.points.slice(0, 100),
+        stats: s.stats,
       }),
     },
   ),

@@ -21,6 +21,7 @@ import { Route as AppUplinkRouteImport } from './routes/_app/uplink'
 import { Route as AppTransmissionsRouteImport } from './routes/_app/transmissions'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppPortalsRouteImport } from './routes/_app/portals'
+import { Route as AppPointsRouteImport } from './routes/_app/points'
 import { Route as AppEchoesRouteImport } from './routes/_app/echoes'
 import { Route as AppContinuumRouteImport } from './routes/_app/continuum'
 import { Route as AppComposeRouteImport } from './routes/_app/compose'
@@ -85,6 +86,11 @@ const AppPortalsRoute = AppPortalsRouteImport.update({
   path: '/portals',
   getParentRoute: () => AppRoute,
 } as any)
+const AppPointsRoute = AppPointsRouteImport.update({
+  id: '/points',
+  path: '/points',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppEchoesRoute = AppEchoesRouteImport.update({
   id: '/echoes',
   path: '/echoes',
@@ -114,6 +120,7 @@ export interface FileRoutesByFullPath {
   '/compose': typeof AppComposeRoute
   '/continuum': typeof AppContinuumRoute
   '/echoes': typeof AppEchoesRoute
+  '/points': typeof AppPointsRoute
   '/portals': typeof AppPortalsRoute
   '/settings': typeof AppSettingsRoute
   '/transmissions': typeof AppTransmissionsRoute
@@ -130,6 +137,7 @@ export interface FileRoutesByTo {
   '/compose': typeof AppComposeRoute
   '/continuum': typeof AppContinuumRoute
   '/echoes': typeof AppEchoesRoute
+  '/points': typeof AppPointsRoute
   '/portals': typeof AppPortalsRoute
   '/settings': typeof AppSettingsRoute
   '/transmissions': typeof AppTransmissionsRoute
@@ -149,6 +157,7 @@ export interface FileRoutesById {
   '/_app/compose': typeof AppComposeRoute
   '/_app/continuum': typeof AppContinuumRoute
   '/_app/echoes': typeof AppEchoesRoute
+  '/_app/points': typeof AppPointsRoute
   '/_app/portals': typeof AppPortalsRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/transmissions': typeof AppTransmissionsRoute
@@ -169,6 +178,7 @@ export interface FileRouteTypes {
     | '/compose'
     | '/continuum'
     | '/echoes'
+    | '/points'
     | '/portals'
     | '/settings'
     | '/transmissions'
@@ -185,6 +195,7 @@ export interface FileRouteTypes {
     | '/compose'
     | '/continuum'
     | '/echoes'
+    | '/points'
     | '/portals'
     | '/settings'
     | '/transmissions'
@@ -203,6 +214,7 @@ export interface FileRouteTypes {
     | '/_app/compose'
     | '/_app/continuum'
     | '/_app/echoes'
+    | '/_app/points'
     | '/_app/portals'
     | '/_app/settings'
     | '/_app/transmissions'
@@ -310,6 +322,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPortalsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/points': {
+      id: '/_app/points'
+      path: '/points'
+      fullPath: '/points'
+      preLoaderRoute: typeof AppPointsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/echoes': {
       id: '/_app/echoes'
       path: '/echoes'
@@ -345,6 +364,7 @@ interface AppRouteChildren {
   AppComposeRoute: typeof AppComposeRoute
   AppContinuumRoute: typeof AppContinuumRoute
   AppEchoesRoute: typeof AppEchoesRoute
+  AppPointsRoute: typeof AppPointsRoute
   AppPortalsRoute: typeof AppPortalsRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppTransmissionsRoute: typeof AppTransmissionsRoute
@@ -357,6 +377,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppComposeRoute: AppComposeRoute,
   AppContinuumRoute: AppContinuumRoute,
   AppEchoesRoute: AppEchoesRoute,
+  AppPointsRoute: AppPointsRoute,
   AppPortalsRoute: AppPortalsRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppTransmissionsRoute: AppTransmissionsRoute,

@@ -137,6 +137,51 @@ export default defineSchema({
     .index("by_transmission", ["transmissionId"])
     .index("by_workspace", ["workspaceId"]),
 
+  /** Resonance — append-only points ledger. One award per (refId, source). */
+  pointsLedger: defineTable({
+    workspaceId: v.id("workspaces"),
+    source: v.union(
+      v.literal("post"),
+      v.literal("bonus"),
+      v.literal("streak"),
+      v.literal("milestone"),
+      v.literal("views"),
+      v.literal("likes"),
+      v.literal("comments"),
+    ),
+    amount: v.number(),
+    /** Idempotency key — projection/transmission/badge reference. */
+    refId: v.optional(v.string()),
+    note: v.optional(v.string()),
+    at: v.number(),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_workspace_at", ["workspaceId", "at"])
+    .index("by_ref", ["refId", "source"]),
+
+  /** Resonance aggregates — one row per workspace. */
+  userStats: defineTable({
+    workspaceId: v.id("workspaces"),
+    lifetimeRP: v.number(),
+    weekRP: v.number(),
+    weekStartAt: v.number(),
+    streakDays: v.number(),
+    /** UTC day "YYYY-MM-DD" of the last day that earned posting RP. */
+    lastPostDay: v.optional(v.string()),
+    badges: v.array(v.string()),
+  }).index("by_workspace", ["workspaceId"]),
+
+  /** Last-counted platform metrics per projection (delta-based awarding). */
+  metricSnapshots: defineTable({
+    projectionId: v.id("projections"),
+    workspaceId: v.id("workspaces"),
+    provider: vPlatform,
+    views: v.number(),
+    likes: v.number(),
+    comments: v.number(),
+    fetchedAt: v.number(),
+  }).index("by_projection", ["projectionId"]),
+
   events: defineTable({
     workspaceId: v.id("workspaces"),
     transmissionId: v.optional(v.id("transmissions")),

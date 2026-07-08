@@ -2,6 +2,7 @@ import { internal } from "./_generated/api";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { vPlatform, vProjectionStatus, vTransmissionStatus } from "./schema";
+import { awardPointsForLiveProjection } from "./points";
 
 /** Internal twin of transmissions.create (used by duplicate + future API). */
 export const createInternal = internalMutation({
@@ -114,6 +115,8 @@ export const patchProjection = internalMutation({
       ...(clearPendingContainer ? { pendingContainerId: undefined } : {}),
       updatedAt: Date.now(),
     });
+    // Resonance: going live earns points, for every connector, exactly once.
+    if (args.status === "live") await awardPointsForLiveProjection(ctx, projectionId);
   },
 });
 

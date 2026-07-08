@@ -9,6 +9,7 @@ import type {
   ArtifactDTO,
   EventDTO,
   PlatformId,
+  PointsSummaryDTO,
   PortalDTO,
   ProjectionDTO,
   TransmissionDTO,
@@ -137,6 +138,18 @@ export function usePortals(): PortalDTO[] {
         ? { used: d.windowUsed ?? 0, cap: d.windowCap, windowHours: d.windowHours ?? 24 }
         : undefined,
   }));
+}
+
+export function usePoints(): PointsSummaryDTO | undefined {
+  const data = useWsQuery((args) => useQuery(api.points.getMyPoints, args));
+  if (!data) return undefined;
+  return {
+    lifetimeRP: data.lifetimeRP,
+    weekRP: data.weekRP,
+    streakDays: data.streakDays,
+    badges: data.badges,
+    recent: data.recent.map((e) => ({ id: e.id, source: e.source, amount: e.amount, note: e.note, at: e.at })),
+  };
 }
 
 export function useEngineActions() {

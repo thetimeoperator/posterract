@@ -10,4 +10,7 @@ crons.interval("sweep stalled posts", { minutes: 2 }, internal.publish.sweep, {}
 // Long-lived platform tokens (Instagram: 60 days) — extend before they expire.
 crons.interval("refresh platform tokens", { hours: 24 }, internal.oauth.refreshExpiringTokens, {});
 
+// Resonance: roll weekly RP every Monday just after the UTC week boundary.
+crons.weekly("reset weekly points", { dayOfWeek: "monday", hourUTC: 0, minuteUTC: 5 }, internal.points.resetWeekly, {});
+
 export default crons;

@@ -8,6 +8,7 @@ import {
   Flame,
   TerminalSquare,
   Settings,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 
@@ -28,6 +29,7 @@ export const NAV_ITEMS: NavItem[] = [
   { path: "/continuum", label: "Calendar", flavor: "Continuum", icon: CalendarDays, section: "main" },
   { path: "/transmissions", label: "Posts", flavor: "Transmissions", icon: Radio, section: "main" },
   { path: "/vault", label: "Library", flavor: "The Vault", icon: Archive, section: "main" },
+  { path: "/points", label: "Points", flavor: "Resonance", icon: Zap, section: "main" },
   { path: "/portals", label: "Accounts", flavor: "Portals", icon: Orbit, section: "main" },
   { path: "/echoes", label: "Analytics", flavor: "Echoes", icon: BarChart3, section: "main" },
   { path: "/forge", label: "AI Studio", flavor: "The Forge", icon: Flame, locked: "coming online", section: "main" },
