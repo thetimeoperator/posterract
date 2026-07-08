@@ -152,27 +152,6 @@ export type EventDTO = {
 };
 
 // ---------------------------------------------------------------------------
-// Automation flows — saved posting recipes: platforms + per-platform caption
-// templates, applied to any video. Templates may use the {title} token.
-// ---------------------------------------------------------------------------
-
-export type AutomationFlowDTO = {
-  id: string;
-  workspaceId: string;
-  name: string;
-  platforms: PlatformId[];
-  /** Per-platform caption template; missing platform falls back to baseCaption. */
-  captionTemplates: Partial<Record<PlatformId, string>>;
-  baseCaption: string;
-  hashtags: string[];
-  /** Optional preferred posting time "HH:MM" (24h, workspace timezone). */
-  defaultTimeOfDay?: string;
-  enabled: boolean;
-  createdAt: number;
-  updatedAt: number;
-};
-
-// ---------------------------------------------------------------------------
 // Validation (pre-flight checks)
 // ---------------------------------------------------------------------------
 

@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { CheckCircle2, CircleAlert, CircleX, Replace, Send, X as XIcon, Zap } from "lucide-react";
+import { CheckCircle2, CircleAlert, CircleX, Replace, Send, X as XIcon } from "lucide-react";
 import clsx from "clsx";
 import {
   Button,
@@ -24,19 +24,17 @@ import {
   renderTemplate,
   useArtifacts,
   useEngineActions,
-  useFlows,
   usePortals,
 } from "@/engine/useEngine";
 import { aspectLabel, formatBytes, formatDuration, toDatetimeLocal } from "@/lib/fmt";
 
-type ComposeSearch = { artifact?: string; at?: number; flow?: string };
+type ComposeSearch = { artifact?: string; at?: number };
 
 export const Route = createFileRoute("/_app/compose")({
   component: Composer,
   validateSearch: (search: Record<string, unknown>): ComposeSearch => ({
     artifact: typeof search.artifact === "string" ? search.artifact : undefined,
     at: typeof search.at === "number" ? search.at : undefined,
-    flow: typeof search.flow === "string" ? search.flow : undefined,
   }),
 });
 
@@ -50,9 +48,7 @@ function Composer() {
   const search = Route.useSearch();
   const artifacts = useArtifacts();
   const portals = usePortals();
-  const flows = useFlows();
   const { createTransmission } = useEngineActions();
-  const [appliedFlow, setAppliedFlow] = useState<string>("");
 
   const [artifactId, setArtifactId] = useState<string | undefined>(search.artifact);
   const [title, setTitle] = useState("");
@@ -67,35 +63,6 @@ function Composer() {
   const [vaultOpen, setVaultOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [safeZones, setSafeZones] = useState(false);
-
-  const applyFlow = (flowId: string) => {
-    setAppliedFlow(flowId);
-    const flow = flows.find((f) => f.id === flowId);
-    if (!flow) return;
-    setPlatforms([...new Set(flow.platforms)]);
-    setOverrides({ ...flow.captionTemplates });
-    setBaseCaption(flow.baseCaption);
-    setHashtags([...new Set(flow.hashtags)]);
-    if (flow.defaultTimeOfDay) {
-      const [h, m] = flow.defaultTimeOfDay.split(":").map(Number);
-      const at = new Date();
-      at.setHours(h, m, 0, 0);
-      if (at.getTime() <= Date.now()) at.setTime(at.getTime() + 86400_000);
-      setMode("at");
-      setWhenLocal(toDatetimeLocal(at.getTime()));
-    }
-    pushSignal({ tone: "info", title: `Flow applied: ${flow.name}`, detail: "Platforms, captions, and time pre-filled." });
-  };
-
-  // Apply flow from ?flow= exactly once per flow id (StrictMode-safe)
-  const appliedFromSearch = useRef<string | null>(null);
-  useEffect(() => {
-    if (search.flow && appliedFromSearch.current !== search.flow && flows.some((f) => f.id === search.flow)) {
-      appliedFromSearch.current = search.flow;
-      applyFlow(search.flow);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search.flow, flows]);
 
   const artifact = artifacts.find((a) => a.id === artifactId);
   const previewUrl = artifactUrl(artifactId);
@@ -306,28 +273,6 @@ function Composer() {
 
       {/* ── Right: targets + trajectory + pre-flight ── */}
       <div className="flex flex-col gap-4">
-        {flows.filter((f) => f.enabled).length > 0 && (
-          <Panel kicker="Automation" title="Apply a flow" brackets>
-            <div className="flex items-center gap-2">
-              <Zap size={14} className="flex-none text-neon" />
-              <select
-                value={appliedFlow}
-                onChange={(e) => e.target.value && applyFlow(e.target.value)}
-                aria-label="Apply automation flow"
-                className="h-9 w-full rounded-[10px] border border-[rgba(155,255,197,0.25)] bg-void-2 px-2.5 text-[12.5px] text-starlight [color-scheme:dark] focus:border-[rgba(101,255,154,0.6)] focus:outline-none"
-              >
-                <option value="">No flow — compose manually</option>
-                {flows
-                  .filter((f) => f.enabled)
-                  .map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.name}
-                    </option>
-                  ))}
-              </select>
-            </div>
-          </Panel>
-        )}
         <Panel kicker="Projection targets" title="Platforms" brackets>
           {/* The cube net — unfolded-cross arrangement (chip row when narrow) */}
           <div className="hidden grid-cols-4 gap-1.5 min-[1500px]:grid" role="group" aria-label="Target platforms">

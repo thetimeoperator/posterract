@@ -7,7 +7,6 @@ import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import { create } from "zustand";
 import type {
   ArtifactDTO,
-  AutomationFlowDTO,
   EventDTO,
   PlatformId,
   PortalDTO,
@@ -16,7 +15,7 @@ import type {
 } from "@posterract/contract";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
-import type { CreateTransmissionInput, FlowInput } from "./store";
+import type { CreateTransmissionInput } from "./store";
 
 /** Workspace context (single workspace until auth lands). */
 type WorkspaceState = { workspaceId: string | null; setWorkspaceId: (id: string) => void };
@@ -140,23 +139,6 @@ export function usePortals(): PortalDTO[] {
   }));
 }
 
-export function useFlows(): AutomationFlowDTO[] {
-  const docs = useWsQuery((args) => useQuery(api.flows.list, args));
-  return (docs ?? []).map((d) => ({
-    id: d._id as string,
-    workspaceId: d.workspaceId as string,
-    name: d.name,
-    platforms: d.platforms,
-    captionTemplates: d.captionTemplates as Partial<Record<PlatformId, string>>,
-    baseCaption: d.baseCaption,
-    hashtags: d.hashtags,
-    defaultTimeOfDay: d.defaultTimeOfDay,
-    enabled: d.enabled,
-    createdAt: d._creationTime,
-    updatedAt: d.updatedAt,
-  }));
-}
-
 export function useEngineActions() {
   const generateUploadUrl = useMutation(api.artifacts.generateUploadUrl);
   const createArtifact = useMutation(api.artifacts.create);
@@ -167,9 +149,6 @@ export function useEngineActions() {
   const duplicateTx = useMutation(api.transmissions.duplicate);
   const retryProj = useMutation(api.transmissions.retryProjection);
   const setPortal = useMutation(api.portals.setStatus);
-  const createFlowMut = useMutation(api.flows.create);
-  const updateFlowMut = useMutation(api.flows.update);
-  const removeFlowMut = useMutation(api.flows.remove);
 
   return {
     addArtifact: async (
@@ -236,19 +215,6 @@ export function useEngineActions() {
       if (status === "pending_approval" || status === "error") return;
       void setPortal({ provider, status });
     },
-
-    createFlow: (input: FlowInput) =>
-      void createFlowMut({
-        ...input,
-        captionTemplates: input.captionTemplates as Record<string, string>,
-      }),
-    updateFlow: (id: string, patch: Partial<FlowInput>) =>
-      void updateFlowMut({
-        flowId: id as Id<"flows">,
-        ...patch,
-        captionTemplates: patch.captionTemplates as Record<string, string> | undefined,
-      }),
-    deleteFlow: (id: string) => void removeFlowMut({ flowId: id as Id<"flows"> }),
   };
 }
 

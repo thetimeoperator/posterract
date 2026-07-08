@@ -13,7 +13,6 @@ import type * as auth from "../auth.js";
 import type * as connectors_instagram from "../connectors/instagram.js";
 import type * as crons from "../crons.js";
 import type * as events from "../events.js";
-import type * as flows from "../flows.js";
 import type * as http from "../http.js";
 import type * as lib from "../lib.js";
 import type * as oauth from "../oauth.js";
@@ -35,7 +34,6 @@ declare const fullApi: ApiFromModules<{
   "connectors/instagram": typeof connectors_instagram;
   crons: typeof crons;
   events: typeof events;
-  flows: typeof flows;
   http: typeof http;
   lib: typeof lib;
   oauth: typeof oauth;

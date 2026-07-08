@@ -4,8 +4,8 @@ import { authComponent } from "./auth";
 import { getOwnedWorkspace } from "./lib";
 
 /**
- * Get-or-create the signed-in user's workspace, seeding demo portals and
- * the sample flow on first run. Called once on boot after sign-in.
+ * Get-or-create the signed-in user's workspace, seeding demo portals on
+ * first run. Called once on boot after sign-in.
  */
 export const ensure = mutation({
   args: { name: v.optional(v.string()) },
@@ -50,22 +50,6 @@ export const ensure = mutation({
         windowHours: caps[provider]?.hours,
       });
     }
-
-    await ctx.db.insert("flows", {
-      workspaceId,
-      name: "Repurpose: IG-first → X + TikTok",
-      platforms: ["instagram", "x", "tiktok"],
-      captionTemplates: {
-        instagram: "{title} — full breakdown in this clip 🎬\n\nSave this one for later.",
-        x: "{title}.\n\nThe 60-second version:",
-        tiktok: "{title} — watch till the end.",
-      },
-      baseCaption: "{title}",
-      hashtags: ["repurpose"],
-      defaultTimeOfDay: "09:00",
-      enabled: true,
-      updatedAt: Date.now(),
-    });
 
     await ctx.db.insert("events", {
       workspaceId,

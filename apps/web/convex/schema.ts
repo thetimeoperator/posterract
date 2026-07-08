@@ -146,15 +146,4 @@ export default defineSchema({
     at: v.number(),
   }).index("by_workspace", ["workspaceId"]),
 
-  flows: defineTable({
-    workspaceId: v.id("workspaces"),
-    name: v.string(),
-    platforms: v.array(vPlatform),
-    captionTemplates: v.record(v.string(), v.string()),
-    baseCaption: v.string(),
-    hashtags: v.array(v.string()),
-    defaultTimeOfDay: v.optional(v.string()),
-    enabled: v.boolean(),
-    updatedAt: v.number(),
-  }).index("by_workspace", ["workspaceId"]),
 });

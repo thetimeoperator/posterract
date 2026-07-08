@@ -20,7 +20,6 @@ export const useTransmissions = impl.useTransmissions;
 export const useProjections = impl.useProjections;
 export const useEvents = impl.useEvents;
 export const usePortals = impl.usePortals;
-export const useFlows = impl.useFlows;
 export const useEngineActions = impl.useEngineActions;
 export const artifactUrl = impl.artifactUrl;
 export const useOAuth = impl.useOAuth;

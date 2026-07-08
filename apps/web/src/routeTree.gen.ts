@@ -24,7 +24,6 @@ import { Route as AppPortalsRouteImport } from './routes/_app/portals'
 import { Route as AppEchoesRouteImport } from './routes/_app/echoes'
 import { Route as AppContinuumRouteImport } from './routes/_app/continuum'
 import { Route as AppComposeRouteImport } from './routes/_app/compose'
-import { Route as AppAutomationsRouteImport } from './routes/_app/automations'
 import { Route as OauthCallbackProviderRouteImport } from './routes/oauth.callback.$provider'
 
 const TermsRoute = TermsRouteImport.update({
@@ -101,11 +100,6 @@ const AppComposeRoute = AppComposeRouteImport.update({
   path: '/compose',
   getParentRoute: () => AppRoute,
 } as any)
-const AppAutomationsRoute = AppAutomationsRouteImport.update({
-  id: '/automations',
-  path: '/automations',
-  getParentRoute: () => AppRoute,
-} as any)
 const OauthCallbackProviderRoute = OauthCallbackProviderRouteImport.update({
   id: '/oauth/callback/$provider',
   path: '/oauth/callback/$provider',
@@ -117,7 +111,6 @@ export interface FileRoutesByFullPath {
   '/gate': typeof GateRoute
   '/privacy': typeof PrivacyRoute
   '/terms': typeof TermsRoute
-  '/automations': typeof AppAutomationsRoute
   '/compose': typeof AppComposeRoute
   '/continuum': typeof AppContinuumRoute
   '/echoes': typeof AppEchoesRoute
@@ -134,7 +127,6 @@ export interface FileRoutesByTo {
   '/gate': typeof GateRoute
   '/privacy': typeof PrivacyRoute
   '/terms': typeof TermsRoute
-  '/automations': typeof AppAutomationsRoute
   '/compose': typeof AppComposeRoute
   '/continuum': typeof AppContinuumRoute
   '/echoes': typeof AppEchoesRoute
@@ -154,7 +146,6 @@ export interface FileRoutesById {
   '/gate': typeof GateRoute
   '/privacy': typeof PrivacyRoute
   '/terms': typeof TermsRoute
-  '/_app/automations': typeof AppAutomationsRoute
   '/_app/compose': typeof AppComposeRoute
   '/_app/continuum': typeof AppContinuumRoute
   '/_app/echoes': typeof AppEchoesRoute
@@ -175,7 +166,6 @@ export interface FileRouteTypes {
     | '/gate'
     | '/privacy'
     | '/terms'
-    | '/automations'
     | '/compose'
     | '/continuum'
     | '/echoes'
@@ -192,7 +182,6 @@ export interface FileRouteTypes {
     | '/gate'
     | '/privacy'
     | '/terms'
-    | '/automations'
     | '/compose'
     | '/continuum'
     | '/echoes'
@@ -211,7 +200,6 @@ export interface FileRouteTypes {
     | '/gate'
     | '/privacy'
     | '/terms'
-    | '/_app/automations'
     | '/_app/compose'
     | '/_app/continuum'
     | '/_app/echoes'
@@ -343,13 +331,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppComposeRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/automations': {
-      id: '/_app/automations'
-      path: '/automations'
-      fullPath: '/automations'
-      preLoaderRoute: typeof AppAutomationsRouteImport
-      parentRoute: typeof AppRoute
-    }
     '/oauth/callback/$provider': {
       id: '/oauth/callback/$provider'
       path: '/oauth/callback/$provider'
@@ -361,7 +342,6 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteChildren {
-  AppAutomationsRoute: typeof AppAutomationsRoute
   AppComposeRoute: typeof AppComposeRoute
   AppContinuumRoute: typeof AppContinuumRoute
   AppEchoesRoute: typeof AppEchoesRoute
@@ -374,7 +354,6 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
-  AppAutomationsRoute: AppAutomationsRoute,
   AppComposeRoute: AppComposeRoute,
   AppContinuumRoute: AppContinuumRoute,
   AppEchoesRoute: AppEchoesRoute,
