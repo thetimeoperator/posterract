@@ -79,13 +79,23 @@ export const getWork = internalQuery({
       .collect();
     const tokensByPortal: Record<
       string,
-      { accessToken: string; providerUserId?: string; expiresAt?: number }
+      {
+        tokenId: typeof tokens[number]["_id"];
+        accessToken: string;
+        refreshToken?: string;
+        providerUserId?: string;
+        expiresAt?: number;
+        refreshExpiresAt?: number;
+      }
     > = {};
     for (const t of tokens) {
       tokensByPortal[t.portalId] = {
+        tokenId: t._id,
         accessToken: t.accessToken,
+        refreshToken: t.refreshToken,
         providerUserId: t.providerUserId,
         expiresAt: t.expiresAt,
+        refreshExpiresAt: t.refreshExpiresAt,
       };
     }
 

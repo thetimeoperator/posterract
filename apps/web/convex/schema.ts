@@ -75,6 +75,8 @@ export default defineSchema({
     accessToken: v.string(),
     refreshToken: v.optional(v.string()),
     expiresAt: v.optional(v.number()),
+    /** When the refresh token itself dies (TikTok: 365d, rotating). */
+    refreshExpiresAt: v.optional(v.number()),
     providerUserId: v.optional(v.string()),
   })
     .index("by_portal", ["portalId"])

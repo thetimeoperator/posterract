@@ -4,12 +4,14 @@ import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import type { FunctionArgs } from "convex/server";
 
+// Convex runtime provides process.env; declare for app-side typechecking.
+declare const process: { env: Record<string, string | undefined> };
+
 /**
- * The publish engine. Today every platform runs the FAKE connector — the
- * same staged lifecycle the product shows (uploading → publishing →
- * processing → live) — so the cloud loop is real end-to-end before the
- * platform APIs are wired in. Real connectors replace `runFakeConnector`
- * one platform at a time in the connector phases.
+ * The publish engine. Instagram and TikTok run real connectors; the
+ * remaining platforms run the FAKE connector — the same staged lifecycle
+ * the product shows (uploading → publishing → processing → live) — until
+ * their real connectors land in the connector phases.
  */
 
 const LABELS: Record<string, string> = {
@@ -61,7 +63,7 @@ export const dispatch = internalAction({
             return;
           }
 
-          // Real connector for Instagram; simulator for the rest (until wired).
+          // Real connectors (Instagram, TikTok); simulator for the rest (until wired).
           if (projection.provider === "instagram") {
             await runInstagramConnector(ctx, {
               workspaceId: transmission.workspaceId,
@@ -72,6 +74,20 @@ export const dispatch = internalAction({
               accessToken: tokensByPortal[portal._id]?.accessToken,
               videoUrl: artifactUrl,
               caption: projection.caption,
+              pendingContainerId: projection.pendingContainerId,
+            });
+            return;
+          }
+          if (projection.provider === "tiktok") {
+            await runTikTokConnector(ctx, {
+              workspaceId: transmission.workspaceId,
+              transmissionId: transmission._id,
+              projectionId: projection._id,
+              attempt: projection.attemptCount + 1,
+              token: tokensByPortal[portal._id],
+              videoUrl: artifactUrl,
+              caption: projection.caption,
+              mimeType: artifact?.mimeType,
               pendingContainerId: projection.pendingContainerId,
             });
             return;
@@ -268,6 +284,149 @@ async function runInstagramConnector(
         clearPendingContainer: true,
       });
       await emit("projection.failed", `Instagram failed — ${message}`);
+    }
+  }
+  await ctx.runMutation(internal.publishHelpers.refreshStatus, { transmissionId: job.transmissionId });
+}
+
+/** Real TikTok publish — direct post via FILE_UPLOAD, with retry semantics. */
+async function runTikTokConnector(
+  ctx: ActionCtx,
+  job: {
+    workspaceId: Id<"workspaces">;
+    transmissionId: Id<"transmissions">;
+    projectionId: Id<"projections">;
+    attempt: number;
+    token?: {
+      tokenId: Id<"portalTokens">;
+      accessToken: string;
+      refreshToken?: string;
+      expiresAt?: number;
+      refreshExpiresAt?: number;
+    };
+    videoUrl: string | null;
+    caption: string;
+    mimeType?: string;
+    pendingContainerId?: string;
+  },
+): Promise<void> {
+  const patch = (p: FunctionArgs<typeof internal.publishHelpers.patchProjection>) =>
+    ctx.runMutation(internal.publishHelpers.patchProjection, p);
+  const emit = (type: string, message: string) =>
+    ctx.runMutation(internal.publishHelpers.emit, {
+      workspaceId: job.workspaceId,
+      transmissionId: job.transmissionId,
+      projectionId: job.projectionId,
+      type,
+      message,
+    });
+
+  if (!job.token) {
+    await patch({
+      projectionId: job.projectionId,
+      status: "needs_reauth",
+      errorCategory: "auth",
+      errorSummary: "TikTok token missing — reconnect the account",
+    });
+    await emit("projection.failed", "TikTok blocked — reconnect required");
+    return;
+  }
+  if (!job.videoUrl) {
+    await patch({
+      projectionId: job.projectionId,
+      status: "failed",
+      errorCategory: "validation",
+      errorSummary: "Video is not available to publish",
+    });
+    await emit("projection.failed", "TikTok blocked — video unavailable");
+    return;
+  }
+
+  await patch({ projectionId: job.projectionId, status: "uploading", attemptCount: job.attempt });
+  await ctx.runMutation(internal.publishHelpers.refreshStatus, { transmissionId: job.transmissionId });
+
+  const { tiktokPublishVideo, tiktokRefreshToken } = await import("./connectors/tiktok");
+
+  // Access tokens live 24h — refresh on demand when stale (rotates the refresh token).
+  let accessToken = job.token.accessToken;
+  if (job.token.refreshToken && (job.token.expiresAt ?? 0) < Date.now() + 120_000) {
+    try {
+      const refreshed = await tiktokRefreshToken({
+        clientKey: process.env.TIKTOK_CLIENT_KEY!,
+        clientSecret: process.env.TIKTOK_CLIENT_SECRET!,
+        refreshToken: job.token.refreshToken,
+      });
+      accessToken = refreshed.accessToken;
+      await ctx.runMutation(internal.oauth.applyRefreshedToken, {
+        tokenId: job.token.tokenId,
+        accessToken: refreshed.accessToken,
+        expiresAt: refreshed.expiresAt,
+        refreshToken: refreshed.refreshToken,
+        refreshExpiresAt: refreshed.refreshExpiresAt,
+      });
+    } catch {
+      await patch({
+        projectionId: job.projectionId,
+        status: "needs_reauth",
+        errorCategory: "auth",
+        errorSummary: "TikTok session expired — reconnect the account",
+      });
+      await emit("projection.failed", "TikTok blocked — reconnect required");
+      await ctx.runMutation(internal.publishHelpers.refreshStatus, { transmissionId: job.transmissionId });
+      return;
+    }
+  }
+
+  try {
+    const result = await tiktokPublishVideo({
+      accessToken,
+      videoUrl: job.videoUrl,
+      caption: job.caption,
+      mimeType: job.mimeType,
+      resumePublishId: job.pendingContainerId,
+      onPublishId: async (publishId) => {
+        await patch({ projectionId: job.projectionId, pendingContainerId: publishId });
+      },
+      onProgress: async (stage, detail) => {
+        await patch({
+          projectionId: job.projectionId,
+          status: stage === "processing" ? "processing" : "uploading",
+        });
+        if (detail) await emit(`projection.${stage}`, `${detail}…`);
+      },
+    });
+    await patch({
+      projectionId: job.projectionId,
+      status: "live",
+      platformPostId: result.postId ?? result.publishId,
+      clearError: true,
+      clearPendingContainer: true,
+    });
+    await emit(
+      "projection.live",
+      result.postId ? `TikTok LIVE → video ${result.postId}` : "TikTok LIVE — private while the app is unaudited",
+    );
+  } catch (e) {
+    const retryable = (e as { retryable?: boolean }).retryable === true && job.attempt < 5;
+    const message = e instanceof Error ? e.message : "TikTok publish failed";
+    if (retryable) {
+      await patch({
+        projectionId: job.projectionId,
+        status: "scheduled",
+        errorCategory: "transient",
+        errorSummary: message,
+      });
+      await emit("projection.retrying", `TikTok — ${message}; retrying`);
+      await ctx.scheduler.runAfter(60_000, internal.publish.dispatch, { transmissionId: job.transmissionId });
+    } else {
+      await patch({
+        projectionId: job.projectionId,
+        status: "failed",
+        errorCategory: "platform",
+        errorSummary: message,
+        clearPendingContainer: true,
+      });
+      await emit("projection.failed", `TikTok failed — ${message}`);
     }
   }
   await ctx.runMutation(internal.publishHelpers.refreshStatus, { transmissionId: job.transmissionId });

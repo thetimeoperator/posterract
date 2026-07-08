@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import { vPlatform } from "./schema";
 import { requireWorkspace } from "./lib";
 import { instagramAuthUrl, instagramExchangeCode, instagramRefreshToken } from "./connectors/instagram";
+import { tiktokAuthUrl, tiktokExchangeCode, tiktokRefreshToken } from "./connectors/tiktok";
 
 declare const process: { env: Record<string, string | undefined> };
 
@@ -30,6 +31,13 @@ export const start = mutation({
       if (!clientId) throw new Error("Instagram not configured");
       return {
         url: instagramAuthUrl({ clientId, redirectUri: redirectUri("instagram"), state }),
+      };
+    }
+    if (args.provider === "tiktok") {
+      const clientKey = process.env.TIKTOK_CLIENT_KEY;
+      if (!clientKey) throw new Error("TikTok not configured");
+      return {
+        url: tiktokAuthUrl({ clientKey, redirectUri: redirectUri("tiktok"), state }),
       };
     }
     throw new Error(`${args.provider} connect is not available yet`);
@@ -66,6 +74,26 @@ export const complete = action({
         });
         return { ok: true, handle: `@${token.username}` };
       }
+      if (args.provider === "tiktok") {
+        const token = await tiktokExchangeCode({
+          clientKey: process.env.TIKTOK_CLIENT_KEY!,
+          clientSecret: process.env.TIKTOK_CLIENT_SECRET!,
+          redirectUri: redirectUri("tiktok"),
+          code: args.code,
+        });
+        await ctx.runMutation(internal.oauth.saveConnection, {
+          state: args.state,
+          provider: "tiktok",
+          handle: token.displayName,
+          providerAccountId: token.openId,
+          accessToken: token.accessToken,
+          refreshToken: token.refreshToken,
+          expiresAt: token.expiresAt,
+          refreshExpiresAt: token.refreshExpiresAt,
+          providerUserId: token.openId,
+        });
+        return { ok: true, handle: token.displayName };
+      }
       return { ok: false, error: `${args.provider} is not available yet` };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : "Connection failed" };
@@ -94,7 +122,9 @@ export const saveConnection = internalMutation({
     handle: v.string(),
     providerAccountId: v.string(),
     accessToken: v.string(),
+    refreshToken: v.optional(v.string()),
     expiresAt: v.optional(v.number()),
+    refreshExpiresAt: v.optional(v.number()),
     providerUserId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -130,7 +160,9 @@ export const saveConnection = internalMutation({
       workspaceId,
       provider: args.provider,
       accessToken: args.accessToken,
+      refreshToken: args.refreshToken,
       expiresAt: args.expiresAt,
+      refreshExpiresAt: args.refreshExpiresAt,
       providerUserId: args.providerUserId,
     });
 
@@ -170,35 +202,55 @@ export const disconnect = mutation({
 });
 
 // ---------------------------------------------------------------------------
-// Token upkeep — long-lived IG tokens last 60 days; refresh before they die.
+// Token upkeep. Instagram: 60-day tokens, refresh inside the last 10 days.
+// TikTok: 24h access tokens with a rotating 365-day refresh token — refresh
+// every run so the connection stays warm for the scheduler.
 // ---------------------------------------------------------------------------
 
-const REFRESH_WINDOW_MS = 10 * 86400_000; // start refreshing once <10 days remain
+const REFRESH_WINDOW_MS = 10 * 86400_000; // IG: start refreshing once <10 days remain
 const REAUTH_WINDOW_MS = 2 * 86400_000; // flag the portal once <2 days remain
 
 export const listExpiringTokens = internalQuery({
   args: {},
   handler: async (ctx) => {
-    const cutoff = Date.now() + REFRESH_WINDOW_MS;
+    const igCutoff = Date.now() + REFRESH_WINDOW_MS;
     const tokens = await ctx.db.query("portalTokens").collect();
     return tokens
-      .filter((t) => t.provider === "instagram" && t.expiresAt !== undefined && t.expiresAt < cutoff)
+      .filter((t) => {
+        if (t.provider === "instagram") return t.expiresAt !== undefined && t.expiresAt < igCutoff;
+        if (t.provider === "tiktok") return t.refreshToken !== undefined;
+        return false;
+      })
       .map((t) => ({
         tokenId: t._id,
         portalId: t.portalId,
         workspaceId: t.workspaceId,
+        provider: t.provider,
         accessToken: t.accessToken,
-        expiresAt: t.expiresAt!,
+        refreshToken: t.refreshToken,
+        expiresAt: t.expiresAt ?? 0,
+        refreshExpiresAt: t.refreshExpiresAt,
       }));
   },
 });
 
 export const applyRefreshedToken = internalMutation({
-  args: { tokenId: v.id("portalTokens"), accessToken: v.string(), expiresAt: v.number() },
+  args: {
+    tokenId: v.id("portalTokens"),
+    accessToken: v.string(),
+    expiresAt: v.number(),
+    refreshToken: v.optional(v.string()),
+    refreshExpiresAt: v.optional(v.number()),
+  },
   handler: async (ctx, args) => {
     const token = await ctx.db.get(args.tokenId);
     if (!token) return;
-    await ctx.db.patch(args.tokenId, { accessToken: args.accessToken, expiresAt: args.expiresAt });
+    await ctx.db.patch(args.tokenId, {
+      accessToken: args.accessToken,
+      expiresAt: args.expiresAt,
+      ...(args.refreshToken ? { refreshToken: args.refreshToken } : {}),
+      ...(args.refreshExpiresAt ? { refreshExpiresAt: args.refreshExpiresAt } : {}),
+    });
     await ctx.db.patch(token.portalId, { tokenExpiresAt: args.expiresAt });
   },
 });
@@ -223,19 +275,38 @@ export const refreshExpiringTokens = internalAction({
     const expiring = await ctx.runQuery(internal.oauth.listExpiringTokens, {});
     for (const t of expiring) {
       try {
-        const refreshed = await instagramRefreshToken(t.accessToken);
-        await ctx.runMutation(internal.oauth.applyRefreshedToken, {
-          tokenId: t.tokenId,
-          accessToken: refreshed.accessToken,
-          expiresAt: refreshed.expiresAt,
-        });
+        if (t.provider === "instagram") {
+          const refreshed = await instagramRefreshToken(t.accessToken);
+          await ctx.runMutation(internal.oauth.applyRefreshedToken, {
+            tokenId: t.tokenId,
+            accessToken: refreshed.accessToken,
+            expiresAt: refreshed.expiresAt,
+          });
+        } else if (t.provider === "tiktok" && t.refreshToken) {
+          const refreshed = await tiktokRefreshToken({
+            clientKey: process.env.TIKTOK_CLIENT_KEY!,
+            clientSecret: process.env.TIKTOK_CLIENT_SECRET!,
+            refreshToken: t.refreshToken,
+          });
+          await ctx.runMutation(internal.oauth.applyRefreshedToken, {
+            tokenId: t.tokenId,
+            accessToken: refreshed.accessToken,
+            expiresAt: refreshed.expiresAt,
+            refreshToken: refreshed.refreshToken,
+            refreshExpiresAt: refreshed.refreshExpiresAt,
+          });
+        }
       } catch {
-        // Transient failures retry tomorrow; flag only when the token is nearly dead.
-        if (t.expiresAt < Date.now() + REAUTH_WINDOW_MS) {
+        // Transient failures retry tomorrow; flag only when the credential is nearly dead.
+        const dying =
+          t.provider === "tiktok"
+            ? (t.refreshExpiresAt ?? 0) < Date.now() + REAUTH_WINDOW_MS
+            : t.expiresAt < Date.now() + REAUTH_WINDOW_MS;
+        if (dying) {
           await ctx.runMutation(internal.oauth.markNeedsReauth, {
             portalId: t.portalId,
             workspaceId: t.workspaceId,
-            reason: "Instagram token expired — reconnect the account",
+            reason: `${t.provider} token expired — reconnect the account`,
           });
         }
       }

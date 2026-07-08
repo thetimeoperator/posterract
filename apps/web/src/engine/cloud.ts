@@ -236,7 +236,7 @@ export function artifactUrl(artifactId: string | undefined): string | undefined 
 }
 
 /** Providers with a real OAuth connector wired (vs. the demo toggle). */
-export const OAUTH_SUPPORTED = new Set<PlatformId>(["instagram"]);
+export const OAUTH_SUPPORTED = new Set<PlatformId>(["instagram", "tiktok"]);
 
 export function useOAuth() {
   const start = useMutation(api.oauth.start);
