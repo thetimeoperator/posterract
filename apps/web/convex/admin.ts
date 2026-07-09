@@ -11,9 +11,22 @@ export const resetWorkspace = internalMutation({
   args: {
     workspaceId: v.id("workspaces"),
     disconnectPortals: v.optional(v.boolean()),
+    deleteArtifacts: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const counts: Record<string, number> = {};
+
+    if (args.deleteArtifacts) {
+      const artifacts = await ctx.db
+        .query("artifacts")
+        .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+        .collect();
+      for (const a of artifacts) {
+        await ctx.storage.delete(a.storageId);
+        await ctx.db.delete(a._id);
+      }
+      counts.artifacts = artifacts.length;
+    }
 
     for (const table of ["transmissions", "projections", "events", "pointsLedger", "userStats"] as const) {
       const rows = await ctx.db
