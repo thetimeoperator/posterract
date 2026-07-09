@@ -125,7 +125,8 @@ async function openApiPost<T>(path: string, accessToken: string, body: unknown):
   });
   const json = (await res.json()) as TikTokEnvelope<T>;
   if (json.error && json.error.code && json.error.code !== "ok") {
-    throw new Error(`TikTok ${path} failed: ${json.error.message ?? json.error.code}`);
+    // Keep the machine-readable code — messages are often generic boilerplate.
+    throw new Error(`TikTok ${path} failed: ${json.error.code} — ${json.error.message ?? "no message"}`);
   }
   if (!json.data) throw new Error(`TikTok ${path} failed: empty response (${res.status})`);
   return json.data;
