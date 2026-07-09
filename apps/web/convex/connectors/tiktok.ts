@@ -240,6 +240,14 @@ export async function tiktokPublishVideo(args: {
     if (status.status === "PUBLISH_COMPLETE") {
       return { publishId, postId: status.publicaly_available_post_id?.[0]?.toString() };
     }
+    // A resumed FILE_UPLOAD still in PROCESSING_UPLOAD means the prior
+    // attempt died mid-transfer — its upload_url is gone, so the publish can
+    // never complete. Start a fresh one.
+    if (resumed && status.status === "PROCESSING_UPLOAD") {
+      resumed = false;
+      publishId = await initAndUpload();
+      continue;
+    }
     if (status.status === "FAILED") {
       // A resumed publish may have died between attempts — start fresh once.
       if (resumed) {
