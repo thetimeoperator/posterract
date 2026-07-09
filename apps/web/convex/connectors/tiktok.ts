@@ -13,9 +13,11 @@
 
 const OPEN_API = "https://open.tiktokapis.com";
 
-/** video.list rides along for Echo points (Display API) — the app must have
- * Login Kit + Content Posting API + Display API products enabled. */
-export const TIKTOK_SCOPES = ["user.info.basic", "video.publish", "video.list"];
+/** Posting scopes only: Login Kit (user.info.basic) + Content Posting API
+ * (video.publish). `video.list` (Display API) is added later for the
+ * view-count analytics cron — requesting it before the app has the Display
+ * API product would make the authorize step reject the scope. */
+export const TIKTOK_SCOPES = ["user.info.basic", "video.publish"];
 
 export function tiktokAuthUrl(args: { clientKey: string; redirectUri: string; state: string }): string {
   const p = new URLSearchParams({
