@@ -155,13 +155,17 @@ export async function tiktokPublishVideo(args: {
   const { accessToken, videoUrl, caption } = args;
 
   const initAndUpload = async (): Promise<string> => {
-    // 1. creator info — required pre-publish step; also surfaces privacy options.
+    // 1. creator info — required pre-publish step; the post request MUST
+    // mirror these settings (guidelines reject contradictions, e.g. allowing
+    // duets on a private account where duet_disabled=true).
     await args.onProgress?.("uploading", "Checking TikTok creator status");
-    const creator = await openApiPost<{ privacy_level_options?: string[]; creator_nickname?: string }>(
-      "/v2/post/publish/creator_info/query/",
-      accessToken,
-      {},
-    );
+    const creator = await openApiPost<{
+      privacy_level_options?: string[];
+      creator_nickname?: string;
+      comment_disabled?: boolean;
+      duet_disabled?: boolean;
+      stitch_disabled?: boolean;
+    }>("/v2/post/publish/creator_info/query/", accessToken, {});
     // Unaudited clients may only post privately; post-audit this becomes the user's choice.
     const privacy = creator.privacy_level_options?.includes("SELF_ONLY")
       ? "SELF_ONLY"
@@ -185,9 +189,9 @@ export async function tiktokPublishVideo(args: {
         post_info: {
           title: caption.slice(0, 2200),
           privacy_level: privacy,
-          disable_duet: false,
-          disable_comment: false,
-          disable_stitch: false,
+          disable_duet: creator.duet_disabled ?? false,
+          disable_comment: creator.comment_disabled ?? false,
+          disable_stitch: creator.stitch_disabled ?? false,
         },
         source_info: {
           source: "FILE_UPLOAD",
