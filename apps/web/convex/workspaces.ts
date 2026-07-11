@@ -35,7 +35,6 @@ export const ensure = mutation({
     const caps: Record<string, { cap: number; hours: number } | undefined> = {
       instagram: { cap: 100, hours: 24 },
       tiktok: { cap: 15, hours: 24 },
-      youtube: { cap: 6, hours: 24 },
       threads: { cap: 250, hours: 24 },
     };
     for (const [provider, status] of seeds) {

@@ -56,6 +56,8 @@ export default defineSchema({
     /** The platform's account id (e.g. Instagram user id) once connected. */
     providerAccountId: v.optional(v.string()),
     status: vPortalStatus,
+    /** OAuth scopes actually granted by the provider. */
+    scopes: v.optional(v.array(v.string())),
     tokenExpiresAt: v.optional(v.number()),
     windowUsed: v.optional(v.number()),
     windowCap: v.optional(v.number()),
@@ -78,6 +80,7 @@ export default defineSchema({
     /** When the refresh token itself dies (TikTok: 365d, rotating). */
     refreshExpiresAt: v.optional(v.number()),
     providerUserId: v.optional(v.string()),
+    scopes: v.optional(v.array(v.string())),
   })
     .index("by_portal", ["portalId"])
     .index("by_workspace_provider", ["workspaceId", "provider"]),
@@ -125,6 +128,10 @@ export default defineSchema({
     provider: vPlatform,
     caption: v.string(),
     hashtags: v.array(v.string()),
+    /** Provider-specific user choices captured at compose time. */
+    platformOptions: v.optional(
+      v.record(v.string(), v.union(v.string(), v.boolean(), v.number())),
+    ),
     status: vProjectionStatus,
     attemptCount: v.number(),
     nextAttemptAt: v.optional(v.number()),
@@ -182,6 +189,21 @@ export default defineSchema({
     likes: v.number(),
     comments: v.number(),
     fetchedAt: v.number(),
+  }).index("by_projection", ["projectionId"]),
+
+  /**
+   * Resumable YouTube upload URLs are bearer-like secrets. Keep them in an
+   * internal-only table rather than returning them with projection records.
+   */
+  youtubeUploadSessions: defineTable({
+    projectionId: v.id("projections"),
+    workspaceId: v.id("workspaces"),
+    uploadUrl: v.string(),
+    totalBytes: v.number(),
+    mimeType: v.string(),
+    uploadedBytes: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
   }).index("by_projection", ["projectionId"]),
 
   events: defineTable({

@@ -1,6 +1,7 @@
 import { internal } from "./_generated/api";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
+import type { Doc } from "./_generated/dataModel";
 import { vPlatform, vProjectionStatus, vTransmissionStatus } from "./schema";
 import { awardPointsForLiveProjection } from "./points";
 
@@ -14,6 +15,12 @@ export const createInternal = internalMutation({
     artifactId: v.id("artifacts"),
     platforms: v.array(vPlatform),
     perPlatformCaptions: v.record(v.string(), v.string()),
+    perPlatformOptions: v.optional(
+      v.record(
+        v.string(),
+        v.record(v.string(), v.union(v.string(), v.boolean(), v.number())),
+      ),
+    ),
     scheduledFor: v.number(),
   },
   handler: async (ctx, args) => {
@@ -35,6 +42,7 @@ export const createInternal = internalMutation({
       .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
       .collect();
     for (const provider of args.platforms) {
+      const platformOptions = args.perPlatformOptions?.[provider];
       await ctx.db.insert("projections", {
         transmissionId,
         workspaceId: args.workspaceId,
@@ -42,6 +50,7 @@ export const createInternal = internalMutation({
         provider,
         caption: args.perPlatformCaptions[provider] ?? args.baseCaption,
         hashtags: args.hashtags,
+        platformOptions,
         status: "scheduled",
         attemptCount: 0,
         updatedAt: now,
@@ -71,6 +80,18 @@ export const getWork = internalQuery({
       .collect();
     const artifact = transmission.artifactId ? await ctx.db.get(transmission.artifactId) : null;
     const artifactUrl = artifact ? await ctx.storage.getUrl(artifact.storageId) : null;
+    const uploadSessions: Doc<"youtubeUploadSessions">[] = [];
+    for (const projection of projections) {
+      if (projection.provider !== "youtube") continue;
+      const session = await ctx.db
+        .query("youtubeUploadSessions")
+        .withIndex("by_projection", (q) => q.eq("projectionId", projection._id))
+        .first();
+      if (session) uploadSessions.push(session);
+    }
+    const sessionsByProjection = Object.fromEntries(
+      uploadSessions.map((session) => [session.projectionId, session]),
+    );
 
     // Tokens for the connected portals we may publish through (internal-only).
     const tokens = await ctx.db
@@ -99,7 +120,91 @@ export const getWork = internalQuery({
       };
     }
 
-    return { transmission, projections, portals, artifact, artifactUrl, tokensByPortal };
+    return {
+      transmission,
+      projections,
+      portals,
+      artifact,
+      artifactUrl,
+      tokensByPortal,
+      sessionsByProjection,
+    };
+  },
+});
+
+/** A single projection plus its private credential/media context. */
+export const getProjectionWork = internalQuery({
+  args: { projectionId: v.id("projections") },
+  handler: async (ctx, args) => {
+    const projection = await ctx.db.get(args.projectionId);
+    if (!projection) return null;
+    const transmission = await ctx.db.get(projection.transmissionId);
+    if (!transmission) return null;
+    const portal = projection.portalId ? await ctx.db.get(projection.portalId) : null;
+    const token = projection.portalId
+      ? await ctx.db
+          .query("portalTokens")
+          .withIndex("by_portal", (q) => q.eq("portalId", projection.portalId!))
+          .first()
+      : null;
+    const artifact = transmission.artifactId ? await ctx.db.get(transmission.artifactId) : null;
+    const artifactUrl = artifact ? await ctx.storage.getUrl(artifact.storageId) : null;
+    const session = await ctx.db
+      .query("youtubeUploadSessions")
+      .withIndex("by_projection", (q) => q.eq("projectionId", projection._id))
+      .first();
+    return { projection, transmission, portal, token, artifact, artifactUrl, session };
+  },
+});
+
+export const saveYouTubeUploadSession = internalMutation({
+  args: {
+    projectionId: v.id("projections"),
+    workspaceId: v.id("workspaces"),
+    uploadUrl: v.string(),
+    totalBytes: v.number(),
+    mimeType: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("youtubeUploadSessions")
+      .withIndex("by_projection", (q) => q.eq("projectionId", args.projectionId))
+      .first();
+    const now = Date.now();
+    if (existing) {
+      await ctx.db.patch(existing._id, { ...args, updatedAt: now });
+      return existing._id;
+    }
+    return ctx.db.insert("youtubeUploadSessions", {
+      ...args,
+      uploadedBytes: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
+  },
+});
+
+export const updateYouTubeUploadProgress = internalMutation({
+  args: { projectionId: v.id("projections"), uploadedBytes: v.number() },
+  handler: async (ctx, args) => {
+    const session = await ctx.db
+      .query("youtubeUploadSessions")
+      .withIndex("by_projection", (q) => q.eq("projectionId", args.projectionId))
+      .first();
+    if (session) {
+      await ctx.db.patch(session._id, { uploadedBytes: args.uploadedBytes, updatedAt: Date.now() });
+    }
+  },
+});
+
+export const clearYouTubeUploadSession = internalMutation({
+  args: { projectionId: v.id("projections") },
+  handler: async (ctx, args) => {
+    const sessions = await ctx.db
+      .query("youtubeUploadSessions")
+      .withIndex("by_projection", (q) => q.eq("projectionId", args.projectionId))
+      .collect();
+    for (const session of sessions) await ctx.db.delete(session._id);
   },
 });
 

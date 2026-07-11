@@ -63,6 +63,10 @@ function Composer() {
   const [vaultOpen, setVaultOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [safeZones, setSafeZones] = useState(false);
+  const [youtubePrivacy, setYoutubePrivacy] = useState<"public" | "unlisted" | "private">("public");
+  const [youtubeMadeForKids, setYoutubeMadeForKids] = useState(false);
+  const [youtubeSynthetic, setYoutubeSynthetic] = useState(false);
+  const [youtubeNotify, setYoutubeNotify] = useState(true);
 
   const artifact = artifacts.find((a) => a.id === artifactId);
   const previewUrl = artifactUrl(artifactId);
@@ -78,16 +82,29 @@ function Composer() {
 
   const portalStatus = (p: PlatformId) => portals.find((x) => x.provider === p)?.status;
 
-  const preflight = useMemo(
-    () =>
-      computePreflight({
+  const preflight = useMemo(() => {
+      const checks = computePreflight({
         artifact,
         platforms,
         captionFor: fullCaptionFor,
         portalStatus,
-      }),
+      });
+      if (platforms.includes("youtube")) {
+        checks.push(
+          resolvedTitle.length > 0 && resolvedTitle.length <= 100
+            ? { id: "youtube_title", label: "YouTube title · 1–100 characters", status: "pass" }
+            : {
+                id: "youtube_title",
+                label: "YouTube title",
+                status: "fail",
+                detail: `${resolvedTitle.length}/100 characters`,
+              },
+        );
+      }
+      return checks;
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [artifact, platforms, baseCaption, overrides, hashtags, portals, title],
+    [artifact, platforms, baseCaption, overrides, hashtags, portals, title, resolvedTitle],
   );
   const failing = preflight.filter((c) => c.status === "fail");
   const canLaunch = failing.length === 0 && !!artifact && platforms.length > 0;
@@ -117,6 +134,17 @@ function Composer() {
       perPlatformCaptions: Object.fromEntries(
         platforms.map((p) => [p, fullCaptionFor(p)]),
       ) as Partial<Record<PlatformId, string>>,
+      perPlatformOptions: platforms.includes("youtube")
+        ? {
+            youtube: {
+              privacy: youtubePrivacy,
+              madeForKids: youtubeMadeForKids,
+              containsSyntheticMedia: youtubeSynthetic,
+              notifySubscribers: youtubeNotify,
+              categoryId: "22",
+            },
+          }
+        : undefined,
       scheduleMode: mode,
       scheduledFor,
     });
@@ -200,7 +228,7 @@ function Composer() {
       <Panel kicker="The message" title="Caption" brackets>
         <div className="space-y-4">
           <Input
-            label="Title (internal)"
+            label={platforms.includes("youtube") ? "Title · used on YouTube" : "Title (internal)"}
             placeholder="What is this transmission called?"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -315,6 +343,40 @@ function Composer() {
             </p>
           )}
         </Panel>
+
+        {platforms.includes("youtube") && (
+          <Panel kicker="YouTube" title="Publishing controls" brackets>
+            <div className="space-y-3">
+              <Segmented
+                aria-label="YouTube visibility"
+                value={youtubePrivacy}
+                onChange={setYoutubePrivacy}
+                options={[
+                  { value: "public", label: "Public" },
+                  { value: "unlisted", label: "Unlisted" },
+                  { value: "private", label: "Private" },
+                ]}
+              />
+              <div className="space-y-2 rounded-[10px] border border-[var(--glass-border)] bg-void-2/45 px-3 py-2.5">
+                <YouTubeToggle
+                  checked={youtubeMadeForKids}
+                  onChange={setYoutubeMadeForKids}
+                  label="Made for kids"
+                />
+                <YouTubeToggle
+                  checked={youtubeSynthetic}
+                  onChange={setYoutubeSynthetic}
+                  label="Contains realistic altered or synthetic content"
+                />
+                <YouTubeToggle
+                  checked={youtubeNotify}
+                  onChange={setYoutubeNotify}
+                  label="Notify subscribers"
+                />
+              </div>
+            </div>
+          </Panel>
+        )}
 
         <Panel kicker="Trajectory" title="When" brackets>
           <div className="space-y-3">
@@ -431,5 +493,27 @@ function Composer() {
         </p>
       </Modal>
     </div>
+  );
+}
+
+function YouTubeToggle({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  label: string;
+}) {
+  return (
+    <label className="flex cursor-pointer items-center justify-between gap-3 text-[11.5px] text-starlight-dim">
+      <span>{label}</span>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="accent-[#65ff9a]"
+      />
+    </label>
   );
 }

@@ -7,7 +7,7 @@ export const Route = createFileRoute("/privacy")({
 
 function Privacy() {
   return (
-    <LegalPage title="Privacy Policy" updated="July 6, 2026">
+    <LegalPage title="Privacy Policy" updated="July 10, 2026">
       <h2>What Posterract does</h2>
       <p>
         Posterract (accessible at posterract.app) is a social media scheduling service. You upload
@@ -67,6 +67,25 @@ function Privacy() {
         Publishing through Posterract is governed by each destination platform&apos;s own terms and
         privacy policies (Meta, TikTok, Google/YouTube, X). Revoking Posterract&apos;s access from a
         platform&apos;s own settings page also stops our ability to publish there.
+      </p>
+
+      <h2>YouTube API Services</h2>
+      <p>
+        Posterract uses YouTube API Services. When you connect YouTube, Google provides Posterract
+        authorization tokens and your YouTube channel identifier. At your direction, we use that
+        access to upload and schedule videos and read the status of those uploads. We use this data
+        only to provide the YouTube publishing features you request in Posterract.
+      </p>
+      <p>
+        Your use of YouTube through Posterract is also governed by the{" "}
+        <a href="https://policies.google.com/privacy" target="_blank" rel="noreferrer">
+          Google Privacy Policy
+        </a>
+        . You can disconnect YouTube in Posterract at any time, or revoke access directly from your{" "}
+        <a href="https://security.google.com/settings/security/permissions" target="_blank" rel="noreferrer">
+          Google account permissions
+        </a>
+        . Disconnecting revokes Google authorization and removes the stored tokens from Posterract.
       </p>
 
       <h2>Contact</h2>

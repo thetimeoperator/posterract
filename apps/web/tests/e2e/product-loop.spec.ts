@@ -67,6 +67,15 @@ test.describe("Posterract product loop", () => {
     await expect(page.getByText("Add a video to transmit.")).toBeVisible();
   });
 
+  test("composer exposes the required YouTube publishing choices", async ({ page }) => {
+    await page.goto("/compose");
+    await expect(page.getByRole("radiogroup", { name: "YouTube visibility" })).toBeVisible();
+    await expect(page.getByLabel("Made for kids")).toBeVisible();
+    await expect(page.getByLabel("Contains realistic altered or synthetic content")).toBeVisible();
+    await expect(page.getByLabel("Notify subscribers")).toBeChecked();
+    await expect(page.getByLabel("Title · used on YouTube")).toBeVisible();
+  });
+
   test("portals connect and disconnect", async ({ page }) => {
     await page.goto("/portals");
     const threadsCard = page.locator("section", { hasText: "Threads" }).first();

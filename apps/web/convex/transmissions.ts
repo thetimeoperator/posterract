@@ -16,6 +16,12 @@ export const create = mutation({
     artifactId: v.id("artifacts"),
     platforms: v.array(vPlatform),
     perPlatformCaptions: v.record(v.string(), v.string()),
+    perPlatformOptions: v.optional(
+      v.record(
+        v.string(),
+        v.record(v.string(), v.union(v.string(), v.boolean(), v.number())),
+      ),
+    ),
     scheduleMode: v.union(v.literal("now"), v.literal("at")),
     scheduledFor: v.number(),
     source: v.optional(v.union(v.literal("ui"), v.literal("api"))),
@@ -46,6 +52,7 @@ export const create = mutation({
       .collect();
 
     for (const provider of args.platforms) {
+      const platformOptions = args.perPlatformOptions?.[provider];
       await ctx.db.insert("projections", {
         transmissionId,
         workspaceId: workspace._id,
@@ -53,6 +60,7 @@ export const create = mutation({
         provider,
         caption: args.perPlatformCaptions[provider] ?? args.baseCaption,
         hashtags: args.hashtags,
+        platformOptions,
         status: "scheduled",
         attemptCount: 0,
         updatedAt: now,
@@ -118,7 +126,7 @@ export const cancel = mutation({
       .withIndex("by_transmission", (q) => q.eq("transmissionId", t._id))
       .collect();
     for (const p of projections) {
-      if (p.status === "scheduled") {
+      if (p.status === "scheduled" || p.status === "retrying") {
         await ctx.db.patch(p._id, {
           status: "blocked",
           errorSummary: "Canceled by operator",
@@ -170,6 +178,9 @@ export const duplicate = mutation({
       artifactId: t.artifactId,
       platforms: projections.map((p) => p.provider),
       perPlatformCaptions: Object.fromEntries(projections.map((p) => [p.provider, p.caption])),
+      perPlatformOptions: Object.fromEntries(
+        projections.map((p) => [p.provider, p.platformOptions ?? {}]),
+      ),
       scheduledFor: Date.now() + 3600_000,
     });
   },

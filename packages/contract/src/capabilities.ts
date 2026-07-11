@@ -166,19 +166,18 @@ export const PLATFORM_CAPABILITIES: Record<PlatformId, PlatformCapabilities> = {
     video: {
       minDurationS: 1,
       maxDurationS: 180,
-      maxSizeMB: 10240,
+      maxSizeMB: 262144,
       preferredAspect: "9:16",
       formats: ["video/mp4", "video/quicktime", "video/webm"],
     },
     mediaMode: "upload",
-    apiWindowCap: { posts: 6, windowHours: 24 },
     approval: {
       devModeWorks: true,
       publicRequires: "Google OAuth verification + YouTube API audit",
     },
     notes: [
       "Vertical video ≤ 3 minutes is automatically a Short.",
-      "Default API quota (10k units/day) allows ≈6 uploads/day; uploads from unverified API projects are locked private.",
+      "YouTube applies a separate daily upload limit to each channel; API uploads from unaudited projects are locked private.",
     ],
   },
 };

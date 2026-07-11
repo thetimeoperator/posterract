@@ -7,7 +7,7 @@ export const Route = createFileRoute("/terms")({
 
 function Terms() {
   return (
-    <LegalPage title="Terms of Service" updated="July 6, 2026">
+    <LegalPage title="Terms of Service" updated="July 10, 2026">
       <h2>The service</h2>
       <p>
         Posterract lets you upload short-form video content, connect your social media accounts, and
@@ -44,6 +44,18 @@ function Terms() {
         the destination platforms&apos; APIs, which impose their own rate limits, content rules, and
         occasional outages; a platform may reject or delay a post for reasons outside our control.
         Failed posts are reported in the product and can be retried.
+      </p>
+
+      <h2>YouTube</h2>
+      <p>
+        By connecting or using YouTube through Posterract, you agree to be bound by the{" "}
+        <a href="https://www.youtube.com/t/terms" target="_blank" rel="noreferrer">
+          YouTube Terms of Service
+        </a>
+        . You remain responsible for ensuring that every upload complies with YouTube&apos;s terms,
+        Community Guidelines, copyright rules, and required disclosures. You control each
+        upload&apos;s title, description, visibility, audience setting, and synthetic-content
+        disclosure before publishing.
       </p>
 
       <h2>Fees</h2>

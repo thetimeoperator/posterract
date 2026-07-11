@@ -13,6 +13,7 @@ import type * as artifacts from "../artifacts.js";
 import type * as auth from "../auth.js";
 import type * as connectors_instagram from "../connectors/instagram.js";
 import type * as connectors_tiktok from "../connectors/tiktok.js";
+import type * as connectors_youtube from "../connectors/youtube.js";
 import type * as crons from "../crons.js";
 import type * as events from "../events.js";
 import type * as http from "../http.js";
@@ -38,6 +39,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   "connectors/instagram": typeof connectors_instagram;
   "connectors/tiktok": typeof connectors_tiktok;
+  "connectors/youtube": typeof connectors_youtube;
   crons: typeof crons;
   events: typeof events;
   http: typeof http;

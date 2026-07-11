@@ -5,8 +5,8 @@ import { v } from "convex/values";
 import type { FunctionArgs } from "convex/server";
 
 /**
- * The publish engine. Instagram and TikTok run real connectors; the
- * remaining platforms run the FAKE connector — the same staged lifecycle
+ * The publish engine. Instagram, TikTok, and YouTube run real connectors;
+ * the remaining platforms run the FAKE connector — the same staged lifecycle
  * the product shows (uploading → publishing → processing → live) — until
  * their real connectors land in the connector phases.
  */
@@ -33,7 +33,15 @@ export const dispatch = internalAction({
       transmissionId: args.transmissionId,
     });
     if (!work || work.transmission.status === "canceled") return;
-    const { transmission, projections, portals, artifact, artifactUrl, tokensByPortal } = work;
+    const {
+      transmission,
+      projections,
+      portals,
+      artifact,
+      artifactUrl,
+      tokensByPortal,
+      sessionsByProjection,
+    } = work;
     const sizeMB = Math.max(8, Math.round((artifact?.sizeBytes ?? 40_000_000) / 1_000_000));
 
     // In-flight statuses are normally owned by a running action — but if that
@@ -70,7 +78,7 @@ export const dispatch = internalAction({
             return;
           }
 
-          // Real connectors (Instagram, TikTok); simulator for the rest (until wired).
+          // Real connectors (Instagram, TikTok, YouTube); simulator for the rest.
           if (projection.provider === "instagram") {
             await runInstagramConnector(ctx, {
               workspaceId: transmission.workspaceId,
@@ -98,6 +106,34 @@ export const dispatch = internalAction({
               mimeType: artifact?.mimeType,
               pendingContainerId: projection.pendingContainerId,
             });
+            return;
+          }
+          if (projection.provider === "youtube") {
+            if (projection.platformPostId) {
+              await ctx.runAction(internal.publishNode.youtubeFinalize, {
+                projectionId: projection._id,
+              });
+            } else {
+              await ctx.runAction(internal.publishNode.youtubePublish, {
+                workspaceId: transmission.workspaceId,
+                transmissionId: transmission._id,
+                projectionId: projection._id,
+                attempt: projection.attemptCount + 1,
+                token: tokensByPortal[portal._id],
+                videoUrl: artifactUrl,
+                mimeType: artifact?.mimeType,
+                totalBytes: artifact?.sizeBytes ?? 0,
+                title: transmission.title,
+                description: projection.caption,
+                options: projection.platformOptions,
+                resume: sessionsByProjection[projection._id]
+                  ? {
+                      uploadUrl: sessionsByProjection[projection._id].uploadUrl,
+                      uploadedBytes: sessionsByProjection[projection._id].uploadedBytes,
+                    }
+                  : undefined,
+              });
+            }
             return;
           }
 

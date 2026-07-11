@@ -41,6 +41,9 @@ export type CreateTransmissionInput = {
   artifactId: string;
   platforms: PlatformId[];
   perPlatformCaptions: Partial<Record<PlatformId, string>>;
+  perPlatformOptions?: Partial<
+    Record<PlatformId, Record<string, string | boolean | number>>
+  >;
   scheduleMode: ScheduleMode;
   scheduledFor: number;
 };
@@ -235,7 +238,7 @@ export const useEngineStore = create<EngineState>()(
           provider,
           caption: input.perPlatformCaptions[provider] ?? input.baseCaption,
           hashtags: input.hashtags,
-          platformOptions: {},
+          platformOptions: input.perPlatformOptions?.[provider] ?? {},
           status: "scheduled",
           attemptCount: 0,
           updatedAt: now,

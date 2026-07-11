@@ -94,7 +94,7 @@ export function useProjections(): ProjectionDTO[] {
     provider: d.provider,
     caption: d.caption,
     hashtags: d.hashtags,
-    platformOptions: {},
+    platformOptions: d.platformOptions ?? {},
     status: d.status,
     attemptCount: d.attemptCount,
     nextAttemptAt: d.nextAttemptAt,
@@ -125,16 +125,16 @@ export function usePortals(): PortalDTO[] {
     id: d._id as string,
     workspaceId: d.workspaceId as string,
     provider: d.provider,
-    providerAccountId: `${d.provider}_cloud`,
+    providerAccountId: d.providerAccountId ?? `${d.provider}_cloud`,
     handle: d.handle,
     displayName: d.displayName,
     avatarUrl: undefined,
-    scopes: [],
+    scopes: d.scopes ?? [],
     status: d.status,
     tokenExpiresAt: d.tokenExpiresAt,
     lastHealthCheckAt: undefined,
     windowUsage:
-      d.windowCap !== undefined
+      d.provider !== "youtube" && d.windowCap !== undefined
         ? { used: d.windowUsed ?? 0, cap: d.windowCap, windowHours: d.windowHours ?? 24 }
         : undefined,
   }));
@@ -213,6 +213,7 @@ export function useEngineActions() {
         artifactId: input.artifactId as Id<"artifacts">,
         platforms: input.platforms,
         perPlatformCaptions: input.perPlatformCaptions as Record<string, string>,
+        perPlatformOptions: input.perPlatformOptions,
         scheduleMode: input.scheduleMode === "now" ? "now" : "at",
         scheduledFor: input.scheduledFor,
       });
@@ -236,12 +237,12 @@ export function artifactUrl(artifactId: string | undefined): string | undefined 
 }
 
 /** Providers with a real OAuth connector wired (vs. the demo toggle). */
-export const OAUTH_SUPPORTED = new Set<PlatformId>(["instagram", "tiktok"]);
+export const OAUTH_SUPPORTED = new Set<PlatformId>(["instagram", "tiktok", "youtube"]);
 
 export function useOAuth() {
   const start = useMutation(api.oauth.start);
   const complete = useAction(api.oauth.complete);
-  const disconnect = useMutation(api.oauth.disconnect);
+  const disconnect = useAction(api.oauth.disconnect);
   return {
     supported: OAUTH_SUPPORTED,
     start: (provider: PlatformId) => start({ provider }),

@@ -5,6 +5,12 @@ import { vPlatform } from "./schema";
 import { requireWorkspace } from "./lib";
 import { instagramAuthUrl, instagramExchangeCode, instagramRefreshToken } from "./connectors/instagram";
 import { tiktokAuthUrl, tiktokExchangeCode, tiktokRefreshToken } from "./connectors/tiktok";
+import {
+  youtubeAuthUrl,
+  youtubeExchangeCode,
+  youtubeRefreshToken,
+  youtubeRevokeToken,
+} from "./connectors/youtube";
 
 declare const process: { env: Record<string, string | undefined> };
 
@@ -38,6 +44,13 @@ export const start = mutation({
       if (!clientKey) throw new Error("TikTok not configured");
       return {
         url: tiktokAuthUrl({ clientKey, redirectUri: redirectUri("tiktok"), state }),
+      };
+    }
+    if (args.provider === "youtube") {
+      const clientId = process.env.YOUTUBE_CLIENT_ID;
+      if (!clientId) throw new Error("YouTube is not configured");
+      return {
+        url: youtubeAuthUrl({ clientId, redirectUri: redirectUri("youtube"), state }),
       };
     }
     throw new Error(`${args.provider} connect is not available yet`);
@@ -94,6 +107,30 @@ export const complete = action({
         });
         return { ok: true, handle: token.displayName };
       }
+      if (args.provider === "youtube") {
+        const clientId = process.env.YOUTUBE_CLIENT_ID;
+        const clientSecret = process.env.YOUTUBE_CLIENT_SECRET;
+        if (!clientId || !clientSecret) throw new Error("YouTube is not configured");
+        const token = await youtubeExchangeCode({
+          clientId,
+          clientSecret,
+          redirectUri: redirectUri("youtube"),
+          code: args.code,
+        });
+        const handle = token.handle || token.channelTitle;
+        await ctx.runMutation(internal.oauth.saveConnection, {
+          state: args.state,
+          provider: "youtube",
+          handle,
+          providerAccountId: token.channelId,
+          accessToken: token.accessToken,
+          refreshToken: token.refreshToken,
+          expiresAt: token.expiresAt,
+          providerUserId: token.channelId,
+          scopes: token.scopes,
+        });
+        return { ok: true, handle };
+      }
       return { ok: false, error: `${args.provider} is not available yet` };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : "Connection failed" };
@@ -126,6 +163,7 @@ export const saveConnection = internalMutation({
     expiresAt: v.optional(v.number()),
     refreshExpiresAt: v.optional(v.number()),
     providerUserId: v.optional(v.string()),
+    scopes: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
     const stateRow = await ctx.db
@@ -147,6 +185,7 @@ export const saveConnection = internalMutation({
       handle: args.handle,
       providerAccountId: args.providerAccountId,
       tokenExpiresAt: args.expiresAt,
+      scopes: args.scopes,
     });
 
     // Replace any existing token for this portal.
@@ -164,6 +203,7 @@ export const saveConnection = internalMutation({
       expiresAt: args.expiresAt,
       refreshExpiresAt: args.refreshExpiresAt,
       providerUserId: args.providerUserId,
+      scopes: args.scopes,
     });
 
     await ctx.db.delete(stateRow._id);
@@ -176,27 +216,73 @@ export const saveConnection = internalMutation({
   },
 });
 
-/** Disconnect: clear token + reset portal. */
-export const disconnect = mutation({
+/** Disconnect and revoke Google authorization before clearing local credentials. */
+export const disconnect = action({
+  args: { provider: vPlatform },
+  handler: async (ctx, args): Promise<void> => {
+    const token = await ctx.runQuery(internal.oauth.getDisconnectToken, { provider: args.provider });
+    if (!token) return;
+    if (args.provider === "youtube") {
+      try {
+        await youtubeRevokeToken(token.refreshToken || token.accessToken);
+      } catch {
+        // Local deletion must still succeed; Google may already have revoked
+        // the grant or may be temporarily unreachable.
+      }
+    }
+    await ctx.runMutation(internal.oauth.clearConnection, {
+      portalId: token.portalId,
+      workspaceId: token.workspaceId,
+      provider: args.provider,
+    });
+  },
+});
+
+export const getDisconnectToken = internalQuery({
   args: { provider: vPlatform },
   handler: async (ctx, args) => {
     const workspace = await requireWorkspace(ctx);
-    const portal = await ctx.db
-      .query("portals")
-      .withIndex("by_workspace", (q) => q.eq("workspaceId", workspace._id))
-      .filter((q) => q.eq(q.field("provider"), args.provider))
+    const token = await ctx.db
+      .query("portalTokens")
+      .withIndex("by_workspace_provider", (q) =>
+        q.eq("workspaceId", workspace._id).eq("provider", args.provider),
+      )
       .first();
-    if (!portal) return;
+    return token
+      ? {
+          portalId: token.portalId,
+          workspaceId: token.workspaceId,
+          accessToken: token.accessToken,
+          refreshToken: token.refreshToken,
+        }
+      : null;
+  },
+});
+
+export const clearConnection = internalMutation({
+  args: {
+    portalId: v.id("portals"),
+    workspaceId: v.id("workspaces"),
+    provider: vPlatform,
+  },
+  handler: async (ctx, args) => {
     const tokens = await ctx.db
       .query("portalTokens")
-      .withIndex("by_portal", (q) => q.eq("portalId", portal._id))
+      .withIndex("by_portal", (q) => q.eq("portalId", args.portalId))
       .collect();
-    for (const t of tokens) await ctx.db.delete(t._id);
-    await ctx.db.patch(portal._id, {
+    for (const token of tokens) await ctx.db.delete(token._id);
+    await ctx.db.patch(args.portalId, {
       status: "disconnected",
       handle: "not connected",
       providerAccountId: undefined,
       tokenExpiresAt: undefined,
+      scopes: undefined,
+    });
+    await ctx.db.insert("events", {
+      workspaceId: args.workspaceId,
+      type: "portal.disconnected",
+      message: `${args.provider} disconnected`,
+      at: Date.now(),
     });
   },
 });
@@ -219,6 +305,9 @@ export const listExpiringTokens = internalQuery({
       .filter((t) => {
         if (t.provider === "instagram") return t.expiresAt !== undefined && t.expiresAt < igCutoff;
         if (t.provider === "tiktok") return t.refreshToken !== undefined;
+        if (t.provider === "youtube") {
+          return t.refreshToken !== undefined && (t.expiresAt ?? 0) < Date.now() + 10 * 60_000;
+        }
         return false;
       })
       .map((t) => ({
@@ -294,6 +383,20 @@ export const refreshExpiringTokens = internalAction({
             expiresAt: refreshed.expiresAt,
             refreshToken: refreshed.refreshToken,
             refreshExpiresAt: refreshed.refreshExpiresAt,
+          });
+        } else if (t.provider === "youtube" && t.refreshToken) {
+          const clientId = process.env.YOUTUBE_CLIENT_ID;
+          const clientSecret = process.env.YOUTUBE_CLIENT_SECRET;
+          if (!clientId || !clientSecret) throw new Error("YouTube is not configured");
+          const refreshed = await youtubeRefreshToken({
+            clientId,
+            clientSecret,
+            refreshToken: t.refreshToken,
+          });
+          await ctx.runMutation(internal.oauth.applyRefreshedToken, {
+            tokenId: t.tokenId,
+            accessToken: refreshed.accessToken,
+            expiresAt: refreshed.expiresAt,
           });
         }
       } catch {
