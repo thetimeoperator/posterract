@@ -13,11 +13,14 @@
 
 const OPEN_API = "https://open.tiktokapis.com";
 
-/** Posting scopes only: Login Kit (user.info.basic) + Content Posting API
- * (video.publish). `video.list` (Display API) is added later for the
- * view-count analytics cron — requesting it before the app has the Display
- * API product would make the authorize step reject the scope. */
-export const TIKTOK_SCOPES = ["user.info.basic", "video.publish"];
+/** Publishing plus Echoes analytics. TikTok must grant the Display API,
+ * `video.list`, and `user.info.stats` to the production developer app. */
+export const TIKTOK_SCOPES = [
+  "user.info.basic",
+  "user.info.stats",
+  "video.list",
+  "video.publish",
+] as const;
 
 export function tiktokAuthUrl(args: { clientKey: string; redirectUri: string; state: string }): string {
   const p = new URLSearchParams({
@@ -37,6 +40,7 @@ export type TikTokToken = {
   refreshExpiresAt: number;
   openId: string;
   displayName: string;
+  scopes: string[];
 };
 
 type TokenResponse = {
@@ -45,6 +49,7 @@ type TokenResponse = {
   refresh_token?: string;
   refresh_expires_in?: number;
   open_id?: string;
+  scope?: string;
   error?: string;
   error_description?: string;
 };
@@ -69,6 +74,7 @@ function toTokenSet(json: TokenResponse): Omit<TikTokToken, "displayName"> {
     expiresAt: now + (json.expires_in ?? 86400) * 1000,
     refreshExpiresAt: now + (json.refresh_expires_in ?? 365 * 86400) * 1000,
     openId: json.open_id,
+    scopes: json.scope?.split(",").map((scope) => scope.trim()).filter(Boolean) ?? [...TIKTOK_SCOPES],
   };
 }
 
@@ -112,6 +118,74 @@ export async function tiktokRefreshToken(args: {
       grant_type: "refresh_token",
       refresh_token: args.refreshToken,
     }),
+  );
+}
+
+export type TikTokUserStats = {
+  followers: number;
+  following: number;
+  totalLikes: number;
+  videos: number;
+};
+
+export async function tiktokGetUserStats(accessToken: string): Promise<TikTokUserStats> {
+  const fields = "follower_count,following_count,likes_count,video_count";
+  const response = await fetch(`${OPEN_API}/v2/user/info/?fields=${fields}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const json = (await response.json()) as TikTokEnvelope<{
+    user?: {
+      follower_count?: number;
+      following_count?: number;
+      likes_count?: number;
+      video_count?: number;
+    };
+  }>;
+  if (!response.ok || (json.error?.code && json.error.code !== "ok")) {
+    throw new Error(`TikTok user analytics failed: ${json.error?.code ?? response.status}`);
+  }
+  const user = json.data?.user;
+  return {
+    followers: user?.follower_count ?? 0,
+    following: user?.following_count ?? 0,
+    totalLikes: user?.likes_count ?? 0,
+    videos: user?.video_count ?? 0,
+  };
+}
+
+export type TikTokVideoStats = {
+  id: string;
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+};
+
+export async function tiktokGetVideoStats(
+  accessToken: string,
+  videoIds: string[],
+): Promise<TikTokVideoStats[]> {
+  if (videoIds.length === 0) return [];
+  const fields = "id,view_count,like_count,comment_count,share_count";
+  const data = await openApiPost<{
+    videos?: Array<{
+      id?: string;
+      view_count?: number;
+      like_count?: number;
+      comment_count?: number;
+      share_count?: number;
+    }>;
+  }>(`/v2/video/query/?fields=${fields}`, accessToken, { filters: { video_ids: videoIds.slice(0, 20) } });
+  return (data.videos ?? []).flatMap((video) =>
+    video.id
+      ? [{
+          id: video.id,
+          views: video.view_count ?? 0,
+          likes: video.like_count ?? 0,
+          comments: video.comment_count ?? 0,
+          shares: video.share_count ?? 0,
+        }]
+      : [],
   );
 }
 

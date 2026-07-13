@@ -9,6 +9,7 @@
  */
 
 import type * as admin from "../admin.js";
+import type * as analytics from "../analytics.js";
 import type * as artifacts from "../artifacts.js";
 import type * as auth from "../auth.js";
 import type * as connectors_instagram from "../connectors/instagram.js";
@@ -24,8 +25,10 @@ import type * as portals from "../portals.js";
 import type * as publish from "../publish.js";
 import type * as publishHelpers from "../publishHelpers.js";
 import type * as publishNode from "../publishNode.js";
+import type * as tiktokAnalytics from "../tiktokAnalytics.js";
 import type * as transmissions from "../transmissions.js";
 import type * as workspaces from "../workspaces.js";
+import type * as youtubeAnalytics from "../youtubeAnalytics.js";
 
 import type {
   ApiFromModules,
@@ -35,6 +38,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
+  analytics: typeof analytics;
   artifacts: typeof artifacts;
   auth: typeof auth;
   "connectors/instagram": typeof connectors_instagram;
@@ -50,8 +54,10 @@ declare const fullApi: ApiFromModules<{
   publish: typeof publish;
   publishHelpers: typeof publishHelpers;
   publishNode: typeof publishNode;
+  tiktokAnalytics: typeof tiktokAnalytics;
   transmissions: typeof transmissions;
   workspaces: typeof workspaces;
+  youtubeAnalytics: typeof youtubeAnalytics;
 }>;
 
 /**

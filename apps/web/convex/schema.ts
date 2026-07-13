@@ -186,10 +186,48 @@ export default defineSchema({
     workspaceId: v.id("workspaces"),
     provider: vPlatform,
     views: v.number(),
+    engagedViews: v.optional(v.number()),
     likes: v.number(),
     comments: v.number(),
+    shares: v.optional(v.number()),
+    estimatedMinutesWatched: v.optional(v.number()),
+    averageViewDuration: v.optional(v.number()),
     fetchedAt: v.number(),
-  }).index("by_projection", ["projectionId"]),
+  })
+    .index("by_projection", ["projectionId"])
+    .index("by_workspace_provider", ["workspaceId", "provider"]),
+
+  /** Latest account-level totals for audience and network-wide counters. */
+  accountMetricSnapshots: defineTable({
+    portalId: v.id("portals"),
+    workspaceId: v.id("workspaces"),
+    provider: vPlatform,
+    audience: v.optional(v.number()),
+    totalViews: v.optional(v.number()),
+    totalLikes: v.optional(v.number()),
+    publishedVideos: v.optional(v.number()),
+    fetchedAt: v.number(),
+  })
+    .index("by_portal", ["portalId"])
+    .index("by_workspace_provider", ["workspaceId", "provider"]),
+
+  /** Daily deltas used by Echoes range charts and growth calculations. */
+  dailyMetricSnapshots: defineTable({
+    portalId: v.id("portals"),
+    workspaceId: v.id("workspaces"),
+    provider: vPlatform,
+    date: v.string(),
+    views: v.number(),
+    likes: v.number(),
+    comments: v.number(),
+    shares: v.number(),
+    watchMinutes: v.optional(v.number()),
+    audienceGained: v.number(),
+    audienceLost: v.number(),
+    fetchedAt: v.number(),
+  })
+    .index("by_portal_date", ["portalId", "date"])
+    .index("by_workspace_provider_date", ["workspaceId", "provider", "date"]),
 
   /**
    * Resumable YouTube upload URLs are bearer-like secrets. Keep them in an

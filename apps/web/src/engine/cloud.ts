@@ -7,6 +7,7 @@ import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import { create } from "zustand";
 import type {
   ArtifactDTO,
+  AnalyticsRangeDays,
   EventDTO,
   PlatformId,
   PointsSummaryDTO,
@@ -150,6 +151,11 @@ export function usePoints(): PointsSummaryDTO | undefined {
     badges: data.badges,
     recent: data.recent.map((e) => ({ id: e.id, source: e.source, amount: e.amount, note: e.note, at: e.at })),
   };
+}
+
+export function useAnalyticsDashboard(rangeDays: AnalyticsRangeDays) {
+  const workspaceId = useWorkspace((state) => state.workspaceId);
+  return useQuery(api.analytics.dashboard, workspaceId ? { rangeDays } : "skip");
 }
 
 export function useEngineActions() {

@@ -319,6 +319,64 @@ export const RP_PER_COMMENT = 2;
 /** Echo points only track posts younger than this. */
 export const METRICS_WINDOW_DAYS = 14;
 
+// ---------------------------------------------------------------------------
+// Echoes — normalized cross-platform analytics. Providers expose different
+// metric vocabularies; the UI consumes this shared shape without pretending
+// that every signal is available on every network.
+// ---------------------------------------------------------------------------
+
+export type AnalyticsRangeDays = 7 | 30 | 90;
+
+export type AnalyticsDailyPointDTO = {
+  date: string;
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  watchMinutes?: number;
+  audienceGained: number;
+  audienceLost: number;
+};
+
+export type AnalyticsPostDTO = {
+  projectionId: string;
+  transmissionId: string;
+  provider: PlatformId;
+  title: string;
+  publishedAt?: number;
+  platformPostUrl?: string;
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  watchMinutes?: number;
+};
+
+export type PlatformAnalyticsDTO = {
+  provider: PlatformId;
+  connected: boolean;
+  ready: boolean;
+  missingScopes: string[];
+  handle?: string;
+  audienceLabel: "Subscribers" | "Followers";
+  audience?: number;
+  audienceDelta: number;
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  watchMinutes?: number;
+  publishedPosts: number;
+  lastSyncedAt?: number;
+  daily: AnalyticsDailyPointDTO[];
+  posts: AnalyticsPostDTO[];
+};
+
+export type AnalyticsDashboardDTO = {
+  rangeDays: AnalyticsRangeDays;
+  platforms: PlatformAnalyticsDTO[];
+};
+
 export type Rank = { id: string; label: string; minRP: number };
 
 export const RANKS: Rank[] = [

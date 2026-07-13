@@ -104,6 +104,7 @@ export const complete = action({
           expiresAt: token.expiresAt,
           refreshExpiresAt: token.refreshExpiresAt,
           providerUserId: token.openId,
+          scopes: token.scopes,
         });
         return { ok: true, handle: token.displayName };
       }

@@ -3,10 +3,12 @@ const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_REVOKE_URL = "https://oauth2.googleapis.com/revoke";
 const YOUTUBE_API = "https://www.googleapis.com/youtube/v3";
 const YOUTUBE_UPLOAD_API = "https://www.googleapis.com/upload/youtube/v3";
+const YOUTUBE_ANALYTICS_API = "https://youtubeanalytics.googleapis.com/v2/reports";
 
 export const YOUTUBE_SCOPES = [
   "https://www.googleapis.com/auth/youtube.upload",
   "https://www.googleapis.com/auth/youtube.readonly",
+  "https://www.googleapis.com/auth/yt-analytics.readonly",
 ] as const;
 
 type GoogleTokenResponse = {
@@ -22,6 +24,12 @@ type YouTubeChannelResponse = {
   items?: Array<{
     id: string;
     snippet?: { title?: string; customUrl?: string };
+    statistics?: {
+      viewCount?: string;
+      subscriberCount?: string;
+      hiddenSubscriberCount?: boolean;
+      videoCount?: string;
+    };
   }>;
   error?: { message?: string };
 };
@@ -119,7 +127,7 @@ export async function youtubeRevokeToken(token: string): Promise<void> {
 }
 
 export async function youtubeGetMyChannel(accessToken: string) {
-  const response = await fetch(`${YOUTUBE_API}/channels?part=id%2Csnippet&mine=true`, {
+  const response = await fetch(`${YOUTUBE_API}/channels?part=id%2Csnippet%2Cstatistics&mine=true`, {
     headers: { authorization: `Bearer ${accessToken}` },
   });
   const body = (await response.json()) as YouTubeChannelResponse;
@@ -130,6 +138,13 @@ export async function youtubeGetMyChannel(accessToken: string) {
     id: channel.id,
     title: channel.snippet?.title || "YouTube channel",
     handle: channel.snippet?.customUrl,
+    statistics: {
+      views: Number(channel.statistics?.viewCount ?? 0),
+      subscribers: channel.statistics?.hiddenSubscriberCount
+        ? undefined
+        : Number(channel.statistics?.subscriberCount ?? 0),
+      videos: Number(channel.statistics?.videoCount ?? 0),
+    },
   };
 }
 
@@ -339,7 +354,7 @@ export async function youtubeUploadResumable(args: {
 }
 
 export async function youtubeGetVideo(accessToken: string, videoId: string) {
-  const params = new URLSearchParams({ part: "status,processingDetails", id: videoId });
+  const params = new URLSearchParams({ part: "status,processingDetails,statistics", id: videoId });
   const response = await fetch(`${YOUTUBE_API}/videos?${params}`, {
     headers: { authorization: `Bearer ${accessToken}` },
   });
@@ -348,8 +363,108 @@ export async function youtubeGetVideo(accessToken: string, videoId: string) {
       id: string;
       status?: { privacyStatus?: string; uploadStatus?: string };
       processingDetails?: { processingStatus?: string };
+      statistics?: { viewCount?: string; likeCount?: string; commentCount?: string };
     }>;
   };
   if (!response.ok) throw await youtubeApiError(response, "Could not read the YouTube video");
   return body.items?.[0] ?? null;
+}
+
+export async function youtubeGetVideos(accessToken: string, videoIds: string[]) {
+  if (videoIds.length === 0) return [];
+  const params = new URLSearchParams({
+    part: "statistics",
+    id: videoIds.slice(0, 50).join(","),
+  });
+  const response = await fetch(`${YOUTUBE_API}/videos?${params}`, {
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  const body = (await response.json()) as {
+    items?: Array<{
+      id: string;
+      statistics?: { viewCount?: string; likeCount?: string; commentCount?: string };
+    }>;
+  };
+  if (!response.ok) throw await youtubeApiError(response, "Could not read YouTube video statistics");
+  return body.items ?? [];
+}
+
+type AnalyticsCell = string | number | null;
+type YouTubeAnalyticsResponse = {
+  columnHeaders?: Array<{ name?: string }>;
+  rows?: AnalyticsCell[][];
+};
+
+function analyticsRows(body: YouTubeAnalyticsResponse): Array<Record<string, AnalyticsCell>> {
+  const names = body.columnHeaders?.map((header) => header.name ?? "") ?? [];
+  return (body.rows ?? []).map((row) =>
+    Object.fromEntries(names.map((name, index) => [name, row[index] ?? 0])),
+  );
+}
+
+const metricNumber = (row: Record<string, AnalyticsCell>, key: string) => Number(row[key] ?? 0);
+
+export async function youtubeAnalyticsReport(args: {
+  accessToken: string;
+  videoId: string;
+  startDate: string;
+  endDate: string;
+}) {
+  const params = new URLSearchParams({
+    ids: "channel==MINE",
+    startDate: args.startDate,
+    endDate: args.endDate,
+    metrics:
+      "views,engagedViews,likes,comments,shares,estimatedMinutesWatched,averageViewDuration",
+    filters: `video==${args.videoId}`,
+  });
+  const response = await fetch(`${YOUTUBE_ANALYTICS_API}?${params}`, {
+    headers: { authorization: `Bearer ${args.accessToken}` },
+  });
+  const body = (await response.json()) as YouTubeAnalyticsResponse;
+  if (!response.ok) throw await youtubeApiError(response, "Could not read YouTube Analytics");
+  const row = analyticsRows(body)[0] ?? {};
+  return {
+    views: metricNumber(row, "views"),
+    engagedViews: metricNumber(row, "engagedViews"),
+    likes: metricNumber(row, "likes"),
+    comments: metricNumber(row, "comments"),
+    shares: metricNumber(row, "shares"),
+    estimatedMinutesWatched: metricNumber(row, "estimatedMinutesWatched"),
+    averageViewDuration: metricNumber(row, "averageViewDuration"),
+  };
+}
+
+/** Channel-owned daily history for the Echoes trend and audience-growth views. */
+export async function youtubeChannelAnalyticsReport(args: {
+  accessToken: string;
+  startDate: string;
+  endDate: string;
+}) {
+  const params = new URLSearchParams({
+    ids: "channel==MINE",
+    startDate: args.startDate,
+    endDate: args.endDate,
+    dimensions: "day",
+    metrics:
+      "views,engagedViews,likes,comments,shares,estimatedMinutesWatched,averageViewDuration,subscribersGained,subscribersLost",
+    sort: "day",
+  });
+  const response = await fetch(`${YOUTUBE_ANALYTICS_API}?${params}`, {
+    headers: { authorization: `Bearer ${args.accessToken}` },
+  });
+  const body = (await response.json()) as YouTubeAnalyticsResponse;
+  if (!response.ok) throw await youtubeApiError(response, "Could not read YouTube channel analytics");
+  return analyticsRows(body).map((row) => ({
+    date: String(row.day ?? ""),
+    views: metricNumber(row, "views"),
+    engagedViews: metricNumber(row, "engagedViews"),
+    likes: metricNumber(row, "likes"),
+    comments: metricNumber(row, "comments"),
+    shares: metricNumber(row, "shares"),
+    estimatedMinutesWatched: metricNumber(row, "estimatedMinutesWatched"),
+    averageViewDuration: metricNumber(row, "averageViewDuration"),
+    subscribersGained: metricNumber(row, "subscribersGained"),
+    subscribersLost: metricNumber(row, "subscribersLost"),
+  }));
 }

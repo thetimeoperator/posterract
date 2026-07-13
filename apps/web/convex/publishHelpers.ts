@@ -231,7 +231,15 @@ export const patchProjection = internalMutation({
       updatedAt: Date.now(),
     });
     // Resonance: going live earns points, for every connector, exactly once.
-    if (args.status === "live") await awardPointsForLiveProjection(ctx, projectionId);
+    if (args.status === "live") {
+      await awardPointsForLiveProjection(ctx, projectionId);
+      const projection = await ctx.db.get(projectionId);
+      if (projection?.provider === "youtube") {
+        await ctx.scheduler.runAfter(5 * 60_000, internal.youtubeAnalytics.refreshRecent, {});
+      } else if (projection?.provider === "tiktok") {
+        await ctx.scheduler.runAfter(5 * 60_000, internal.tiktokAnalytics.refreshRecent, {});
+      }
+    }
   },
 });
 
