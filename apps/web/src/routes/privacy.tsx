@@ -199,13 +199,57 @@ function Privacy() {
             >
               Google Account permissions
             </a>
-            . Disconnecting YouTube causes Posterract to request revocation from Google and delete
-            the stored Google OAuth tokens from its active connection records. After revocation,
-            loss of authorization, or a verified deletion request, we delete remaining Google user
-            data associated with the connection within 30 days, except where retention is required
-            by law. Authorized YouTube statistics retained for historical analytics are refreshed
-            or authorization is reverified at least every 30 days while the connection remains
-            active.
+            . The following retention and deletion rules apply to YouTube API Data:
+          </p>
+          <ul>
+            <li>
+              <strong>While you remain connected:</strong> authorized YouTube Analytics API data,
+              Reporting API data, and statistics such as views or subscriber totals may be retained
+              for as long as necessary to provide the analytics you requested. At least every 30
+              days, Posterract must reconfirm that your authorization remains valid and refresh or
+              otherwise verify the stored data. Other authorized or non-authorized YouTube API Data
+              is refreshed or deleted within 30 days as required by YouTube&apos;s policies.
+            </li>
+            <li>
+              <strong>If you disconnect in Posterract or request deletion:</strong> Posterract
+              requests revocation of the Google OAuth token immediately, deletes the token from its
+              active connection records, and deletes YouTube Authorized Data associated with that
+              consent as soon as possible and no later than 7 calendar days, unless retention is
+              required by law.
+            </li>
+            <li>
+              <strong>If you revoke access through Google:</strong> Posterract deletes YouTube API
+              Data associated with that consent as soon as possible and no later than 30 calendar
+              days after detecting the revocation or inability to refresh authorization.
+            </li>
+            <li>
+              <strong>Limited 36-month allowance:</strong> YouTube offers a separate, conditional
+              allowance for certain approved analytics clients to store permitted statistical and
+              derived metrics for up to 36 months. Posterract does not rely on that allowance unless
+              and until YouTube expressly approves Posterract for it through the applicable audit
+              process. It does not permit retaining a user&apos;s data after consent is revoked, and it
+              does not extend to data such as video titles, creator names, descriptions, or comment
+              text.
+            </li>
+          </ul>
+          <p>
+            These requirements are described in the{" "}
+            <a
+              href="https://developers.google.com/youtube/terms/developer-policies"
+              target="_blank"
+              rel="noreferrer"
+            >
+              YouTube API Services Developer Policies
+            </a>{" "}
+            and, for approved analytics use cases, the{" "}
+            <a
+              href="https://developers.google.com/youtube/terms/derived-metrics-policy"
+              target="_blank"
+              rel="noreferrer"
+            >
+              additional derived-metrics and data-storage policy
+            </a>
+            .
           </p>
         </div>
       </section>
@@ -221,11 +265,25 @@ function Privacy() {
           your Posterract-published TikTok video IDs and status, and video metrics such as views,
           likes, comments, and shares. We use this information only to connect your account,
           publish videos you direct us to publish, show delivery status, and display analytics.
-          Disconnecting deletes the stored TikTok tokens from Posterract; you may also remove access
-          in TikTok settings. Remaining TikTok-derived account data is deleted following a verified
-          deletion request, subject to applicable platform rules and law. See the{" "}
+        </p>
+        <p>
+          <strong>Retention and deletion:</strong> Disconnecting deletes stored TikTok tokens from
+          Posterract&apos;s active connection records; you may also remove access in TikTok settings.
+          TikTok-derived data is retained only while needed for these authorized features and is
+          deleted promptly after a verified deletion request or when it is no longer needed. If
+          TikTok terminates Posterract&apos;s developer access, Posterract will immediately stop using
+          the TikTok Developer Services and delete TikTok Information obtained through them, except
+          where retention is required by law. See the{" "}
           <a href="https://www.tiktok.com/legal/page/us/privacy-policy/en" target="_blank" rel="noreferrer">
             TikTok Privacy Policy
+          </a>
+          {" "}and{" "}
+          <a
+            href="https://www.tiktok.com/legal/page/global/tik-tok-developer-terms-of-service/en"
+            target="_blank"
+            rel="noreferrer"
+          >
+            TikTok Developer Terms
           </a>
           .
         </p>
@@ -240,11 +298,26 @@ function Privacy() {
           With your consent, Posterract may receive an Instagram professional-account ID,
           username, OAuth token, granted permissions, token-expiration information, and identifiers,
           permalinks, and delivery status for Reels published through Posterract. We use this data
-          only to maintain the connection and publish content you explicitly select. Disconnecting
-          deletes the stored Instagram token from Posterract; you may also remove Posterract from
-          Instagram or Meta&apos;s connected-app settings. See the{" "}
+          only to maintain the connection and publish content you explicitly select.
+        </p>
+        <p>
+          <strong>Retention and deletion:</strong> Disconnecting deletes the stored Instagram token
+          from Posterract&apos;s active connection records; you may also remove Posterract from
+          Instagram or Meta&apos;s connected-app settings. In accordance with Meta&apos;s Platform Terms,
+          we update or delete Instagram Platform Data promptly when you or Meta requests it and
+          delete it as soon as reasonably possible when it is no longer necessary, Posterract stops
+          providing the integration, or you delete your Posterract account, except where retention
+          is required by law. See the{" "}
           <a href="https://www.facebook.com/privacy/policy/" target="_blank" rel="noreferrer">
             Meta Privacy Policy
+          </a>
+          {" "}and{" "}
+          <a
+            href="https://developers.facebook.com/terms/dfc_platform_terms/"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Meta Platform Terms
           </a>
           .
         </p>
@@ -259,10 +332,21 @@ function Privacy() {
           Posterract does not currently request or store Facebook API data. If this integration is
           activated after Meta approval, Posterract will request only the permissions required to
           identify a user-authorized Page, publish selected content, report delivery status, and
-          display authorized performance metrics. Disconnecting will remove stored credentials,
-          and users may request deletion of associated Facebook-derived data. See the{" "}
+          display authorized performance metrics. If activated, disconnecting will remove stored
+          credentials. Posterract will update or delete Facebook Platform Data promptly when the
+          user or Meta requests it and delete it as soon as reasonably possible when it is no longer
+          necessary, the integration ends, or the user closes their Posterract account, except where
+          retention is required by law. See the{" "}
           <a href="https://www.facebook.com/privacy/policy/" target="_blank" rel="noreferrer">
             Meta Privacy Policy
+          </a>
+          {" "}and{" "}
+          <a
+            href="https://developers.facebook.com/terms/dfc_platform_terms/"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Meta Platform Terms
           </a>
           .
         </p>
@@ -277,11 +361,21 @@ function Privacy() {
           Posterract does not currently request or store Threads API data. If this integration is
           activated after Meta approval, Posterract will request only the permissions needed to
           identify the authorized profile, publish user-selected content, return publishing status,
-          and display available authorized metrics. Disconnecting will remove stored credentials,
-          and users may request deletion of associated Threads-derived data. Threads is a Meta
-          product; see the{" "}
+          and display available authorized metrics. If activated, disconnecting will remove stored
+          credentials. Posterract will update or delete Threads Platform Data promptly when the user
+          or Meta requests it and delete it as soon as reasonably possible when it is no longer
+          necessary, the integration ends, or the user closes their Posterract account, except where
+          retention is required by law. Threads is a Meta product; see the{" "}
           <a href="https://www.facebook.com/privacy/policy/" target="_blank" rel="noreferrer">
             Meta Privacy Policy
+          </a>
+          {" "}and{" "}
+          <a
+            href="https://developers.facebook.com/terms/dfc_platform_terms/"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Meta Platform Terms
           </a>
           .
         </p>
@@ -297,10 +391,18 @@ function Privacy() {
           activated after X approval, Posterract will request only the permissions needed to
           identify the authorized account, publish content the user has reviewed and approved,
           return publishing status, and display available authorized metrics. We will not access
-          direct messages. Disconnecting will remove stored credentials, and X-derived content will
-          be corrected or deleted as required by X&apos;s policies. See the{" "}
+          direct messages. If activated, disconnecting will remove stored credentials. Posterract
+          will keep stored X Content synchronized with X and delete or modify content as soon as
+          reasonably possible, including within 24 hours after a deletion or correction request
+          from X or the applicable account owner. If Posterract&apos;s X API access is terminated, it
+          will delete stored X data within 10 business days, except where retention is required by
+          law. See the{" "}
           <a href="https://x.com/en/privacy" target="_blank" rel="noreferrer">
             X Privacy Policy
+          </a>
+          {" "}and{" "}
+          <a href="https://docs.x.com/developer-terms/policy" target="_blank" rel="noreferrer">
+            X Developer Policy
           </a>
           .
         </p>
@@ -315,11 +417,28 @@ function Privacy() {
           Posterract does not currently request or store LinkedIn API data. If this integration is
           activated after LinkedIn approval, Posterract will request only the permissions required
           to identify an authorized member or organization, publish user-selected content, report
-          delivery status, and display permitted analytics. Disconnecting will remove stored
-          credentials, and LinkedIn-derived data will be deleted or refreshed according to
-          LinkedIn&apos;s applicable retention rules and verified user requests. See the{" "}
+          delivery status, and display permitted analytics. If activated, Posterract will store only
+          the LinkedIn Content expressly permitted for the applicable API product and only for its
+          applicable duration. LinkedIn&apos;s limits vary by data type; for example, some other-member
+          profile data may only be cached for 24 hours, member social activity for 48 hours, and
+          certain organization reporting data for up to one year. The shortest applicable limit
+          controls. Posterract will immediately delete LinkedIn API Content, member tokens, and OAuth
+          tokens collected for a user when that user requests deletion or closes their Posterract
+          account, except where retention is required by law. See the{" "}
           <a href="https://www.linkedin.com/legal/privacy-policy" target="_blank" rel="noreferrer">
             LinkedIn Privacy Policy
+          </a>
+          , the{" "}
+          <a href="https://www.linkedin.com/legal/l/api-terms-of-use" target="_blank" rel="noreferrer">
+            LinkedIn API Terms
+          </a>
+          , and the{" "}
+          <a
+            href="https://learn.microsoft.com/en-us/linkedin/marketing/data-storage-requirements"
+            target="_blank"
+            rel="noreferrer"
+          >
+            LinkedIn data-storage requirements
           </a>
           .
         </p>
@@ -330,7 +449,8 @@ function Privacy() {
         <li>
           <strong>Posterract account and workspace data.</strong> Retained while your account is
           active and deleted within 30 days after we verify an account-deletion request, except
-          records we must retain by law or for security and dispute resolution.
+          records we must retain by law or for security and dispute resolution. Any shorter
+          platform-specific deletion deadline described above controls for that platform&apos;s data.
         </li>
         <li>
           <strong>Uploaded media.</strong> Retained in your Library until you delete it, where the
