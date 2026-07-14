@@ -1,4 +1,5 @@
 import { Navigate, Outlet, createFileRoute, useRouterState } from "@tanstack/react-router";
+import type { ReactElement } from "react";
 import { useConvexAuth } from "convex/react";
 import clsx from "clsx";
 import { motion, AnimatePresence } from "framer-motion";
@@ -17,10 +18,10 @@ export const Route = createFileRoute("/_app")({
 });
 
 /** Cloud mode: signed-out visitors see the public homepage; the product remains protected. */
-function GuardedAppShell() {
+function GuardedAppShell(): ReactElement {
   const { isLoading, isAuthenticated } = useConvexAuth();
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
-  if (isLoading) return <WarpingIn />;
+  const pathname: string = useRouterState({ select: (s) => s.location.pathname });
+  if (isLoading) return pathname === "/" ? <Homepage /> : <WarpingIn />;
   if (!isAuthenticated) {
     if (pathname === "/") return <Homepage />;
     return <Navigate to="/" />;
