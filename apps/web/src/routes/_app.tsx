@@ -10,16 +10,21 @@ import { SignalsPanel } from "@/shell/SignalsPanel";
 import { useUI } from "@/state/ui";
 import { ENGINE_MODE, useEngineBoot } from "@/engine/useEngine";
 import { WarpingIn } from "@/shell/SystemStates";
+import { Homepage } from "@/marketing/Homepage";
 
 export const Route = createFileRoute("/_app")({
   component: ENGINE_MODE === "cloud" ? GuardedAppShell : AppShell,
 });
 
-/** Cloud mode: the whole app sits behind the Gate. */
+/** Cloud mode: signed-out visitors see the public homepage; the product remains protected. */
 function GuardedAppShell() {
   const { isLoading, isAuthenticated } = useConvexAuth();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
   if (isLoading) return <WarpingIn />;
-  if (!isAuthenticated) return <Navigate to="/gate" />;
+  if (!isAuthenticated) {
+    if (pathname === "/") return <Homepage />;
+    return <Navigate to="/" />;
+  }
   return <AppShell />;
 }
 
