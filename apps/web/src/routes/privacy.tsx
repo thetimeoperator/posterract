@@ -7,7 +7,53 @@ export const Route = createFileRoute("/privacy")({
 
 function Privacy() {
   return (
-    <LegalPage title="Privacy Policy" updated="July 13, 2026">
+    <LegalPage title="Privacy Policy" updated="July 13, 2026" wide>
+      <section className="legal-verification" aria-labelledby="youtube-verification-title">
+        <div className="legal-verification-heading">
+          <div>
+            <p>VERIFICATION SUMMARY // YOUTUBE + GOOGLE</p>
+            <h2 id="youtube-verification-title">YouTube API Services privacy disclosure</h2>
+          </div>
+          <span>ACTIVE INTEGRATION</span>
+        </div>
+
+        <div className="legal-verification-links" aria-label="Google and YouTube policies">
+          <a href="https://policies.google.com/privacy" target="_blank" rel="noreferrer">Google Privacy Policy</a>
+          <a href="https://www.youtube.com/t/terms" target="_blank" rel="noreferrer">YouTube Terms of Service</a>
+          <a href="https://developers.google.com/youtube/terms/api-services-terms-of-service" target="_blank" rel="noreferrer">YouTube API Terms</a>
+          <a href="https://developers.google.com/youtube/terms/developer-policies" target="_blank" rel="noreferrer">Developer Policies</a>
+        </div>
+
+        <div className="legal-verification-grid">
+          <article>
+            <span>01 // DATA ACCESSED</span>
+            <p>With consent, Posterract uses YouTube API Services and requests <code>youtube.upload</code>, <code>youtube.readonly</code>, and <code>yt-analytics.readonly</code>.</p>
+            <p>We may store OAuth tokens, channel identity, subscriber totals, uploaded-video IDs and URLs, publishing status, and authorized views, likes, comments, shares, watch time, and subscriber changes.</p>
+          </article>
+          <article>
+            <span>02 // PURPOSE + LIMITED USE</span>
+            <p>We use this data only to connect the selected channel, upload or schedule videos when the user instructs us, show delivery status and analytics, and provide clearly labeled Posterract performance features.</p>
+            <p>We do not sell YouTube API Data, use it for advertising or AI training, or access private messages.</p>
+          </article>
+          <article className="legal-verification-retention">
+            <span>03 // RETENTION, REVOCATION + DELETION</span>
+            <ul>
+              <li><strong>While connected:</strong> authorized analytics may be retained only as needed; authorization and stored data are revalidated or refreshed at least every 30 days.</li>
+              <li><strong>Disconnect or deletion request:</strong> we request token revocation immediately and delete the active token and associated YouTube Authorized Data as soon as possible, no later than 7 days unless law requires retention.</li>
+              <li><strong>Revoke through Google:</strong> associated YouTube API Data is deleted as soon as possible, no later than 30 days after detection.</li>
+              <li><strong>36-month allowance:</strong> Posterract does not rely on this conditional analytics allowance unless YouTube expressly approves it through an audit.</li>
+            </ul>
+          </article>
+          <article className="legal-verification-control">
+            <span>04 // USER CONTROL</span>
+            <p>Disconnect YouTube in Posterract&apos;s Accounts page or revoke Posterract through <a href="https://security.google.com/settings/security/permissions" target="_blank" rel="noreferrer">Google Account permissions</a>. Deletion requests: <a href="mailto:pahlevansina@gmail.com">pahlevansina@gmail.com</a>.</p>
+          </article>
+        </div>
+
+        <p className="legal-verification-footnote">Posterract&apos;s use and transfer of information received from Google APIs adheres to the Google API Services User Data Policy, including its Limited Use requirements.</p>
+      </section>
+
+      <p className="legal-policy-continues">Complete Posterract Privacy Policy</p>
       <p className="legal-lede">
         This Privacy Policy explains how Posterract collects, uses, stores, shares, and deletes
         information when you use posterract.app, connect a social-media account, publish content,
@@ -511,14 +557,16 @@ export function LegalPage({
   title,
   updated,
   children,
+  wide = false,
 }: {
   title: string;
   updated: string;
   children: React.ReactNode;
+  wide?: boolean;
 }) {
   return (
     <main className="chamber min-h-screen px-6 py-12">
-      <div className="mx-auto max-w-3xl">
+      <div className={`mx-auto ${wide ? "max-w-5xl" : "max-w-3xl"}`}>
         <Link to="/gate" className="mb-8 flex items-center gap-3" aria-label="Posterract home">
           <MiniTesseract size={26} />
           <span className="font-display text-[15px] font-bold tracking-[0.18em] text-starlight">
@@ -552,6 +600,30 @@ export function LegalPage({
         .legal-body code { border: 1px solid var(--glass-border); border-radius: 5px; background: rgba(3, 11, 14, 0.52); padding: 1px 5px; color: var(--auroral); font-family: var(--font-mono); font-size: 11px; }
         .legal-lede { color: var(--starlight-dim); font-size: 15px; line-height: 1.75; }
         .legal-summary { border: 1px solid rgba(101, 255, 154, 0.3); border-radius: 12px; background: rgba(101, 255, 154, 0.055); padding: 16px 18px; }
+        .legal-verification { overflow: hidden; border: 1px solid rgba(101, 255, 154, 0.42); border-radius: 14px; background: linear-gradient(145deg, rgba(101, 255, 154, 0.07), rgba(4, 13, 16, 0.76)); box-shadow: 0 26px 80px rgba(0, 0, 0, 0.24); }
+        .legal-verification-heading { display: flex; min-height: 70px; padding: 14px 18px; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid rgba(101, 255, 154, 0.22); }
+        .legal-verification-heading p { margin: 0 0 5px; color: var(--neon); font-family: var(--font-mono); font-size: 8px; font-weight: 650; letter-spacing: 0.13em; }
+        .legal-verification-heading h2 { margin: 0; font-size: 20px; }
+        .legal-verification-heading > span { flex: 0 0 auto; border: 1px solid rgba(101, 255, 154, 0.35); border-radius: 999px; padding: 5px 8px; color: var(--neon); font-family: var(--font-mono); font-size: 7px; letter-spacing: 0.1em; }
+        .legal-verification-links { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid rgba(101, 255, 154, 0.2); }
+        .legal-verification-links a { display: flex; min-height: 36px; padding: 7px 10px; align-items: center; justify-content: center; border-right: 1px solid rgba(101, 255, 154, 0.16); color: var(--starlight-dim); font-family: var(--font-mono); font-size: 7px; letter-spacing: 0.04em; text-align: center; text-decoration: none; text-transform: uppercase; }
+        .legal-verification-links a:last-child { border-right: 0; }
+        .legal-verification-links a:hover { color: var(--neon); }
+        .legal-verification-grid { display: grid; grid-template-columns: 1fr 1fr; }
+        .legal-verification-grid article { min-width: 0; padding: 13px 16px; border-right: 1px solid rgba(101, 255, 154, 0.16); border-bottom: 1px solid rgba(101, 255, 154, 0.16); }
+        .legal-verification-grid article:nth-child(2) { border-right: 0; }
+        .legal-verification-grid article > span { display: block; margin-bottom: 7px; color: var(--neon); font-family: var(--font-mono); font-size: 7.5px; font-weight: 650; letter-spacing: 0.1em; }
+        .legal-verification-grid article p { margin: 0; color: var(--starlight-dim); font-size: 10.5px; line-height: 1.48; }
+        .legal-verification-grid article p + p { margin-top: 6px; }
+        .legal-verification-grid article code { font-size: 8px; }
+        .legal-verification-grid .legal-verification-retention { grid-column: 1 / -1; border-right: 0; }
+        .legal-verification-retention ul { display: grid; margin: 0; padding: 0; grid-template-columns: 1fr 1fr; gap: 7px 22px; list-style: none; }
+        .legal-verification-retention li { position: relative; padding-left: 12px; color: var(--starlight-dim); font-size: 9.5px; line-height: 1.42; }
+        .legal-verification-retention li::before { position: absolute; top: 6px; left: 0; width: 4px; height: 4px; background: var(--neon); content: ""; }
+        .legal-verification-grid .legal-verification-control { grid-column: 1 / -1; display: grid; padding-top: 10px; padding-bottom: 10px; grid-template-columns: 155px 1fr; align-items: center; border-right: 0; }
+        .legal-verification-grid .legal-verification-control > span { margin: 0; }
+        .legal-verification-footnote { margin: 0; padding: 9px 16px; color: var(--starlight-faint); font-family: var(--font-mono); font-size: 7.5px; line-height: 1.45; text-align: center; }
+        .legal-policy-continues { margin: 42px 0 0; padding-bottom: 10px; border-bottom: 1px solid var(--glass-border); color: var(--neon); font-family: var(--font-mono); font-size: 9px; font-weight: 650; letter-spacing: 0.12em; text-transform: uppercase; }
         .legal-toc { display: flex; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid var(--glass-border); padding: 2px 0 18px; }
         .legal-toc a { border: 1px solid var(--glass-border); border-radius: 999px; padding: 5px 9px; text-decoration: none; color: var(--starlight-dim); font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase; }
         .legal-toc a:hover { border-color: rgba(101, 255, 154, 0.45); color: var(--neon); }
@@ -562,6 +634,16 @@ export function LegalPage({
         .platform-policy-featured .platform-policy-heading span { border-color: rgba(101, 255, 154, 0.3); color: var(--neon); }
         .google-disclosure { margin-top: 16px; border-left: 3px solid var(--neon); border-radius: 0 10px 10px 0; background: rgba(101, 255, 154, 0.075); padding: 14px 16px; }
         .google-disclosure-kicker { margin-bottom: 7px; color: var(--starlight); font-family: var(--font-display); font-size: 14px; font-weight: 650; }
+        @media (max-width: 760px) {
+          .legal-verification-heading { align-items: flex-start; }
+          .legal-verification-links { grid-template-columns: 1fr 1fr; }
+          .legal-verification-links a:nth-child(2) { border-right: 0; }
+          .legal-verification-links a:nth-child(-n + 2) { border-bottom: 1px solid rgba(101, 255, 154, 0.16); }
+          .legal-verification-grid { grid-template-columns: 1fr; }
+          .legal-verification-grid article, .legal-verification-grid article:nth-child(2) { grid-column: 1; border-right: 0; }
+          .legal-verification-retention ul { grid-template-columns: 1fr; }
+          .legal-verification-grid .legal-verification-control { grid-template-columns: 1fr; gap: 7px; }
+        }
       `}</style>
     </main>
   );
