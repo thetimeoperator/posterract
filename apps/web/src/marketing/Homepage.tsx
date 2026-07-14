@@ -24,6 +24,31 @@ const PLATFORMS: Platform[] = [
   { id: "linkedin", name: "LinkedIn", mark: "/brand/platforms/linkedin.png", phase: "next", capability: "Integration roadmap" },
 ];
 
+function PlatformNetwork() {
+  return (
+    <section className="site-platforms" id="platforms" aria-labelledby="platform-title">
+      <div className="site-platforms-heading">
+        <div><p className="site-kicker">THE NETWORK // 07 DESTINATIONS</p><h2 id="platform-title">Where Posterract publishes.</h2></div>
+        <p>Live connections today, with the same system expanding across the rest of the network.</p>
+      </div>
+      <div className="site-platform-grid">
+        {PLATFORMS.map((platform, index) => (
+          <article className={`site-platform site-platform-${platform.phase}`} data-platform={platform.id} key={platform.id}>
+            <span className="site-platform-index">{String(index + 1).padStart(2, "0")}</span>
+            <div className="site-platform-mark"><img src={platform.mark} alt={`${platform.name} logo`} /></div>
+            <div><h3>{platform.name}</h3><p>{platform.capability}</p></div>
+            <strong>{platform.phase === "live" ? "LIVE" : "NEXT"}</strong>
+          </article>
+        ))}
+      </div>
+      <div className="site-platform-note">
+        <p><strong>LIVE NOW</strong> YouTube / TikTok / Instagram</p>
+        <p><strong>EXPANSION</strong> Facebook / Threads / X / LinkedIn</p>
+      </div>
+    </section>
+  );
+}
+
 export function Homepage() {
   const navigate = useNavigate();
   const emailRef = useRef<HTMLInputElement>(null);
@@ -88,14 +113,19 @@ export function Homepage() {
 
       <section className="site-hero" aria-labelledby="site-title">
         <header className="site-nav">
-          <a className="site-wordmark" href="#top" aria-label="Posterract home">POSTER<span>RACT</span></a>
+          <div className="site-nav-brand">
+            <a className="site-wordmark" href="#top" aria-label="Posterract home">POSTER<span>RACT</span></a>
+            <span className="site-nav-system">PUBLISHING OS // 01</span>
+          </div>
           <nav aria-label="Primary navigation">
-            <a href="#workflow">How it works</a>
-            <a href="#analytics">Analytics</a>
-            <a href="#platforms">Platforms</a>
-            <button type="button" onClick={() => openAuth("signin")}>Sign in</button>
+            <a href="#platforms"><span>01</span> Network</a>
+            <a href="#workflow"><span>02</span> Workflow</a>
+            <a href="#analytics"><span>03</span> Analytics</a>
           </nav>
-          <button className="site-nav-cta" type="button" onClick={() => openAuth("signup")}>Create account</button>
+          <div className="site-nav-actions">
+            <button className="site-nav-signin" type="button" onClick={() => openAuth("signin")}>Sign in</button>
+            <button className="site-nav-cta" type="button" onClick={() => openAuth("signup")}>Launch Posterract</button>
+          </div>
         </header>
 
         <div className="site-hero-main">
@@ -142,6 +172,8 @@ export function Homepage() {
           <div><span>24/7</span><p>Publishing status</p></div>
         </div>
       </section>
+
+      <PlatformNetwork />
 
       <section className="site-workflow" id="workflow" aria-labelledby="workflow-title">
         <div className="site-section-heading">
@@ -199,28 +231,18 @@ export function Homepage() {
         <button type="button" onClick={() => openAuth("signup")}>Create your command center</button>
       </section>
 
-      <section className="site-platforms" id="platforms" aria-labelledby="platform-title">
-        <div className="site-platforms-heading">
-          <div><p className="site-kicker">THE NETWORK // 07 DESTINATIONS</p><h2 id="platform-title">Where Posterract publishes.</h2></div>
-          <p>Live connections today, with the same system expanding across the rest of the network.</p>
+      <footer className="site-footer" id="footer">
+        <div className="site-footer-platforms" aria-label="Posterract platform network">
+          <p>NETWORK MIRROR // 07</p>
+          <div>
+            {PLATFORMS.map((platform) => (
+              <span className="site-footer-platform" data-platform={platform.id} key={platform.id}>
+                <img src={platform.mark} alt="" aria-hidden />
+                <small>{platform.name}</small>
+              </span>
+            ))}
+          </div>
         </div>
-        <div className="site-platform-grid">
-          {PLATFORMS.map((platform, index) => (
-            <article className={`site-platform site-platform-${platform.phase}`} data-platform={platform.id} key={platform.id}>
-              <span className="site-platform-index">{String(index + 1).padStart(2, "0")}</span>
-              <div className="site-platform-mark"><img src={platform.mark} alt={`${platform.name} logo`} /></div>
-              <div><h3>{platform.name}</h3><p>{platform.capability}</p></div>
-              <strong>{platform.phase === "live" ? "LIVE" : "NEXT"}</strong>
-            </article>
-          ))}
-        </div>
-        <div className="site-platform-note">
-          <p><strong>LIVE NOW</strong> YouTube / TikTok / Instagram</p>
-          <p><strong>EXPANSION</strong> Facebook / Threads / X / LinkedIn</p>
-        </div>
-      </section>
-
-      <footer className="site-footer">
         <div className="site-footer-main">
           <a className="site-wordmark" href="#top">POSTER<span>RACT</span></a>
           <p>One artifact. Multiple projections. Time is the fourth dimension.</p>
