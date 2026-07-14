@@ -72,7 +72,7 @@ export const applyYouTubeAccountRefresh = internalMutation({
   },
   handler: async (ctx, args) => {
     const portal = await ctx.db.get(args.portalId);
-    if (!portal || portal.provider !== "youtube") return;
+    if (!portal || portal.provider !== "youtube" || portal.status !== "connected") return;
     const fetchedAt = Date.now();
     const existingAccount = await ctx.db
       .query("accountMetricSnapshots")
@@ -129,6 +129,9 @@ export const applyYouTubePostRefresh = internalMutation({
   handler: async (ctx, args) => {
     const projection = await ctx.db.get(args.projectionId);
     if (!projection || projection.provider !== "youtube") return;
+    if (!projection.portalId) return;
+    const portal = await ctx.db.get(projection.portalId);
+    if (!portal || portal.provider !== "youtube" || portal.status !== "connected") return;
     const previous = await ctx.db
       .query("metricSnapshots")
       .withIndex("by_projection", (q) => q.eq("projectionId", args.projectionId))

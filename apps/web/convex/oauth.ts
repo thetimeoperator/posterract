@@ -272,6 +272,36 @@ export const clearConnection = internalMutation({
       .withIndex("by_portal", (q) => q.eq("portalId", args.portalId))
       .collect();
     for (const token of tokens) await ctx.db.delete(token._id);
+
+    if (args.provider === "youtube") {
+      // A disconnect is also a deletion request for cached YouTube analytics.
+      // Purge every YouTube snapshot in the workspace in the same transaction
+      // that marks the portal disconnected, so the dashboard cannot retain or
+      // briefly re-display data from the revoked grant.
+      const accountSnapshots = await ctx.db
+        .query("accountMetricSnapshots")
+        .withIndex("by_workspace_provider", (q) =>
+          q.eq("workspaceId", args.workspaceId).eq("provider", "youtube"),
+        )
+        .collect();
+      const dailySnapshots = await ctx.db
+        .query("dailyMetricSnapshots")
+        .withIndex("by_workspace_provider_date", (q) =>
+          q.eq("workspaceId", args.workspaceId).eq("provider", "youtube"),
+        )
+        .collect();
+      const postSnapshots = await ctx.db
+        .query("metricSnapshots")
+        .withIndex("by_workspace_provider", (q) =>
+          q.eq("workspaceId", args.workspaceId).eq("provider", "youtube"),
+        )
+        .collect();
+
+      for (const snapshot of accountSnapshots) await ctx.db.delete(snapshot._id);
+      for (const snapshot of dailySnapshots) await ctx.db.delete(snapshot._id);
+      for (const snapshot of postSnapshots) await ctx.db.delete(snapshot._id);
+    }
+
     await ctx.db.patch(args.portalId, {
       status: "disconnected",
       handle: "not connected",
