@@ -50,6 +50,7 @@ export async function facebookExchangeCode(args: {
   clientSecret: string;
   redirectUri: string;
   code: string;
+  configuredAccessToken?: boolean;
 }): Promise<{ accessToken: string; expiresAt?: number; scopes: string[] }> {
   const tokenUrl = new URL(`${GRAPH}/${API_VERSION}/oauth/access_token`);
   tokenUrl.searchParams.set("client_id", args.clientId);
@@ -64,6 +65,23 @@ export async function facebookExchangeCode(args: {
   };
   if (!shortResponse.ok || !short.access_token) {
     throw new Error(`Facebook token exchange failed: ${short.error?.message ?? shortResponse.status}`);
+  }
+
+  // A Facebook Login for Business configuration controls the returned token's
+  // type, lifetime, permissions, and Page targets. Re-exchanging that token
+  // through the legacy fb_exchange_token flow can lose its granular Page
+  // selection. Use the configured token exactly as Meta returned it.
+  if (args.configuredAccessToken) {
+    const grantedScopes = await facebookGrantedScopes(short.access_token);
+    const missing = FACEBOOK_PAGE_SCOPES.filter((scope) => !grantedScopes.includes(scope));
+    if (missing.length > 0) {
+      throw new Error(`Facebook did not grant: ${missing.join(", ")}. Reconnect and approve every permission.`);
+    }
+    return {
+      accessToken: short.access_token,
+      expiresAt: short.expires_in ? Date.now() + short.expires_in * 1000 : undefined,
+      scopes: grantedScopes,
+    };
   }
 
   const longUrl = new URL(`${GRAPH}/${API_VERSION}/oauth/access_token`);

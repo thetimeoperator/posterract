@@ -209,6 +209,7 @@ export const complete = action({
           clientSecret,
           redirectUri: redirectUri("facebook"),
           code: args.code,
+          configuredAccessToken: Boolean(process.env.FACEBOOK_LOGIN_CONFIG_ID),
         });
         const pages = await facebookListPages({
           userAccessToken: token.accessToken,
