@@ -210,7 +210,11 @@ export const complete = action({
           redirectUri: redirectUri("facebook"),
           code: args.code,
         });
-        const pages = await facebookListPages(token.accessToken);
+        const pages = await facebookListPages({
+          userAccessToken: token.accessToken,
+          clientId,
+          clientSecret,
+        });
         if (pages.length === 0) {
           throw new Error(
             "No manageable Facebook Pages were returned. Use an account with full Page access and approve all requested permissions.",

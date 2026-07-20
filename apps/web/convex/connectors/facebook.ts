@@ -21,6 +21,8 @@ export function facebookAuthUrl(args: {
     redirect_uri: args.redirectUri,
     response_type: "code",
     state: args.state,
+    auth_type: "rerequest",
+    return_scopes: "true",
   });
   if (args.configId) {
     // Facebook Login for Business configurations replace an ad-hoc scope
@@ -108,18 +110,15 @@ async function facebookGrantedScopes(userAccessToken: string): Promise<string[]>
   );
 }
 
-export async function facebookListPages(userAccessToken: string): Promise<FacebookPage[]> {
-  const url = new URL(`${GRAPH}/${API_VERSION}/me/accounts`);
-  url.searchParams.set("fields", "id,name,access_token,tasks");
-  url.searchParams.set("limit", "100");
-  url.searchParams.set("access_token", userAccessToken);
-  const response = await fetch(url);
-  const body = (await response.json()) as {
-    data?: Array<{ id?: string; name?: string; access_token?: string; tasks?: string[] }>;
-    error?: { message?: string };
-  };
-  if (!response.ok) throw new Error(`Facebook Page lookup failed: ${body.error?.message ?? response.status}`);
-  return (body.data ?? []).flatMap((page) => {
+type FacebookPageResponse = {
+  id?: string;
+  name?: string;
+  access_token?: string;
+  tasks?: string[];
+};
+
+function normalizeFacebookPages(pages: FacebookPageResponse[]): FacebookPage[] {
+  return pages.flatMap((page) => {
     if (!page.id || !page.access_token) return [];
     return [{
       id: page.id,
@@ -132,6 +131,65 @@ export async function facebookListPages(userAccessToken: string): Promise<Facebo
       tasks: page.tasks ?? [],
     }];
   });
+}
+
+export async function facebookListPages(args: {
+  userAccessToken: string;
+  clientId: string;
+  clientSecret: string;
+}): Promise<FacebookPage[]> {
+  const url = new URL(`${GRAPH}/${API_VERSION}/me/accounts`);
+  url.searchParams.set("fields", "id,name,access_token,tasks");
+  url.searchParams.set("limit", "100");
+  url.searchParams.set("access_token", args.userAccessToken);
+  const response = await fetch(url);
+  const body = (await response.json()) as {
+    data?: FacebookPageResponse[];
+    error?: { message?: string };
+  };
+  if (!response.ok) throw new Error(`Facebook Page lookup failed: ${body.error?.message ?? response.status}`);
+  const listedPages = normalizeFacebookPages(body.data ?? []);
+  if (listedPages.length > 0) return listedPages;
+
+  // Facebook Login grants Page permissions to specific assets. In some Login
+  // for Business flows, /me/accounts can be empty even though the token's
+  // granular scopes contain the Page IDs the person selected. Meta documents
+  // fetching a specific Page access token directly by Page ID, so recover those
+  // selected targets instead of treating an empty collection as no access.
+  const debugUrl = new URL(`${GRAPH}/${API_VERSION}/debug_token`);
+  debugUrl.searchParams.set("input_token", args.userAccessToken);
+  const debugResponse = await fetch(debugUrl, {
+    headers: { Authorization: `Bearer ${args.clientId}|${args.clientSecret}` },
+  });
+  const debugBody = (await debugResponse.json()) as {
+    data?: {
+      granular_scopes?: Array<{ scope?: string; target_ids?: string[] }>;
+    };
+  };
+  if (!debugResponse.ok) return [];
+
+  const pageIds = new Set(
+    (debugBody.data?.granular_scopes ?? [])
+      .filter((row) => row.scope && FACEBOOK_PAGE_SCOPES.includes(row.scope))
+      .flatMap((row) => row.target_ids ?? []),
+  );
+  if (pageIds.size === 0) {
+    throw new Error(
+      "Meta granted the Facebook permissions but did not share a Page with Posterract. Reconnect and select the Page when Meta asks which Pages to allow.",
+    );
+  }
+
+  const selectedPages = await Promise.all(
+    [...pageIds].map(async (pageId): Promise<FacebookPageResponse | undefined> => {
+      const pageUrl = new URL(`${GRAPH}/${API_VERSION}/${pageId}`);
+      pageUrl.searchParams.set("fields", "id,name,access_token,tasks");
+      pageUrl.searchParams.set("access_token", args.userAccessToken);
+      const pageResponse = await fetch(pageUrl);
+      if (!pageResponse.ok) return undefined;
+      return (await pageResponse.json()) as FacebookPageResponse;
+    }),
+  );
+  return normalizeFacebookPages(selectedPages.filter((page) => page !== undefined));
 }
 
 export async function facebookRevokeGrant(userAccessToken: string): Promise<void> {
