@@ -174,17 +174,36 @@ export async function facebookListPages(args: {
   // granular scopes contain the Page IDs the person selected. Meta documents
   // fetching a specific Page access token directly by Page ID, so recover those
   // selected targets instead of treating an empty collection as no access.
+  const appTokenUrl = new URL(`${GRAPH}/${API_VERSION}/oauth/access_token`);
+  appTokenUrl.searchParams.set("client_id", args.clientId);
+  appTokenUrl.searchParams.set("client_secret", args.clientSecret);
+  appTokenUrl.searchParams.set("grant_type", "client_credentials");
+  const appTokenResponse = await fetch(appTokenUrl);
+  const appTokenBody = (await appTokenResponse.json()) as {
+    access_token?: string;
+    error?: { message?: string };
+  };
+  if (!appTokenResponse.ok || !appTokenBody.access_token) {
+    throw new Error(
+      `Facebook Page diagnostic failed while creating the app token (${appTokenResponse.status}): ${appTokenBody.error?.message ?? "Meta returned no app token"}`,
+    );
+  }
+
   const debugUrl = new URL(`${GRAPH}/${API_VERSION}/debug_token`);
   debugUrl.searchParams.set("input_token", args.userAccessToken);
-  const debugResponse = await fetch(debugUrl, {
-    headers: { Authorization: `Bearer ${args.clientId}|${args.clientSecret}` },
-  });
+  debugUrl.searchParams.set("access_token", appTokenBody.access_token);
+  const debugResponse = await fetch(debugUrl);
   const debugBody = (await debugResponse.json()) as {
     data?: {
       granular_scopes?: Array<{ scope?: string; target_ids?: string[] }>;
     };
+    error?: { message?: string };
   };
-  if (!debugResponse.ok) return [];
+  if (!debugResponse.ok) {
+    throw new Error(
+      `Facebook Page diagnostic failed while inspecting the user token (${debugResponse.status}): ${debugBody.error?.message ?? "Meta returned no token details"}`,
+    );
+  }
 
   const pageIds = new Set(
     (debugBody.data?.granular_scopes ?? [])
@@ -193,21 +212,40 @@ export async function facebookListPages(args: {
   );
   if (pageIds.size === 0) {
     throw new Error(
-      "Meta granted the Facebook permissions but did not share a Page with Posterract. Reconnect and select the Page when Meta asks which Pages to allow.",
+      `Meta granted the Facebook permissions but returned ${body.data?.length ?? 0} Page records and no Page-specific target IDs. Meta did not attach the Page selected in the authorization screen to this access token.`,
     );
   }
 
-  const selectedPages = await Promise.all(
-    [...pageIds].map(async (pageId): Promise<FacebookPageResponse | undefined> => {
+  const selectedPageResults = await Promise.all(
+    [...pageIds].map(async (pageId): Promise<{ page?: FacebookPageResponse; error?: string }> => {
       const pageUrl = new URL(`${GRAPH}/${API_VERSION}/${pageId}`);
       pageUrl.searchParams.set("fields", "id,name,access_token,tasks");
       pageUrl.searchParams.set("access_token", args.userAccessToken);
       const pageResponse = await fetch(pageUrl);
-      if (!pageResponse.ok) return undefined;
-      return (await pageResponse.json()) as FacebookPageResponse;
+      const pageBody = (await pageResponse.json()) as FacebookPageResponse & {
+        error?: { message?: string };
+      };
+      if (!pageResponse.ok) {
+        return {
+          error: `${pageResponse.status}: ${pageBody.error?.message ?? "Meta denied the Page lookup"}`,
+        };
+      }
+      if (!pageBody.access_token) {
+        return { error: `${pageResponse.status}: Meta returned the Page but omitted its access token` };
+      }
+      return { page: pageBody };
     }),
   );
-  return normalizeFacebookPages(selectedPages.filter((page) => page !== undefined));
+  const selectedPages = normalizeFacebookPages(
+    selectedPageResults.flatMap((result) => result.page ? [result.page] : []),
+  );
+  if (selectedPages.length === 0) {
+    const reasons = [...new Set(selectedPageResults.flatMap((result) => result.error ? [result.error] : []))];
+    throw new Error(
+      `Meta authorized ${pageIds.size} Page target${pageIds.size === 1 ? "" : "s"}, but Posterract could not obtain a Page access token. ${reasons.join("; ")}`,
+    );
+  }
+  return selectedPages;
 }
 
 export async function facebookRevokeGrant(userAccessToken: string): Promise<void> {
