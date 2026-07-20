@@ -21,9 +21,18 @@ export function facebookAuthUrl(args: {
     redirect_uri: args.redirectUri,
     response_type: "code",
     state: args.state,
-    scope: FACEBOOK_PAGE_SCOPES.join(","),
   });
-  if (args.configId) params.set("config_id", args.configId);
+  if (args.configId) {
+    // Facebook Login for Business configurations replace an ad-hoc scope
+    // list. The override flag is required for the configuration's code flow
+    // and ensures Meta presents its business-asset selector.
+    params.set("config_id", args.configId);
+    params.set("override_default_response_type", "true");
+  } else {
+    // Development fallback for apps that have not created a Business Login
+    // configuration yet.
+    params.set("scope", FACEBOOK_PAGE_SCOPES.join(","));
+  }
   return `https://www.facebook.com/${API_VERSION}/dialog/oauth?${params.toString()}`;
 }
 
@@ -112,23 +121,15 @@ export async function facebookListPages(userAccessToken: string): Promise<Facebo
   if (!response.ok) throw new Error(`Facebook Page lookup failed: ${body.error?.message ?? response.status}`);
   return (body.data ?? []).flatMap((page) => {
     if (!page.id || !page.access_token) return [];
-    const tasks = page.tasks ?? [];
-    const canPublish =
-      tasks.length === 0 ||
-      tasks.some((task) =>
-        ["CREATE_CONTENT", "PROFILE_PLUS_CREATE_CONTENT", "PROFILE_PLUS_FULL_CONTROL"].includes(task),
-      );
-    const canAnalyze =
-      tasks.length === 0 ||
-      tasks.some((task) =>
-        ["ANALYZE", "PROFILE_PLUS_ANALYZE", "PROFILE_PLUS_FULL_CONTROL"].includes(task),
-      );
-    if (!canPublish || !canAnalyze) return [];
     return [{
       id: page.id,
       name: page.name ?? "Facebook Page",
       accessToken: page.access_token,
-      tasks,
+      // Meta's task labels vary between classic Pages, New Pages Experience,
+      // and business-owned assets. A returned Page access token plus the
+      // explicitly verified OAuth permissions is the reliable authorization
+      // boundary; filtering on task-label strings can incorrectly hide a Page.
+      tasks: page.tasks ?? [],
     }];
   });
 }
