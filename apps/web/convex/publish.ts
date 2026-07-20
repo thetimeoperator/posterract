@@ -5,10 +5,9 @@ import { v } from "convex/values";
 import type { FunctionArgs } from "convex/server";
 
 /**
- * The publish engine. Instagram, TikTok, and YouTube run real connectors;
- * the remaining platforms run the FAKE connector — the same staged lifecycle
- * the product shows (uploading → publishing → processing → live) — until
- * their real connectors land in the connector phases.
+ * The publish engine. Instagram, TikTok, YouTube, Facebook, and Threads run
+ * official platform connectors. X remains on the simulator until its API
+ * credentials and production connector are approved.
  */
 
 const LABELS: Record<string, string> = {
@@ -20,8 +19,8 @@ const LABELS: Record<string, string> = {
   youtube: "YouTube",
 };
 
-/** Platforms that ingest from a URL get a platform-side processing stage. */
-const PULL_PLATFORMS = new Set(["instagram", "threads", "tiktok"]);
+/** Simulated platforms that include a platform-side processing stage. */
+const PULL_PLATFORMS = new Set(["tiktok"]);
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const jitter = (base: number) => base * (0.7 + Math.random() * 0.6);
@@ -78,7 +77,7 @@ export const dispatch = internalAction({
             return;
           }
 
-          // Real connectors (Instagram, TikTok, YouTube); simulator for the rest.
+          // Real connectors; simulator remains only for X.
           if (projection.provider === "instagram") {
             await runInstagramConnector(ctx, {
               workspaceId: transmission.workspaceId,
@@ -134,6 +133,34 @@ export const dispatch = internalAction({
                   : undefined,
               });
             }
+            return;
+          }
+          if (projection.provider === "facebook") {
+            await runFacebookConnector(ctx, {
+              workspaceId: transmission.workspaceId,
+              transmissionId: transmission._id,
+              projectionId: projection._id,
+              attempt: projection.attemptCount + 1,
+              pageId: tokensByPortal[portal._id]?.providerUserId,
+              accessToken: tokensByPortal[portal._id]?.accessToken,
+              videoUrl: artifactUrl,
+              title: transmission.title,
+              caption: projection.caption,
+            });
+            return;
+          }
+          if (projection.provider === "threads") {
+            await runThreadsConnector(ctx, {
+              workspaceId: transmission.workspaceId,
+              transmissionId: transmission._id,
+              projectionId: projection._id,
+              attempt: projection.attemptCount + 1,
+              userId: tokensByPortal[portal._id]?.providerUserId,
+              accessToken: tokensByPortal[portal._id]?.accessToken,
+              videoUrl: artifactUrl,
+              caption: projection.caption,
+              pendingContainerId: projection.pendingContainerId,
+            });
             return;
           }
 
@@ -307,6 +334,7 @@ async function runInstagramConnector(
       clearPendingContainer: true,
     });
     await emit("projection.live", `Instagram LIVE → ${(result.permalink ?? "instagram.com").replace("https://", "")}`);
+    await ctx.scheduler.runAfter(5 * 60_000, internal.metaAnalytics.refreshRecent, {});
   } catch (e) {
     const retryable = (e as { retryable?: boolean }).retryable === true && job.attempt < 5;
     const message = e instanceof Error ? e.message : "Instagram publish failed";
@@ -329,6 +357,218 @@ async function runInstagramConnector(
       });
       await emit("projection.failed", `Instagram failed — ${message}`);
     }
+  }
+  await ctx.runMutation(internal.publishHelpers.refreshStatus, { transmissionId: job.transmissionId });
+}
+
+/** Real Threads publish — create/poll/publish with resumable containers. */
+async function runThreadsConnector(
+  ctx: ActionCtx,
+  job: {
+    workspaceId: Id<"workspaces">;
+    transmissionId: Id<"transmissions">;
+    projectionId: Id<"projections">;
+    attempt: number;
+    userId?: string;
+    accessToken?: string;
+    videoUrl: string | null;
+    caption: string;
+    pendingContainerId?: string;
+  },
+): Promise<void> {
+  const patch = (p: FunctionArgs<typeof internal.publishHelpers.patchProjection>) =>
+    ctx.runMutation(internal.publishHelpers.patchProjection, p);
+  const emit = (type: string, message: string) =>
+    ctx.runMutation(internal.publishHelpers.emit, {
+      workspaceId: job.workspaceId,
+      transmissionId: job.transmissionId,
+      projectionId: job.projectionId,
+      type,
+      message,
+    });
+
+  if (!job.accessToken || !job.userId) {
+    await patch({
+      projectionId: job.projectionId,
+      status: "needs_reauth",
+      errorCategory: "auth",
+      errorSummary: "Threads token missing — reconnect the account",
+    });
+    await emit("projection.failed", "Threads blocked — reconnect required");
+    return;
+  }
+  if (!job.videoUrl) {
+    await patch({
+      projectionId: job.projectionId,
+      status: "failed",
+      errorCategory: "validation",
+      errorSummary: "Video is not available to publish",
+    });
+    await emit("projection.failed", "Threads blocked — video unavailable");
+    return;
+  }
+
+  await patch({ projectionId: job.projectionId, status: "uploading", attemptCount: job.attempt });
+  await ctx.runMutation(internal.publishHelpers.refreshStatus, { transmissionId: job.transmissionId });
+
+  try {
+    const { threadsPublishVideo } = await import("./connectors/threads");
+    const result = await threadsPublishVideo({
+      userId: job.userId,
+      accessToken: job.accessToken,
+      videoUrl: job.videoUrl,
+      text: job.caption,
+      resumeContainerId: job.pendingContainerId,
+      onContainer: async (containerId) => {
+        await patch({ projectionId: job.projectionId, pendingContainerId: containerId });
+      },
+      onProgress: async (stage, detail) => {
+        await patch({
+          projectionId: job.projectionId,
+          status:
+            stage === "publishing"
+              ? "publishing"
+              : stage === "processing"
+                ? "processing"
+                : "uploading",
+        });
+        if (detail) await emit(`projection.${stage}`, `${detail}…`);
+      },
+    });
+    const url = result.permalink ?? `https://www.threads.net/@me/post/${result.mediaId}`;
+    await patch({
+      projectionId: job.projectionId,
+      status: "live",
+      platformPostId: result.mediaId,
+      platformPostUrl: url,
+      clearError: true,
+      clearPendingContainer: true,
+    });
+    await emit("projection.live", `Threads LIVE → ${url.replace("https://", "")}`);
+    await ctx.scheduler.runAfter(5 * 60_000, internal.metaAnalytics.refreshRecent, {});
+  } catch (error) {
+    const retryable = (error as { retryable?: boolean }).retryable === true && job.attempt < 5;
+    const message = error instanceof Error ? error.message : "Threads publish failed";
+    if (retryable) {
+      await patch({
+        projectionId: job.projectionId,
+        status: "scheduled",
+        errorCategory: "transient",
+        errorSummary: message,
+      });
+      await emit("projection.retrying", `Threads — ${message}; retrying`);
+      await ctx.scheduler.runAfter(60_000, internal.publish.dispatch, {
+        transmissionId: job.transmissionId,
+      });
+    } else {
+      await patch({
+        projectionId: job.projectionId,
+        status: "failed",
+        errorCategory: "platform",
+        errorSummary: message,
+        clearPendingContainer: true,
+      });
+      await emit("projection.failed", `Threads failed — ${message}`);
+    }
+  }
+  await ctx.runMutation(internal.publishHelpers.refreshStatus, { transmissionId: job.transmissionId });
+}
+
+/** Real Facebook Page Reel publish using the selected Page access token. */
+async function runFacebookConnector(
+  ctx: ActionCtx,
+  job: {
+    workspaceId: Id<"workspaces">;
+    transmissionId: Id<"transmissions">;
+    projectionId: Id<"projections">;
+    attempt: number;
+    pageId?: string;
+    accessToken?: string;
+    videoUrl: string | null;
+    title: string;
+    caption: string;
+  },
+): Promise<void> {
+  const patch = (p: FunctionArgs<typeof internal.publishHelpers.patchProjection>) =>
+    ctx.runMutation(internal.publishHelpers.patchProjection, p);
+  const emit = (type: string, message: string) =>
+    ctx.runMutation(internal.publishHelpers.emit, {
+      workspaceId: job.workspaceId,
+      transmissionId: job.transmissionId,
+      projectionId: job.projectionId,
+      type,
+      message,
+    });
+
+  if (!job.accessToken || !job.pageId) {
+    await patch({
+      projectionId: job.projectionId,
+      status: "needs_reauth",
+      errorCategory: "auth",
+      errorSummary: "Facebook Page token missing — reconnect the Page",
+    });
+    await emit("projection.failed", "Facebook blocked — reconnect the Page");
+    return;
+  }
+  if (!job.videoUrl) {
+    await patch({
+      projectionId: job.projectionId,
+      status: "failed",
+      errorCategory: "validation",
+      errorSummary: "Video is not available to publish",
+    });
+    await emit("projection.failed", "Facebook blocked — video unavailable");
+    return;
+  }
+
+  await patch({ projectionId: job.projectionId, status: "uploading", attemptCount: job.attempt });
+  await ctx.runMutation(internal.publishHelpers.refreshStatus, { transmissionId: job.transmissionId });
+
+  try {
+    const { facebookPublishReel } = await import("./connectors/facebook");
+    const result = await facebookPublishReel({
+      pageId: job.pageId,
+      pageAccessToken: job.accessToken,
+      videoUrl: job.videoUrl,
+      title: job.title,
+      description: job.caption,
+      onVideoId: async (videoId) => {
+        await patch({ projectionId: job.projectionId, pendingContainerId: videoId });
+      },
+      onProgress: async (stage, detail) => {
+        await patch({
+          projectionId: job.projectionId,
+          status:
+            stage === "publishing"
+              ? "publishing"
+              : stage === "processing"
+                ? "processing"
+                : "uploading",
+        });
+        if (detail) await emit(`projection.${stage}`, `${detail}…`);
+      },
+    });
+    const url = result.permalink ?? `https://www.facebook.com/${job.pageId}/videos/${result.videoId}`;
+    await patch({
+      projectionId: job.projectionId,
+      status: "live",
+      platformPostId: result.videoId,
+      platformPostUrl: url,
+      clearError: true,
+      clearPendingContainer: true,
+    });
+    await emit("projection.live", `Facebook LIVE → ${url.replace("https://", "")}`);
+    await ctx.scheduler.runAfter(5 * 60_000, internal.metaAnalytics.refreshRecent, {});
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Facebook Reel publish failed";
+    await patch({
+      projectionId: job.projectionId,
+      status: "failed",
+      errorCategory: "platform",
+      errorSummary: message,
+      clearPendingContainer: true,
+    });
+    await emit("projection.failed", `Facebook failed — ${message}`);
   }
   await ctx.runMutation(internal.publishHelpers.refreshStatus, { transmissionId: job.transmissionId });
 }

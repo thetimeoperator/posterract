@@ -8,11 +8,7 @@ export const Route = createFileRoute("/_app/portals")({
   component: Portals,
 });
 
-/**
- * Portals — one card per platform (3×2, echoing the device's six pods).
- * Demo connections toggle instantly; real OAuth replaces the toggle when
- * the cloud backend lands.
- */
+/** Portals — one card per platform (3×2, echoing the device's six pods). */
 function Portals() {
   const portals = usePortals();
   const { setPortalStatus } = useEngineActions();
@@ -22,7 +18,7 @@ function Portals() {
     <div className="space-y-4">
       <p className="max-w-2xl text-[12.5px] text-starlight-dim">
         Each portal is one connected account. A transmission only projects to platforms whose portal is aligned.
-        <span className="text-starlight-faint"> Demo mode: connections toggle instantly — real platform sign-in arrives with the cloud backend.</span>
+        <span className="text-starlight-faint"> Connect through each network's official authorization screen; Facebook always asks you to choose the exact Page.</span>
       </p>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {PLATFORM_ORDER.map((provider) => {

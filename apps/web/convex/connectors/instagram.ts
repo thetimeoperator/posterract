@@ -7,7 +7,11 @@
 const API_VERSION = "v23.0";
 const GRAPH = `https://graph.instagram.com`;
 
-export const IG_SCOPES = ["instagram_business_basic", "instagram_business_content_publish"];
+export const IG_SCOPES = [
+  "instagram_business_basic",
+  "instagram_business_content_publish",
+  "instagram_business_manage_insights",
+];
 
 export function instagramAuthUrl(args: {
   clientId: string;
@@ -204,4 +208,65 @@ export async function instagramPublishReel(args: {
   }
 
   return { mediaId: published.id, permalink };
+}
+
+export async function instagramAccountSummary(args: {
+  userId: string;
+  accessToken: string;
+}): Promise<{ audience?: number; publishedVideos?: number }> {
+  const url = new URL(`${GRAPH}/${API_VERSION}/${args.userId}`);
+  url.searchParams.set("fields", "followers_count,media_count");
+  url.searchParams.set("access_token", args.accessToken);
+  const response = await fetch(url);
+  const body = (await response.json()) as {
+    followers_count?: number;
+    media_count?: number;
+    error?: { message?: string };
+  };
+  if (!response.ok) {
+    throw new Error(`Instagram account insights failed: ${body.error?.message ?? response.status}`);
+  }
+  return { audience: body.followers_count, publishedVideos: body.media_count };
+}
+
+export async function instagramPostInsights(args: {
+  mediaId: string;
+  accessToken: string;
+}): Promise<{ views: number; likes: number; comments: number; shares: number }> {
+  const fetchMetrics = async (metrics: string) => {
+    const url = new URL(`${GRAPH}/${API_VERSION}/${args.mediaId}/insights`);
+    url.searchParams.set("metric", metrics);
+    url.searchParams.set("access_token", args.accessToken);
+    const response = await fetch(url);
+    const body = (await response.json()) as {
+      data?: Array<{
+        name?: string;
+        values?: Array<{ value?: number }>;
+        total_value?: { value?: number };
+      }>;
+      error?: { message?: string };
+    };
+    if (!response.ok) {
+      throw new Error(`Instagram post insights failed: ${body.error?.message ?? response.status}`);
+    }
+    return body.data ?? [];
+  };
+
+  let data: Awaited<ReturnType<typeof fetchMetrics>>;
+  try {
+    data = await fetchMetrics("views,likes,comments,shares");
+  } catch {
+    // Older Reel objects expose `plays` where newer versions expose `views`.
+    data = await fetchMetrics("plays,likes,comments,shares");
+  }
+  const value = (name: string) => {
+    const metric = data.find((row) => row.name === name);
+    return metric?.total_value?.value ?? metric?.values?.at(-1)?.value ?? 0;
+  };
+  return {
+    views: value("views") || value("plays"),
+    likes: value("likes"),
+    comments: value("comments"),
+    shares: value("shares"),
+  };
 }

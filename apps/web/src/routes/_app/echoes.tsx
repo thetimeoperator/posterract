@@ -24,9 +24,12 @@ import { useAnalyticsDashboard, useProjections, useTransmissions } from "@/engin
 
 export const Route = createFileRoute("/_app/echoes")({ component: Analytics });
 
-type PlatformFilter = "all" | "youtube" | "tiktok";
+type PlatformFilter = "all" | "instagram" | "tiktok" | "youtube" | "facebook" | "threads";
 const FILTERS: Array<{ value: PlatformFilter; label: string }> = [
   { value: "all", label: "All signals" },
+  { value: "instagram", label: "Instagram" },
+  { value: "facebook", label: "Facebook" },
+  { value: "threads", label: "Threads" },
   { value: "youtube", label: "YouTube" },
   { value: "tiktok", label: "TikTok" },
 ];
@@ -76,7 +79,7 @@ function Analytics() {
       <Panel className="min-h-[60vh]" brackets>
         <EmptyState
           title="Listening for echoes…"
-          detail="Connect YouTube or TikTok, then publish your first transmission. Audience and performance signals will resolve here."
+          detail="Connect a platform, then publish your first transmission. Audience and performance signals will resolve here."
           action={<Link to="/portals"><Button variant="primary">Connect a platform</Button></Link>}
         />
       </Panel>

@@ -9,11 +9,13 @@ crons.interval("sweep stalled posts", { minutes: 2 }, internal.publish.sweep, {}
 
 // Long-lived platform tokens (Instagram: 60 days) — extend before they expire.
 crons.interval("refresh platform tokens", { hours: 24 }, internal.oauth.refreshExpiringTokens, {});
+crons.interval("purge expired OAuth states", { hours: 1 }, internal.oauth.purgeExpiredStates, {});
 
 // Social analytics refreshes: YouTube provides historical reports; TikTok
 // provides cumulative counters that we normalize into observed daily deltas.
 crons.interval("refresh YouTube analytics", { hours: 6 }, internal.youtubeAnalytics.refreshRecent, {});
 crons.interval("refresh TikTok analytics", { hours: 6 }, internal.tiktokAnalytics.refreshRecent, {});
+crons.interval("refresh Meta analytics", { hours: 6 }, internal.metaAnalytics.refreshRecent, {});
 
 // Resonance: roll weekly RP every Monday just after the UTC week boundary.
 crons.weekly("reset weekly points", { dayOfWeek: "monday", hourUTC: 0, minuteUTC: 5 }, internal.points.resetWeekly, {});

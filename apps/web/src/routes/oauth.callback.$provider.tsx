@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { createFileRoute, useNavigate, useParams } from "@tanstack/react-router";
-import { MiniTesseract, pushSignal } from "@posterract/hyperkit";
+import { Button, MiniTesseract, Panel, pushSignal } from "@posterract/hyperkit";
 import { isPlatformId } from "@posterract/contract";
 import { useOAuth } from "@/engine/useEngine";
 
 type CallbackSearch = { code?: string; state?: string; error?: string; error_description?: string };
+type FacebookPageChoice = { id: string; name: string };
 
 export const Route = createFileRoute("/oauth/callback/$provider")({
   component: OAuthCallback,
@@ -28,6 +29,8 @@ function OAuthCallback() {
   const navigate = useNavigate();
   const oauth = useOAuth();
   const [message, setMessage] = useState("Completing connection…");
+  const [pages, setPages] = useState<FacebookPageChoice[]>([]);
+  const [selectingPageId, setSelectingPageId] = useState<string>();
   const ran = useRef(false);
 
   useEffect(() => {
@@ -50,7 +53,18 @@ function OAuthCallback() {
 
     void oauth
       .complete(provider, search.code, search.state)
-      .then((res: { ok: boolean; handle?: string; error?: string }) => {
+      .then((res: {
+        ok: boolean;
+        handle?: string;
+        error?: string;
+        selectionRequired?: boolean;
+        pages?: FacebookPageChoice[];
+      }) => {
+        if (res.ok && res.selectionRequired && res.pages?.length) {
+          setPages(res.pages);
+          setMessage("Choose the Facebook Page Posterract may use");
+          return;
+        }
         if (res.ok) {
           setMessage("Connected. Returning…");
           finish("success", "Account connected", res.handle ? `${res.handle} is linked.` : undefined);
@@ -62,12 +76,68 @@ function OAuthCallback() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const selectPage = async (page: FacebookPageChoice) => {
+    if (!search.state || selectingPageId) return;
+    setSelectingPageId(page.id);
+    setMessage(`Connecting ${page.name}…`);
+    try {
+      const result = await oauth.selectFacebookPage(search.state, page.id);
+      if (!result.ok) {
+        setSelectingPageId(undefined);
+        setMessage(result.error ?? "Page connection failed");
+        pushSignal({
+          tone: "danger",
+          title: "Facebook Page connection failed",
+          detail: result.error,
+        });
+        return;
+      }
+      pushSignal({
+        tone: "success",
+        title: "Facebook Page connected",
+        detail: `${page.name} is linked.`,
+      });
+      await navigate({ to: "/portals" });
+    } catch {
+      setSelectingPageId(undefined);
+      setMessage("Page connection failed — connect Facebook again.");
+    }
+  };
+
   return (
-    <main className="chamber flex min-h-screen flex-col items-center justify-center gap-4">
+    <main className="chamber flex min-h-screen flex-col items-center justify-center gap-4 px-5">
       <MiniTesseract size={36} state="transmitting" />
       <p className="kicker" aria-live="polite">
         {message}
       </p>
+      {pages.length > 0 && (
+        <Panel
+          kicker="Facebook Page"
+          title="Select only the Page you want Posterract to manage"
+          brackets
+          className="w-full max-w-lg"
+        >
+          <div className="space-y-2">
+            {pages.map((page) => (
+              <Button
+                key={page.id}
+                variant="secondary"
+                className="w-full justify-between"
+                disabled={Boolean(selectingPageId)}
+                onClick={() => void selectPage(page)}
+              >
+                <span>{page.name}</span>
+                <span className="telemetry text-[10px] text-starlight-faint">
+                  {selectingPageId === page.id ? "CONNECTING" : "SELECT"}
+                </span>
+              </Button>
+            ))}
+          </div>
+          <p className="mt-3 text-[11px] text-starlight-faint">
+            Posterract stores access for the selected Page only. It does not publish to your personal profile.
+          </p>
+        </Panel>
+      )}
     </main>
   );
 }

@@ -243,17 +243,26 @@ export function artifactUrl(artifactId: string | undefined): string | undefined 
 }
 
 /** Providers with a real OAuth connector wired (vs. the demo toggle). */
-export const OAUTH_SUPPORTED = new Set<PlatformId>(["instagram", "tiktok", "youtube"]);
+export const OAUTH_SUPPORTED = new Set<PlatformId>([
+  "instagram",
+  "tiktok",
+  "youtube",
+  "facebook",
+  "threads",
+]);
 
 export function useOAuth() {
   const start = useMutation(api.oauth.start);
   const complete = useAction(api.oauth.complete);
+  const selectFacebookPage = useAction(api.oauth.selectFacebookPage);
   const disconnect = useAction(api.oauth.disconnect);
   return {
     supported: OAUTH_SUPPORTED,
     start: (provider: PlatformId) => start({ provider }),
     complete: (provider: PlatformId, code: string, state: string) =>
       complete({ provider, code, state }),
+    selectFacebookPage: (state: string, pageId: string) =>
+      selectFacebookPage({ state, pageId }),
     disconnect: (provider: PlatformId) => disconnect({ provider }),
   };
 }

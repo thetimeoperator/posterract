@@ -98,20 +98,20 @@ export const PLATFORM_CAPABILITIES: Record<PlatformId, PlatformCapabilities> = {
     accent: "#0866FF",
     captionMaxChars: 63206,
     video: {
-      minDurationS: 3,
-      maxDurationS: 90,
+      minDurationS: 4,
+      maxDurationS: 60,
       maxSizeMB: 1000,
       preferredAspect: "9:16",
       formats: ["video/mp4", "video/quicktime"],
     },
-    mediaMode: "both",
+    mediaMode: "pull_url",
     approval: {
       devModeWorks: true,
       publicRequires: "Meta App Review",
     },
     notes: [
       "Posts go to Facebook Pages (not personal profiles).",
-      "Short-form publishes via the Reels endpoint (3–90s).",
+      "Short-form publishes via the Page Reels endpoint (4–60s).",
     ],
   },
   threads: {

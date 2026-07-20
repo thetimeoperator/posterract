@@ -4,14 +4,23 @@ import { getOwnedWorkspace } from "./lib";
 import { vPlatform } from "./schema";
 
 const vRangeDays = v.union(v.literal(7), v.literal(30), v.literal(90));
-const ANALYTICS_PROVIDERS = ["youtube", "tiktok"] as const;
+const ANALYTICS_PROVIDERS = [
+  "instagram",
+  "tiktok",
+  "youtube",
+  "facebook",
+  "threads",
+] as const;
 
 const REQUIRED_SCOPES = {
+  instagram: ["instagram_business_basic", "instagram_business_manage_insights"],
   youtube: [
     "https://www.googleapis.com/auth/youtube.readonly",
     "https://www.googleapis.com/auth/yt-analytics.readonly",
   ],
   tiktok: ["user.info.stats", "video.list"],
+  facebook: ["pages_read_engagement", "read_insights"],
+  threads: ["threads_basic", "threads_manage_insights"],
 } as const;
 
 const dateOf = (timestamp: number) => new Date(timestamp).toISOString().slice(0, 10);
@@ -20,7 +29,9 @@ const dateOf = (timestamp: number) => new Date(timestamp).toISOString().slice(0,
 export const listRefreshablePortals = internalQuery({
   args: { provider: vPlatform },
   handler: async (ctx, args) => {
-    if (args.provider !== "youtube" && args.provider !== "tiktok") return [];
+    if (!ANALYTICS_PROVIDERS.includes(args.provider as (typeof ANALYTICS_PROVIDERS)[number])) {
+      return [];
+    }
     const portals = await ctx.db.query("portals").collect();
     const selected = portals.filter(
       (portal) => portal.provider === args.provider && portal.status === "connected",
@@ -114,6 +125,104 @@ const vTikTokVideoMetric = v.object({
   likes: v.number(),
   comments: v.number(),
   shares: v.number(),
+});
+
+/** Instagram, Facebook, and Threads expose cumulative counters. Normalize
+ * newly observed differences into today's dashboard row. */
+export const applyCumulativeRefresh = internalMutation({
+  args: {
+    portalId: v.id("portals"),
+    provider: vPlatform,
+    audience: v.optional(v.number()),
+    totalViews: v.optional(v.number()),
+    totalLikes: v.optional(v.number()),
+    publishedVideos: v.optional(v.number()),
+    videos: v.array(vTikTokVideoMetric),
+  },
+  handler: async (ctx, args) => {
+    if (
+      args.provider !== "instagram" &&
+      args.provider !== "facebook" &&
+      args.provider !== "threads"
+    ) return;
+    const portal = await ctx.db.get(args.portalId);
+    if (!portal || portal.provider !== args.provider || portal.status !== "connected") return;
+    const fetchedAt = Date.now();
+    const existingAccount = await ctx.db
+      .query("accountMetricSnapshots")
+      .withIndex("by_portal", (q) => q.eq("portalId", portal._id))
+      .first();
+    const audienceDelta =
+      args.audience === undefined || existingAccount?.audience === undefined
+        ? 0
+        : args.audience - existingAccount.audience;
+    const account = {
+      portalId: portal._id,
+      workspaceId: portal.workspaceId,
+      provider: args.provider,
+      audience: args.audience,
+      totalViews: args.totalViews,
+      totalLikes: args.totalLikes,
+      publishedVideos: args.publishedVideos,
+      fetchedAt,
+    };
+    if (existingAccount) await ctx.db.patch(existingAccount._id, account);
+    else await ctx.db.insert("accountMetricSnapshots", account);
+
+    let views = 0;
+    let likes = 0;
+    let comments = 0;
+    let shares = 0;
+    for (const video of args.videos) {
+      const projection = await ctx.db.get(video.projectionId);
+      if (
+        !projection ||
+        projection.provider !== args.provider ||
+        projection.portalId !== portal._id
+      ) continue;
+      const previous = await ctx.db
+        .query("metricSnapshots")
+        .withIndex("by_projection", (q) => q.eq("projectionId", video.projectionId))
+        .first();
+      views += Math.max(0, video.views - (previous?.views ?? video.views));
+      likes += Math.max(0, video.likes - (previous?.likes ?? video.likes));
+      comments += Math.max(0, video.comments - (previous?.comments ?? video.comments));
+      shares += Math.max(0, video.shares - (previous?.shares ?? video.shares));
+      const snapshot = {
+        projectionId: video.projectionId,
+        workspaceId: projection.workspaceId,
+        provider: args.provider,
+        views: video.views,
+        likes: video.likes,
+        comments: video.comments,
+        shares: video.shares,
+        fetchedAt,
+      };
+      if (previous) await ctx.db.patch(previous._id, snapshot);
+      else await ctx.db.insert("metricSnapshots", snapshot);
+    }
+
+    const date = dateOf(fetchedAt);
+    const existingDaily = await ctx.db
+      .query("dailyMetricSnapshots")
+      .withIndex("by_portal_date", (q) => q.eq("portalId", portal._id).eq("date", date))
+      .first();
+    const daily = {
+      portalId: portal._id,
+      workspaceId: portal.workspaceId,
+      provider: args.provider,
+      date,
+      views: (existingDaily?.views ?? 0) + views,
+      likes: (existingDaily?.likes ?? 0) + likes,
+      comments: (existingDaily?.comments ?? 0) + comments,
+      shares: (existingDaily?.shares ?? 0) + shares,
+      audienceGained: (existingDaily?.audienceGained ?? 0) + Math.max(0, audienceDelta),
+      audienceLost: (existingDaily?.audienceLost ?? 0) + Math.max(0, -audienceDelta),
+      fetchedAt,
+    };
+    if (existingDaily) await ctx.db.patch(existingDaily._id, daily);
+    else await ctx.db.insert("dailyMetricSnapshots", daily);
+  },
 });
 
 /** Latest YouTube totals for each Posterract-published video. Analytics stays
@@ -236,7 +345,7 @@ export const applyTikTokRefresh = internalMutation({
   },
 });
 
-/** One normalized read model powers the YouTube, TikTok, and All filters. */
+/** One normalized read model powers every connected analytics filter. */
 export const dashboard = query({
   args: { rangeDays: vRangeDays },
   handler: async (ctx, args) => {
@@ -327,9 +436,9 @@ export const dashboard = query({
         }),
         { views: 0, likes: 0, comments: 0, shares: 0 },
       );
-      const hasObservedTikTokDeltas =
+      const hasObservedCumulativeDeltas =
         dailyTotals.views + dailyTotals.likes + dailyTotals.comments + dailyTotals.shares > 0;
-      const useDailyTotals = provider === "youtube" ? daily.length > 0 : hasObservedTikTokDeltas;
+      const useDailyTotals = provider === "youtube" ? daily.length > 0 : hasObservedCumulativeDeltas;
       platforms.push({
         provider,
         connected: portal?.status === "connected",

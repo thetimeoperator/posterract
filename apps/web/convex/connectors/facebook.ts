@@ -1,0 +1,292 @@
+/** Facebook Login + Page Reels publishing helpers. */
+
+const API_VERSION = "v23.0";
+const GRAPH = "https://graph.facebook.com";
+
+export const FACEBOOK_PAGE_SCOPES = [
+  "pages_show_list",
+  "pages_read_engagement",
+  "pages_manage_posts",
+  "read_insights",
+];
+
+export function facebookAuthUrl(args: {
+  clientId: string;
+  redirectUri: string;
+  state: string;
+  configId?: string;
+}): string {
+  const params = new URLSearchParams({
+    client_id: args.clientId,
+    redirect_uri: args.redirectUri,
+    response_type: "code",
+    state: args.state,
+    scope: FACEBOOK_PAGE_SCOPES.join(","),
+  });
+  if (args.configId) params.set("config_id", args.configId);
+  return `https://www.facebook.com/${API_VERSION}/dialog/oauth?${params.toString()}`;
+}
+
+export type FacebookPage = {
+  id: string;
+  name: string;
+  accessToken: string;
+  tasks: string[];
+};
+
+export async function facebookExchangeCode(args: {
+  clientId: string;
+  clientSecret: string;
+  redirectUri: string;
+  code: string;
+}): Promise<{ accessToken: string; expiresAt?: number; scopes: string[] }> {
+  const tokenUrl = new URL(`${GRAPH}/${API_VERSION}/oauth/access_token`);
+  tokenUrl.searchParams.set("client_id", args.clientId);
+  tokenUrl.searchParams.set("client_secret", args.clientSecret);
+  tokenUrl.searchParams.set("redirect_uri", args.redirectUri);
+  tokenUrl.searchParams.set("code", args.code.replace(/#_$/, ""));
+  const shortResponse = await fetch(tokenUrl);
+  const short = (await shortResponse.json()) as {
+    access_token?: string;
+    expires_in?: number;
+    error?: { message?: string };
+  };
+  if (!shortResponse.ok || !short.access_token) {
+    throw new Error(`Facebook token exchange failed: ${short.error?.message ?? shortResponse.status}`);
+  }
+
+  const longUrl = new URL(`${GRAPH}/${API_VERSION}/oauth/access_token`);
+  longUrl.searchParams.set("grant_type", "fb_exchange_token");
+  longUrl.searchParams.set("client_id", args.clientId);
+  longUrl.searchParams.set("client_secret", args.clientSecret);
+  longUrl.searchParams.set("fb_exchange_token", short.access_token);
+  const longResponse = await fetch(longUrl);
+  const long = (await longResponse.json()) as {
+    access_token?: string;
+    expires_in?: number;
+    error?: { message?: string };
+  };
+  if (!longResponse.ok || !long.access_token) {
+    throw new Error(`Facebook long-lived token exchange failed: ${long.error?.message ?? longResponse.status}`);
+  }
+
+  const grantedScopes = await facebookGrantedScopes(long.access_token);
+  const missing = FACEBOOK_PAGE_SCOPES.filter((scope) => !grantedScopes.includes(scope));
+  if (missing.length > 0) {
+    throw new Error(`Facebook did not grant: ${missing.join(", ")}. Reconnect and approve every permission.`);
+  }
+
+  return {
+    accessToken: long.access_token,
+    expiresAt: long.expires_in ? Date.now() + long.expires_in * 1000 : undefined,
+    scopes: grantedScopes,
+  };
+}
+
+async function facebookGrantedScopes(userAccessToken: string): Promise<string[]> {
+  const url = new URL(`${GRAPH}/${API_VERSION}/me/permissions`);
+  url.searchParams.set("access_token", userAccessToken);
+  const response = await fetch(url);
+  const body = (await response.json()) as {
+    data?: Array<{ permission?: string; status?: string }>;
+    error?: { message?: string };
+  };
+  if (!response.ok) {
+    throw new Error(`Facebook permission check failed: ${body.error?.message ?? response.status}`);
+  }
+  return (body.data ?? []).flatMap((row) =>
+    row.status === "granted" && row.permission ? [row.permission] : [],
+  );
+}
+
+export async function facebookListPages(userAccessToken: string): Promise<FacebookPage[]> {
+  const url = new URL(`${GRAPH}/${API_VERSION}/me/accounts`);
+  url.searchParams.set("fields", "id,name,access_token,tasks");
+  url.searchParams.set("limit", "100");
+  url.searchParams.set("access_token", userAccessToken);
+  const response = await fetch(url);
+  const body = (await response.json()) as {
+    data?: Array<{ id?: string; name?: string; access_token?: string; tasks?: string[] }>;
+    error?: { message?: string };
+  };
+  if (!response.ok) throw new Error(`Facebook Page lookup failed: ${body.error?.message ?? response.status}`);
+  return (body.data ?? []).flatMap((page) => {
+    if (!page.id || !page.access_token) return [];
+    const tasks = page.tasks ?? [];
+    const canPublish =
+      tasks.length === 0 ||
+      tasks.some((task) =>
+        ["CREATE_CONTENT", "PROFILE_PLUS_CREATE_CONTENT", "PROFILE_PLUS_FULL_CONTROL"].includes(task),
+      );
+    const canAnalyze =
+      tasks.length === 0 ||
+      tasks.some((task) =>
+        ["ANALYZE", "PROFILE_PLUS_ANALYZE", "PROFILE_PLUS_FULL_CONTROL"].includes(task),
+      );
+    if (!canPublish || !canAnalyze) return [];
+    return [{
+      id: page.id,
+      name: page.name ?? "Facebook Page",
+      accessToken: page.access_token,
+      tasks,
+    }];
+  });
+}
+
+export async function facebookRevokeGrant(userAccessToken: string): Promise<void> {
+  const url = new URL(`${GRAPH}/${API_VERSION}/me/permissions`);
+  url.searchParams.set("access_token", userAccessToken);
+  await fetch(url, { method: "DELETE" });
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export async function facebookPublishReel(args: {
+  pageId: string;
+  pageAccessToken: string;
+  videoUrl: string;
+  title: string;
+  description: string;
+  onVideoId?: (videoId: string) => Promise<void> | void;
+  onProgress?: (stage: string, detail?: string) => Promise<void> | void;
+}): Promise<{ videoId: string; permalink?: string }> {
+  await args.onProgress?.("uploading", "Starting Facebook Reel upload");
+  const startResponse = await fetch(`${GRAPH}/${API_VERSION}/me/video_reels`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ access_token: args.pageAccessToken, upload_phase: "start" }),
+  });
+  const started = (await startResponse.json()) as {
+    video_id?: string;
+    upload_url?: string;
+    error?: { message?: string };
+  };
+  if (!startResponse.ok || !started.video_id || !started.upload_url) {
+    throw new Error(`Facebook Reel start failed: ${started.error?.message ?? startResponse.status}`);
+  }
+  await args.onVideoId?.(started.video_id);
+
+  const uploadResponse = await fetch(started.upload_url, {
+    method: "POST",
+    headers: {
+      Authorization: `OAuth ${args.pageAccessToken}`,
+      file_url: args.videoUrl,
+    },
+  });
+  const uploaded = (await uploadResponse.json()) as { success?: boolean; error?: { message?: string } };
+  if (!uploadResponse.ok || uploaded.success !== true) {
+    throw new Error(`Facebook Reel upload failed: ${uploaded.error?.message ?? uploadResponse.status}`);
+  }
+
+  await args.onProgress?.("publishing", "Publishing to Facebook");
+  const finishResponse = await fetch(`${GRAPH}/${API_VERSION}/me/video_reels`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      access_token: args.pageAccessToken,
+      video_id: started.video_id,
+      upload_phase: "finish",
+      video_state: "PUBLISHED",
+      description: args.description,
+      title: args.title,
+    }),
+  });
+  const finished = (await finishResponse.json()) as { success?: boolean; error?: { message?: string } };
+  if (!finishResponse.ok || finished.success !== true) {
+    throw new Error(`Facebook Reel publish failed: ${finished.error?.message ?? finishResponse.status}`);
+  }
+
+  await args.onProgress?.("processing", "Facebook is processing the Reel");
+  const deadline = Date.now() + 150_000;
+  let permalink: string | undefined;
+  while (Date.now() < deadline) {
+    const statusUrl = new URL(`${GRAPH}/${API_VERSION}/${started.video_id}`);
+    statusUrl.searchParams.set("fields", "status,permalink_url");
+    statusUrl.searchParams.set("access_token", args.pageAccessToken);
+    const response = await fetch(statusUrl);
+    const body = (await response.json()) as {
+      permalink_url?: string;
+      status?: {
+        video_status?: string;
+        processing_phase?: { status?: string };
+        publishing_phase?: { status?: string };
+      };
+      error?: { message?: string };
+    };
+    if (!response.ok) throw new Error(`Facebook Reel status failed: ${body.error?.message ?? response.status}`);
+    permalink = body.permalink_url ?? permalink;
+    const videoStatus = body.status?.video_status?.toLowerCase();
+    const processing = body.status?.processing_phase?.status?.toLowerCase();
+    const publishing = body.status?.publishing_phase?.status?.toLowerCase();
+    if (videoStatus === "error" || processing === "error" || publishing === "error") {
+      throw new Error("Facebook Reel processing failed");
+    }
+    if (
+      videoStatus === "ready" ||
+      videoStatus === "published" ||
+      publishing === "complete" ||
+      publishing === "completed"
+    ) break;
+    await sleep(4000);
+  }
+
+  return { videoId: started.video_id, permalink };
+}
+
+export async function facebookPageSummary(args: {
+  pageId: string;
+  pageAccessToken: string;
+}): Promise<{ audience?: number }> {
+  const url = new URL(`${GRAPH}/${API_VERSION}/${args.pageId}`);
+  url.searchParams.set("fields", "followers_count,fan_count");
+  url.searchParams.set("access_token", args.pageAccessToken);
+  const response = await fetch(url);
+  const body = (await response.json()) as {
+    followers_count?: number;
+    fan_count?: number;
+    error?: { message?: string };
+  };
+  if (!response.ok) throw new Error(`Facebook Page lookup failed: ${body.error?.message ?? response.status}`);
+
+  // Exercise the Page Insights edge with the permission Meta reviews for
+  // analytics. Reach is not mislabeled as video views in our normalized UI,
+  // so this request validates access while post-level video counters power
+  // the visible Views metric.
+  const insightsUrl = new URL(
+    `${GRAPH}/${API_VERSION}/${args.pageId}/insights/page_impressions_unique`,
+  );
+  insightsUrl.searchParams.set("period", "day");
+  insightsUrl.searchParams.set("since", String(Math.floor(Date.now() / 1000) - 7 * 86400));
+  insightsUrl.searchParams.set("access_token", args.pageAccessToken);
+  const insightsResponse = await fetch(insightsUrl);
+  const insightsBody = (await insightsResponse.json()) as { error?: { message?: string } };
+  if (!insightsResponse.ok) {
+    throw new Error(
+      `Facebook Page insights failed: ${insightsBody.error?.message ?? insightsResponse.status}`,
+    );
+  }
+  return { audience: body.followers_count ?? body.fan_count };
+}
+
+export async function facebookPostInsights(args: {
+  videoId: string;
+  pageAccessToken: string;
+}): Promise<{ views: number; likes: number; comments: number; shares: number }> {
+  const url = new URL(`${GRAPH}/${API_VERSION}/${args.videoId}`);
+  url.searchParams.set("fields", "views,likes.summary(true),comments.summary(true)");
+  url.searchParams.set("access_token", args.pageAccessToken);
+  const response = await fetch(url);
+  const body = (await response.json()) as {
+    views?: number;
+    likes?: { summary?: { total_count?: number } };
+    comments?: { summary?: { total_count?: number } };
+    error?: { message?: string };
+  };
+  if (!response.ok) throw new Error(`Facebook post insights failed: ${body.error?.message ?? response.status}`);
+  return {
+    views: body.views ?? 0,
+    likes: body.likes?.summary?.total_count ?? 0,
+    comments: body.comments?.summary?.total_count ?? 0,
+    shares: 0,
+  };
+}

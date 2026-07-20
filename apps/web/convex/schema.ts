@@ -93,6 +93,29 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_state", ["state"]),
 
+  /**
+   * Facebook Login returns the Pages a user can manage. Keep the user token
+   * and Page tokens server-only while the user explicitly chooses which Page
+   * Posterract may publish to. The OAuth state is consumed only after that
+   * choice is made.
+   */
+  pendingFacebookConnections: defineTable({
+    state: v.string(),
+    workspaceId: v.id("workspaces"),
+    userAccessToken: v.string(),
+    expiresAt: v.optional(v.number()),
+    scopes: v.array(v.string()),
+    pages: v.array(
+      v.object({
+        id: v.string(),
+        name: v.string(),
+        accessToken: v.string(),
+        tasks: v.array(v.string()),
+      }),
+    ),
+    createdAt: v.number(),
+  }).index("by_state", ["state"]),
+
   artifacts: defineTable({
     workspaceId: v.id("workspaces"),
     fileName: v.string(),

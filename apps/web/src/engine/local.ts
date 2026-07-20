@@ -144,6 +144,7 @@ export function useOAuth() {
     supported: OAUTH_SUPPORTED,
     start: async () => ({ url: "" }),
     complete: async () => ({ ok: false as const, error: "Demo mode" }),
+    selectFacebookPage: async () => ({ ok: false as const, error: "Demo mode" }),
     disconnect: async () => {},
   };
 }
