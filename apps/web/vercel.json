@@ -1,6 +1,24 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
+  "rewrites": [
+    {
+      "source": "/api/meta/threads/deauthorize",
+      "destination": "https://handsome-dotterel-46.convex.site/meta/threads/deauthorize"
+    },
+    {
+      "source": "/api/meta/threads/data-deletion",
+      "destination": "https://handsome-dotterel-46.convex.site/meta/threads/data-deletion"
+    },
+    {
+      "source": "/api/meta/instagram/deauthorize",
+      "destination": "https://handsome-dotterel-46.convex.site/meta/instagram/deauthorize"
+    },
+    {
+      "source": "/api/meta/instagram/data-deletion",
+      "destination": "https://handsome-dotterel-46.convex.site/meta/instagram/data-deletion"
+    },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
   "headers": [
     {
       "source": "/assets/(.*)",
