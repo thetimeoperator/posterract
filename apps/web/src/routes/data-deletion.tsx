@@ -1,9 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "convex/react";
+import { useEffect, useState } from "react";
+import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../convex/_generated/api";
 import { LegalPage } from "./privacy";
 
 type DeletionSearch = { code?: string };
+type DeletionStatus = {
+  provider: "instagram" | "threads";
+  status: "processing" | "completed";
+  requestedAt: number;
+  completedAt?: number;
+} | null;
+
+const deletionStatusClient = import.meta.env.VITE_CONVEX_URL
+  ? new ConvexHttpClient(import.meta.env.VITE_CONVEX_URL)
+  : null;
 
 export const Route = createFileRoute("/data-deletion")({
   validateSearch: (search: Record<string, unknown>): DeletionSearch => ({
@@ -48,7 +59,43 @@ function DataDeletionStatus() {
 }
 
 function DeletionReceipt({ confirmationCode }: { confirmationCode: string }) {
-  const status = useQuery(api.metaCallbacks.getDeletionStatus, { confirmationCode });
+  const [status, setStatus] = useState<DeletionStatus | undefined>();
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setStatus(undefined);
+    setFailed(false);
+
+    if (!deletionStatusClient) {
+      setFailed(true);
+      return () => {
+        active = false;
+      };
+    }
+
+    deletionStatusClient
+      .query(api.metaCallbacks.getDeletionStatus, { confirmationCode })
+      .then((receipt) => {
+        if (active) setStatus(receipt);
+      })
+      .catch(() => {
+        if (active) setFailed(true);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [confirmationCode]);
+
+  if (failed) {
+    return (
+      <StatusCard title="Status service unavailable" state="UNAVAILABLE">
+        Posterract could not retrieve this deletion receipt. Contact Posterract support with the
+        confirmation code so the request can be verified.
+      </StatusCard>
+    );
+  }
   if (status === undefined) {
     return (
       <StatusCard title="Checking request" state="VERIFYING">
