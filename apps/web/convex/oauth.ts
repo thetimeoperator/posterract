@@ -237,7 +237,13 @@ export const complete = action({
       }
       return { ok: false, error: `${args.provider} is not available yet` };
     } catch (e) {
-      return { ok: false, error: e instanceof Error ? e.message : "Connection failed" };
+      const message = e instanceof Error ? e.message : "Connection failed";
+      if (args.provider === "facebook") {
+        // Keep the production trace actionable without logging OAuth codes or
+        // access tokens. The user-facing message contains the same safe detail.
+        console.error(`[Facebook OAuth completion] ${message}`);
+      }
+      return { ok: false, error: message };
     }
   },
 });
