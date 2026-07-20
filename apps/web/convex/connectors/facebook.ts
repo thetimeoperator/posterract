@@ -219,7 +219,7 @@ export async function facebookListPages(args: {
   const selectedPageResults = await Promise.all(
     [...pageIds].map(async (pageId): Promise<{ page?: FacebookPageResponse; error?: string }> => {
       const pageUrl = new URL(`${GRAPH}/${API_VERSION}/${pageId}`);
-      pageUrl.searchParams.set("fields", "id,name,access_token,tasks");
+      pageUrl.searchParams.set("fields", "id,name,access_token");
       pageUrl.searchParams.set("access_token", args.userAccessToken);
       const pageResponse = await fetch(pageUrl);
       const pageBody = (await pageResponse.json()) as FacebookPageResponse & {
