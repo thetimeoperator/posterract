@@ -22,6 +22,7 @@ import type * as events from "../events.js";
 import type * as http from "../http.js";
 import type * as lib from "../lib.js";
 import type * as metaAnalytics from "../metaAnalytics.js";
+import type * as metaCallbacks from "../metaCallbacks.js";
 import type * as oauth from "../oauth.js";
 import type * as points from "../points.js";
 import type * as portals from "../portals.js";
@@ -54,6 +55,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   lib: typeof lib;
   metaAnalytics: typeof metaAnalytics;
+  metaCallbacks: typeof metaCallbacks;
   oauth: typeof oauth;
   points: typeof points;
   portals: typeof portals;

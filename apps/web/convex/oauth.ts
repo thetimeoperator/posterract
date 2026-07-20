@@ -499,6 +499,7 @@ export const clearConnection = internalMutation({
     await ctx.db.patch(args.portalId, {
       status: "disconnected",
       handle: "not connected",
+      displayName: undefined,
       providerAccountId: undefined,
       tokenExpiresAt: undefined,
       scopes: undefined,

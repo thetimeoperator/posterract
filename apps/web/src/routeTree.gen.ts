@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as GateRouteImport } from './routes/gate'
+import { Route as DataDeletionRouteImport } from './routes/data-deletion'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as DevHyperkitRouteImport } from './routes/dev/hyperkit'
@@ -40,6 +41,11 @@ const PrivacyRoute = PrivacyRouteImport.update({
 const GateRoute = GateRouteImport.update({
   id: '/gate',
   path: '/gate',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DataDeletionRoute = DataDeletionRouteImport.update({
+  id: '/data-deletion',
+  path: '/data-deletion',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppRoute = AppRouteImport.update({
@@ -114,6 +120,7 @@ const OauthCallbackProviderRoute = OauthCallbackProviderRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
+  '/data-deletion': typeof DataDeletionRoute
   '/gate': typeof GateRoute
   '/privacy': typeof PrivacyRoute
   '/terms': typeof TermsRoute
@@ -131,6 +138,7 @@ export interface FileRoutesByFullPath {
   '/oauth/callback/$provider': typeof OauthCallbackProviderRoute
 }
 export interface FileRoutesByTo {
+  '/data-deletion': typeof DataDeletionRoute
   '/gate': typeof GateRoute
   '/privacy': typeof PrivacyRoute
   '/terms': typeof TermsRoute
@@ -151,6 +159,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
+  '/data-deletion': typeof DataDeletionRoute
   '/gate': typeof GateRoute
   '/privacy': typeof PrivacyRoute
   '/terms': typeof TermsRoute
@@ -172,6 +181,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/data-deletion'
     | '/gate'
     | '/privacy'
     | '/terms'
@@ -189,6 +199,7 @@ export interface FileRouteTypes {
     | '/oauth/callback/$provider'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/data-deletion'
     | '/gate'
     | '/privacy'
     | '/terms'
@@ -208,6 +219,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_app'
+    | '/data-deletion'
     | '/gate'
     | '/privacy'
     | '/terms'
@@ -228,6 +240,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
+  DataDeletionRoute: typeof DataDeletionRoute
   GateRoute: typeof GateRoute
   PrivacyRoute: typeof PrivacyRoute
   TermsRoute: typeof TermsRoute
@@ -257,6 +270,13 @@ declare module '@tanstack/react-router' {
       path: '/gate'
       fullPath: '/gate'
       preLoaderRoute: typeof GateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/data-deletion': {
+      id: '/data-deletion'
+      path: '/data-deletion'
+      fullPath: '/data-deletion'
+      preLoaderRoute: typeof DataDeletionRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app': {
@@ -390,6 +410,7 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
+  DataDeletionRoute: DataDeletionRoute,
   GateRoute: GateRoute,
   PrivacyRoute: PrivacyRoute,
   TermsRoute: TermsRoute,

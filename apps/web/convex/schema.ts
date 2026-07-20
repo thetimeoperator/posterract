@@ -62,7 +62,9 @@ export default defineSchema({
     windowUsed: v.optional(v.number()),
     windowCap: v.optional(v.number()),
     windowHours: v.optional(v.number()),
-  }).index("by_workspace", ["workspaceId"]),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_provider_account", ["provider", "providerAccountId"]),
 
   /**
    * OAuth access tokens — server-only. Never returned by any client-facing
@@ -251,6 +253,22 @@ export default defineSchema({
   })
     .index("by_portal_date", ["portalId", "date"])
     .index("by_workspace_provider_date", ["workspaceId", "provider", "date"]),
+
+  /**
+   * Public Meta deletion receipts. Raw Meta user IDs are deliberately never
+   * stored here; requestKey is a one-way HMAC used only for retry safety.
+   */
+  metaDeletionRequests: defineTable({
+    provider: v.union(v.literal("instagram"), v.literal("threads")),
+    requestKey: v.string(),
+    confirmationCode: v.string(),
+    status: v.union(v.literal("processing"), v.literal("completed")),
+    deletedConnections: v.number(),
+    requestedAt: v.number(),
+    completedAt: v.optional(v.number()),
+  })
+    .index("by_request_key", ["requestKey"])
+    .index("by_confirmation_code", ["confirmationCode"]),
 
   /**
    * Resumable YouTube upload URLs are bearer-like secrets. Keep them in an
