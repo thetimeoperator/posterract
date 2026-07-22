@@ -6,7 +6,7 @@ import { LegalPage } from "./privacy";
 
 type DeletionSearch = { code?: string };
 type DeletionStatus = {
-  provider: "instagram" | "threads";
+  provider: "instagram" | "facebook" | "threads";
   status: "processing" | "completed";
   requestedAt: number;
   completedAt?: number;
@@ -165,8 +165,10 @@ function StatusField({ label, value, mono = false }: { label: string; value: str
   );
 }
 
-function platformName(provider: "instagram" | "threads"): string {
-  return provider === "instagram" ? "Instagram" : "Threads";
+function platformName(provider: "instagram" | "facebook" | "threads"): string {
+  if (provider === "instagram") return "Instagram";
+  if (provider === "facebook") return "Facebook";
+  return "Threads";
 }
 
 function formatTimestamp(timestamp: number): string {

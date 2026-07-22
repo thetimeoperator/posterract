@@ -7,7 +7,7 @@ export const Route = createFileRoute("/terms")({
 
 function Terms() {
   return (
-    <LegalPage title="Terms of Service" updated="July 10, 2026">
+    <LegalPage title="Terms of Service" updated="July 21, 2026">
       <h2>The service</h2>
       <p>
         Posterract lets you upload short-form video content, connect your social media accounts, and
@@ -58,12 +58,34 @@ function Terms() {
         disclosure before publishing.
       </p>
 
+      <h2>Facebook, Instagram, and Threads</h2>
+      <p>
+        By connecting or using Facebook, Instagram, or Threads through Posterract, you agree to
+        comply with the applicable Meta product terms, including the{" "}
+        <a href="https://www.facebook.com/legal/terms" target="_blank" rel="noreferrer">
+          Meta Terms of Service
+        </a>
+        , the{" "}
+        <a href="https://help.instagram.com/581066165581870/" target="_blank" rel="noreferrer">
+          Instagram Terms of Use
+        </a>
+        , the{" "}
+        <a href="https://help.instagram.com/769983657850450" target="_blank" rel="noreferrer">
+          Threads Supplemental Terms
+        </a>
+        , and applicable community and developer policies. You may connect only Pages and
+        professional accounts you own or are authorized to manage. Posterract acts only on the
+        publishing and analytics instructions you provide; Meta may independently reject, remove,
+        restrict, or delay content or API access under its policies.
+      </p>
+
       <h2>Fees</h2>
       <p>
-        Posterract is currently free while in early access. Some destination platforms charge
-        platform-side fees for API publishing (for example, X charges per API post); where
-        applicable this is surfaced in the product. Paid plans, if introduced, will be communicated
-        clearly in advance.
+        Posterract may offer free trials, free access, or paid subscription plans. Current pricing,
+        billing period, included usage, and renewal terms are presented before purchase. Some
+        destination platforms may also impose platform-side fees or usage limits; where applicable,
+        those are separate from Posterract&apos;s fees and are surfaced in the product or relevant
+        platform documentation.
       </p>
 
       <h2>Disclaimer and liability</h2>

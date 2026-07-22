@@ -17,6 +17,14 @@
       "source": "/api/meta/instagram/data-deletion",
       "destination": "https://handsome-dotterel-46.convex.site/meta/instagram/data-deletion"
     },
+    {
+      "source": "/api/meta/facebook/deauthorize",
+      "destination": "https://handsome-dotterel-46.convex.site/meta/facebook/deauthorize"
+    },
+    {
+      "source": "/api/meta/facebook/data-deletion",
+      "destination": "https://handsome-dotterel-46.convex.site/meta/facebook/data-deletion"
+    },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [

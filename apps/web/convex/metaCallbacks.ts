@@ -11,8 +11,12 @@ import {
 
 declare const process: { env: Record<string, string | undefined> };
 
-const vMetaProvider = v.union(v.literal("instagram"), v.literal("threads"));
-type MetaProvider = "instagram" | "threads";
+const vMetaProvider = v.union(
+  v.literal("instagram"),
+  v.literal("facebook"),
+  v.literal("threads"),
+);
+type MetaProvider = "instagram" | "facebook" | "threads";
 type CallbackKind = "deauthorize" | "data-deletion";
 
 class CallbackError extends Error {
@@ -25,10 +29,11 @@ class CallbackError extends Error {
 }
 
 function secretFor(provider: MetaProvider): string {
-  const secret =
-    provider === "instagram"
-      ? process.env.INSTAGRAM_APP_SECRET
-      : process.env.THREADS_APP_SECRET;
+  const secret = {
+    instagram: process.env.INSTAGRAM_APP_SECRET,
+    facebook: process.env.FACEBOOK_APP_SECRET,
+    threads: process.env.THREADS_APP_SECRET,
+  }[provider];
   if (!secret) throw new CallbackError(`${provider} callback is not configured`, 503);
   return secret;
 }
@@ -173,6 +178,25 @@ function json(body: unknown, status = 200): Response {
 export const findConnections = internalQuery({
   args: { provider: vMetaProvider, providerUserId: v.string() },
   handler: async (ctx, args) => {
+    if (args.provider === "facebook") {
+      const tokens = await ctx.db
+        .query("portalTokens")
+        .withIndex("by_provider_auth_user", (index) =>
+          index.eq("provider", "facebook").eq("providerAuthUserId", args.providerUserId),
+        )
+        .collect();
+      const result = [];
+      for (const token of tokens) {
+        const portal = await ctx.db.get(token.portalId);
+        if (!portal || portal.provider !== "facebook") continue;
+        result.push({
+          portalId: portal._id,
+          workspaceId: portal.workspaceId,
+          provider: args.provider,
+        });
+      }
+      return result;
+    }
     const portals = await ctx.db
       .query("portals")
       .withIndex("by_provider_account", (index) =>
@@ -384,4 +408,12 @@ export const instagramDeauthorize = httpAction((ctx, request) =>
 
 export const instagramDataDeletion = httpAction((ctx, request) =>
   handleCallback(ctx, request, "instagram", "data-deletion"),
+);
+
+export const facebookDeauthorize = httpAction((ctx, request) =>
+  handleCallback(ctx, request, "facebook", "deauthorize"),
+);
+
+export const facebookDataDeletion = httpAction((ctx, request) =>
+  handleCallback(ctx, request, "facebook", "data-deletion"),
 );

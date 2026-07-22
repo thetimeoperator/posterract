@@ -1,6 +1,8 @@
 import { httpRouter } from "convex/server";
 import { authComponent, createAuth } from "./auth";
 import {
+  facebookDataDeletion,
+  facebookDeauthorize,
   instagramDataDeletion,
   instagramDeauthorize,
   threadsDataDeletion,
@@ -14,6 +16,12 @@ authComponent.registerRoutes(http, createAuth, { cors: true });
 
 http.route({ path: "/meta/threads/deauthorize", method: "POST", handler: threadsDeauthorize });
 http.route({ path: "/meta/threads/data-deletion", method: "POST", handler: threadsDataDeletion });
+http.route({ path: "/meta/facebook/deauthorize", method: "POST", handler: facebookDeauthorize });
+http.route({
+  path: "/meta/facebook/data-deletion",
+  method: "POST",
+  handler: facebookDataDeletion,
+});
 http.route({
   path: "/meta/instagram/deauthorize",
   method: "POST",

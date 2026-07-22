@@ -7,7 +7,7 @@ export const Route = createFileRoute("/privacy")({
 
 function Privacy() {
   return (
-    <LegalPage title="Privacy Policy" updated="July 13, 2026" wide>
+    <LegalPage title="Privacy Policy" updated="July 21, 2026" wide>
       <section className="legal-verification" aria-labelledby="youtube-verification-title">
         <div className="legal-verification-heading">
           <div>
@@ -341,19 +341,25 @@ function Privacy() {
           <span>Active integration</span>
         </div>
         <p>
-          With your consent, Posterract may receive an Instagram professional-account ID,
-          username, OAuth token, granted permissions, token-expiration information, and identifiers,
-          permalinks, and delivery status for Reels published through Posterract. We use this data
-          only to maintain the connection and publish content you explicitly select.
+          With your consent, Posterract requests <code>instagram_business_basic</code>,
+          <code>instagram_business_content_publish</code>, and
+          <code>instagram_business_manage_insights</code>. We may receive your Instagram
+          professional-account ID and username, OAuth token, granted permissions, token-expiration
+          information, follower and media totals, and identifiers, permalinks, delivery status,
+          views, likes, comments, and shares for Reels published through Posterract. We use this
+          data only to maintain the authorized connection, publish content you explicitly select,
+          report delivery status, and display your authorized analytics.
         </p>
         <p>
           <strong>Retention and deletion:</strong> Disconnecting deletes the stored Instagram token
-          from Posterract&apos;s active connection records; you may also remove Posterract from
-          Instagram or Meta&apos;s connected-app settings. In accordance with Meta&apos;s Platform Terms,
-          we update or delete Instagram Platform Data promptly when you or Meta requests it and
-          delete it as soon as reasonably possible when it is no longer necessary, Posterract stops
-          providing the integration, or you delete your Posterract account, except where retention
-          is required by law. See the{" "}
+          and cached Instagram analytics from Posterract; you may also remove Posterract from
+          Instagram or Meta&apos;s connected-app settings. Authenticated deauthorization and data
+          deletion requests from Meta are processed through Posterract&apos;s callback endpoints, with
+          a confirmation receipt available on our <Link to="/data-deletion">Data Deletion Status</Link>
+          page. In accordance with Meta&apos;s Platform Terms, we update or delete Instagram Platform
+          Data promptly when you or Meta requests it and delete it as soon as reasonably possible
+          when it is no longer necessary, Posterract stops providing the integration, or you delete
+          your Posterract account, except where retention is required by law. See the{" "}
           <a href="https://www.facebook.com/privacy/policy/" target="_blank" rel="noreferrer">
             Meta Privacy Policy
           </a>
@@ -372,17 +378,26 @@ function Privacy() {
       <section className="platform-policy" id="facebook">
         <div className="platform-policy-heading">
           <h3>Facebook</h3>
-          <span>Planned integration</span>
+          <span>Active integration</span>
         </div>
         <p>
-          Posterract does not currently request or store Facebook API data. If this integration is
-          activated after Meta approval, Posterract will request only the permissions required to
-          identify a user-authorized Page, publish selected content, report delivery status, and
-          display authorized performance metrics. If activated, disconnecting will remove stored
-          credentials. Posterract will update or delete Facebook Platform Data promptly when the
-          user or Meta requests it and delete it as soon as reasonably possible when it is no longer
-          necessary, the integration ends, or the user closes their Posterract account, except where
-          retention is required by law. See the{" "}
+          With your consent, Posterract requests <code>pages_show_list</code>,
+          <code>pages_read_engagement</code>, <code>pages_manage_posts</code>, and
+          <code>read_insights</code>. We may receive the authorized Page ID and name, OAuth tokens,
+          granted permissions, follower or fan totals, and identifiers, permalinks, delivery
+          status, views, likes, and comments for Page videos published through Posterract. We use
+          this data only to let you select an authorized Page, maintain the connection, publish
+          content you explicitly select, report delivery status, and display authorized analytics.
+        </p>
+        <p>
+          <strong>Retention and deletion:</strong> Disconnecting removes the stored Facebook tokens
+          and cached Facebook analytics. Authenticated deauthorization and data deletion requests
+          from Meta are processed through Posterract&apos;s callback endpoints, with a confirmation
+          receipt available on our <Link to="/data-deletion">Data Deletion Status</Link> page.
+          Posterract updates or deletes Facebook Platform Data promptly when you or Meta requests it
+          and deletes it as soon as reasonably possible when it is no longer necessary, the
+          integration ends, or you close your Posterract account, except where retention is required
+          by law. See the{" "}
           <a href="https://www.facebook.com/privacy/policy/" target="_blank" rel="noreferrer">
             Meta Privacy Policy
           </a>
@@ -401,17 +416,26 @@ function Privacy() {
       <section className="platform-policy" id="threads">
         <div className="platform-policy-heading">
           <h3>Threads</h3>
-          <span>Planned integration</span>
+          <span>Active integration</span>
         </div>
         <p>
-          Posterract does not currently request or store Threads API data. If this integration is
-          activated after Meta approval, Posterract will request only the permissions needed to
-          identify the authorized profile, publish user-selected content, return publishing status,
-          and display available authorized metrics. If activated, disconnecting will remove stored
-          credentials. Posterract will update or delete Threads Platform Data promptly when the user
-          or Meta requests it and delete it as soon as reasonably possible when it is no longer
-          necessary, the integration ends, or the user closes their Posterract account, except where
-          retention is required by law. Threads is a Meta product; see the{" "}
+          With your consent, Posterract requests <code>threads_basic</code>,
+          <code>threads_content_publish</code>, and <code>threads_manage_insights</code>. We may
+          receive your Threads profile ID and username, OAuth token, granted permissions,
+          token-expiration information, follower totals, and identifiers, permalinks, publishing
+          status, views, likes, replies, reposts, and quotes for Threads posts published through
+          Posterract. We use this data only to maintain the authorized connection, publish content
+          you explicitly select, report delivery status, and display authorized analytics.
+        </p>
+        <p>
+          <strong>Retention and deletion:</strong> Disconnecting removes the stored Threads token
+          and cached Threads analytics. Authenticated deauthorization and data deletion requests
+          from Meta are processed through Posterract&apos;s callback endpoints, with a confirmation
+          receipt available on our <Link to="/data-deletion">Data Deletion Status</Link> page.
+          Posterract updates or deletes Threads Platform Data promptly when you or Meta requests it
+          and deletes it as soon as reasonably possible when it is no longer necessary, the
+          integration ends, or you close your Posterract account, except where retention is required
+          by law. Threads is a Meta product; see the{" "}
           <a href="https://www.facebook.com/privacy/policy/" target="_blank" rel="noreferrer">
             Meta Privacy Policy
           </a>
@@ -511,7 +535,9 @@ function Privacy() {
         <li>
           <strong>Platform-derived data.</strong> Retained only as long as needed for the features
           described above and refreshed or deleted according to the applicable platform&apos;s rules.
-          Google/YouTube deletion commitments are described in the highlighted subsection above.
+          Disconnecting a platform also deletes its cached account and post analytics from
+          Posterract. Google/YouTube deletion commitments are described in the highlighted
+          subsection above.
         </li>
       </ul>
       <p>

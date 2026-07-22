@@ -11,6 +11,7 @@ import {
 } from "./connectors/instagram";
 import {
   FACEBOOK_PAGE_SCOPES,
+  facebookAuthenticatedUserId,
   facebookAuthUrl,
   facebookExchangeCode,
   facebookListPages,
@@ -211,6 +212,7 @@ export const complete = action({
           code: args.code,
           configuredAccessToken: Boolean(process.env.FACEBOOK_LOGIN_CONFIG_ID),
         });
+        const authUserId = await facebookAuthenticatedUserId(token.accessToken);
         const pages = await facebookListPages({
           userAccessToken: token.accessToken,
           clientId,
@@ -225,6 +227,7 @@ export const complete = action({
           state: args.state,
           workspaceId: resolved.workspaceId,
           userAccessToken: token.accessToken,
+          authUserId,
           expiresAt: token.expiresAt,
           scopes: token.scopes,
           pages,
@@ -253,6 +256,7 @@ export const savePendingFacebookConnection = internalMutation({
     state: v.string(),
     workspaceId: v.id("workspaces"),
     userAccessToken: v.string(),
+    authUserId: v.string(),
     expiresAt: v.optional(v.number()),
     scopes: v.array(v.string()),
     pages: v.array(
@@ -316,6 +320,7 @@ export const selectFacebookPage = action({
       refreshToken: pending.userAccessToken,
       expiresAt: pending.expiresAt,
       providerUserId: page.id,
+      ...(pending.authUserId ? { providerAuthUserId: pending.authUserId } : {}),
       scopes: FACEBOOK_PAGE_SCOPES,
     });
     await ctx.runMutation(internal.oauth.removePendingFacebookConnection, {
@@ -363,6 +368,7 @@ export const saveConnection = internalMutation({
     expiresAt: v.optional(v.number()),
     refreshExpiresAt: v.optional(v.number()),
     providerUserId: v.optional(v.string()),
+    providerAuthUserId: v.optional(v.string()),
     scopes: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
@@ -404,6 +410,7 @@ export const saveConnection = internalMutation({
       expiresAt: args.expiresAt,
       refreshExpiresAt: args.refreshExpiresAt,
       providerUserId: args.providerUserId,
+      providerAuthUserId: args.providerAuthUserId,
       scopes: args.scopes,
     });
 

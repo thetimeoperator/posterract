@@ -82,10 +82,13 @@ export default defineSchema({
     /** When the refresh token itself dies (TikTok: 365d, rotating). */
     refreshExpiresAt: v.optional(v.number()),
     providerUserId: v.optional(v.string()),
+    /** App-scoped OAuth user ID used only to process provider callbacks. */
+    providerAuthUserId: v.optional(v.string()),
     scopes: v.optional(v.array(v.string())),
   })
     .index("by_portal", ["portalId"])
-    .index("by_workspace_provider", ["workspaceId", "provider"]),
+    .index("by_workspace_provider", ["workspaceId", "provider"])
+    .index("by_provider_auth_user", ["provider", "providerAuthUserId"]),
 
   /** Short-lived CSRF state for OAuth connect flows. */
   oauthStates: defineTable({
@@ -105,6 +108,7 @@ export default defineSchema({
     state: v.string(),
     workspaceId: v.id("workspaces"),
     userAccessToken: v.string(),
+    authUserId: v.optional(v.string()),
     expiresAt: v.optional(v.number()),
     scopes: v.array(v.string()),
     pages: v.array(
@@ -259,7 +263,7 @@ export default defineSchema({
    * stored here; requestKey is a one-way HMAC used only for retry safety.
    */
   metaDeletionRequests: defineTable({
-    provider: v.union(v.literal("instagram"), v.literal("threads")),
+    provider: v.union(v.literal("instagram"), v.literal("facebook"), v.literal("threads")),
     requestKey: v.string(),
     confirmationCode: v.string(),
     status: v.union(v.literal("processing"), v.literal("completed")),

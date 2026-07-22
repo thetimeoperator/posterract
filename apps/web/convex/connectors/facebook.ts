@@ -46,6 +46,23 @@ export type FacebookPage = {
   tasks: string[];
 };
 
+/** App-scoped Facebook user ID used to match Meta deauthorization and
+ * data-deletion callbacks to the connection created by this OAuth grant. */
+export async function facebookAuthenticatedUserId(userAccessToken: string): Promise<string> {
+  const url = new URL(`${GRAPH}/${API_VERSION}/me`);
+  url.searchParams.set("fields", "id");
+  url.searchParams.set("access_token", userAccessToken);
+  const response = await fetch(url);
+  const body = (await response.json()) as {
+    id?: string;
+    error?: { message?: string };
+  };
+  if (!response.ok || !body.id) {
+    throw new Error(`Facebook user lookup failed: ${body.error?.message ?? response.status}`);
+  }
+  return body.id;
+}
+
 export async function facebookExchangeCode(args: {
   clientId: string;
   clientSecret: string;
