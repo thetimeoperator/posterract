@@ -72,6 +72,7 @@ export const refreshRecent = internalAction({
               portalId: account.portal._id,
               provider,
               ...(summary.audience === undefined ? {} : { audience: summary.audience }),
+              totalViews: summary.totalViews,
               videos,
             });
           } else {

@@ -361,6 +361,8 @@ export type PlatformAnalyticsDTO = {
   audienceLabel: "Subscribers" | "Followers";
   audience?: number;
   audienceDelta: number;
+  /** Facebook Page-level views returned by the Page Insights API. */
+  pageViews?: number;
   views: number;
   likes: number;
   comments: number;

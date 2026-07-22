@@ -369,7 +369,7 @@ export async function facebookPublishReel(args: {
 export async function facebookPageSummary(args: {
   pageId: string;
   pageAccessToken: string;
-}): Promise<{ audience?: number }> {
+}): Promise<{ audience?: number; totalViews: number }> {
   const url = new URL(`${GRAPH}/${API_VERSION}/${args.pageId}`);
   url.searchParams.set("fields", "followers_count,fan_count");
   url.searchParams.set("access_token", args.pageAccessToken);
@@ -391,13 +391,19 @@ export async function facebookPageSummary(args: {
   insightsUrl.searchParams.set("since", String(Math.floor(Date.now() / 1000) - 7 * 86400));
   insightsUrl.searchParams.set("access_token", args.pageAccessToken);
   const insightsResponse = await fetch(insightsUrl);
-  const insightsBody = (await insightsResponse.json()) as { error?: { message?: string } };
+  const insightsBody = (await insightsResponse.json()) as {
+    data?: Array<{ values?: Array<{ value?: number }> }>;
+    error?: { message?: string };
+  };
   if (!insightsResponse.ok) {
     throw new Error(
       `Facebook Page insights failed: ${insightsBody.error?.message ?? insightsResponse.status}`,
     );
   }
-  return { audience: body.followers_count ?? body.fan_count };
+  const totalViews = (insightsBody.data ?? [])
+    .flatMap((metric) => metric.values ?? [])
+    .reduce((sum, point) => sum + (typeof point.value === "number" ? point.value : 0), 0);
+  return { audience: body.followers_count ?? body.fan_count, totalViews };
 }
 
 export async function facebookPostInsights(args: {
