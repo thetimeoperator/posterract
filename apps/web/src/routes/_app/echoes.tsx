@@ -52,10 +52,9 @@ function Analytics() {
     [dashboard, platform],
   );
   const totals = useMemo(() => summarize(selected), [selected]);
-  const facebookPageViews =
-    platform === "facebook" && selected.length === 1 ? selected[0].pageViews : undefined;
-  const facebookPostViews =
-    platform === "facebook" && selected.length === 1 ? selected[0].postViews : undefined;
+  const isFacebook = platform === "facebook";
+  const facebookPageViews = isFacebook ? (selected[0]?.pageViews ?? 0) : undefined;
+  const facebookPostViews = isFacebook ? (selected[0]?.postViews ?? totals.views) : undefined;
   const topPosts = useMemo(
     () => selected.flatMap((row) => row.posts).sort((a, b) => b.views - a.views).slice(0, 8),
     [selected],
@@ -128,15 +127,19 @@ function Analytics() {
       )}
 
       <div
-        className={`grid grid-cols-2 gap-3 ${facebookPageViews === undefined ? "xl:grid-cols-5" : "xl:grid-cols-6"}`}
+        className={`grid grid-cols-2 gap-3 ${isFacebook ? "xl:grid-cols-6" : "xl:grid-cols-5"}`}
       >
         <MetricCard icon={<Users size={15} />} label={totals.audienceLabel} value={compact(totals.audience)} delta={totals.audienceDelta} />
-        {facebookPageViews !== undefined && (
-          <MetricCard icon={<Eye size={15} />} label="Page views" value={compact(facebookPageViews)} />
+        {isFacebook && (
+          <MetricCard
+            icon={<Eye size={15} />}
+            label="Page views"
+            value={compact(facebookPageViews ?? 0)}
+          />
         )}
         <MetricCard
           icon={<Eye size={15} />}
-          label={facebookPageViews === undefined ? "Views" : "Post views"}
+          label={isFacebook ? "Post views" : "Views"}
           value={compact(facebookPostViews ?? totals.views)}
         />
         <MetricCard icon={<TrendingUp size={15} />} label="Engagement" value={`${totals.engagementRate.toFixed(1)}%`} />
