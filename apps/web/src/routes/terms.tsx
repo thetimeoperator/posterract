@@ -78,6 +78,13 @@ function Terms() {
         publishing and analytics instructions you provide; Meta may independently reject, remove,
         restrict, or delay content or API access under its policies.
       </p>
+      <p>
+        Posterract reviews the legality and scope of public-authority requests for personal data
+        received through Meta products. Where reasonable and legally permitted, we challenge
+        requests we believe are unlawful, invalid, or overbroad; disclose only the minimum
+        information legally required; and document the request, response, legal reasoning,
+        disclosure, and decision-makers except where documentation is prohibited by law.
+      </p>
 
       <h2>Fees</h2>
       <p>

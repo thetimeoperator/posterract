@@ -335,6 +335,37 @@ function Privacy() {
         </p>
       </section>
 
+      <section className="platform-policy" id="meta-public-authority-requests">
+        <div className="platform-policy-heading">
+          <h3>Meta Platform Data and public-authority requests</h3>
+          <span>Facebook · Instagram · Threads</span>
+        </div>
+        <p>
+          If a public authority requests personal data or personal information that Posterract
+          received through a Meta product, Posterract applies the following safeguards before
+          making any disclosure:
+        </p>
+        <ul>
+          <li>
+            <strong>Legality review.</strong> We review the request&apos;s legal basis, scope,
+            authority, and validity.
+          </li>
+          <li>
+            <strong>Challenge unlawful requests.</strong> Where reasonable and legally permitted,
+            we challenge or reject requests we believe are unlawful, invalid, or overbroad.
+          </li>
+          <li>
+            <strong>Data minimization.</strong> We disclose only the minimum information legally
+            required to respond to a valid request.
+          </li>
+          <li>
+            <strong>Documentation.</strong> We document the request, our response, the legal
+            reasoning, any disclosure made, and the people involved in the decision, except where
+            doing so is prohibited by law.
+          </li>
+        </ul>
+      </section>
+
       <section className="platform-policy" id="instagram">
         <div className="platform-policy-heading">
           <h3>Instagram</h3>
