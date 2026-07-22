@@ -2,6 +2,7 @@
 
 const API_VERSION = "v23.0";
 const GRAPH = "https://graph.facebook.com";
+const PAGE_INSIGHTS_METRIC = "page_media_view";
 
 export const FACEBOOK_PAGE_SCOPES = [
   "pages_show_list",
@@ -364,11 +365,10 @@ export async function facebookPageSummary(args: {
   if (!response.ok) throw new Error(`Facebook Page lookup failed: ${body.error?.message ?? response.status}`);
 
   // Exercise the Page Insights edge with the permission Meta reviews for
-  // analytics. Reach is not mislabeled as video views in our normalized UI,
-  // so this request validates access while post-level video counters power
-  // the visible Views metric.
+  // analytics. Page media views are not mixed into our normalized post views;
+  // post-level video counters continue to power the visible Views metric.
   const insightsUrl = new URL(
-    `${GRAPH}/${API_VERSION}/${args.pageId}/insights/page_impressions_unique`,
+    `${GRAPH}/${API_VERSION}/${args.pageId}/insights/${PAGE_INSIGHTS_METRIC}`,
   );
   insightsUrl.searchParams.set("period", "day");
   insightsUrl.searchParams.set("since", String(Math.floor(Date.now() / 1000) - 7 * 86400));
