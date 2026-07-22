@@ -363,6 +363,8 @@ export type PlatformAnalyticsDTO = {
   audienceDelta: number;
   /** Facebook Page-level views returned by the Page Insights API. */
   pageViews?: number;
+  /** Total views on Facebook posts published through Posterract. */
+  postViews?: number;
   views: number;
   likes: number;
   comments: number;

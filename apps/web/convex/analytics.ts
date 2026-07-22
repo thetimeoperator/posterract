@@ -449,6 +449,7 @@ export const dashboard = query({
         audience: account?.audience,
         audienceDelta: dailyTotals.audienceDelta,
         pageViews: provider === "facebook" ? account?.totalViews : undefined,
+        postViews: provider === "facebook" ? postTotals.views : undefined,
         views: useDailyTotals ? dailyTotals.views : postTotals.views,
         likes: useDailyTotals ? dailyTotals.likes : postTotals.likes,
         comments: useDailyTotals ? dailyTotals.comments : postTotals.comments,
