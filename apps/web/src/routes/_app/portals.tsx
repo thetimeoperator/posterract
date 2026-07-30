@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import clsx from "clsx";
-import { Button, Panel, PlatformRune, Telemetry, pushSignal } from "@posterract/hyperkit";
+import { Button, Panel, Telemetry, pushSignal } from "@posterract/hyperkit";
 import { PLATFORM_CAPABILITIES, PLATFORM_ORDER } from "@posterract/contract";
+import { PlatformBrandMark } from "@/components/PlatformBrandMark";
 import { useEngineActions, useOAuth, usePortals } from "@/engine/useEngine";
 
 export const Route = createFileRoute("/_app/portals")({
@@ -52,21 +53,14 @@ function Portals() {
                     target="_blank"
                     rel="noreferrer"
                     aria-label={connected ? `Open ${portal?.handle ?? "connected channel"} on YouTube` : "Open YouTube"}
-                    className="flex h-11 w-11 flex-none items-center justify-center"
+                    className="flex h-11 w-12 flex-none items-center justify-center"
                     title="Open YouTube"
                   >
-                    <PlatformRune platform="youtube" size={24} />
+                    <PlatformBrandMark platform="youtube" height={24} />
                   </a>
                 ) : (
-                  <span
-                    className="flex h-11 w-11 flex-none items-center justify-center rounded-[12px] border"
-                    style={{
-                      color: caps.accent,
-                      borderColor: connected ? caps.accent : "var(--glass-border)",
-                      boxShadow: connected ? `0 0 16px color-mix(in srgb, ${caps.accent} 35%, transparent)` : undefined,
-                    }}
-                  >
-                    <PlatformRune platform={provider} size={20} />
+                  <span className="flex h-11 w-12 flex-none items-center justify-center">
+                    <PlatformBrandMark platform={provider} height={24} />
                   </span>
                 )}
                 <div className="min-w-0 flex-1">

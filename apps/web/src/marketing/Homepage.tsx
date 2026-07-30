@@ -250,7 +250,6 @@ export function Homepage() {
           <div>
             {PLATFORMS.map((platform) => (
               <span className="site-footer-platform" data-platform={platform.id} key={platform.id}>
-                {platform.id !== "youtube" && <img src={platform.mark} alt="" aria-hidden />}
                 <small>{platform.name}</small>
               </span>
             ))}
