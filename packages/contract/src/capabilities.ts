@@ -160,7 +160,7 @@ export const PLATFORM_CAPABILITIES: Record<PlatformId, PlatformCapabilities> = {
   youtube: {
     id: "youtube",
     label: "YouTube",
-    accent: "#FF0033",
+    accent: "#FF0000",
     captionMaxChars: 5000,
     titleMaxChars: 100,
     video: {

@@ -945,6 +945,7 @@
   align-self: center;
   align-items: center;
   justify-content: center;
+  text-decoration: none;
 }
 
 .site-platform-mark img {
@@ -1063,8 +1064,12 @@
   filter: grayscale(1) brightness(2.1) contrast(0.8);
 }
 
-.site-footer-platform[data-platform="youtube"] img {
-  width: 26px;
+.site-footer-platform[data-platform="youtube"] small {
+  font-family: var(--font-display);
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .site-footer-platform[data-platform="linkedin"] img {

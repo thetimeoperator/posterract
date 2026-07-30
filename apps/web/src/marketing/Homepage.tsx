@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { YOUTUBE_ICON_DATA_URI } from "@posterract/hyperkit";
 import { authClient } from "@/lib/authClient";
 import "@/styles/homepage.css";
 
@@ -15,7 +16,7 @@ type Platform = {
 };
 
 const PLATFORMS: Platform[] = [
-  { id: "youtube", name: "YouTube", mark: "/brand/platforms/youtube.svg", phase: "live", capability: "Publishing + analytics" },
+  { id: "youtube", name: "YouTube", mark: YOUTUBE_ICON_DATA_URI, phase: "live", capability: "Publishing + analytics" },
   { id: "tiktok", name: "TikTok", mark: "/brand/platforms/tiktok.svg", phase: "live", capability: "Publishing + analytics" },
   { id: "instagram", name: "Instagram", mark: "/brand/platforms/instagram.svg", phase: "live", capability: "Publishing + insights" },
   { id: "facebook", name: "Facebook", mark: "/brand/platforms/facebook.svg", phase: "next", capability: "Integration roadmap" },
@@ -35,7 +36,19 @@ function PlatformNetwork() {
         {PLATFORMS.map((platform, index) => (
           <article className={`site-platform site-platform-${platform.phase}`} data-platform={platform.id} key={platform.id}>
             <span className="site-platform-index">{String(index + 1).padStart(2, "0")}</span>
-            <div className="site-platform-mark"><img src={platform.mark} alt={`${platform.name} logo`} /></div>
+            {platform.id === "youtube" ? (
+              <a
+                className="site-platform-mark"
+                href="https://www.youtube.com/"
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Open YouTube"
+              >
+                <img src={platform.mark} alt="YouTube" />
+              </a>
+            ) : (
+              <div className="site-platform-mark"><img src={platform.mark} alt={`${platform.name} logo`} /></div>
+            )}
             <div><h3>{platform.name}</h3><p>{platform.capability}</p></div>
             <strong>{platform.phase === "live" ? "LIVE" : "NEXT"}</strong>
           </article>
@@ -237,7 +250,7 @@ export function Homepage() {
           <div>
             {PLATFORMS.map((platform) => (
               <span className="site-footer-platform" data-platform={platform.id} key={platform.id}>
-                <img src={platform.mark} alt="" aria-hidden />
+                {platform.id !== "youtube" && <img src={platform.mark} alt="" aria-hidden />}
                 <small>{platform.name}</small>
               </span>
             ))}

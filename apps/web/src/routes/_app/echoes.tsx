@@ -206,7 +206,9 @@ function PlatformSelector({ value, onChange }: { value: PlatformFilter; onChange
             onClick={() => onChange(option.value)}
             className={`flex h-8 items-center gap-1.5 rounded-[7px] px-3 font-display text-[11.5px] transition ${active ? "border border-[rgba(101,255,154,.36)] bg-[rgba(101,255,154,.08)] text-starlight shadow-glow-neon-sm" : "border border-transparent text-starlight-dim hover:text-starlight"}`}
           >
-            {option.value !== "all" && <PlatformRune platform={option.value} size={12} />}
+            {option.value !== "all" && option.value !== "youtube" && (
+              <PlatformRune platform={option.value} size={12} />
+            )}
             {option.label}
           </button>
         );
@@ -313,18 +315,135 @@ function EngagementMix({ totals }: { totals: ReturnType<typeof summarize> }) {
 
 function TopPosts({ posts }: { posts: PlatformAnalyticsDTO["posts"] }) {
   if (!posts.length) return <p className="py-8 text-center text-[12px] text-starlight-faint">Published-post metrics will resolve here.</p>;
-  return <div className="divide-y divide-[var(--glass-border)]">{posts.map((post, index) => <div key={post.projectionId} className="grid grid-cols-[22px_minmax(0,1fr)_64px_52px_24px] items-center gap-3 py-3 first:pt-0 last:pb-0"><span className="telemetry text-[10px] text-starlight-faint">{String(index + 1).padStart(2, "0")}</span><div className="flex min-w-0 items-center gap-2"><PlatformRune platform={post.provider} size={14} /><div className="min-w-0"><p className="truncate text-[12px] text-starlight">{post.title}</p><p className="telemetry mt-0.5 text-[8.5px] text-starlight-faint">{post.publishedAt ? new Date(post.publishedAt).toLocaleDateString([], { month: "short", day: "numeric" }) : "Published"}</p></div></div><div className="text-right"><p className="telemetry text-[11px] text-starlight">{compact(post.views)}</p><p className="kicker !text-[7px]">Views</p></div><div className="text-right"><p className="telemetry text-[11px] text-starlight">{compact(post.likes + post.comments + post.shares)}</p><p className="kicker !text-[7px]">Acts</p></div>{post.platformPostUrl ? <a href={post.platformPostUrl} target="_blank" rel="noreferrer" aria-label={`Open ${post.title}`} className="text-starlight-faint transition hover:text-neon"><ArrowUpRight size={14} /></a> : <span />}</div>)}</div>;
+  return (
+    <div className="divide-y divide-[var(--glass-border)]">
+      {posts.map((post, index) => (
+        <div
+          key={post.projectionId}
+          className="grid grid-cols-[22px_minmax(0,1fr)_64px_52px_24px] items-center gap-3 py-3 first:pt-0 last:pb-0"
+        >
+          <span className="telemetry text-[10px] text-starlight-faint">
+            {String(index + 1).padStart(2, "0")}
+          </span>
+          <div className="flex min-w-0 items-center gap-2">
+            {post.provider === "youtube" ? (
+              <span className="font-display text-[9px] font-semibold text-starlight-dim">YouTube</span>
+            ) : (
+              <PlatformRune platform={post.provider} size={14} />
+            )}
+            <div className="min-w-0">
+              <p className="truncate text-[12px] text-starlight">{post.title}</p>
+              <p className="telemetry mt-0.5 text-[8.5px] text-starlight-faint">
+                {post.publishedAt
+                  ? new Date(post.publishedAt).toLocaleDateString([], { month: "short", day: "numeric" })
+                  : "Published"}
+              </p>
+            </div>
+          </div>
+          <div className="text-right">
+            <p className="telemetry text-[11px] text-starlight">{compact(post.views)}</p>
+            <p className="kicker !text-[7px]">Views</p>
+          </div>
+          <div className="text-right">
+            <p className="telemetry text-[11px] text-starlight">
+              {compact(post.likes + post.comments + post.shares)}
+            </p>
+            <p className="kicker !text-[7px]">Acts</p>
+          </div>
+          {post.platformPostUrl ? (
+            <a
+              href={post.platformPostUrl}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={`Open ${post.title}`}
+              className="text-starlight-faint transition hover:text-neon"
+            >
+              <ArrowUpRight size={14} />
+            </a>
+          ) : (
+            <span />
+          )}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function PlatformStatus({ platform }: { platform: PlatformAnalyticsDTO }) {
   const caps = PLATFORM_CAPABILITIES[platform.provider];
   const status = !platform.connected ? "Not connected" : platform.ready ? "Receiving" : "Reconnect";
-  return <div className="rounded-[12px] border border-[var(--glass-border)] bg-void-2/45 p-3"><div className="flex items-center gap-2"><span className="flex h-8 w-8 items-center justify-center rounded-[9px] bg-void-3"><PlatformRune platform={platform.provider} size={15} /></span><div className="min-w-0 flex-1"><p className="font-display text-[12px] font-medium text-starlight">{caps.label}</p><p className="truncate text-[9.5px] text-starlight-faint">{platform.handle ?? "Awaiting portal"}</p></div><span className={`telemetry text-[8px] uppercase ${platform.ready ? "text-neon" : platform.connected ? "text-solar" : "text-starlight-faint"}`}>{status}</span></div><div className="mt-3 flex items-end justify-between border-t border-[var(--glass-border)] pt-2.5"><div><p className="telemetry text-[16px] text-starlight">{platform.audience === undefined ? "—" : compact(platform.audience)}</p><p className="kicker !text-[7px]">{platform.audienceLabel}</p></div><p className="telemetry text-[8.5px] text-starlight-faint">{platform.lastSyncedAt ? `Synced ${relativeTime(platform.lastSyncedAt)}` : "No signal yet"}</p></div></div>;
+  const youtubeHref =
+    platform.provider === "youtube" && platform.handle?.startsWith("@")
+      ? `https://www.youtube.com/${platform.handle}`
+      : "https://www.youtube.com/";
+  return (
+    <div className="rounded-[12px] border border-[var(--glass-border)] bg-void-2/45 p-3">
+      <div className="flex items-center gap-2">
+        {platform.provider === "youtube" ? (
+          <a
+            href={youtubeHref}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={platform.handle ? `Open ${platform.handle} on YouTube` : "Open YouTube"}
+            className="flex h-8 w-10 flex-none items-center justify-center"
+            title="Open YouTube"
+          >
+            <PlatformRune platform="youtube" size={24} />
+          </a>
+        ) : (
+          <span className="flex h-8 w-8 items-center justify-center rounded-[9px] bg-void-3">
+            <PlatformRune platform={platform.provider} size={15} />
+          </span>
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="font-display text-[12px] font-medium text-starlight">{caps.label}</p>
+          <p className="truncate text-[9.5px] text-starlight-faint">{platform.handle ?? "Awaiting portal"}</p>
+        </div>
+        <span
+          className={`telemetry text-[8px] uppercase ${
+            platform.ready ? "text-neon" : platform.connected ? "text-solar" : "text-starlight-faint"
+          }`}
+        >
+          {status}
+        </span>
+      </div>
+      <div className="mt-3 flex items-end justify-between border-t border-[var(--glass-border)] pt-2.5">
+        <div>
+          <p className="telemetry text-[16px] text-starlight">
+            {platform.audience === undefined ? "—" : compact(platform.audience)}
+          </p>
+          <p className="kicker !text-[7px]">{platform.audienceLabel}</p>
+        </div>
+        <p className="telemetry text-[8.5px] text-starlight-faint">
+          {platform.lastSyncedAt ? `Synced ${relativeTime(platform.lastSyncedAt)}` : "No signal yet"}
+        </p>
+      </div>
+    </div>
+  );
 }
 
 function DeliveryBars({ rows }: { rows: Array<{ provider: PlatformId; count: number }> }) {
   const max = Math.max(1, ...rows.map((row) => row.count));
-  return <div className="grid grid-cols-2 gap-x-5 gap-y-2.5 sm:grid-cols-3">{rows.map((row) => { const caps = PLATFORM_CAPABILITIES[row.provider]; return <div key={row.provider} className="flex items-center gap-2"><PlatformRune platform={row.provider} size={12} /><span className="w-14 text-[9.5px] text-starlight-dim">{caps.label}</span><div className="h-1 flex-1 rounded-full bg-void-3"><div className="h-full rounded-full" style={{ width: `${(row.count / max) * 100}%`, background: caps.accent }} /></div><span className="telemetry w-4 text-right text-[9px] text-starlight-faint">{row.count}</span></div>; })}</div>;
+  return (
+    <div className="grid grid-cols-2 gap-x-5 gap-y-2.5 sm:grid-cols-3">
+      {rows.map((row) => {
+        const caps = PLATFORM_CAPABILITIES[row.provider];
+        return (
+          <div key={row.provider} className="flex items-center gap-2">
+            {row.provider !== "youtube" && <PlatformRune platform={row.provider} size={12} />}
+            <span className="w-14 text-[9.5px] text-starlight-dim">{caps.label}</span>
+            <div className="h-1 flex-1 rounded-full bg-void-3">
+              <div
+                className="h-full rounded-full"
+                style={{ width: `${(row.count / max) * 100}%`, background: caps.accent }}
+              />
+            </div>
+            <span className="telemetry w-4 text-right text-[9px] text-starlight-faint">{row.count}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function SmallReadout({ label, value }: { label: string; value: number | string }) {
