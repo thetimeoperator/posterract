@@ -26,6 +26,10 @@ function Portals() {
           const portal = portals.find((p) => p.provider === provider);
           const status = portal?.status ?? "disconnected";
           const connected = status === "connected";
+          const youtubeHref =
+            provider === "youtube" && portal?.handle?.startsWith("@")
+              ? `https://www.youtube.com/${portal.handle}`
+              : "https://www.youtube.com/";
 
           return (
             <Panel
@@ -42,16 +46,29 @@ function Portals() {
               }}
             >
               <div className="flex items-start gap-3">
-                <span
-                  className="flex h-11 w-11 flex-none items-center justify-center rounded-[12px] border"
-                  style={{
-                    color: caps.accent,
-                    borderColor: connected ? caps.accent : "var(--glass-border)",
-                    boxShadow: connected ? `0 0 16px color-mix(in srgb, ${caps.accent} 35%, transparent)` : undefined,
-                  }}
-                >
-                  <PlatformRune platform={provider} size={20} />
-                </span>
+                {provider === "youtube" ? (
+                  <a
+                    href={youtubeHref}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label={connected ? `Open ${portal?.handle ?? "connected channel"} on YouTube` : "Open YouTube"}
+                    className="flex h-11 w-11 flex-none items-center justify-center"
+                    title="Open YouTube"
+                  >
+                    <PlatformRune platform="youtube" size={24} />
+                  </a>
+                ) : (
+                  <span
+                    className="flex h-11 w-11 flex-none items-center justify-center rounded-[12px] border"
+                    style={{
+                      color: caps.accent,
+                      borderColor: connected ? caps.accent : "var(--glass-border)",
+                      boxShadow: connected ? `0 0 16px color-mix(in srgb, ${caps.accent} 35%, transparent)` : undefined,
+                    }}
+                  >
+                    <PlatformRune platform={provider} size={20} />
+                  </span>
+                )}
                 <div className="min-w-0 flex-1">
                   <p className="font-display text-[14px] font-semibold text-starlight">{caps.label}</p>
                   <p className="telemetry text-[11px] text-starlight-faint">

@@ -27,6 +27,7 @@ export function PlatformChip({
   title,
 }: PlatformChipProps) {
   const caps = PLATFORM_CAPABILITIES[platform];
+  const isYouTube = platform === "youtube";
   const style = { "--pc": caps.accent } as CSSProperties;
   const Tag = onClick ? "button" : "span";
 
@@ -40,7 +41,11 @@ export function PlatformChip({
       style={style}
       className={clsx(
         "inline-flex items-center justify-center gap-1.5 rounded-[var(--radius-chip)] border font-display transition-all duration-200",
-        mini ? "h-6 w-6" : "h-7 px-2.5 text-[11px] font-medium",
+        mini
+          ? isYouTube
+            ? "h-6 min-w-[48px] px-2 text-[9px] font-semibold"
+            : "h-6 w-6"
+          : "h-7 px-2.5 text-[11px] font-medium",
         selected
           ? "border-[var(--pc)] bg-[color-mix(in_srgb,var(--pc)_12%,transparent)] text-[var(--pc)] shadow-[0_0_14px_color-mix(in_srgb,var(--pc)_30%,transparent)]"
           : "border-[var(--glass-border)] text-starlight-dim",
@@ -50,8 +55,8 @@ export function PlatformChip({
         className,
       )}
     >
-      <PlatformRune platform={platform} size={mini ? 13 : 13} />
-      {!mini && caps.label}
+      {!isYouTube && <PlatformRune platform={platform} size={13} />}
+      {isYouTube || !mini ? caps.label : null}
     </Tag>
   );
 }
@@ -75,10 +80,13 @@ export function PlatformRuneRow({
           <span
             key={p}
             title={caps.label}
-            className="relative inline-flex h-6 w-6 items-center justify-center rounded-[6px] border border-[var(--glass-border)] text-starlight-dim"
+            className={clsx(
+              "relative inline-flex h-6 items-center justify-center rounded-[6px] border border-[var(--glass-border)] text-starlight-dim",
+              p === "youtube" ? "min-w-[48px] px-1.5 font-display text-[9px] font-semibold" : "w-6",
+            )}
             style={{ color: "var(--starlight-dim)" }}
           >
-            <PlatformRune platform={p} size={12} />
+            {p === "youtube" ? "YouTube" : <PlatformRune platform={p} size={12} />}
             {dot && (
               <span
                 aria-hidden

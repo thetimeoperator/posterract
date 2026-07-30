@@ -35,6 +35,7 @@ export {
   ThreadsRune,
   XRune,
   YouTubeRune,
+  YOUTUBE_ICON_DATA_URI,
 } from "./components/PlatformRune";
 
 export { ProgressBeam, ProgressComet, OrbitRing } from "./components/Progress";
