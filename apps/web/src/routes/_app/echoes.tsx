@@ -20,7 +20,7 @@ import {
   type PlatformAnalyticsDTO,
   type PlatformId,
 } from "@posterract/contract";
-import { PlatformBrandMark } from "@/components/PlatformBrandMark";
+import { PlatformBrandMark } from "@posterract/hyperkit";
 import { useAnalyticsDashboard, useProjections, useTransmissions } from "@/engine/useEngine";
 
 export const Route = createFileRoute("/_app/echoes")({ component: Analytics });

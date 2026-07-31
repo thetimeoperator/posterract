@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { YOUTUBE_ICON_DATA_URI } from "@posterract/hyperkit";
+import { PLATFORM_MARK_SOURCES } from "@posterract/hyperkit";
 import { authClient } from "@/lib/authClient";
 import "@/styles/homepage.css";
 
@@ -16,13 +16,13 @@ type Platform = {
 };
 
 const PLATFORMS: Platform[] = [
-  { id: "youtube", name: "YouTube", mark: YOUTUBE_ICON_DATA_URI, phase: "live", capability: "Publishing + analytics" },
-  { id: "tiktok", name: "TikTok", mark: "/brand/platforms/tiktok.svg", phase: "live", capability: "Publishing + analytics" },
-  { id: "instagram", name: "Instagram", mark: "/brand/platforms/instagram.svg", phase: "live", capability: "Publishing + insights" },
-  { id: "facebook", name: "Facebook", mark: "/brand/platforms/facebook.svg", phase: "next", capability: "Integration roadmap" },
-  { id: "threads", name: "Threads", mark: "/brand/platforms/threads.svg", phase: "next", capability: "Integration roadmap" },
-  { id: "x", name: "X", mark: "/brand/platforms/x.svg", phase: "next", capability: "Integration roadmap" },
-  { id: "linkedin", name: "LinkedIn", mark: "/brand/platforms/linkedin.png", phase: "next", capability: "Integration roadmap" },
+  { id: "youtube", name: "YouTube", mark: PLATFORM_MARK_SOURCES.youtube, phase: "live", capability: "Publishing + analytics" },
+  { id: "tiktok", name: "TikTok", mark: PLATFORM_MARK_SOURCES.tiktok, phase: "live", capability: "Publishing + analytics" },
+  { id: "instagram", name: "Instagram", mark: PLATFORM_MARK_SOURCES.instagram, phase: "live", capability: "Publishing + insights" },
+  { id: "facebook", name: "Facebook", mark: PLATFORM_MARK_SOURCES.facebook, phase: "next", capability: "Integration roadmap" },
+  { id: "threads", name: "Threads", mark: PLATFORM_MARK_SOURCES.threads, phase: "next", capability: "Integration roadmap" },
+  { id: "x", name: "X", mark: PLATFORM_MARK_SOURCES.x, phase: "next", capability: "Integration roadmap" },
+  { id: "linkedin", name: "LinkedIn", mark: PLATFORM_MARK_SOURCES.linkedin, phase: "next", capability: "Integration roadmap" },
 ];
 
 function PlatformNetwork() {

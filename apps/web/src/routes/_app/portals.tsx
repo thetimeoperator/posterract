@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import clsx from "clsx";
 import { Button, Panel, Telemetry, pushSignal } from "@posterract/hyperkit";
 import { PLATFORM_CAPABILITIES, PLATFORM_ORDER } from "@posterract/contract";
-import { PlatformBrandMark } from "@/components/PlatformBrandMark";
+import { PlatformBrandMark } from "@posterract/hyperkit";
 import { useEngineActions, useOAuth, usePortals } from "@/engine/useEngine";
 
 export const Route = createFileRoute("/_app/portals")({
