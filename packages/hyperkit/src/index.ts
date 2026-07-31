@@ -28,6 +28,12 @@ export type { BadgeStatus } from "./components/StatusBadge";
 
 export { PlatformChip, PlatformRuneRow } from "./components/PlatformChip";
 export {
+  PlatformBrandMark,
+  PLATFORM_MARK_SOURCES,
+} from "./components/PlatformBrandMark";
+export type { PlatformBrandMarkProps } from "./components/PlatformBrandMark";
+export type { PlatformBrandId } from "./components/PlatformRune";
+export {
   PlatformRune,
   InstagramRune,
   TikTokRune,

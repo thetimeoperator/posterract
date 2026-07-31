@@ -2,11 +2,10 @@ import clsx from "clsx";
 import type { CSSProperties } from "react";
 import type { PlatformId } from "@posterract/contract";
 import { PLATFORM_CAPABILITIES } from "@posterract/contract";
-import { PlatformRune } from "./PlatformRune";
 
 export type PlatformChipProps = {
   platform: PlatformId;
-  /** Show only the rune, no label (mini variant for rows/calendar). */
+  /** Use the compact text-label variant for rows and calendars. */
   mini?: boolean;
   selected?: boolean;
   disabled?: boolean;
@@ -27,7 +26,6 @@ export function PlatformChip({
   title,
 }: PlatformChipProps) {
   const caps = PLATFORM_CAPABILITIES[platform];
-  const isYouTube = platform === "youtube";
   const style = { "--pc": caps.accent } as CSSProperties;
   const Tag = onClick ? "button" : "span";
 
@@ -42,9 +40,7 @@ export function PlatformChip({
       className={clsx(
         "inline-flex items-center justify-center gap-1.5 rounded-[var(--radius-chip)] border font-display transition-all duration-200",
         mini
-          ? isYouTube
-            ? "h-6 min-w-[48px] px-2 text-[9px] font-semibold"
-            : "h-6 w-6"
+          ? "h-6 min-w-[42px] px-1.5 text-[9px] font-semibold"
           : "h-7 px-2.5 text-[11px] font-medium",
         selected
           ? "border-[var(--pc)] bg-[color-mix(in_srgb,var(--pc)_12%,transparent)] text-[var(--pc)] shadow-[0_0_14px_color-mix(in_srgb,var(--pc)_30%,transparent)]"
@@ -55,8 +51,7 @@ export function PlatformChip({
         className,
       )}
     >
-      {!isYouTube && <PlatformRune platform={platform} size={13} />}
-      {isYouTube || !mini ? caps.label : null}
+      {caps.label}
     </Tag>
   );
 }
@@ -81,12 +76,11 @@ export function PlatformRuneRow({
             key={p}
             title={caps.label}
             className={clsx(
-              "relative inline-flex h-6 items-center justify-center rounded-[6px] border border-[var(--glass-border)] text-starlight-dim",
-              p === "youtube" ? "min-w-[48px] px-1.5 font-display text-[9px] font-semibold" : "w-6",
+              "relative inline-flex h-6 min-w-[42px] items-center justify-center rounded-[6px] border border-[var(--glass-border)] px-1.5 font-display text-[9px] font-semibold text-starlight-dim",
             )}
             style={{ color: "var(--starlight-dim)" }}
           >
-            {p === "youtube" ? "YouTube" : <PlatformRune platform={p} size={12} />}
+            {caps.label}
             {dot && (
               <span
                 aria-hidden

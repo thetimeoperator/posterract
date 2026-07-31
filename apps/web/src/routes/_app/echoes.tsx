@@ -12,7 +12,7 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react";
-import { Button, EmptyState, Panel, PlatformRune, Segmented } from "@posterract/hyperkit";
+import { Button, EmptyState, Panel, Segmented } from "@posterract/hyperkit";
 import {
   PLATFORM_CAPABILITIES,
   PLATFORM_ORDER,
@@ -20,6 +20,7 @@ import {
   type PlatformAnalyticsDTO,
   type PlatformId,
 } from "@posterract/contract";
+import { PlatformBrandMark } from "@posterract/hyperkit";
 import { useAnalyticsDashboard, useProjections, useTransmissions } from "@/engine/useEngine";
 
 export const Route = createFileRoute("/_app/echoes")({ component: Analytics });
@@ -206,9 +207,6 @@ function PlatformSelector({ value, onChange }: { value: PlatformFilter; onChange
             onClick={() => onChange(option.value)}
             className={`flex h-8 items-center gap-1.5 rounded-[7px] px-3 font-display text-[11.5px] transition ${active ? "border border-[rgba(101,255,154,.36)] bg-[rgba(101,255,154,.08)] text-starlight shadow-glow-neon-sm" : "border border-transparent text-starlight-dim hover:text-starlight"}`}
           >
-            {option.value !== "all" && option.value !== "youtube" && (
-              <PlatformRune platform={option.value} size={12} />
-            )}
             {option.label}
           </button>
         );
@@ -326,11 +324,9 @@ function TopPosts({ posts }: { posts: PlatformAnalyticsDTO["posts"] }) {
             {String(index + 1).padStart(2, "0")}
           </span>
           <div className="flex min-w-0 items-center gap-2">
-            {post.provider === "youtube" ? (
-              <span className="font-display text-[9px] font-semibold text-starlight-dim">YouTube</span>
-            ) : (
-              <PlatformRune platform={post.provider} size={14} />
-            )}
+            <span className="w-[52px] flex-none font-display text-[8.5px] font-semibold text-starlight-dim">
+              {PLATFORM_CAPABILITIES[post.provider].label}
+            </span>
             <div className="min-w-0">
               <p className="truncate text-[12px] text-starlight">{post.title}</p>
               <p className="telemetry mt-0.5 text-[8.5px] text-starlight-faint">
@@ -388,11 +384,11 @@ function PlatformStatus({ platform }: { platform: PlatformAnalyticsDTO }) {
             className="flex h-8 w-10 flex-none items-center justify-center"
             title="Open YouTube"
           >
-            <PlatformRune platform="youtube" size={24} />
+            <PlatformBrandMark platform="youtube" height={24} />
           </a>
         ) : (
-          <span className="flex h-8 w-8 items-center justify-center rounded-[9px] bg-void-3">
-            <PlatformRune platform={platform.provider} size={15} />
+          <span className="flex h-8 w-10 flex-none items-center justify-center">
+            <PlatformBrandMark platform={platform.provider} height={24} />
           </span>
         )}
         <div className="min-w-0 flex-1">
@@ -430,7 +426,6 @@ function DeliveryBars({ rows }: { rows: Array<{ provider: PlatformId; count: num
         const caps = PLATFORM_CAPABILITIES[row.provider];
         return (
           <div key={row.provider} className="flex items-center gap-2">
-            {row.provider !== "youtube" && <PlatformRune platform={row.provider} size={12} />}
             <span className="w-14 text-[9.5px] text-starlight-dim">{caps.label}</span>
             <div className="h-1 flex-1 rounded-full bg-void-3">
               <div

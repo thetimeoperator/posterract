@@ -950,7 +950,8 @@
 
 .site-platform-mark img {
   display: block;
-  width: 100%;
+  width: auto;
+  height: auto;
   max-width: 52px;
   max-height: 52px;
   object-fit: contain;
@@ -966,11 +967,6 @@
 
 .site-platform[data-platform="linkedin"] .site-platform-mark img {
   max-width: 49px;
-  border-radius: 3px;
-}
-
-.site-platform-next .site-platform-mark {
-  opacity: 0.65;
 }
 
 .site-platform > div:last-of-type {
@@ -1055,43 +1051,17 @@
   color: #688071;
 }
 
-.site-footer-platform img {
-  display: block;
-  width: 20px;
-  max-height: 20px;
-  object-fit: contain;
-  opacity: 0.38;
-  filter: grayscale(1) brightness(2.1) contrast(0.8);
-}
-
-.site-footer-platform[data-platform="youtube"] small {
+.site-footer-platform small {
+  overflow: hidden;
   font-family: var(--font-display);
   font-size: 8px;
   font-weight: 600;
   letter-spacing: 0;
-  text-transform: none;
-}
-
-.site-footer-platform[data-platform="linkedin"] img {
-  border: 1px solid currentColor;
-  filter: grayscale(1) brightness(2.4) contrast(0.72);
-}
-
-.site-footer-platform small {
-  overflow: hidden;
-  font-family: var(--font-mono);
-  font-size: 6px;
-  letter-spacing: 0.07em;
   text-overflow: ellipsis;
-  text-transform: uppercase;
 }
 
 .site-footer-platform:hover {
   color: var(--site-green);
-}
-
-.site-footer-platform:hover img {
-  opacity: 0.7;
 }
 
 .site-footer-main {
