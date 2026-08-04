@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { PLATFORM_MARK_SOURCES } from "@posterract/hyperkit";
+import AetherRibbonMesh from "@/components/ui/aether-ribbon-mesh";
+import { Hero } from "@/components/ui/animated-hero";
 import { authClient } from "@/lib/authClient";
 import "@/styles/homepage.css";
 
@@ -125,6 +127,11 @@ export function Homepage() {
       <div className="site-grid" aria-hidden />
 
       <section className="site-hero" aria-labelledby="site-title">
+        <div className="site-hero-background" aria-hidden="true">
+          <AetherRibbonMesh />
+        </div>
+        <div className="site-hero-shade" aria-hidden="true" />
+
         <header className="site-nav">
           <div className="site-nav-brand">
             <a className="site-wordmark" href="#top" aria-label="Posterract home">POSTER<span>RACT</span></a>
@@ -142,40 +149,7 @@ export function Homepage() {
         </header>
 
         <div className="site-hero-main">
-          <div className="site-hero-copy">
-            <p className="site-kicker">SOCIAL PUBLISHING // ONE COMMAND CENTER</p>
-            <h1 id="site-title">One upload.<span>Every channel.</span></h1>
-            <p className="site-hero-lede">
-              Posterract turns one finished video into a coordinated publishing sequence—scheduled, distributed, and measured without the tab-hopping.
-            </p>
-            <div className="site-actions">
-              <button className="site-primary" type="button" onClick={() => openAuth("signup")}>Start publishing</button>
-              <a className="site-secondary" href="#workflow">See how it works</a>
-            </div>
-            <p className="site-live"><span /> Publishing live on YouTube, TikTok, and Instagram.</p>
-          </div>
-
-          <div className="site-console" aria-label="Posterract publishing interface preview">
-            <div className="site-console-bar">
-              <span>NEW TRANSMISSION</span>
-              <strong>READY // 024</strong>
-            </div>
-            <div className="site-console-body">
-              <div className="site-media-preview">
-                <div className="site-media-orbit" aria-hidden />
-                <div className="site-media-core"><span>VIDEO</span><strong>00:24</strong></div>
-                <p>PRIMARY ARTIFACT // VERTICAL 9:16</p>
-              </div>
-              <dl className="site-console-meta">
-                <div><dt>Caption</dt><dd>The final cut is ready.</dd></div>
-                <div><dt>Launch</dt><dd>Today · 6:30 PM</dd></div>
-                <div><dt>Visibility</dt><dd>Public</dd></div>
-              </dl>
-            </div>
-            <div className="site-console-route">
-              <span>UPLOAD</span><i /><span>SCHEDULE</span><i /><span>PUBLISH</span><i /><strong>MEASURE</strong>
-            </div>
-          </div>
+          <Hero onLaunch={() => openAuth("signup")} />
         </div>
 
         <div className="site-hero-stats" aria-label="Posterract capabilities">
