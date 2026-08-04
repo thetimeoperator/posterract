@@ -263,7 +263,7 @@ function SignalChart({ platforms, rangeDays }: { platforms: PlatformAnalyticsDTO
   const y = (value: number) => H - P.bottom - (value / max) * (H - P.top - P.bottom);
   const hasData = series.some((row) => row.values.some((value) => value > 0));
   if (!hasData) {
-    return <div className="flex h-[250px] items-center justify-center text-center text-[12px] text-starlight-faint">Signals begin resolving after the first analytics refresh.</div>;
+    return <ConnectedSignalState platforms={platforms} />;
   }
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full overflow-visible" role="img" aria-label="Daily views by platform">
@@ -289,6 +289,94 @@ function SignalChart({ platforms, rangeDays }: { platforms: PlatformAnalyticsDTO
         return <text key={date} x={x(index)} y={H - 8} textAnchor="middle" fontSize="8" fill="var(--starlight-faint)" fontFamily="var(--font-mono)">{new Date(`${date}T00:00:00`).toLocaleDateString([], { month: "short", day: "numeric" })}</text>;
       })}
     </svg>
+  );
+}
+
+function ConnectedSignalState({ platforms }: { platforms: PlatformAnalyticsDTO[] }) {
+  const connected = platforms.filter((platform) => platform.connected);
+  if (!connected.length) {
+    return (
+      <div className="flex h-[250px] items-center justify-center text-center text-[12px] text-starlight-faint">
+        Connect a platform to begin receiving analytics.
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="flex min-h-[250px] items-center justify-center py-4"
+      data-testid="connected-analytics-state"
+    >
+      <div className="w-full max-w-[660px] overflow-hidden rounded-[16px] border border-[rgba(101,255,154,.2)] bg-[rgba(4,14,16,.72)] shadow-[0_0_42px_rgba(101,255,154,.055)]">
+        <div className="flex items-center justify-between gap-3 border-b border-[var(--glass-border)] px-4 py-3 sm:px-5">
+          <div className="flex items-center gap-2 text-neon">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-neon opacity-40" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-neon shadow-[0_0_10px_var(--neon)]" />
+            </span>
+            <span className="kicker !text-[8px] !text-neon">Analytics connection verified</span>
+          </div>
+          <span className="telemetry text-[8px] uppercase text-starlight-faint">
+            Daily trend collecting
+          </span>
+        </div>
+
+        <div className={`grid gap-3 p-4 sm:p-5 ${connected.length > 1 ? "sm:grid-cols-2" : ""}`}>
+          {connected.map((platform) => {
+            const caps = PLATFORM_CAPABILITIES[platform.provider];
+            const availableViews = platform.provider === "facebook"
+              ? (platform.postViews ?? platform.views)
+              : platform.views;
+            return (
+              <div
+                key={platform.provider}
+                className="rounded-[13px] border border-[var(--glass-border)] bg-void-2/60 p-4"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="flex h-10 w-12 flex-none items-center justify-center rounded-[10px] border border-[var(--glass-border)] bg-void-3/70">
+                    <PlatformBrandMark platform={platform.provider} height={24} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-display text-[15px] font-semibold text-starlight">
+                      {caps.label} connected
+                    </p>
+                    <p className="mt-0.5 truncate text-[10px] text-starlight-dim">
+                      {platform.handle ?? "Authorized account"}
+                    </p>
+                  </div>
+                  <span
+                    className={`telemetry text-[8px] uppercase ${platform.ready ? "text-neon" : "text-solar"}`}
+                  >
+                    {platform.ready ? "Permissions active" : "Reconnect required"}
+                  </span>
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-3 border-t border-[var(--glass-border)] pt-3">
+                  <div>
+                    <p className="telemetry text-[22px] leading-none text-starlight">
+                      {compact(availableViews)}
+                    </p>
+                    <p className="kicker mt-1.5 !text-[7px]">
+                      {platform.provider === "facebook" ? "Post views available" : "Views available"}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="telemetry text-[10px] text-starlight">
+                      {platform.lastSyncedAt ? `Synced ${relativeTime(platform.lastSyncedAt)}` : "Awaiting first sync"}
+                    </p>
+                    <p className="kicker mt-1.5 !text-[7px]">{caps.label} analytics API</p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <p className="border-t border-[var(--glass-border)] px-4 py-2.5 text-center text-[9.5px] text-starlight-faint sm:px-5">
+          The account is connected and totals are available. The curve will draw as new daily activity is observed.
+        </p>
+      </div>
+    </div>
   );
 }
 
