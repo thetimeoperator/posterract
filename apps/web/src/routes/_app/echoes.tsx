@@ -54,6 +54,7 @@ function Analytics() {
   );
   const totals = useMemo(() => summarize(selected), [selected]);
   const isFacebook = platform === "facebook";
+  const isThreads = platform === "threads";
   const facebookPageViews = isFacebook ? (selected[0]?.pageViews ?? 0) : undefined;
   const facebookPostViews = isFacebook ? (selected[0]?.postViews ?? totals.views) : undefined;
   const topPosts = useMemo(
@@ -128,7 +129,7 @@ function Analytics() {
       )}
 
       <div
-        className={`grid grid-cols-2 gap-3 ${isFacebook ? "xl:grid-cols-6" : "xl:grid-cols-5"}`}
+        className={`grid grid-cols-2 gap-3 ${isFacebook || isThreads ? "xl:grid-cols-6" : "xl:grid-cols-5"}`}
       >
         <MetricCard icon={<Users size={15} />} label={totals.audienceLabel} value={compact(totals.audience)} delta={totals.audienceDelta} />
         {isFacebook && (
@@ -143,14 +144,25 @@ function Analytics() {
           label={isFacebook ? "Post views" : "Views"}
           value={compact(facebookPostViews ?? totals.views)}
         />
-        <MetricCard icon={<TrendingUp size={15} />} label="Engagement" value={`${totals.engagementRate.toFixed(1)}%`} />
-        <MetricCard icon={<Sparkles size={15} />} label="Published" value={String(totals.publishedPosts)} />
-        <MetricCard
-          icon={<Clock3 size={15} />}
-          label={totals.watchMinutes > 0 ? "Watch time" : "Interactions"}
-          value={totals.watchMinutes > 0 ? formatMinutes(totals.watchMinutes) : compact(totals.interactions)}
-          className="col-span-2 xl:col-span-1"
-        />
+        {isThreads ? (
+          <>
+            <MetricCard icon={<Heart size={15} />} label="Likes" value={compact(totals.likes)} />
+            <MetricCard icon={<MessageCircle size={15} />} label="Replies" value={compact(totals.comments)} />
+            <MetricCard icon={<Share2 size={15} />} label="Reposts + quotes" value={compact(totals.shares)} />
+            <MetricCard icon={<Sparkles size={15} />} label="Published" value={String(totals.publishedPosts)} />
+          </>
+        ) : (
+          <>
+            <MetricCard icon={<TrendingUp size={15} />} label="Engagement" value={`${totals.engagementRate.toFixed(1)}%`} />
+            <MetricCard icon={<Sparkles size={15} />} label="Published" value={String(totals.publishedPosts)} />
+            <MetricCard
+              icon={<Clock3 size={15} />}
+              label={totals.watchMinutes > 0 ? "Watch time" : "Interactions"}
+              value={totals.watchMinutes > 0 ? formatMinutes(totals.watchMinutes) : compact(totals.interactions)}
+              className="col-span-2 xl:col-span-1"
+            />
+          </>
+        )}
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(300px,.85fr)]">
@@ -164,7 +176,7 @@ function Analytics() {
           <SignalChart platforms={selected} rangeDays={rangeDays} />
         </Panel>
         <Panel kicker="Engagement mix" title="How the audience responded" brackets>
-          <EngagementMix totals={totals} />
+          <EngagementMix totals={totals} platform={platform} />
         </Panel>
       </div>
 
@@ -324,11 +336,12 @@ function ChartLegend({ platforms }: { platforms: PlatformAnalyticsDTO[] }) {
   return <div className="flex items-center gap-3">{platforms.map((row) => <span key={row.provider} className="flex items-center gap-1.5 text-[9px] text-starlight-dim"><span className="h-1.5 w-4 rounded-full" style={{ background: PLATFORM_CAPABILITIES[row.provider].accent, boxShadow: `0 0 8px ${PLATFORM_CAPABILITIES[row.provider].accent}` }} />{PLATFORM_CAPABILITIES[row.provider].label}{row.connected && <span className="telemetry text-[7px] uppercase text-neon">Connected</span>}</span>)}</div>;
 }
 
-function EngagementMix({ totals }: { totals: ReturnType<typeof summarize> }) {
+function EngagementMix({ totals, platform }: { totals: ReturnType<typeof summarize>; platform: PlatformFilter }) {
+  const isThreads = platform === "threads";
   const rows = [
     { label: "Likes", value: totals.likes, icon: <Heart size={13} />, color: "var(--neon)" },
-    { label: "Comments", value: totals.comments, icon: <MessageCircle size={13} />, color: "var(--ice)" },
-    { label: "Shares", value: totals.shares, icon: <Share2 size={13} />, color: "var(--pure)" },
+    { label: isThreads ? "Replies" : "Comments", value: totals.comments, icon: <MessageCircle size={13} />, color: "var(--ice)" },
+    { label: isThreads ? "Reposts + quotes" : "Shares", value: totals.shares, icon: <Share2 size={13} />, color: "var(--pure)" },
   ];
   const max = Math.max(1, ...rows.map((row) => row.value));
   return (
