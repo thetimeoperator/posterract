@@ -9,7 +9,7 @@ The agent receives two environment variables. Never paste the key into a prompt,
 commit it, or put it in a URL.
 
 ```bash
-export POSTERRACT_API_URL="https://posterract-api.makeaiugcvids.com/api"
+export POSTERRACT_API_URL="https://www.posterract.app/api"
 export POSTERRACT_API_KEY="pr_live_..."
 ```
 
@@ -27,9 +27,8 @@ The default key can read connected accounts and analytics, upload video, create
 and read posts, cancel posts, and retry failed platform projections. It cannot
 connect or disconnect social accounts.
 
-The agent hostname routes directly through Cloudflare Tunnel to the VPS, so
-agent traffic does not traverse the Vercel frontend proxy. The website itself
-continues to use its same-origin `/api` route for browser cookies.
+The `/api` route is proxied to the VPS PostgreSQL API through Cloudflare Tunnel.
+It is also the same-origin route used by the website for browser cookies.
 
 ## Fastest posting interface
 
