@@ -1,23 +1,25 @@
 # Posterract VPS Migration Master Plan
 
-Last updated: July 27, 2026
+Last updated: August 13, 2026
 
-## August 13 implementation update
+## August 13 production cutover update
 
-The PostgreSQL replacement is now implemented locally behind
-`VITE_API_URL=/api`, without changing the live Vercel/Convex deployment. It
-includes Better Auth on PostgreSQL, the complete current-data importer and
-reconciler, encrypted social tokens, authenticated OAuth/account management,
-direct R2 uploads, the scoped/idempotent agent API, a transactional outbox,
-Temporal publishing activities for Instagram, TikTok, YouTube, Threads, and
-Facebook Pages, recurring analytics ingestion, and the PostgreSQL frontend
-engine. X remains explicitly blocked because no official X connector or
-credentials exist.
+The PostgreSQL replacement is live. The production frontend uses
+`VITE_API_URL=/api`, and Vercel proxies that same-origin API path through the
+Cloudflare Tunnel to the VPS. Better Auth, product data, encrypted social
+tokens, authenticated OAuth/account management, direct R2 uploads, the
+scoped/idempotent agent API, the transactional outbox, Temporal publishing, and
+analytics ingestion now use the VPS stack. Convex is retained only as a
+temporary rollback source; it is no longer the production application backend.
 
-The current production Convex snapshot was successfully imported twice into an
-isolated PostgreSQL 17 database and reconciled exactly. The isolated database
-was deleted afterward. Production deployment, DNS/cutover, and the final agent
-key were deliberately not performed by this implementation pass.
+The final production Convex snapshot was imported into PostgreSQL 17 and
+reconciled exactly: 16 users, 15 workspaces, 90 social-account slots, 5 social
+tokens, 7 transmissions, 9 projections, and all related history and analytics.
+All 24 Convex sessions were deliberately invalidated. A least-privilege agent
+key was issued for `pahlevansina@gmail.com`; the plaintext is stored only in the
+VPS credential file and the owner's local mode-600 credential file. Instagram,
+TikTok, YouTube, Threads, and Facebook are connected. X remains blocked because
+there is no connected X account or official X connector.
 
 ## Objective
 
@@ -82,25 +84,28 @@ The target architecture uses:
   - `posterract.app`
   - `www.posterract.app`
   - `api.posterract.app`
+- Deployed the complete PostgreSQL API and Temporal publishing worker.
+- Migrated and reconciled the final production Convex snapshot.
+- Switched the production frontend, authentication, analytics, scheduling, and
+  uploads to the PostgreSQL API.
+- Added the public same-origin `/api` proxy through Vercel and Cloudflare
+  Tunnel.
+- Issued and smoke-tested the scoped API key for
+  `pahlevansina@gmail.com`.
 
 ### Not Complete
 
-- Public `posterract.app` and `www.posterract.app` traffic still resolves to
-  Vercel so existing testers remain protected.
 - The private staging hostname still needs its DNS record changed from the
   obsolete Vercel target to the Cloudflare Tunnel target in the
   `posterract.app` zone.
 - The staging origin still needs to be added to R2 CORS from the Cloudflare
   dashboard. The deliberately object-only runtime credential cannot administer
   bucket settings.
-- The VPS frontend still calls the existing Convex backend.
-- The complete product API has not yet replaced Convex.
-- Existing Posterract data has not yet been migrated to PostgreSQL.
-- The production social-platform connectors have not yet been moved into
-  Temporal activities.
-- The new analytics ingestion and normalization system has not yet been built.
-- The Google Drive Watch Folder and complete agent API have not yet been built.
-- Automated backups, restore tests, monitoring, and alerts are not yet complete.
+- The Google Drive Watch Folder has not yet been built.
+- Automated off-VPS backups, restore drills, monitoring, and alerts are not yet
+  complete.
+- X publishing remains unavailable until an official connector, credentials,
+  and a connected X account exist.
 
 ## Phase 1: Configure Cloudflare R2
 
@@ -196,8 +201,8 @@ Convex-backed production flows have been tested through the tunnel.
 
 ## Phase 4: Build the PostgreSQL Application Backend
 
-The containers and foundation schema exist, but most current product behavior
-still lives in Convex.
+The relational application backend is deployed and is the production source of
+truth. The checklist below is retained as the implementation record.
 
 ### Tasks
 
@@ -237,8 +242,8 @@ still lives in Convex.
 
 ## Phase 6: Complete the Posterract API
 
-The current VPS API provides health checks and the multipart-upload foundation.
-It is not yet a complete replacement for Convex.
+The current VPS API is the production replacement for the former Convex
+application backend. The checklist below is retained as the API contract.
 
 ### Required API Areas
 
