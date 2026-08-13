@@ -1,0 +1,33 @@
+{
+  auto_https off
+  admin off
+}
+
+:3000 {
+  encode zstd gzip
+
+  handle /api/auth/* {
+    reverse_proxy api:3001
+  }
+
+  handle /api/v1/* {
+    uri strip_prefix /api
+    reverse_proxy api:3001
+  }
+
+  handle /v1/* {
+    reverse_proxy api:3001
+  }
+
+  handle /api/meta/* {
+    reverse_proxy api:3001
+  }
+
+  handle /health/* {
+    reverse_proxy api:3001
+  }
+
+  handle {
+    reverse_proxy web:8080
+  }
+}

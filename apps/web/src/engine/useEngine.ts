@@ -8,11 +8,18 @@ import type { PlatformId } from "@posterract/contract";
 import { PLATFORM_CAPABILITIES } from "@posterract/contract";
 import * as localEngine from "./local";
 import * as cloudEngine from "./cloud";
+import * as postgresEngine from "./postgres";
 
+const POSTGRES = Boolean(import.meta.env.VITE_API_URL);
 const CLOUD = Boolean(import.meta.env.VITE_CONVEX_URL);
-export const ENGINE_MODE: "cloud" | "demo" = CLOUD ? "cloud" : "demo";
+export const ENGINE_MODE: "cloud" | "demo" = POSTGRES || CLOUD ? "cloud" : "demo";
+export const ENGINE_BACKEND: "postgres" | "convex" | "demo" = POSTGRES
+  ? "postgres"
+  : CLOUD
+    ? "convex"
+    : "demo";
 
-const impl = CLOUD ? cloudEngine : localEngine;
+const impl = POSTGRES ? postgresEngine : CLOUD ? cloudEngine : localEngine;
 
 export const useEngineBoot = impl.useEngineBoot;
 export const useArtifacts = impl.useArtifacts;

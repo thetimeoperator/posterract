@@ -1,4 +1,6 @@
 packages:
   - "apps/web"
+  - "apps/api"
+  - "apps/orchestrator"
   - "packages/contract"
   - "packages/hyperkit"

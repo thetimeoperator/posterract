@@ -223,6 +223,8 @@ export async function tiktokPublishVideo(args: {
   videoUrl: string;
   caption: string;
   mimeType?: string;
+  /** Known object size lets the worker stream upload ranges without buffering the whole video. */
+  sizeBytes?: number;
   resumePublishId?: string;
   onPublishId?: (publishId: string) => Promise<void> | void;
   onProgress?: PublishProgress;
@@ -246,17 +248,23 @@ export async function tiktokPublishVideo(args: {
       ? "SELF_ONLY"
       : (creator.privacy_level_options?.[0] ?? "SELF_ONLY");
 
-    // 2. fetch the video bytes from storage
+    // 2. Resolve the size. VPS workers pass sizeBytes from PostgreSQL, which
+    // avoids buffering a multi-gigabyte video in memory. The fallback keeps
+    // the existing Convex call path compatible during the cutover window.
     await args.onProgress?.("uploading", "Preparing video for TikTok");
-    const videoRes = await fetch(videoUrl);
-    if (!videoRes.ok) throw new Error(`Video fetch failed: ${videoRes.status}`);
-    const bytes = await videoRes.arrayBuffer();
-    const size = bytes.byteLength;
+    let bufferedVideo: ArrayBuffer | undefined;
+    let size = args.sizeBytes;
+    if (!size) {
+      const videoRes = await fetch(videoUrl);
+      if (!videoRes.ok) throw new Error(`Video fetch failed: ${videoRes.status}`);
+      bufferedVideo = await videoRes.arrayBuffer();
+      size = bufferedVideo.byteLength;
+    }
 
     // 3. init — single chunk ≤64MB, else 50MB chunks with the final one absorbing the remainder
     const single = size <= SINGLE_CHUNK_MAX;
     const chunkSize = single ? size : CHUNK_SIZE;
-    const chunkCount = single ? 1 : Math.floor(size / chunkSize);
+    const chunkCount = single ? 1 : Math.ceil(size / chunkSize);
     const init = await openApiPost<{ publish_id?: string; upload_url?: string }>(
       "/v2/post/publish/video/init/",
       accessToken,
@@ -284,13 +292,24 @@ export async function tiktokPublishVideo(args: {
     for (let i = 0; i < chunkCount; i++) {
       const start = i * chunkSize;
       const end = i === chunkCount - 1 ? size - 1 : start + chunkSize - 1;
+      const chunk = bufferedVideo
+        ? bufferedVideo.slice(start, end + 1)
+        : await (async () => {
+            const response = await fetch(videoUrl, {
+              headers: { Range: `bytes=${start}-${end}` },
+            });
+            if (!response.ok) {
+              throw new Error(`Video range fetch failed: ${response.status}`);
+            }
+            return response.arrayBuffer();
+          })();
       const put = await fetch(init.upload_url, {
         method: "PUT",
         headers: {
           "Content-Type": args.mimeType ?? "video/mp4",
           "Content-Range": `bytes ${start}-${end}/${size}`,
         },
-        body: bytes.slice(start, end + 1),
+        body: chunk,
       });
       if (!put.ok) throw new Error(`TikTok chunk upload failed: ${put.status}`);
     }

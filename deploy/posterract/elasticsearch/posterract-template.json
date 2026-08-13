@@ -1,0 +1,39 @@
+{
+  "index_patterns": ["posterract-*"],
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+      "refresh_interval": "5s"
+    },
+    "mappings": {
+      "dynamic": true,
+      "properties": {
+        "workspaceId": { "type": "keyword" },
+        "transmissionId": { "type": "keyword" },
+        "projectionId": { "type": "keyword" },
+        "provider": { "type": "keyword" },
+        "status": { "type": "keyword" },
+        "occurredAt": { "type": "date" },
+        "caption": {
+          "type": "text",
+          "fields": {
+            "keyword": { "type": "keyword", "ignore_above": 256 }
+          }
+        },
+        "title": {
+          "type": "text",
+          "fields": {
+            "keyword": { "type": "keyword", "ignore_above": 256 }
+          }
+        },
+        "transcript": { "type": "text" },
+        "hashtags": { "type": "keyword" },
+        "topics": { "type": "keyword" },
+        "entities": { "type": "keyword" },
+        "metrics": { "type": "object", "dynamic": true }
+      }
+    }
+  },
+  "priority": 100
+}

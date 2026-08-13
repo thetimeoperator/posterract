@@ -49,7 +49,8 @@ export type ProjectionStatus =
   | "failed"
   | "retrying"
   | "needs_reauth"
-  | "blocked";
+  | "blocked"
+  | "canceled";
 
 export type PortalStatus =
   | "connected"

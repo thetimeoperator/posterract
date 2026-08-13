@@ -25,7 +25,10 @@ declare module "@tanstack/react-router" {
 }
 
 const convexUrl = import.meta.env.VITE_CONVEX_URL as string | undefined;
-const convex = convexUrl ? new ConvexReactClient(convexUrl, { expectAuth: true }) : null;
+const postgresBackend = Boolean(import.meta.env.VITE_API_URL);
+const convex = convexUrl && !postgresBackend
+  ? new ConvexReactClient(convexUrl, { expectAuth: true })
+  : null;
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

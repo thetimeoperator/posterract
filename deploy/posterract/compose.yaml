@@ -1,0 +1,398 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+
+services:
+  gateway:
+    <<: *service-defaults
+    image: caddy:2.10.2-alpine
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      web:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    networks:
+      - posterract-network
+    mem_limit: 128m
+
+  web:
+    <<: *service-defaults
+    build:
+      context: ../..
+      dockerfile: deploy/posterract/Dockerfile
+      target: web-runtime
+      args:
+        VITE_CONVEX_URL: ${VITE_CONVEX_URL}
+        VITE_CONVEX_SITE_URL: ${VITE_CONVEX_SITE_URL}
+        VITE_API_URL: ${VITE_API_URL:-}
+        VITE_SITE_URL: ${VITE_SITE_URL}
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8080/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - posterract-network
+    mem_limit: 128m
+
+  api:
+    <<: *service-defaults
+    build:
+      context: ../..
+      dockerfile: deploy/posterract/Dockerfile
+      target: backend-runtime
+    command: ["pnpm", "--filter", "@posterract/api", "start"]
+    environment:
+      PORT: "3001"
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: posterract
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-https://api.posterract.app}
+      PUBLIC_API_URL: ${PUBLIC_API_URL:-https://api.posterract.app}
+      SITE_URL: ${VITE_SITE_URL}
+      TRUSTED_ORIGINS: ${TRUSTED_ORIGINS:-}
+      MAX_UPLOAD_BYTES: "5000000000"
+      UPLOAD_SESSION_TTL_SECONDS: "86400"
+      UNATTACHED_MEDIA_TTL_HOURS: "24"
+      MEDIA_CLEANUP_INTERVAL_SECONDS: "900"
+      R2_SIGNED_URL_TTL_SECONDS: "900"
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ENDPOINT: ${R2_ENDPOINT:-}
+      R2_REGION: ${R2_REGION:-auto}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET: ${R2_BUCKET:-posterract}
+      INSTAGRAM_APP_ID: ${INSTAGRAM_APP_ID:-}
+      INSTAGRAM_APP_SECRET: ${INSTAGRAM_APP_SECRET:-}
+      FACEBOOK_APP_ID: ${FACEBOOK_APP_ID:-}
+      FACEBOOK_APP_SECRET: ${FACEBOOK_APP_SECRET:-}
+      FACEBOOK_LOGIN_CONFIG_ID: ${FACEBOOK_LOGIN_CONFIG_ID:-}
+      THREADS_APP_ID: ${THREADS_APP_ID:-}
+      THREADS_APP_SECRET: ${THREADS_APP_SECRET:-}
+      TIKTOK_CLIENT_KEY: ${TIKTOK_CLIENT_KEY:-}
+      TIKTOK_CLIENT_SECRET: ${TIKTOK_CLIENT_SECRET:-}
+      YOUTUBE_CLIENT_ID: ${YOUTUBE_CLIENT_ID:-}
+      YOUTUBE_CLIENT_SECRET: ${YOUTUBE_CLIENT_SECRET:-}
+      OUTBOX_INTERVAL_MS: "1000"
+      API_RATE_LIMIT_PER_MINUTE: "120"
+    expose:
+      - "3001"
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3001/health/live').then(r=>{if(!r.ok)process.exit(1)})",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    networks:
+      - posterract-network
+      - temporal-network
+    mem_limit: 512m
+
+  orchestrator:
+    <<: *service-defaults
+    build:
+      context: ../..
+      dockerfile: deploy/posterract/Dockerfile
+      target: backend-runtime
+    command: ["pnpm", "--filter", "@posterract/orchestrator", "start"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: posterract
+      TEMPORAL_TASK_QUEUE: posterract-publishing
+      MAX_CONCURRENT_ACTIVITIES: "4"
+      MAX_CONCURRENT_WORKFLOWS: "20"
+      HEALTH_PORT: "3002"
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ENDPOINT: ${R2_ENDPOINT:-}
+      R2_REGION: ${R2_REGION:-auto}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET: ${R2_BUCKET:-posterract}
+      R2_SIGNED_DOWNLOAD_TTL_SECONDS: "3600"
+      INSTAGRAM_APP_ID: ${INSTAGRAM_APP_ID:-}
+      INSTAGRAM_APP_SECRET: ${INSTAGRAM_APP_SECRET:-}
+      FACEBOOK_APP_ID: ${FACEBOOK_APP_ID:-}
+      FACEBOOK_APP_SECRET: ${FACEBOOK_APP_SECRET:-}
+      FACEBOOK_LOGIN_CONFIG_ID: ${FACEBOOK_LOGIN_CONFIG_ID:-}
+      THREADS_APP_ID: ${THREADS_APP_ID:-}
+      THREADS_APP_SECRET: ${THREADS_APP_SECRET:-}
+      TIKTOK_CLIENT_KEY: ${TIKTOK_CLIENT_KEY:-}
+      TIKTOK_CLIENT_SECRET: ${TIKTOK_CLIENT_SECRET:-}
+      YOUTUBE_CLIENT_ID: ${YOUTUBE_CLIENT_ID:-}
+      YOUTUBE_CLIENT_SECRET: ${YOUTUBE_CLIENT_SECRET:-}
+    expose:
+      - "3002"
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+      temporal-search-attributes:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3002/health').then(r=>{if(!r.ok)process.exit(1)})",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    networks:
+      - posterract-network
+      - temporal-network
+    mem_limit: 768m
+
+  migrations:
+    build:
+      context: ../..
+      dockerfile: deploy/posterract/Dockerfile
+      target: backend-runtime
+    restart: "no"
+    command: ["node", "apps/api/scripts/migrate-all.mjs"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-https://api.posterract.app}
+      PUBLIC_API_URL: ${PUBLIC_API_URL:-https://api.posterract.app}
+      SITE_URL: ${VITE_SITE_URL}
+      TRUSTED_ORIGINS: ${TRUSTED_ORIGINS:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - posterract-network
+    mem_limit: 256m
+
+  postgres:
+    <<: *service-defaults
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    command:
+      - postgres
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - effective_cache_size=1GB
+      - -c
+      - max_connections=100
+    volumes:
+      - posterract-postgres-data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - posterract-network
+    mem_limit: 1g
+
+  redis:
+    <<: *service-defaults
+    image: redis:7.2-alpine
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --maxmemory
+      - 192mb
+      - --maxmemory-policy
+      - allkeys-lru
+      - --requirepass
+      - ${REDIS_PASSWORD}
+    volumes:
+      - posterract-redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a '${REDIS_PASSWORD}' ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - posterract-network
+    mem_limit: 256m
+
+  elasticsearch:
+    <<: *service-defaults
+    image: elasticsearch:7.17.27
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      cluster.routing.allocation.disk.threshold_enabled: "true"
+      cluster.routing.allocation.disk.watermark.low: "5gb"
+      cluster.routing.allocation.disk.watermark.high: "3gb"
+      cluster.routing.allocation.disk.watermark.flood_stage: "2gb"
+      ES_JAVA_OPTS: -Xms768m -Xmx768m
+    volumes:
+      - posterract-elasticsearch-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS 'http://127.0.0.1:9200/_cluster/health?wait_for_status=yellow&timeout=5s'",
+        ]
+      interval: 15s
+      timeout: 8s
+      retries: 20
+    networks:
+      - posterract-network
+      - temporal-network
+    mem_limit: 1536m
+
+  elasticsearch-init:
+    image: curlimages/curl:8.14.1
+    restart: "no"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    volumes:
+      - ./elasticsearch/posterract-template.json:/config/posterract-template.json:ro
+      - ./scripts/init-elasticsearch.sh:/init-elasticsearch.sh:ro
+    entrypoint: ["/bin/sh", "/init-elasticsearch.sh"]
+    networks:
+      - posterract-network
+    mem_limit: 64m
+
+  temporal-postgres:
+    <<: *service-defaults
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${TEMPORAL_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${TEMPORAL_POSTGRES_PASSWORD}
+    volumes:
+      - posterract-temporal-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${TEMPORAL_POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - temporal-network
+    mem_limit: 768m
+
+  temporal:
+    <<: *service-defaults
+    image: temporalio/auto-setup:1.28.1
+    environment:
+      DB: postgres12
+      DB_PORT: "5432"
+      POSTGRES_USER: ${TEMPORAL_POSTGRES_USER}
+      POSTGRES_PWD: ${TEMPORAL_POSTGRES_PASSWORD}
+      POSTGRES_SEEDS: temporal-postgres
+      DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/development-sql.yaml
+      ENABLE_ES: "true"
+      ES_SEEDS: elasticsearch
+      ES_VERSION: v7
+      TEMPORAL_NAMESPACE: posterract
+    depends_on:
+      temporal-postgres:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    volumes:
+      - ./dynamicconfig:/etc/temporal/config/dynamicconfig:ro
+    expose:
+      - "7233"
+    networks:
+      - temporal-network
+    mem_limit: 768m
+
+  temporal-search-attributes:
+    image: temporalio/admin-tools:1.28.1-tctl-1.18.4-cli-1.4.1
+    restart: "no"
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: posterract
+    depends_on:
+      temporal:
+        condition: service_started
+    volumes:
+      - ./scripts/init-temporal-search-attributes.sh:/init-temporal-search-attributes.sh:ro
+    entrypoint: ["/bin/sh", "/init-temporal-search-attributes.sh"]
+    networks:
+      - temporal-network
+    mem_limit: 128m
+
+  temporal-admin-tools:
+    image: temporalio/admin-tools:1.28.1-tctl-1.18.4-cli-1.4.1
+    profiles: ["tools"]
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CLI_ADDRESS: temporal:7233
+    stdin_open: true
+    tty: true
+    depends_on:
+      - temporal
+    networks:
+      - temporal-network
+    mem_limit: 128m
+
+  temporal-ui:
+    <<: *service-defaults
+    image: temporalio/ui:2.34.0
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CORS_ORIGINS: http://${TAILSCALE_IP}:8080
+    ports:
+      - "${TAILSCALE_IP}:8080:8080"
+    depends_on:
+      - temporal
+    networks:
+      - temporal-network
+    mem_limit: 256m
+
+volumes:
+  posterract-postgres-data:
+  posterract-redis-data:
+  posterract-elasticsearch-data:
+  posterract-temporal-postgres-data:
+
+networks:
+  posterract-network:
+    driver: bridge
+  temporal-network:
+    driver: bridge
+    name: posterract-temporal-network

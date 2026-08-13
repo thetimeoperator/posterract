@@ -1,6 +1,5 @@
 import { Navigate, Outlet, createFileRoute, useRouterState } from "@tanstack/react-router";
 import type { ReactElement } from "react";
-import { useConvexAuth } from "convex/react";
 import clsx from "clsx";
 import { motion, AnimatePresence } from "framer-motion";
 import { SignalHost, Starfield } from "@posterract/hyperkit";
@@ -12,6 +11,7 @@ import { useUI } from "@/state/ui";
 import { ENGINE_MODE, useEngineBoot } from "@/engine/useEngine";
 import { WarpingIn } from "@/shell/SystemStates";
 import { Homepage } from "@/marketing/Homepage";
+import { useAuthState } from "@/lib/useAuthState";
 
 export const Route = createFileRoute("/_app")({
   component: ENGINE_MODE === "cloud" ? GuardedAppShell : AppShell,
@@ -19,7 +19,7 @@ export const Route = createFileRoute("/_app")({
 
 /** Cloud mode: signed-out visitors see the public homepage; the product remains protected. */
 function GuardedAppShell(): ReactElement {
-  const { isLoading, isAuthenticated } = useConvexAuth();
+  const { isLoading, isAuthenticated } = useAuthState();
   const pathname: string = useRouterState({ select: (s) => s.location.pathname });
   if (isLoading) return pathname === "/" ? <Homepage /> : <WarpingIn />;
   if (!isAuthenticated) {

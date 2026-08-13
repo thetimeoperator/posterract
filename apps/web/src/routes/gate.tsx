@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { Link, Navigate, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useConvexAuth } from "convex/react";
 import { Button, GridHorizon, Input, MiniTesseract, Starfield } from "@posterract/hyperkit";
 import { DeviceStage } from "@/core3d/DeviceStage";
 import { authClient } from "@/lib/authClient";
 import { ENGINE_MODE } from "@/engine/useEngine";
+import { useAuthState } from "@/lib/useAuthState";
 
 export const Route = createFileRoute("/gate")({
   component: Gate,
@@ -15,7 +15,7 @@ export const Route = createFileRoute("/gate")({
  */
 function Gate() {
   const navigate = useNavigate();
-  const { isAuthenticated } = useConvexAuth();
+  const { isAuthenticated } = useAuthState();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");

@@ -12,7 +12,8 @@ type DeletionStatus = {
   completedAt?: number;
 } | null;
 
-const deletionStatusClient = import.meta.env.VITE_CONVEX_URL
+const deletionStatusApi = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "");
+const deletionStatusClient = !deletionStatusApi && import.meta.env.VITE_CONVEX_URL
   ? new ConvexHttpClient(import.meta.env.VITE_CONVEX_URL)
   : null;
 
@@ -26,7 +27,9 @@ export const Route = createFileRoute("/data-deletion")({
 function DataDeletionStatus() {
   const { code } = Route.useSearch();
   const normalizedCode = code?.trim().toUpperCase();
-  const convexConfigured = Boolean(import.meta.env.VITE_CONVEX_URL);
+  const statusBackendConfigured = Boolean(
+    deletionStatusApi || import.meta.env.VITE_CONVEX_URL,
+  );
 
   return (
     <LegalPage title="Data Deletion Status" updated="July 20, 2026">
@@ -35,7 +38,7 @@ function DataDeletionStatus() {
         request.
       </p>
 
-      {!convexConfigured ? (
+      {!statusBackendConfigured ? (
         <StatusCard title="Status service unavailable" state="UNAVAILABLE">
           The deletion-status service is not configured in this environment. The production
           Posterract status URL remains available.
@@ -67,17 +70,27 @@ function DeletionReceipt({ confirmationCode }: { confirmationCode: string }) {
     setStatus(undefined);
     setFailed(false);
 
-    if (!deletionStatusClient) {
+    if (!deletionStatusClient && !deletionStatusApi) {
       setFailed(true);
       return () => {
         active = false;
       };
     }
 
-    deletionStatusClient
-      .query(api.metaCallbacks.getDeletionStatus, { confirmationCode })
+    const load = deletionStatusApi
+      ? fetch(
+          `${deletionStatusApi}/v1/meta/deletions/${encodeURIComponent(confirmationCode)}`,
+        ).then(async (response) => {
+          if (response.status === 404) return null;
+          if (!response.ok) throw new Error("Deletion status request failed");
+          return (await response.json()) as Exclude<DeletionStatus, null>;
+        })
+      : deletionStatusClient!.query(api.metaCallbacks.getDeletionStatus, {
+          confirmationCode,
+        });
+    load
       .then((receipt) => {
-        if (active) setStatus(receipt);
+        if (active) setStatus(receipt as DeletionStatus);
       })
       .catch(() => {
         if (active) setFailed(true);

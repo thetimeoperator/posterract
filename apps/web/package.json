@@ -21,6 +21,8 @@
     "@react-three/fiber": "^9.6.1",
     "@react-three/postprocessing": "^3.0.4",
     "@tanstack/react-router": "^1.130.0",
+    "@uppy/aws-s3": "^5.1.0",
+    "@uppy/core": "^5.2.0",
     "better-auth": "~1.6.16",
     "clsx": "^2.1.1",
     "convex": "^1.41.0",
