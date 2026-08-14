@@ -13,12 +13,11 @@
 
 const OPEN_API = "https://open.tiktokapis.com";
 
-/** Publishing plus Echoes analytics. TikTok must grant the Display API,
- * `video.list`, and `user.info.stats` to the production developer app. */
+/** Production scopes confirmed for Login Kit + Content Posting API.
+ * Analytics scopes stay out of OAuth until their separate Display API
+ * approval is explicitly verified. */
 export const TIKTOK_SCOPES = [
   "user.info.basic",
-  "user.info.stats",
-  "video.list",
   "video.publish",
 ] as const;
 
