@@ -21,7 +21,7 @@ export const useProfile = create<ProfileState>()(
       handle: "@posterract",
       workspaceName: "Posterract HQ",
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      defaultPlatforms: ["instagram", "tiktok", "youtube"],
+      defaultPlatforms: ["instagram", "tiktok"],
       shipAudio: false,
       update: (patch) => set(patch),
     }),

@@ -55,18 +55,14 @@ test.describe("Resonance points", () => {
       timeout: 45_000,
     });
 
-    // Dashboard Resonance panel reflects it: charge ring + link to /points.
-    await expect(page.getByRole("progressbar", { name: "Charge" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Resonance points" })).toBeVisible();
-
-    // The ledger feed shows the award.
+    // The shared ledger reflects awards created by the same engine used by the app/API path.
     await page.goto("/points");
     await expect(page.getByText("First Transmission").first()).toBeVisible();
   });
 
-  test("the device is a Start Post button", async ({ page }) => {
+  test("the post-login home is the Forge", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("link", { name: "Start a post" }).click();
-    await expect(page).toHaveURL(/\/compose/);
+    await expect(page).toHaveURL(/\/forge/);
+    await expect(page.getByText("Your content harness is online.")).toBeVisible();
   });
 });

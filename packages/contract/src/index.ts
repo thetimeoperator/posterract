@@ -20,6 +20,14 @@ export const PLATFORM_IDS = [
 
 export type PlatformId = (typeof PLATFORM_IDS)[number];
 
+/** Product availability is deliberately separate from connector presence. */
+export const PUBLISHING_PLATFORM_IDS = ["instagram", "tiktok", "facebook", "threads"] as const satisfies readonly PlatformId[];
+export const ANALYTICS_PLATFORM_IDS = ["instagram", "facebook", "threads"] as const satisfies readonly PlatformId[];
+export const COMING_SOON_PLATFORM_IDS = ["youtube", "x"] as const satisfies readonly PlatformId[];
+
+export type PublishingPlatformId = (typeof PUBLISHING_PLATFORM_IDS)[number];
+export type AnalyticsPlatformId = (typeof ANALYTICS_PLATFORM_IDS)[number];
+
 export function isPlatformId(value: string): value is PlatformId {
   return (PLATFORM_IDS as readonly string[]).includes(value);
 }

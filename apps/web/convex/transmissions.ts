@@ -4,6 +4,8 @@ import { v } from "convex/values";
 import { vPlatform } from "./schema";
 import { getOwnedWorkspace, requireWorkspace } from "./lib";
 
+const publishingPlatforms = new Set(["instagram", "tiktok", "facebook", "threads"]);
+
 /**
  * Create a post + its per-platform projections and schedule the publish at
  * the exact time via the cloud scheduler. Fires with every laptop closed.
@@ -28,6 +30,9 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const workspace = await requireWorkspace(ctx);
+    if (args.platforms.length === 0 || args.platforms.some((platform) => !publishingPlatforms.has(platform))) {
+      throw new Error("Publishing is currently available for Instagram, TikTok, Facebook, and Threads only");
+    }
     const artifact = await ctx.db.get(args.artifactId);
     if (!artifact || artifact.workspaceId !== workspace._id) throw new Error("Artifact not found");
 

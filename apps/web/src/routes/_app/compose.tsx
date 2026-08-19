@@ -15,7 +15,7 @@ import {
   pushSignal,
 } from "@posterract/hyperkit";
 import type { PlatformId } from "@posterract/contract";
-import { PLATFORM_CAPABILITIES, PLATFORM_IDS } from "@posterract/contract";
+import { PLATFORM_CAPABILITIES, PUBLISHING_PLATFORM_IDS } from "@posterract/contract";
 import { VideoDropzone } from "@/components/VideoDropzone";
 import { ArtifactThumb } from "@/components/ArtifactThumb";
 import {
@@ -38,11 +38,6 @@ export const Route = createFileRoute("/_app/compose")({
   }),
 });
 
-/** The cube-net arrangement of the six platforms (cross layout when wide). */
-const NET_TOP: PlatformId = "youtube";
-const NET_ROW: PlatformId[] = ["instagram", "tiktok", "threads", "facebook"];
-const NET_BOTTOM: PlatformId = "x";
-
 function Composer() {
   const navigate = useNavigate();
   const search = Route.useSearch();
@@ -52,21 +47,21 @@ function Composer() {
 
   const [artifactId, setArtifactId] = useState<string | undefined>(search.artifact);
   const [title, setTitle] = useState("");
-  const [baseCaption, setBaseCaption] = useState("");
+  const [baseCaption, setBaseCaption] = useState(() => {
+    const prepared = window.sessionStorage.getItem("posterract.forgeDraft") ?? "";
+    window.sessionStorage.removeItem("posterract.forgeDraft");
+    return prepared;
+  });
   const [overrides, setOverrides] = useState<Partial<Record<PlatformId, string>>>({});
   const [hashtags, setHashtags] = useState<string[]>([]);
   const [tagDraft, setTagDraft] = useState("");
-  const [platforms, setPlatforms] = useState<PlatformId[]>(["instagram", "tiktok", "youtube"]);
+  const [platforms, setPlatforms] = useState<PlatformId[]>(["instagram", "tiktok"]);
   const [captionTab, setCaptionTab] = useState<"base" | PlatformId>("base");
   const [mode, setMode] = useState<"now" | "at">(search.at ? "at" : "now");
   const [whenLocal, setWhenLocal] = useState(() => toDatetimeLocal(search.at ?? Date.now() + 3600_000));
   const [vaultOpen, setVaultOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [safeZones, setSafeZones] = useState(false);
-  const [youtubePrivacy, setYoutubePrivacy] = useState<"public" | "unlisted" | "private">("public");
-  const [youtubeMadeForKids, setYoutubeMadeForKids] = useState(false);
-  const [youtubeSynthetic, setYoutubeSynthetic] = useState(false);
-  const [youtubeNotify, setYoutubeNotify] = useState(true);
 
   const artifact = artifacts.find((a) => a.id === artifactId);
   const previewUrl = artifactUrl(artifactId);
@@ -89,18 +84,6 @@ function Composer() {
         captionFor: fullCaptionFor,
         portalStatus,
       });
-      if (platforms.includes("youtube")) {
-        checks.push(
-          resolvedTitle.length > 0 && resolvedTitle.length <= 100
-            ? { id: "youtube_title", label: "YouTube title · 1–100 characters", status: "pass" }
-            : {
-                id: "youtube_title",
-                label: "YouTube title",
-                status: "fail",
-                detail: `${resolvedTitle.length}/100 characters`,
-              },
-        );
-      }
       return checks;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -134,17 +117,7 @@ function Composer() {
       perPlatformCaptions: Object.fromEntries(
         platforms.map((p) => [p, fullCaptionFor(p)]),
       ) as Partial<Record<PlatformId, string>>,
-      perPlatformOptions: platforms.includes("youtube")
-        ? {
-            youtube: {
-              privacy: youtubePrivacy,
-              madeForKids: youtubeMadeForKids,
-              containsSyntheticMedia: youtubeSynthetic,
-              notifySubscribers: youtubeNotify,
-              categoryId: "22",
-            },
-          }
-        : undefined,
+      perPlatformOptions: undefined,
       scheduleMode: mode,
       scheduledFor,
     });
@@ -228,7 +201,7 @@ function Composer() {
       <Panel kicker="The message" title="Caption" brackets>
         <div className="space-y-4">
           <Input
-            label={platforms.includes("youtube") ? "Title · used on YouTube" : "Title (internal)"}
+            label="Title (internal)"
             placeholder="What is this transmission called?"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -302,18 +275,8 @@ function Composer() {
       {/* ── Right: targets + trajectory + pre-flight ── */}
       <div className="flex flex-col gap-4">
         <Panel kicker="Projection targets" title="Platforms" brackets>
-          {/* The cube net — unfolded-cross arrangement (chip row when narrow) */}
-          <div className="hidden grid-cols-4 gap-1.5 min-[1500px]:grid" role="group" aria-label="Target platforms">
-            <span />
-            <PlatformChip
-              platform={NET_TOP}
-              selected={platforms.includes(NET_TOP)}
-              onClick={() => togglePlatform(NET_TOP)}
-              className="w-full"
-            />
-            <span />
-            <span />
-            {NET_ROW.map((p) => (
+          <div className="grid grid-cols-2 gap-1.5" role="group" aria-label="Target platforms">
+            {PUBLISHING_PLATFORM_IDS.map((p) => (
               <PlatformChip
                 key={p}
                 platform={p}
@@ -322,61 +285,14 @@ function Composer() {
                 className="w-full"
               />
             ))}
-            <span />
-            <PlatformChip
-              platform={NET_BOTTOM}
-              selected={platforms.includes(NET_BOTTOM)}
-              onClick={() => togglePlatform(NET_BOTTOM)}
-              className="w-full"
-            />
-            <span />
-            <span />
           </div>
-          <div className="flex flex-wrap gap-1.5 min-[1500px]:hidden" role="group" aria-label="Target platforms">
-            {PLATFORM_IDS.map((p) => (
-              <PlatformChip key={p} platform={p} selected={platforms.includes(p)} onClick={() => togglePlatform(p)} />
-            ))}
-          </div>
+          <p className="mt-2.5 text-[10px] text-starlight-faint">YouTube and X are coming soon.</p>
           {platforms.some((p) => portalStatus(p) !== "connected") && (
             <p className="mt-2.5 text-[11px] text-solar">
               ⚠ Some targeted portals aren’t connected — align them in Portals.
             </p>
           )}
         </Panel>
-
-        {platforms.includes("youtube") && (
-          <Panel kicker="YouTube" title="Publishing controls" brackets>
-            <div className="space-y-3">
-              <Segmented
-                aria-label="YouTube visibility"
-                value={youtubePrivacy}
-                onChange={setYoutubePrivacy}
-                options={[
-                  { value: "public", label: "Public" },
-                  { value: "unlisted", label: "Unlisted" },
-                  { value: "private", label: "Private" },
-                ]}
-              />
-              <div className="space-y-2 rounded-[10px] border border-[var(--glass-border)] bg-void-2/45 px-3 py-2.5">
-                <YouTubeToggle
-                  checked={youtubeMadeForKids}
-                  onChange={setYoutubeMadeForKids}
-                  label="Made for kids"
-                />
-                <YouTubeToggle
-                  checked={youtubeSynthetic}
-                  onChange={setYoutubeSynthetic}
-                  label="Contains realistic altered or synthetic content"
-                />
-                <YouTubeToggle
-                  checked={youtubeNotify}
-                  onChange={setYoutubeNotify}
-                  label="Notify subscribers"
-                />
-              </div>
-            </div>
-          </Panel>
-        )}
 
         <Panel kicker="Trajectory" title="When" brackets>
           <div className="space-y-3">
@@ -493,27 +409,5 @@ function Composer() {
         </p>
       </Modal>
     </div>
-  );
-}
-
-function YouTubeToggle({
-  checked,
-  onChange,
-  label,
-}: {
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-  label: string;
-}) {
-  return (
-    <label className="flex cursor-pointer items-center justify-between gap-3 text-[11.5px] text-starlight-dim">
-      <span>{label}</span>
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-        className="accent-[#65ff9a]"
-      />
-    </label>
   );
 }

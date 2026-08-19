@@ -22,9 +22,11 @@ import { Route as DevCoreRouteImport } from './routes/dev/core'
 import { Route as AppVaultRouteImport } from './routes/_app/vault'
 import { Route as AppUplinkRouteImport } from './routes/_app/uplink'
 import { Route as AppTransmissionsRouteImport } from './routes/_app/transmissions'
+import { Route as AppSkillsRouteImport } from './routes/_app/skills'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppPortalsRouteImport } from './routes/_app/portals'
 import { Route as AppPointsRouteImport } from './routes/_app/points'
+import { Route as AppForgeRouteImport } from './routes/_app/forge'
 import { Route as AppEchoesRouteImport } from './routes/_app/echoes'
 import { Route as AppContinuumRouteImport } from './routes/_app/continuum'
 import { Route as AppComposeRouteImport } from './routes/_app/compose'
@@ -94,6 +96,11 @@ const AppTransmissionsRoute = AppTransmissionsRouteImport.update({
   path: '/transmissions',
   getParentRoute: () => AppRoute,
 } as any)
+const AppSkillsRoute = AppSkillsRouteImport.update({
+  id: '/skills',
+  path: '/skills',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppSettingsRoute = AppSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -107,6 +114,11 @@ const AppPortalsRoute = AppPortalsRouteImport.update({
 const AppPointsRoute = AppPointsRouteImport.update({
   id: '/points',
   path: '/points',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppForgeRoute = AppForgeRouteImport.update({
+  id: '/forge',
+  path: '/forge',
   getParentRoute: () => AppRoute,
 } as any)
 const AppEchoesRoute = AppEchoesRouteImport.update({
@@ -140,9 +152,11 @@ export interface FileRoutesByFullPath {
   '/compose': typeof AppComposeRoute
   '/continuum': typeof AppContinuumRoute
   '/echoes': typeof AppEchoesRoute
+  '/forge': typeof AppForgeRoute
   '/points': typeof AppPointsRoute
   '/portals': typeof AppPortalsRoute
   '/settings': typeof AppSettingsRoute
+  '/skills': typeof AppSkillsRoute
   '/transmissions': typeof AppTransmissionsRoute
   '/uplink': typeof AppUplinkRoute
   '/vault': typeof AppVaultRoute
@@ -160,9 +174,11 @@ export interface FileRoutesByTo {
   '/compose': typeof AppComposeRoute
   '/continuum': typeof AppContinuumRoute
   '/echoes': typeof AppEchoesRoute
+  '/forge': typeof AppForgeRoute
   '/points': typeof AppPointsRoute
   '/portals': typeof AppPortalsRoute
   '/settings': typeof AppSettingsRoute
+  '/skills': typeof AppSkillsRoute
   '/transmissions': typeof AppTransmissionsRoute
   '/uplink': typeof AppUplinkRoute
   '/vault': typeof AppVaultRoute
@@ -183,9 +199,11 @@ export interface FileRoutesById {
   '/_app/compose': typeof AppComposeRoute
   '/_app/continuum': typeof AppContinuumRoute
   '/_app/echoes': typeof AppEchoesRoute
+  '/_app/forge': typeof AppForgeRoute
   '/_app/points': typeof AppPointsRoute
   '/_app/portals': typeof AppPortalsRoute
   '/_app/settings': typeof AppSettingsRoute
+  '/_app/skills': typeof AppSkillsRoute
   '/_app/transmissions': typeof AppTransmissionsRoute
   '/_app/uplink': typeof AppUplinkRoute
   '/_app/vault': typeof AppVaultRoute
@@ -207,9 +225,11 @@ export interface FileRouteTypes {
     | '/compose'
     | '/continuum'
     | '/echoes'
+    | '/forge'
     | '/points'
     | '/portals'
     | '/settings'
+    | '/skills'
     | '/transmissions'
     | '/uplink'
     | '/vault'
@@ -227,9 +247,11 @@ export interface FileRouteTypes {
     | '/compose'
     | '/continuum'
     | '/echoes'
+    | '/forge'
     | '/points'
     | '/portals'
     | '/settings'
+    | '/skills'
     | '/transmissions'
     | '/uplink'
     | '/vault'
@@ -249,9 +271,11 @@ export interface FileRouteTypes {
     | '/_app/compose'
     | '/_app/continuum'
     | '/_app/echoes'
+    | '/_app/forge'
     | '/_app/points'
     | '/_app/portals'
     | '/_app/settings'
+    | '/_app/skills'
     | '/_app/transmissions'
     | '/_app/uplink'
     | '/_app/vault'
@@ -368,6 +392,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppTransmissionsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/skills': {
+      id: '/_app/skills'
+      path: '/skills'
+      fullPath: '/skills'
+      preLoaderRoute: typeof AppSkillsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/settings': {
       id: '/_app/settings'
       path: '/settings'
@@ -387,6 +418,13 @@ declare module '@tanstack/react-router' {
       path: '/points'
       fullPath: '/points'
       preLoaderRoute: typeof AppPointsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/forge': {
+      id: '/_app/forge'
+      path: '/forge'
+      fullPath: '/forge'
+      preLoaderRoute: typeof AppForgeRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/echoes': {
@@ -424,9 +462,11 @@ interface AppRouteChildren {
   AppComposeRoute: typeof AppComposeRoute
   AppContinuumRoute: typeof AppContinuumRoute
   AppEchoesRoute: typeof AppEchoesRoute
+  AppForgeRoute: typeof AppForgeRoute
   AppPointsRoute: typeof AppPointsRoute
   AppPortalsRoute: typeof AppPortalsRoute
   AppSettingsRoute: typeof AppSettingsRoute
+  AppSkillsRoute: typeof AppSkillsRoute
   AppTransmissionsRoute: typeof AppTransmissionsRoute
   AppUplinkRoute: typeof AppUplinkRoute
   AppVaultRoute: typeof AppVaultRoute
@@ -437,9 +477,11 @@ const AppRouteChildren: AppRouteChildren = {
   AppComposeRoute: AppComposeRoute,
   AppContinuumRoute: AppContinuumRoute,
   AppEchoesRoute: AppEchoesRoute,
+  AppForgeRoute: AppForgeRoute,
   AppPointsRoute: AppPointsRoute,
   AppPortalsRoute: AppPortalsRoute,
   AppSettingsRoute: AppSettingsRoute,
+  AppSkillsRoute: AppSkillsRoute,
   AppTransmissionsRoute: AppTransmissionsRoute,
   AppUplinkRoute: AppUplinkRoute,
   AppVaultRoute: AppVaultRoute,

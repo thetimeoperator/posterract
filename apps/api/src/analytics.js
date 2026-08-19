@@ -1,18 +1,11 @@
 const ANALYTICS_PROVIDERS = [
   "instagram",
-  "tiktok",
-  "youtube",
   "facebook",
   "threads",
 ];
 
 const REQUIRED_SCOPES = {
   instagram: ["instagram_business_basic", "instagram_business_manage_insights"],
-  youtube: [
-    "https://www.googleapis.com/auth/youtube.readonly",
-    "https://www.googleapis.com/auth/yt-analytics.readonly",
-  ],
-  tiktok: ["user.info.stats", "video.list"],
   facebook: ["pages_read_engagement", "read_insights"],
   threads: ["threads_basic", "threads_manage_insights"],
 };
@@ -162,7 +155,7 @@ export async function loadAnalyticsDashboard(postgres, workspaceId, rangeDays) {
         dailyTotals.comments +
         dailyTotals.shares >
       0;
-    const useDaily = provider === "youtube" ? daily.length > 0 : hasObservedDailyEngagement;
+    const useDaily = hasObservedDailyEngagement;
     const connected = account?.status === "connected";
     return {
       provider,
@@ -170,7 +163,7 @@ export async function loadAnalyticsDashboard(postgres, workspaceId, rangeDays) {
       ready: connected && missingScopes.length === 0,
       missingScopes,
       handle: account?.handle ?? undefined,
-      audienceLabel: provider === "youtube" ? "Subscribers" : "Followers",
+      audienceLabel: "Followers",
       audience: optionalNumber(account?.audience),
       audienceDelta: dailyTotals.audienceDelta,
       pageViews:
@@ -182,7 +175,7 @@ export async function loadAnalyticsDashboard(postgres, workspaceId, rangeDays) {
       likes: useDaily ? dailyTotals.likes : postTotals.likes,
       comments: useDaily ? dailyTotals.comments : postTotals.comments,
       shares: useDaily ? dailyTotals.shares : postTotals.shares,
-      watchMinutes: provider === "youtube" ? dailyTotals.watchMinutes : undefined,
+      watchMinutes: undefined,
       publishedPosts: liveCountByProvider.get(provider) ?? 0,
       lastSyncedAt: account?.metrics_fetched_at
         ? new Date(account.metrics_fetched_at).getTime()

@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import clsx from "clsx";
 import { Button, Panel, Telemetry, pushSignal } from "@posterract/hyperkit";
-import { PLATFORM_CAPABILITIES, PLATFORM_ORDER } from "@posterract/contract";
+import { COMING_SOON_PLATFORM_IDS, PLATFORM_CAPABILITIES, PUBLISHING_PLATFORM_IDS } from "@posterract/contract";
 import { PlatformBrandMark } from "@posterract/hyperkit";
 import { useEngineActions, useOAuth, usePortals } from "@/engine/useEngine";
 
@@ -22,15 +22,12 @@ function Portals() {
         <span className="text-starlight-faint"> Connect through each network's official authorization screen; Facebook always asks you to choose the exact Page.</span>
       </p>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {PLATFORM_ORDER.map((provider) => {
+        {[...PUBLISHING_PLATFORM_IDS, ...COMING_SOON_PLATFORM_IDS].map((provider) => {
           const caps = PLATFORM_CAPABILITIES[provider];
+          const comingSoon = (COMING_SOON_PLATFORM_IDS as readonly string[]).includes(provider);
           const portal = portals.find((p) => p.provider === provider);
-          const status = portal?.status ?? "disconnected";
-          const connected = status === "connected";
-          const youtubeHref =
-            provider === "youtube" && portal?.handle?.startsWith("@")
-              ? `https://www.youtube.com/${portal.handle}`
-              : "https://www.youtube.com/";
+          const status = comingSoon ? "disconnected" : portal?.status ?? "disconnected";
+          const connected = !comingSoon && status === "connected";
 
           return (
             <Panel
@@ -47,26 +44,13 @@ function Portals() {
               }}
             >
               <div className="flex items-start gap-3">
-                {provider === "youtube" ? (
-                  <a
-                    href={youtubeHref}
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-label={connected ? `Open ${portal?.handle ?? "connected channel"} on YouTube` : "Open YouTube"}
-                    className="flex h-11 w-12 flex-none items-center justify-center"
-                    title="Open YouTube"
-                  >
-                    <PlatformBrandMark platform="youtube" height={24} />
-                  </a>
-                ) : (
-                  <span className="flex h-11 w-12 flex-none items-center justify-center">
-                    <PlatformBrandMark platform={provider} height={24} />
-                  </span>
-                )}
+                <span className="flex h-11 w-12 flex-none items-center justify-center">
+                  <PlatformBrandMark platform={provider} height={24} />
+                </span>
                 <div className="min-w-0 flex-1">
                   <p className="font-display text-[14px] font-semibold text-starlight">{caps.label}</p>
                   <p className="telemetry text-[11px] text-starlight-faint">
-                    {connected ? portal?.handle : status === "needs_reauth" ? "token expired" : "no account linked"}
+                    {comingSoon ? "launch channel reserved" : connected ? portal?.handle : status === "needs_reauth" ? "token expired" : "no account linked"}
                   </p>
                 </div>
                 <span
@@ -77,7 +61,7 @@ function Portals() {
                     !connected && status !== "needs_reauth" && "text-starlight-faint",
                   )}
                 >
-                  {connected ? "● LINKED" : status === "needs_reauth" ? "◐ RE-ALIGN" : "○ CLOSED"}
+                  {comingSoon ? "COMING SOON" : connected ? "● LINKED" : status === "needs_reauth" ? "◐ RE-ALIGN" : "○ CLOSED"}
                 </span>
               </div>
 
@@ -112,6 +96,9 @@ function Portals() {
 
               <div className="mt-3 flex gap-2">
                 {(() => {
+                  if (comingSoon) {
+                    return <Button size="sm" variant="secondary" className="flex-1" disabled>Coming soon</Button>;
+                  }
                   const real = oauth.supported.has(provider);
                   if (connected) {
                     return (

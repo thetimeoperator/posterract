@@ -15,7 +15,7 @@ import {
 import { Button, EmptyState, Panel, Segmented } from "@posterract/hyperkit";
 import {
   PLATFORM_CAPABILITIES,
-  PLATFORM_ORDER,
+  ANALYTICS_PLATFORM_IDS,
   type AnalyticsRangeDays,
   type PlatformAnalyticsDTO,
   type PlatformId,
@@ -25,14 +25,12 @@ import { useAnalyticsDashboard, useProjections, useTransmissions } from "@/engin
 
 export const Route = createFileRoute("/_app/echoes")({ component: Analytics });
 
-type PlatformFilter = "all" | "instagram" | "tiktok" | "youtube" | "facebook" | "threads";
+type PlatformFilter = "all" | "instagram" | "facebook" | "threads";
 const FILTERS: Array<{ value: PlatformFilter; label: string }> = [
   { value: "all", label: "All signals" },
   { value: "instagram", label: "Instagram" },
   { value: "facebook", label: "Facebook" },
   { value: "threads", label: "Threads" },
-  { value: "youtube", label: "YouTube" },
-  { value: "tiktok", label: "TikTok" },
 ];
 const RANGES: Array<{ value: `${AnalyticsRangeDays}`; label: string }> = [
   { value: "7", label: "7D" },
@@ -49,7 +47,9 @@ function Analytics() {
   const projections = useProjections();
 
   const selected = useMemo(
-    () => (dashboard?.platforms ?? []).filter((row) => platform === "all" || row.provider === platform),
+    () => (dashboard?.platforms ?? []).filter(
+      (row) => (ANALYTICS_PLATFORM_IDS as readonly string[]).includes(row.provider) && (platform === "all" || row.provider === platform),
+    ),
     [dashboard, platform],
   );
   const totals = useMemo(() => summarize(selected), [selected]);
@@ -70,7 +70,7 @@ function Analytics() {
       published: transmissions.filter((row) => row.status === "live" || row.status === "partial").length,
       scheduled: transmissions.filter((row) => row.status === "scheduled").length,
       successRate: finished.length ? Math.round((live.length / finished.length) * 100) : undefined,
-      byPlatform: PLATFORM_ORDER.map((provider) => ({
+      byPlatform: ANALYTICS_PLATFORM_IDS.map((provider) => ({
         provider,
         count: live.filter((row) => row.provider === provider).length,
       })),
@@ -192,6 +192,7 @@ function Analytics() {
       </div>
 
       <Panel kicker="Publishing telemetry" title="Delivery health" brackets>
+        <p className="mb-4 text-[11px] text-starlight-faint">TikTok delivery status appears in History. Audience analytics currently cover Instagram, Facebook, and Threads only.</p>
         <div className="grid gap-5 lg:grid-cols-[240px_minmax(0,1fr)]">
           <div className="grid grid-cols-3 gap-2">
             <SmallReadout label="Posts" value={delivery.published} />
@@ -409,29 +410,12 @@ function TopPosts({ posts }: { posts: PlatformAnalyticsDTO["posts"] }) {
 function PlatformStatus({ platform }: { platform: PlatformAnalyticsDTO }) {
   const caps = PLATFORM_CAPABILITIES[platform.provider];
   const status = !platform.connected ? "Not connected" : platform.ready ? "Receiving" : "Reconnect";
-  const youtubeHref =
-    platform.provider === "youtube" && platform.handle?.startsWith("@")
-      ? `https://www.youtube.com/${platform.handle}`
-      : "https://www.youtube.com/";
   return (
     <div className="rounded-[12px] border border-[var(--glass-border)] bg-void-2/45 p-3">
       <div className="flex items-center gap-2">
-        {platform.provider === "youtube" ? (
-          <a
-            href={youtubeHref}
-            target="_blank"
-            rel="noreferrer"
-            aria-label={platform.handle ? `Open ${platform.handle} on YouTube` : "Open YouTube"}
-            className="flex h-8 w-10 flex-none items-center justify-center"
-            title="Open YouTube"
-          >
-            <PlatformBrandMark platform="youtube" height={24} />
-          </a>
-        ) : (
-          <span className="flex h-8 w-10 flex-none items-center justify-center">
-            <PlatformBrandMark platform={platform.provider} height={24} />
-          </span>
-        )}
+        <span className="flex h-8 w-10 flex-none items-center justify-center">
+          <PlatformBrandMark platform={platform.provider} height={24} />
+        </span>
         <div className="min-w-0 flex-1">
           <p className="font-display text-[12px] font-medium text-starlight">{caps.label}</p>
           <p className="truncate text-[9.5px] text-starlight-faint">{platform.handle ?? "Awaiting portal"}</p>

@@ -134,11 +134,11 @@ function TransmissionRow({
           }`,
         }}
       >
-        <div className="flex items-center gap-4 px-4 py-3">
+        <div className="grid grid-cols-[40px_minmax(0,1fr)] items-start gap-3 px-3 py-3 sm:flex sm:items-center sm:gap-4 sm:px-4">
           <ArtifactThumb artifactId={t.artifactId} className="h-16 w-10 flex-none" hoverPreview={false} />
           <div className="min-w-0 flex-1">
             <p className="truncate text-[13.5px] font-medium text-starlight">{t.title}</p>
-            <div className="mt-1 flex items-center gap-3">
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
               <PlatformRuneRow platforms={projections.map((p) => p.provider)} statusDots={statusDots} />
               <span className="telemetry text-[11px] text-starlight-faint">{formatWhen(t.scheduledFor)}</span>
               {t.status === "scheduled" && t.scheduledFor && t.scheduledFor > Date.now() && (
@@ -146,6 +146,7 @@ function TransmissionRow({
               )}
             </div>
           </div>
+          <div className="col-start-2 flex items-center justify-between gap-2 sm:contents">
           <StatusBadge status={t.status} />
           <div className="flex flex-none items-center gap-1">
             {t.status === "scheduled" && (
@@ -172,6 +173,7 @@ function TransmissionRow({
             <Button size="sm" variant="secondary" aria-label={expanded ? "Collapse log" : "Expand log"} onClick={onToggle}>
               <ChevronDown size={14} className={clsx("transition-transform", expanded && "rotate-180")} />
             </Button>
+          </div>
           </div>
         </div>
 

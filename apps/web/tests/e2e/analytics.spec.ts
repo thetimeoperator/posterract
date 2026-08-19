@@ -8,13 +8,15 @@ test.describe("Echoes analytics", () => {
     await expect(page.getByRole("heading", { name: "What returned from the transmission." })).toBeVisible();
     await expect(page.getByRole("radio", { name: "All signals" })).toBeChecked();
 
-    await page.getByRole("radio", { name: "YouTube" }).click();
+    await page.getByRole("radio", { name: "Instagram" }).click();
     await page.getByRole("radio", { name: "7D" }).click();
 
-    await expect(page.getByRole("radio", { name: "YouTube" })).toBeChecked();
+    await expect(page.getByRole("radio", { name: "Instagram" })).toBeChecked();
     await expect(page.getByRole("radio", { name: "7D" })).toBeChecked();
     await expect(page.getByRole("heading", { name: "Views · last 7 days" })).toBeVisible();
-    await expect(page.getByText("Subscribers", { exact: true })).toHaveCount(2);
+    await expect(page.getByText("Followers", { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("radio", { name: "YouTube" })).toHaveCount(0);
+    await expect(page.getByRole("radio", { name: "TikTok" })).toHaveCount(0);
   });
 
   test("keeps the analytics surface inside the tablet viewport", async ({ page }) => {

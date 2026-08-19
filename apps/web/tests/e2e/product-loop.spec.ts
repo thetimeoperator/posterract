@@ -24,7 +24,7 @@ test.describe("Posterract product loop", () => {
   test("schedule → publish → live in queue and Vault", async ({ page }) => {
     test.setTimeout(90_000);
     await page.goto("/");
-    await expect(page.getByRole("navigation", { name: "Primary" })).toBeVisible();
+    await expect(page.getByRole("toolbar", { name: "Posterract navigation" })).toBeVisible();
     await page.waitForFunction(() => !!window.__engine);
 
     // Agent-style creation through the engine (what the public API will do)
@@ -52,7 +52,7 @@ test.describe("Posterract product loop", () => {
 
     // Projection log shows platform URLs
     await row.getByRole("button", { name: "Expand log" }).click();
-    await expect(row.getByText("Instagram", { exact: true })).toBeVisible();
+    await expect(row.getByText("Instagram", { exact: true }).last()).toBeVisible();
     await expect(row.getByRole("link", { name: /View/ }).first()).toBeVisible();
 
     // The artifact lives in the Vault
@@ -67,21 +67,25 @@ test.describe("Posterract product loop", () => {
     await expect(page.getByText("Add a video to transmit.")).toBeVisible();
   });
 
-  test("composer exposes the required YouTube publishing choices", async ({ page }) => {
+  test("composer exposes only the four approved publishing targets", async ({ page }) => {
     await page.goto("/compose");
-    await expect(page.getByRole("radiogroup", { name: "YouTube visibility" })).toBeVisible();
-    await expect(page.getByLabel("Made for kids")).toBeVisible();
-    await expect(page.getByLabel("Contains realistic altered or synthetic content")).toBeVisible();
-    await expect(page.getByLabel("Notify subscribers")).toBeChecked();
-    await expect(page.getByLabel("Title · used on YouTube")).toBeVisible();
+    const targets = page.getByRole("group", { name: "Target platforms" });
+    for (const platform of ["Instagram", "TikTok", "Facebook", "Threads"]) {
+      await expect(targets.getByRole("button", { name: new RegExp(platform, "i") })).toBeVisible();
+    }
+    await expect(targets.getByRole("button", { name: /YouTube/i })).toHaveCount(0);
+    await expect(page.getByText("YouTube and X are coming soon.")).toBeVisible();
   });
 
   test("portals connect and disconnect", async ({ page }) => {
     await page.goto("/portals");
-    const threadsCard = page.locator("section", { hasText: "Threads" }).first();
-    await threadsCard.getByRole("button", { name: /Open portal/ }).click();
-    await expect(threadsCard.getByText("● LINKED")).toBeVisible();
-    await threadsCard.getByRole("button", { name: "Disconnect" }).click();
-    await expect(threadsCard.getByText("○ CLOSED")).toBeVisible();
+    const instagramCard = page.locator("section", { hasText: "Instagram" }).first();
+    await instagramCard.getByRole("button", { name: "Disconnect" }).click();
+    await expect(instagramCard.getByText("○ CLOSED")).toBeVisible();
+    await instagramCard.getByRole("button", { name: /Open portal/ }).click();
+    await expect(instagramCard.getByText("● LINKED")).toBeVisible();
+
+    const youtubeCard = page.locator("section", { hasText: "YouTube" }).first();
+    await expect(youtubeCard.getByRole("button", { name: "Coming soon" })).toBeDisabled();
   });
 });

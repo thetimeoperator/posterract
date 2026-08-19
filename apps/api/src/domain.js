@@ -7,14 +7,19 @@ export const PLATFORM_IDS = [
   "youtube",
 ];
 
-const platformSet = new Set(PLATFORM_IDS);
+export const PUBLISHING_PLATFORM_IDS = [
+  "instagram",
+  "tiktok",
+  "facebook",
+  "threads",
+];
+
+const platformSet = new Set(PUBLISHING_PLATFORM_IDS);
 const captionLimits = {
   instagram: 2_200,
   tiktok: 2_200,
   facebook: 63_206,
   threads: 500,
-  x: 280,
-  youtube: 5_000,
 };
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

@@ -243,6 +243,289 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* ── Liquid-space application shell ───────────────────────────────── */
+
+:root {
+  --space-x: 0px;
+  --space-y: 0px;
+}
+
+.space-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(42, 107, 73, 0.2), transparent 35%),
+    radial-gradient(circle at 85% 78%, rgba(30, 87, 93, 0.12), transparent 40%),
+    #030506;
+}
+
+.space-backdrop__video,
+.space-backdrop__poster,
+.space-backdrop__nebula,
+.space-backdrop__stars,
+.space-backdrop__grid,
+.space-backdrop__grade,
+.space-backdrop__noise {
+  position: absolute;
+  inset: -8px;
+}
+
+.space-backdrop__video {
+  width: calc(100% + 16px);
+  height: calc(100% + 16px);
+  object-fit: cover;
+  opacity: 0.46;
+  filter: saturate(0.72) brightness(0.62) contrast(1.12) hue-rotate(12deg);
+  transform: translate3d(var(--space-x), var(--space-y), 0) scale(1.035);
+  transition: transform 800ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.space-backdrop__poster {
+  background-position: center;
+  background-size: cover;
+  opacity: 0.4;
+  filter: saturate(0.72) brightness(0.55) contrast(1.1) hue-rotate(12deg);
+  transform: scale(1.02);
+}
+
+.space-backdrop__nebula {
+  background:
+    radial-gradient(circle at 48% 18%, rgba(101, 255, 154, 0.12), transparent 22%),
+    radial-gradient(circle at 73% 62%, rgba(124, 247, 255, 0.06), transparent 28%),
+    radial-gradient(circle at 18% 82%, rgba(101, 255, 154, 0.05), transparent 32%);
+  transform: translate3d(calc(var(--space-x) * -0.4), calc(var(--space-y) * -0.4), 0);
+}
+
+.space-backdrop__stars {
+  opacity: 0.2;
+}
+
+.space-backdrop__grid {
+  opacity: 0.16;
+  mask-image: linear-gradient(to bottom, transparent, black 30%, black 75%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 30%, black 75%, transparent);
+}
+
+.space-backdrop__grade {
+  background:
+    radial-gradient(ellipse at 50% 42%, transparent 20%, rgba(2, 5, 6, 0.4) 68%, rgba(1, 3, 4, 0.88) 100%),
+    linear-gradient(to bottom, rgba(2, 5, 6, 0.58), rgba(2, 5, 6, 0.22) 32%, rgba(2, 5, 6, 0.72));
+}
+
+.space-backdrop__noise {
+  opacity: 0.045;
+  mix-blend-mode: screen;
+  background-image:
+    repeating-linear-gradient(112deg, transparent 0 41px, rgba(255, 255, 255, 0.08) 42px, transparent 43px),
+    repeating-linear-gradient(18deg, transparent 0 91px, rgba(101, 255, 154, 0.06) 92px, transparent 93px);
+}
+
+.liquid-surface {
+  position: relative;
+  overflow: visible;
+  isolation: isolate;
+  background: linear-gradient(135deg, rgba(12, 24, 22, 0.72), rgba(5, 11, 14, 0.62));
+  box-shadow:
+    inset 0 1px 0 rgba(235, 255, 244, 0.09),
+    0 18px 60px rgba(0, 0, 0, 0.34),
+    0 0 36px rgba(101, 255, 154, 0.025);
+}
+
+.liquid-surface::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  border-radius: inherit;
+  border: 1px solid rgba(183, 255, 211, 0.13);
+  background: linear-gradient(115deg, rgba(255, 255, 255, 0.055), transparent 25%, transparent 72%, rgba(101, 255, 154, 0.04));
+}
+
+.liquid-surface--interactive {
+  transition: border-color 180ms ease, box-shadow 220ms ease, transform 220ms var(--ease-warp);
+}
+
+.liquid-surface__effect,
+.liquid-surface__effect > div {
+  width: 100%;
+  height: 100%;
+}
+
+.liquid-surface__content {
+  position: relative;
+  z-index: 3;
+  width: 100%;
+}
+
+/* The refraction layer is visual only; it must never cover controls below it. */
+.liquid-surface .glass__warp {
+  pointer-events: none;
+}
+
+.top-dock-shell {
+  min-width: 0;
+  height: 62px;
+  border-radius: 24px;
+  background: rgba(4, 10, 12, 0.7);
+}
+
+.top-dock-shell a,
+.top-dock-shell button {
+  pointer-events: auto;
+}
+
+.dock-light-trace {
+  position: absolute;
+  inset-x: 23%;
+  bottom: -1px;
+  height: 1px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, var(--neon), var(--ice), transparent);
+  box-shadow: 0 0 12px rgba(101, 255, 154, 0.8);
+  animation: dock-trace-in 320ms var(--ease-warp) both;
+}
+
+@keyframes dock-trace-in {
+  from { opacity: 0; transform: scaleX(0.18); filter: blur(3px); }
+  to { opacity: 1; transform: scaleX(1); filter: blur(0); }
+}
+
+.dock-utility,
+.dock-create {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  border: 1px solid var(--glass-border);
+  color: var(--starlight-dim);
+  transition: color 160ms ease, border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.dock-utility:hover {
+  border-color: var(--glass-border-bright);
+  color: var(--starlight);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.dock-create {
+  color: #031008;
+  border-color: rgba(101, 255, 154, 0.8);
+  background: linear-gradient(135deg, var(--neon), #7deeb5);
+  box-shadow: 0 0 18px rgba(101, 255, 154, 0.22);
+}
+
+.dock-create:hover {
+  transform: scale(1.04);
+  box-shadow: 0 0 26px rgba(101, 255, 154, 0.36);
+}
+
+.dock-more-action {
+  display: flex;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 11px;
+  color: var(--starlight-dim);
+  font-family: var(--font-display);
+  font-size: 10px;
+}
+
+.dock-more-action:hover { background: rgba(255, 255, 255, 0.04); color: var(--starlight); }
+
+.harness-panel {
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(8, 18, 18, 0.78), rgba(4, 9, 12, 0.66));
+  backdrop-filter: blur(20px) saturate(120%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025), 0 18px 60px rgba(0, 0, 0, 0.18);
+}
+
+.harness-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(101, 255, 154, 0.22) transparent;
+}
+
+.harness-scroll::-webkit-scrollbar { width: 5px; height: 5px; }
+.harness-scroll::-webkit-scrollbar-thumb { background: rgba(101, 255, 154, 0.22); border-radius: 999px; }
+
+.forge-grid {
+  display: grid;
+  grid-template-columns: minmax(210px, 250px) minmax(420px, 1fr) minmax(250px, 310px);
+  gap: 12px;
+  min-height: calc(100vh - 134px);
+}
+
+.skill-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(9, 20, 19, 0.82), rgba(4, 9, 12, 0.7));
+  transition: transform 220ms var(--ease-warp), border-color 180ms ease, box-shadow 220ms ease;
+}
+
+.skill-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(101, 255, 154, 0.28);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.26), 0 0 22px rgba(101, 255, 154, 0.035);
+}
+
+.skill-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 42%;
+  height: 1px;
+  background: linear-gradient(90deg, var(--neon), transparent);
+  opacity: 0.55;
+}
+
+.provider-orb {
+  display: inline-flex;
+  height: 34px;
+  min-width: 34px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--starlight-dim);
+}
+
+@media (max-width: 1100px) {
+  .forge-grid { grid-template-columns: minmax(190px, 230px) minmax(0, 1fr); }
+  .forge-inspector { display: none; }
+}
+
+@media (max-width: 760px) {
+  .top-dock-shell { height: 58px; border-radius: 20px; }
+  .forge-grid { display: block; min-height: auto; }
+  .forge-sessions { display: none; }
+  .space-backdrop__video { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .space-backdrop__video { display: none; }
+  .space-backdrop__nebula { transform: none; }
+  .dock-light-trace { animation: none; }
+  .skill-card,
+  .liquid-surface--interactive,
+  .dock-create { transition-duration: 100ms; }
+}
+
+@supports not ((backdrop-filter: blur(8px)) or (-webkit-backdrop-filter: blur(8px))) {
+  .liquid-surface,
+  .harness-panel,
+  .skill-card { background: rgba(5, 11, 14, 0.96); }
+}
+
 .entrance-core-reticle {
   position: absolute;
   inset: 17%;

@@ -6,7 +6,7 @@ const [
   ,
   workspaceOrEmail,
   name = "Agent API key",
-  scopesInput = "accounts:read,media:write,posts:write,posts:read,analytics:read",
+  scopesInput = "skills:read,runs:read,runs:write,posts:read,posts:write,analytics:read,points:read",
 ] = process.argv;
 
 if (!process.env.DATABASE_URL) {
@@ -28,10 +28,14 @@ if (scopes.length === 0) {
 const allowedScopes = new Set([
   "accounts:read",
   "accounts:write",
+  "skills:read",
+  "runs:read",
+  "runs:write",
   "media:write",
   "posts:write",
   "posts:read",
   "analytics:read",
+  "points:read",
 ]);
 const invalidScopes = scopes.filter((scope) => !allowedScopes.has(scope));
 if (invalidScopes.length > 0) {

@@ -43,21 +43,25 @@ export const usePoints = () => {
     [stats, points],
   );
 };
-const demoDaily = (provider: "youtube" | "tiktok", rangeDays: AnalyticsRangeDays) => {
+type DemoAnalyticsProvider = "instagram" | "facebook" | "threads";
+
+const demoDaily = (provider: DemoAnalyticsProvider, rangeDays: AnalyticsRangeDays) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   return Array.from({ length: rangeDays }, (_, index) => {
     const date = new Date(today.getTime() - (rangeDays - index - 1) * 86400_000);
-    const wave = Math.sin(index * 0.72 + (provider === "youtube" ? 0.4 : 1.6));
+    const offsets = { instagram: 0.4, facebook: 1.2, threads: 2.1 };
+    const baselines = { instagram: 980, facebook: 720, threads: 540 };
+    const wave = Math.sin(index * 0.72 + offsets[provider]);
     const lift = index / Math.max(1, rangeDays - 1);
-    const views = Math.max(0, Math.round((provider === "youtube" ? 720 : 980) + wave * 330 + lift * 760));
+    const views = Math.max(0, Math.round(baselines[provider] + wave * 280 + lift * 690));
     return {
       date: date.toISOString().slice(0, 10),
       views,
-      likes: Math.round(views * (provider === "youtube" ? 0.052 : 0.083)),
+      likes: Math.round(views * (provider === "threads" ? 0.095 : 0.072)),
       comments: Math.round(views * 0.009),
-      shares: Math.round(views * (provider === "youtube" ? 0.006 : 0.021)),
-      watchMinutes: provider === "youtube" ? Math.round(views * 0.62) : undefined,
+      shares: Math.round(views * (provider === "threads" ? 0.026 : 0.015)),
+      watchMinutes: undefined,
       audienceGained: Math.max(0, Math.round(views * 0.006 + wave * 2)),
       audienceLost: index % 9 === 0 ? 2 : 0,
     };
@@ -66,7 +70,7 @@ const demoDaily = (provider: "youtube" | "tiktok", rangeDays: AnalyticsRangeDays
 
 export function useAnalyticsDashboard(rangeDays: AnalyticsRangeDays): AnalyticsDashboardDTO {
   return useMemo(() => {
-    const makePlatform = (provider: "youtube" | "tiktok") => {
+    const makePlatform = (provider: DemoAnalyticsProvider) => {
       const daily = demoDaily(provider, rangeDays);
       const totals = daily.reduce(
         (sum, day) => ({
@@ -94,29 +98,29 @@ export function useAnalyticsDashboard(rangeDays: AnalyticsRangeDays): AnalyticsD
         likes: Math.round(totals.likes * 0.2 * post.factor),
         comments: Math.round(totals.comments * 0.2 * post.factor),
         shares: Math.round(totals.shares * 0.2 * post.factor),
-        watchMinutes: provider === "youtube" ? Math.round(totals.watchMinutes * 0.18 * post.factor) : undefined,
+        watchMinutes: undefined,
       }));
       return {
         provider,
         connected: true,
         ready: true,
         missingScopes: [],
-        handle: provider === "youtube" ? "@posterract-lab" : "Posterract Lab",
-        audienceLabel: provider === "youtube" ? "Subscribers" as const : "Followers" as const,
-        audience: provider === "youtube" ? 12840 : 21470,
+        handle: provider === "facebook" ? "Posterract Lab" : "@posterract-lab",
+        audienceLabel: "Followers" as const,
+        audience: provider === "instagram" ? 21470 : provider === "facebook" ? 12840 : 7460,
         audienceDelta: totals.audienceDelta,
         views: totals.views,
         likes: totals.likes,
         comments: totals.comments,
         shares: totals.shares,
-        watchMinutes: provider === "youtube" ? totals.watchMinutes : undefined,
+        watchMinutes: undefined,
         publishedPosts: rangeDays === 7 ? 4 : rangeDays === 30 ? 17 : 48,
         lastSyncedAt: Date.now() - 11 * 60_000,
         daily,
         posts,
       };
     };
-    return { rangeDays, platforms: [makePlatform("youtube"), makePlatform("tiktok")] };
+    return { rangeDays, platforms: [makePlatform("instagram"), makePlatform("facebook"), makePlatform("threads")] };
   }, [rangeDays]);
 }
 export const useEngineActions = () =>

@@ -14,7 +14,7 @@
     "agent:post": "node scripts/post-video.mjs",
     "verify:r2": "node scripts/verify-multipart-upload.mjs",
     "test": "node --test test/*.test.js",
-    "typecheck": "node --check src/server.js && node --check src/analytics.js && node --check src/auth.js && node --check src/domain.js && node --check src/meta.js && node --check src/oauth.js && node --check src/security.js && node --check scripts/create-api-key.mjs && node --check scripts/import-convex-export.mjs && node --check scripts/migrate.mjs && node --check scripts/migrate-all.mjs && node --check scripts/migrate-auth.mjs && node --check scripts/post-video.mjs && node --check scripts/reconcile-convex-import.mjs && node --check scripts/verify-multipart-upload.mjs"
+    "typecheck": "node --check src/server.js && node --check src/agents.js && node --check src/analytics.js && node --check src/auth.js && node --check src/domain.js && node --check src/meta.js && node --check src/oauth.js && node --check src/security.js && node --check src/skills.js && node --check scripts/create-api-key.mjs && node --check scripts/import-convex-export.mjs && node --check scripts/migrate.mjs && node --check scripts/migrate-all.mjs && node --check scripts/migrate-auth.mjs && node --check scripts/post-video.mjs && node --check scripts/reconcile-convex-import.mjs && node --check scripts/verify-multipart-upload.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.864.0",

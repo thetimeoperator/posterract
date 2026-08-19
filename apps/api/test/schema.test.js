@@ -19,7 +19,7 @@ const migrationDirectory = resolve(
 test("PostgreSQL application migrations apply cleanly and idempotently", async () => {
   const postgres = new PGlite({ extensions: { pgcrypto } });
   const migrations = await Promise.all(
-    ["001-posterract.sql", "002-postgres-cutover.sql"].map(async (name) => ({
+    ["001-posterract.sql", "002-postgres-cutover.sql", "003-agent-harness.sql"].map(async (name) => ({
       name,
       sql: await readFile(resolve(migrationDirectory, name), "utf8"),
     })),
@@ -48,6 +48,8 @@ test("PostgreSQL application migrations apply cleanly and idempotently", async (
       "api_idempotency_keys",
       "api_audit_logs",
       "meta_deletion_requests",
+      "agent_credentials",
+      "agent_runs",
     ]) {
       assert.equal(names.has(required), true, `${required} table is missing`);
     }
@@ -93,7 +95,7 @@ test("PostgreSQL Better Auth creates a complete Posterract workspace", async () 
   };
 
   try {
-    for (const name of ["001-posterract.sql", "002-postgres-cutover.sql"]) {
+    for (const name of ["001-posterract.sql", "002-postgres-cutover.sql", "003-agent-harness.sql"]) {
       await postgres.exec(await readFile(resolve(migrationDirectory, name), "utf8"));
     }
     const migrations = await getMigrations(authOptions(pool));
@@ -149,7 +151,7 @@ test("analytics reads normalized PostgreSQL snapshot history", async () => {
   const transmissionId = "00000000-0000-4000-8000-000000000005";
   const projectionId = "00000000-0000-4000-8000-000000000006";
   try {
-    for (const name of ["001-posterract.sql", "002-postgres-cutover.sql"]) {
+    for (const name of ["001-posterract.sql", "002-postgres-cutover.sql", "003-agent-harness.sql"]) {
       await postgres.exec(await readFile(resolve(migrationDirectory, name), "utf8"));
     }
     await postgres.query(

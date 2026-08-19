@@ -14,7 +14,7 @@ type SampleSpec = {
   bg: [string, string];
   postTitle: string;
   caption: string;
-  platforms: Array<"instagram" | "tiktok" | "youtube" | "x">;
+  platforms: Array<"instagram" | "tiktok" | "facebook" | "threads">;
   /** Offset in hours from now; negative = past (seeded as published). */
   offsetH: number;
 };
@@ -25,7 +25,7 @@ const SPECS: SampleSpec[] = [
     bg: ["#0a3d2c", "#65ff9a"],
     postTitle: "Sample: Morning routine that fixed my focus",
     caption: "Five changes, thirty days, completely different brain.",
-    platforms: ["instagram", "tiktok", "youtube"],
+    platforms: ["instagram", "tiktok", "facebook"],
     offsetH: -52,
   },
   {
@@ -41,7 +41,7 @@ const SPECS: SampleSpec[] = [
     bg: ["#1d3a2c", "#eafff3"],
     postTitle: "Sample: Product drop teaser",
     caption: "Something is unfolding. Friday, 9am.",
-    platforms: ["instagram", "tiktok", "youtube", "x"],
+    platforms: ["instagram", "tiktok", "facebook", "threads"],
     offsetH: 30,
   },
 ];
@@ -151,7 +151,7 @@ export async function seedSamplesOnce(): Promise<void> {
         store()._updateProjection(projection.id, {
           status: "live",
           platformPostId: postId,
-          platformPostUrl: `https://${projection.provider === "youtube" ? "youtube.com/shorts" : `${projection.provider}.com/p`}/${postId}`,
+          platformPostUrl: `https://${projection.provider}.com/p/${postId}`,
         });
       }
       store()._refreshTransmissionStatus(t.id);

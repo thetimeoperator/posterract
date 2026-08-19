@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Button, Input, Modal, Panel, PlatformChip, Toggle, pushSignal } from "@posterract/hyperkit";
-import { PLATFORM_IDS, type PlatformId } from "@posterract/contract";
+import { PUBLISHING_PLATFORM_IDS, type PlatformId } from "@posterract/contract";
 import { useProfile, initials } from "@/state/profile";
 import { blobStore } from "@/engine/idb";
 
@@ -75,7 +75,7 @@ function SettingsPage() {
           <div>
             <p className="kicker mb-2">Default platforms for new posts</p>
             <div className="flex flex-wrap gap-1.5">
-              {PLATFORM_IDS.map((p) => (
+              {PUBLISHING_PLATFORM_IDS.map((p) => (
                 <PlatformChip
                   key={p}
                   platform={p}
@@ -84,6 +84,7 @@ function SettingsPage() {
                 />
               ))}
             </div>
+            <p className="mt-2 text-[10px] text-starlight-faint">YouTube and X will join the publishing defaults when those channels launch.</p>
           </div>
           <Toggle
             checked={profile.shipAudio}

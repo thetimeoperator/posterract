@@ -3,7 +3,7 @@ import { Link, Navigate, createFileRoute, useNavigate } from "@tanstack/react-ro
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ArrowRight, SkipForward } from "lucide-react";
 import { MiniTesseract, Starfield } from "@posterract/hyperkit";
-import { PLATFORM_CAPABILITIES, PLATFORM_ORDER, type PlatformId } from "@posterract/contract";
+import { COMING_SOON_PLATFORM_IDS, PLATFORM_CAPABILITIES, PLATFORM_ORDER, type PlatformId } from "@posterract/contract";
 import { ENGINE_MODE } from "@/engine/useEngine";
 import { WarpingIn } from "@/shell/SystemStates";
 import { EntranceRelicStage, type EntrancePhase } from "@/core3d/v2/EntranceRelicStage";
@@ -15,6 +15,7 @@ export const Route = createFileRoute("/enter")({
 });
 
 const ACTIVE_PHASES: EntrancePhase[] = ["igniting", "deploying", "aligning", "portal", "navigating"];
+const isComingSoon = (platform: PlatformId) => (COMING_SOON_PLATFORM_IDS as readonly string[]).includes(platform);
 
 const PHASE_COPY: Record<EntrancePhase, { eyebrow: string; line: string }> = {
   idle: { eyebrow: "Transmission chamber ready", line: "Touch the core" },
@@ -129,7 +130,6 @@ function Entrance() {
   const running = ACTIVE_PHASES.includes(phase);
   const copy = PHASE_COPY[phase];
   const activeCaps = hoveredPlatform ? PLATFORM_CAPABILITIES[hoveredPlatform] : null;
-
   const setExplorationTarget = useCallback(
     (platform: PlatformId | null) => {
       if (running) return;
@@ -143,6 +143,7 @@ function Entrance() {
     return Object.fromEntries(
       PLATFORM_ORDER.map((platform) => {
         let state: RelicPodState = "offline";
+        if (isComingSoon(platform)) return [platform, state];
         if (phase === "idle" || phase === "hovering") state = platform === hoveredPlatform ? "active" : "offline";
         if (phase === "igniting") state = "ready";
         if (phase === "deploying") state = "active";
@@ -153,6 +154,7 @@ function Entrance() {
   }, [hoveredPlatform, phase]);
 
   const platformStatus = (platform: PlatformId) => {
+    if (isComingSoon(platform)) return "COMING SOON";
     if ((phase === "idle" || phase === "hovering") && platform === hoveredPlatform) return "SIGNAL FOUND";
     if (phase === "igniting") return "ACQUIRING";
     if (phase === "deploying") return "ADAPTING";
@@ -256,7 +258,9 @@ function Entrance() {
               {activeCaps && !running ? `${activeCaps.label} · ${platformStatus(activeCaps.id)}` : copy.eyebrow}
             </p>
             <p className="mt-1.5 font-display text-[12px] font-semibold uppercase tracking-[0.18em] text-starlight sm:text-[14px]">
-              {activeCaps && !running ? "Caption adaptation channel online" : copy.line}
+              {activeCaps && !running
+                ? isComingSoon(activeCaps.id) ? "Future channel reserved" : "Caption adaptation channel online"
+                : copy.line}
             </p>
           </motion.div>
         </AnimatePresence>
@@ -265,19 +269,20 @@ function Entrance() {
       <ul className="entrance-platform-rail absolute inset-x-0 bottom-[max(18px,env(safe-area-inset-bottom))] z-20 mx-auto grid max-w-[920px] grid-cols-3 gap-1.5 px-4 sm:grid-cols-6 sm:gap-2 sm:px-8">
         {PLATFORM_ORDER.map((platform, index) => {
           const caps = PLATFORM_CAPABILITIES[platform];
-          const selected = hoveredPlatform === platform || running;
+          const comingSoon = isComingSoon(platform);
+          const selected = !comingSoon && (hoveredPlatform === platform || running);
           return (
             <li key={platform}>
               <button
                 type="button"
-                disabled={running}
+                disabled={running || comingSoon}
                 onPointerEnter={() => setExplorationTarget(platform)}
                 onPointerLeave={() => setExplorationTarget(null)}
                 onFocus={() => setExplorationTarget(platform)}
                 onBlur={() => setExplorationTarget(null)}
                 className="entrance-platform-signal group w-full"
                 style={{ "--entrance-accent": caps.accent, "--entrance-delay": `${index * 70}ms` } as React.CSSProperties}
-                aria-label={`Inspect ${caps.label} signal`}
+                aria-label={comingSoon ? `${caps.label} coming soon` : `Inspect ${caps.label} signal`}
               >
                 <span
                   className="entrance-platform-rune is-word"

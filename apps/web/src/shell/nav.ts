@@ -1,46 +1,53 @@
 import {
-  LayoutDashboard,
-  CalendarDays,
-  Radio,
   Archive,
-  Orbit,
   BarChart3,
-  Flame,
-  TerminalSquare,
+  Bot,
+  CalendarDays,
+  KeyRound,
+  Orbit,
+  Radio,
   Settings,
+  Sparkles,
+  TerminalSquare,
   Zap,
   type LucideIcon,
 } from "lucide-react";
 
 export type NavItem = {
-  path: string;
-  /** Primary label — plain product language (Dashboard, Calendar, Posts…). */
+  path: "/forge" | "/skills" | "/continuum" | "/transmissions" | "/echoes" | "/points" | "/vault" | "/portals" | "/uplink" | "/settings";
   label: string;
-  /** Flavor name from the Posterract lore, shown as the small subtitle. */
   flavor: string;
   icon: LucideIcon;
-  /** Locked items render dimmed with a status note instead of navigating. */
+  section: "primary" | "secondary" | "main" | "system";
   locked?: string;
-  section: "main" | "system";
 };
 
-export const NAV_ITEMS: NavItem[] = [
-  { path: "/", label: "Dashboard", flavor: "The Bridge", icon: LayoutDashboard, section: "main" },
-  { path: "/continuum", label: "Calendar", flavor: "Continuum", icon: CalendarDays, section: "main" },
-  { path: "/transmissions", label: "Posts", flavor: "Transmissions", icon: Radio, section: "main" },
-  { path: "/vault", label: "Library", flavor: "The Vault", icon: Archive, section: "main" },
-  { path: "/points", label: "Points", flavor: "Resonance", icon: Zap, section: "main" },
-  { path: "/portals", label: "Accounts", flavor: "Portals", icon: Orbit, section: "main" },
-  { path: "/echoes", label: "Analytics", flavor: "Echoes", icon: BarChart3, section: "main" },
-  { path: "/forge", label: "AI Studio", flavor: "The Forge", icon: Flame, locked: "coming online", section: "main" },
-  { path: "/uplink", label: "API", flavor: "Uplink", icon: TerminalSquare, section: "system" },
-  { path: "/settings", label: "Settings", flavor: "Ship Systems", icon: Settings, section: "system" },
+export const PRIMARY_NAV_ITEMS: NavItem[] = [
+  { path: "/forge", label: "Forge", flavor: "Agent workspace", icon: Sparkles, section: "primary" },
+  { path: "/skills", label: "Skills", flavor: "Private workflows", icon: Bot, section: "primary" },
+  { path: "/continuum", label: "Schedule", flavor: "Continuum", icon: CalendarDays, section: "primary" },
+  { path: "/transmissions", label: "History", flavor: "Transmissions", icon: Radio, section: "primary" },
+  { path: "/echoes", label: "Analytics", flavor: "Echoes", icon: BarChart3, section: "primary" },
+  { path: "/points", label: "Points", flavor: "Resonance", icon: Zap, section: "primary" },
 ];
 
-export function navItemForPath(pathname: string): Pick<NavItem, "label" | "flavor"> | undefined {
-  if (pathname === "/") return NAV_ITEMS[0];
-  if (pathname.startsWith("/compose")) return { label: "New Post", flavor: "Transmission composer" };
-  return NAV_ITEMS.filter((item) => item.path !== "/").find((item) =>
-    pathname.startsWith(item.path),
-  );
+export const SECONDARY_NAV_ITEMS: NavItem[] = [
+  { path: "/vault", label: "Assets", flavor: "The Vault", icon: Archive, section: "secondary" },
+  { path: "/portals", label: "Social accounts", flavor: "Portals", icon: Orbit, section: "secondary" },
+  { path: "/uplink", label: "Agent API", flavor: "Uplink", icon: TerminalSquare, section: "secondary" },
+  { path: "/settings", label: "Settings", flavor: "Ship systems", icon: Settings, section: "secondary" },
+];
+
+export const NAV_ITEMS = [...PRIMARY_NAV_ITEMS, ...SECONDARY_NAV_ITEMS];
+
+export function isNavActive(pathname: string, path: NavItem["path"]) {
+  return pathname === path || pathname.startsWith(`${path}/`);
 }
+
+export function navItemForPath(pathname: string): Pick<NavItem, "label" | "flavor"> | undefined {
+  if (pathname === "/") return { label: "Forge", flavor: "Agent workspace" };
+  if (pathname.startsWith("/compose")) return { label: "Prepare post", flavor: "Transmission composer" };
+  return NAV_ITEMS.find((item) => isNavActive(pathname, item.path));
+}
+
+export const AGENT_KEY_ICON = KeyRound;

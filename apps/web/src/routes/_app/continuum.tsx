@@ -102,7 +102,29 @@ function Continuum() {
           }}
         />
       ) : (
-      <div className="grid grid-cols-7 gap-2">
+      <>
+      <div className="space-y-2 md:hidden" aria-label="Schedule agenda">
+        {days.map((day) => {
+          const items = byDay.get(day) ?? [];
+          const past = day + DAY < now;
+          const isToday = now >= day && now < day + DAY;
+          return (
+            <section key={day} className={clsx("rounded-[14px] border bg-[var(--glass-bg)] p-3", isToday ? "border-neon/40" : "border-[var(--glass-border)]", past && "opacity-65")}>
+              <div className="flex items-center justify-between">
+                <div><p className={clsx("kicker !text-[9px]", isToday && "!text-neon")}>{new Date(day).toLocaleDateString([], { weekday: "long" })}</p><p className="mt-0.5 text-[12px] text-starlight-dim">{new Date(day).toLocaleDateString([], { month: "short", day: "numeric" })}</p></div>
+                {!past && <button onClick={() => void navigate({ to: "/compose", search: { at: Math.max(day + 12 * 3600_000, now + 1800_000), artifact: undefined } })} className="flex h-8 items-center gap-1 rounded-[10px] border border-neon/25 px-2.5 text-[9px] text-neon" aria-label={`Schedule for ${new Date(day).toDateString()}`}><Plus size={11} /> Schedule</button>}
+              </div>
+              <div className="mt-2 space-y-1.5">
+                {items.length === 0 ? <p className="rounded-[10px] border border-dashed border-[var(--glass-border)] px-3 py-3 text-[10px] text-starlight-faint">No posts scheduled.</p> : items.map((t) => {
+                  const platforms = projections.filter((p) => p.transmissionId === t.id).map((p) => p.provider) as PlatformId[];
+                  return <Link key={t.id} to="/transmissions" className="flex items-center gap-2 rounded-[10px] border border-[var(--glass-border)] bg-void-2 p-2.5"><ArtifactThumb artifactId={t.artifactId} className="h-11 w-8 flex-none" hoverPreview={false} /><div className="min-w-0 flex-1"><p className="telemetry text-[9px] text-neon">{new Date(t.scheduledFor!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p><p className="truncate text-[11px] text-starlight">{t.title}</p><div className="mt-1"><PlatformRuneRow platforms={platforms} /></div></div><StatusBadge status={t.status} size="sm" /></Link>;
+                })}
+              </div>
+            </section>
+          );
+        })}
+      </div>
+      <div className="hidden grid-cols-7 gap-2 md:grid">
         {days.map((day) => {
           const isToday = now >= day && now < day + DAY;
           const dayFrac = isToday ? (now - day) / DAY : 0;
@@ -184,6 +206,7 @@ function Continuum() {
           );
         })}
       </div>
+      </>
       )}
 
       {total === 0 && view === "week" && (

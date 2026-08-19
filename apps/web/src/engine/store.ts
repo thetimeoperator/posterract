@@ -100,10 +100,10 @@ const seedPortals: PortalDTO[] = (
   [
     ["instagram", "connected"],
     ["tiktok", "connected"],
-    ["youtube", "connected"],
-    ["x", "needs_reauth"],
-    ["threads", "disconnected"],
-    ["facebook", "disconnected"],
+    ["facebook", "connected"],
+    ["threads", "connected"],
+    ["youtube", "disconnected"],
+    ["x", "disconnected"],
   ] as Array<[PlatformId, PortalDTO["status"]]>
 ).map(([provider, status]) => ({
   id: `portal_${provider}`,

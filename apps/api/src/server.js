@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import Fastify from "fastify";
 import { Pool } from "pg";
 import Redis from "ioredis";
@@ -27,6 +27,7 @@ import {
 } from "./domain.js";
 import {
   constantTimeEqual,
+  encryptSecret,
   hashApiKey,
   hashRequest,
 } from "./security.js";
@@ -34,6 +35,13 @@ import { createPosterractAuth } from "./auth.js";
 import { registerOAuthRoutes } from "./oauth.js";
 import { loadAnalyticsDashboard } from "./analytics.js";
 import { registerMetaRoutes } from "./meta.js";
+import {
+  executeAgentRun,
+  validateAgentCredentialInput,
+  validateAgentRunInput,
+  validateProviderCredential,
+} from "./agents.js";
+import { listPublicSkills } from "./skills.js";
 
 const env = process.env;
 const port = Number(env.PORT ?? 3001);
@@ -53,6 +61,17 @@ const allowedMimeTypes = new Map([
 ]);
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const agentApiScopes = new Set([
+  "accounts:read",
+  "analytics:read",
+  "media:write",
+  "points:read",
+  "posts:read",
+  "posts:write",
+  "runs:read",
+  "runs:write",
+  "skills:read",
+]);
 
 const app = Fastify({
   logger: {
@@ -676,6 +695,13 @@ app.get("/v1/openapi.json", async () => ({
   },
   security: [{ bearerAuth: [] }],
   paths: {
+    "/v1/skills": { get: { summary: "List safe metadata for private Posterract skills" } },
+    "/v1/agent-runs": { post: { summary: "Run private skills with a workspace agent credential" } },
+    "/v1/agent-runs/{id}": { get: { summary: "Read an agent run and its output" } },
+    "/v1/schedule": { get: { summary: "List scheduled publications in a time range" } },
+    "/v1/analytics": { get: { summary: "Read approved Instagram, Facebook, and Threads analytics" } },
+    "/v1/points": { get: { summary: "Read the workspace Resonance Points balance" } },
+    "/v1/points/ledger": { get: { summary: "Read the immutable points ledger" } },
     "/v1/accounts": { get: { summary: "List connected social accounts" } },
     "/v1/uploads/multipart": { post: { summary: "Start a direct R2 multipart upload" } },
     "/v1/posts": { post: { summary: "Publish now or schedule a post" } },
@@ -685,6 +711,298 @@ app.get("/v1/openapi.json", async () => ({
     "/v1/projections/{id}/retry": { post: { summary: "Retry one failed platform" } },
   },
 }));
+
+app.get(
+  "/v1/skills",
+  { preHandler: requireScope("skills:read") },
+  async () => ({ skills: listPublicSkills() }),
+);
+
+app.get(
+  "/v1/agent-credentials",
+  { preHandler: requireSession },
+  async (request) => {
+    const result = await postgres.query(
+      `select id, provider, label, model, secret_hint, status, last_validated_at, created_at
+       from agent_credentials
+       where workspace_id = $1 and status <> 'revoked'
+       order by created_at desc`,
+      [requiredWorkspace(request)],
+    );
+    return {
+      credentials: result.rows.map((row) => ({
+        id: row.id,
+        provider: row.provider,
+        label: row.label,
+        model: row.model,
+        lastFour: row.secret_hint,
+        status: row.status,
+        connectedAt: new Date(row.created_at).getTime(),
+        lastValidatedAt: row.last_validated_at ? new Date(row.last_validated_at).getTime() : undefined,
+      })),
+    };
+  },
+);
+
+app.post(
+  "/v1/agent-credentials",
+  { preHandler: requireSession },
+  async (request, reply) => {
+    let input;
+    try {
+      input = validateAgentCredentialInput(request.body);
+      await validateProviderCredential({
+        provider: input.provider,
+        secret: input.secret,
+        signal: request.raw.signal,
+      });
+    } catch (error) {
+      return reply.code(400).send({ error: "agent_credential_invalid", detail: error.message });
+    }
+    const inserted = await postgres.query(
+      `insert into agent_credentials
+        (workspace_id, provider, label, model, secret_hint, secret_ciphertext, last_validated_at)
+       values ($1, $2, $3, $4, $5, $6, now())
+       returning id, provider, label, model, secret_hint, status, last_validated_at, created_at`,
+      [
+        requiredWorkspace(request),
+        input.provider,
+        input.label,
+        input.model,
+        input.secret.slice(-4).padStart(4, "•"),
+        encryptSecret(input.secret),
+      ],
+    );
+    const row = inserted.rows[0];
+    return reply.code(201).send({
+      id: row.id,
+      provider: row.provider,
+      label: row.label,
+      model: row.model,
+      lastFour: row.secret_hint,
+      status: row.status,
+      connectedAt: new Date(row.created_at).getTime(),
+    });
+  },
+);
+
+app.delete(
+  "/v1/agent-credentials/:id",
+  { preHandler: requireSession },
+  async (request, reply) => {
+    const result = await postgres.query(
+      `update agent_credentials
+       set status = 'revoked', secret_ciphertext = $3, updated_at = now()
+       where id = $1 and workspace_id = $2 and status <> 'revoked'
+       returning id`,
+      [request.params.id, requiredWorkspace(request), encryptSecret(`revoked:${randomUUID()}`)],
+    );
+    if (!result.rows[0]) return reply.code(404).send({ error: "agent_credential_not_found" });
+    return reply.code(204).send();
+  },
+);
+
+app.post(
+  "/v1/agent-runs",
+  { preHandler: requireScope("runs:write") },
+  async (request, reply) => {
+    const key = idempotencyKey(request, reply);
+    if (!key) return;
+    const workspaceId = requiredWorkspace(request);
+    const credentialId = request.body?.credentialId;
+    if (credentialId !== undefined && (typeof credentialId !== "string" || !uuidPattern.test(credentialId))) {
+      return reply.code(400).send({ error: "invalid_agent_credential_id" });
+    }
+    let runInput;
+    try {
+      runInput = validateAgentRunInput(request.body);
+    } catch (error) {
+      return reply.code(400).send({ error: "invalid_agent_run", detail: error.message });
+    }
+    const credentialResult = await postgres.query(
+      `select id, provider, model, secret_ciphertext
+       from agent_credentials
+       where workspace_id = $1
+         and status = 'connected'
+         and ($2::uuid is null or id = $2)
+       order by created_at asc
+       limit 1`,
+      [workspaceId, credentialId ?? null],
+    );
+    const credential = credentialResult.rows[0];
+    if (!credential) return reply.code(409).send({ error: "agent_credential_required" });
+    const { skillIds, message } = runInput;
+    const source = request.authContext.kind === "api_key" ? "api" : "ui";
+    const idempotency = await claimIdempotency(postgres, request, key, {
+      operation: "agent.run",
+      credentialId: credential.id,
+      skillIds,
+      message,
+    });
+    if (idempotency.error) return reply.code(409).send({ error: idempotency.error });
+    if (idempotency.replay) {
+      return reply
+        .header("idempotent-replayed", "true")
+        .code(idempotency.replay.statusCode)
+        .send(idempotency.replay.body);
+    }
+    const created = await postgres.query(
+      `insert into agent_runs
+        (workspace_id, credential_id, api_key_id, user_id, provider, model, skill_ids, input, status, source)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, 'running', $9)
+       returning id, created_at`,
+      [
+        workspaceId,
+        credential.id,
+        request.authContext.apiKeyId ?? null,
+        request.authContext.userId ?? null,
+        credential.provider,
+        credential.model,
+        Array.isArray(skillIds) ? skillIds : [],
+        { message },
+        source,
+      ],
+    );
+    const run = created.rows[0];
+    try {
+      const result = await executeAgentRun({
+        credential,
+        skillIds,
+        message,
+        signal: request.raw.signal,
+      });
+      await postgres.query(
+        `update agent_runs
+         set status = 'completed', output = $2, skill_versions = $3, completed_at = now()
+         where id = $1`,
+        [run.id, { text: result.output }, result.versions],
+      );
+      const response = {
+        id: run.id,
+        status: "completed",
+        source,
+        provider: credential.provider,
+        model: credential.model,
+        skillIds,
+        skillVersions: result.versions,
+        output: { text: result.output },
+        createdAt: new Date(run.created_at).getTime(),
+      };
+      await completeIdempotency(postgres, idempotency.actorKey, key, 201, response, "agent_run", run.id);
+      await auditApiAction(request, "agent.run", "agent_run", run.id, { skillIds }).catch((error) =>
+        app.log.warn({ err: error }, "agent run audit write failed"),
+      );
+      return reply.code(201).send(response);
+    } catch (error) {
+      const summary = error instanceof Error ? error.message.slice(0, 300) : "Agent run failed";
+      await postgres.query(
+        `update agent_runs set status = 'failed', error_summary = $2, completed_at = now() where id = $1`,
+        [run.id, summary],
+      );
+      const response = { error: "agent_run_failed", detail: summary, runId: run.id };
+      await completeIdempotency(postgres, idempotency.actorKey, key, 502, response, "agent_run", run.id);
+      return reply.code(502).send(response);
+    }
+  },
+);
+
+app.get(
+  "/v1/agent-runs/:id",
+  { preHandler: requireScope("runs:read") },
+  async (request, reply) => {
+    const result = await postgres.query(
+      `select id, provider, model, skill_ids, skill_versions, input, output, status, source,
+              error_summary, created_at, completed_at
+       from agent_runs
+       where id = $1 and workspace_id = $2`,
+      [request.params.id, requiredWorkspace(request)],
+    );
+    const row = result.rows[0];
+    if (!row) return reply.code(404).send({ error: "agent_run_not_found" });
+    return {
+      id: row.id,
+      provider: row.provider,
+      model: row.model,
+      skillIds: row.skill_ids,
+      skillVersions: row.skill_versions,
+      input: row.input,
+      output: row.output,
+      status: row.status,
+      source: row.source,
+      error: row.error_summary,
+      createdAt: new Date(row.created_at).getTime(),
+      completedAt: row.completed_at ? new Date(row.completed_at).getTime() : undefined,
+    };
+  },
+);
+
+app.get(
+  "/v1/api-keys",
+  { preHandler: requireSession },
+  async (request) => {
+    const result = await postgres.query(
+      `select id, name, key_prefix, scopes, last_used_at, expires_at, created_at
+       from api_keys
+       where workspace_id = $1 and revoked_at is null
+       order by created_at desc`,
+      [requiredWorkspace(request)],
+    );
+    return { keys: result.rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      prefix: row.key_prefix,
+      scopes: row.scopes,
+      lastUsedAt: row.last_used_at ? new Date(row.last_used_at).getTime() : undefined,
+      expiresAt: row.expires_at ? new Date(row.expires_at).getTime() : undefined,
+      createdAt: new Date(row.created_at).getTime(),
+    })) };
+  },
+);
+
+app.post(
+  "/v1/api-keys",
+  { preHandler: requireSession },
+  async (request, reply) => {
+    const name = typeof request.body?.name === "string" ? request.body.name.trim() : "";
+    const scopes = Array.isArray(request.body?.scopes) ? [...new Set(request.body.scopes)] : [];
+    if (!name || name.length > 80) return reply.code(400).send({ error: "invalid_api_key_name" });
+    if (scopes.length === 0 || scopes.some((scope) => !agentApiScopes.has(scope))) {
+      return reply.code(400).send({ error: "invalid_api_key_scopes" });
+    }
+    const tokenPrefix = randomBytes(4).toString("hex");
+    const secret = `pr_live_${tokenPrefix}_${randomBytes(32).toString("base64url")}`;
+    const result = await postgres.query(
+      `insert into api_keys (workspace_id, name, key_prefix, secret_hash, scopes)
+       values ($1, $2, $3, $4, $5)
+       returning id, name, key_prefix, scopes, created_at`,
+      [requiredWorkspace(request), name, `pr_live_${tokenPrefix}`, hashApiKey(secret), scopes],
+    );
+    const row = result.rows[0];
+    return reply.code(201).send({
+      id: row.id,
+      name: row.name,
+      prefix: row.key_prefix,
+      scopes: row.scopes,
+      secret,
+      createdAt: new Date(row.created_at).getTime(),
+    });
+  },
+);
+
+app.delete(
+  "/v1/api-keys/:id",
+  { preHandler: requireSession },
+  async (request, reply) => {
+    const result = await postgres.query(
+      `update api_keys set revoked_at = now()
+       where id = $1 and workspace_id = $2 and revoked_at is null
+       returning id`,
+      [request.params.id, requiredWorkspace(request)],
+    );
+    if (!result.rows[0]) return reply.code(404).send({ error: "api_key_not_found" });
+    return reply.code(204).send();
+  },
+);
 
 app.get(
   "/v1/accounts",
@@ -734,6 +1052,113 @@ app.get(
       requiredWorkspace(request),
       rangeDays,
     );
+  },
+);
+
+app.get(
+  "/v1/schedule",
+  { preHandler: requireScope("posts:read") },
+  async (request, reply) => {
+    const from = new Date(request.query?.from ?? Date.now() - 86_400_000);
+    const to = new Date(request.query?.to ?? Date.now() + 30 * 86_400_000);
+    if (
+      !Number.isFinite(from.getTime()) ||
+      !Number.isFinite(to.getTime()) ||
+      from >= to ||
+      to.getTime() - from.getTime() > 180 * 86_400_000
+    ) {
+      return reply.code(400).send({ error: "invalid_schedule_range" });
+    }
+    const transmissions = await postgres.query(
+      `select * from transmissions
+       where workspace_id = $1
+         and scheduled_for >= $2
+         and scheduled_for < $3
+         and status in ('scheduled', 'transmitting', 'live', 'partial', 'failed')
+       order by scheduled_for asc, id asc`,
+      [requiredWorkspace(request), from, to],
+    );
+    if (transmissions.rows.length === 0) return { transmissions: [] };
+    const projections = await postgres.query(
+      `select * from projections
+       where transmission_id = any($1::uuid[])
+       order by created_at asc`,
+      [transmissions.rows.map((row) => row.id)],
+    );
+    const byTransmission = new Map();
+    for (const projection of projections.rows) {
+      const rows = byTransmission.get(projection.transmission_id) ?? [];
+      rows.push(projection);
+      byTransmission.set(projection.transmission_id, rows);
+    }
+    return {
+      transmissions: transmissions.rows.map((row) =>
+        publicPost(row, byTransmission.get(row.id) ?? []),
+      ),
+    };
+  },
+);
+
+app.get(
+  "/v1/points",
+  { preHandler: requireScope("points:read") },
+  async (request) => {
+    const workspaceId = requiredWorkspace(request);
+    const result = await postgres.query(
+      `select coalesce(s.lifetime_rp, sum(l.amount), 0) as lifetime_rp,
+              coalesce(s.week_rp, sum(l.amount) filter (where l.awarded_at >= date_trunc('week', now())), 0) as week_rp,
+              coalesce(s.streak_days, 0) as streak_days,
+              coalesce(s.badges, '{}') as badges
+       from points_ledger l
+       full join user_stats s on s.workspace_id = l.workspace_id
+       where coalesce(l.workspace_id, s.workspace_id) = $1
+       group by s.lifetime_rp, s.week_rp, s.streak_days, s.badges`,
+      [workspaceId],
+    );
+    const row = result.rows[0] ?? {};
+    return {
+      lifetimeRP: Number(row.lifetime_rp ?? 0),
+      weekRP: Number(row.week_rp ?? 0),
+      streakDays: Number(row.streak_days ?? 0),
+      badges: row.badges ?? [],
+    };
+  },
+);
+
+app.get(
+  "/v1/points/ledger",
+  { preHandler: requireScope("points:read") },
+  async (request, reply) => {
+    const limit = Math.min(100, Math.max(1, Number(request.query?.limit ?? 30)));
+    if (!Number.isInteger(limit)) return reply.code(400).send({ error: "invalid_limit" });
+    const beforeValue = request.query?.before;
+    const before = beforeValue ? new Date(beforeValue) : undefined;
+    if (before && !Number.isFinite(before.getTime())) {
+      return reply.code(400).send({ error: "invalid_cursor" });
+    }
+    const result = await postgres.query(
+      `select id, source, amount, reference_id, note, awarded_at
+       from points_ledger
+       where workspace_id = $1
+         and ($2::timestamptz is null or awarded_at < $2)
+       order by awarded_at desc, id desc
+       limit $3`,
+      [requiredWorkspace(request), before ?? null, limit],
+    );
+    return {
+      entries: result.rows.map((row) => ({
+        id: String(row.id),
+        source: row.source,
+        amount: Number(row.amount),
+        referenceId: row.reference_id ?? undefined,
+        note: row.note ?? undefined,
+        awardedAt: new Date(row.awarded_at).getTime(),
+      })),
+      nextCursor:
+        result.rows.length === limit
+          ? new Date(result.rows.at(-1).awarded_at).toISOString()
+          : undefined,
+    };
   },
 );
 

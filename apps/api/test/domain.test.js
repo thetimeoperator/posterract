@@ -19,11 +19,10 @@ test("post input is normalized without accepting duplicate platforms", () => {
       artifactId,
       caption: "hello",
       hashtags: ["one", "one", "two"],
-      platforms: ["instagram", "youtube"],
+      platforms: ["instagram", "threads"],
       perPlatform: {
-        youtube: {
-          caption: "YouTube description",
-          options: { title: "Video title", privacyStatus: "private" },
+        threads: {
+          caption: "Threads caption",
         },
       },
       scheduledFor: "now",
@@ -31,7 +30,7 @@ test("post input is normalized without accepting duplicate platforms", () => {
     new Date("2026-08-13T12:00:00.000Z"),
   );
   assert.deepEqual(parsed.hashtags, ["one", "two"]);
-  assert.equal(parsed.projections[1].caption, "YouTube description");
+  assert.equal(parsed.projections[1].caption, "Threads caption");
   assert.equal(parsed.scheduleMode, "now");
 
   assert.throws(
@@ -42,6 +41,16 @@ test("post input is normalized without accepting duplicate platforms", () => {
         platforms: ["instagram", "instagram"],
       }),
     RequestValidationError,
+  );
+
+  assert.throws(
+    () =>
+      parseCreatePost({
+        artifactId,
+        caption: "hello",
+        platforms: ["youtube"],
+      }),
+    (error) => error instanceof RequestValidationError && error.code === "invalid_platforms",
   );
 });
 
