@@ -12,9 +12,11 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as GateRouteImport } from './routes/gate'
+import { Route as EnterRouteImport } from './routes/enter'
 import { Route as DataDeletionRouteImport } from './routes/data-deletion'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
+import { Route as DevPosterractV2RouteImport } from './routes/dev/posterract-v2'
 import { Route as DevHyperkitRouteImport } from './routes/dev/hyperkit'
 import { Route as DevCoreRouteImport } from './routes/dev/core'
 import { Route as AppVaultRouteImport } from './routes/_app/vault'
@@ -43,6 +45,11 @@ const GateRoute = GateRouteImport.update({
   path: '/gate',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EnterRoute = EnterRouteImport.update({
+  id: '/enter',
+  path: '/enter',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DataDeletionRoute = DataDeletionRouteImport.update({
   id: '/data-deletion',
   path: '/data-deletion',
@@ -56,6 +63,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AppRoute,
+} as any)
+const DevPosterractV2Route = DevPosterractV2RouteImport.update({
+  id: '/dev/posterract-v2',
+  path: '/dev/posterract-v2',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const DevHyperkitRoute = DevHyperkitRouteImport.update({
   id: '/dev/hyperkit',
@@ -121,6 +133,7 @@ const OauthCallbackProviderRoute = OauthCallbackProviderRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/data-deletion': typeof DataDeletionRoute
+  '/enter': typeof EnterRoute
   '/gate': typeof GateRoute
   '/privacy': typeof PrivacyRoute
   '/terms': typeof TermsRoute
@@ -135,10 +148,12 @@ export interface FileRoutesByFullPath {
   '/vault': typeof AppVaultRoute
   '/dev/core': typeof DevCoreRoute
   '/dev/hyperkit': typeof DevHyperkitRoute
+  '/dev/posterract-v2': typeof DevPosterractV2Route
   '/oauth/callback/$provider': typeof OauthCallbackProviderRoute
 }
 export interface FileRoutesByTo {
   '/data-deletion': typeof DataDeletionRoute
+  '/enter': typeof EnterRoute
   '/gate': typeof GateRoute
   '/privacy': typeof PrivacyRoute
   '/terms': typeof TermsRoute
@@ -153,6 +168,7 @@ export interface FileRoutesByTo {
   '/vault': typeof AppVaultRoute
   '/dev/core': typeof DevCoreRoute
   '/dev/hyperkit': typeof DevHyperkitRoute
+  '/dev/posterract-v2': typeof DevPosterractV2Route
   '/': typeof AppIndexRoute
   '/oauth/callback/$provider': typeof OauthCallbackProviderRoute
 }
@@ -160,6 +176,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
   '/data-deletion': typeof DataDeletionRoute
+  '/enter': typeof EnterRoute
   '/gate': typeof GateRoute
   '/privacy': typeof PrivacyRoute
   '/terms': typeof TermsRoute
@@ -174,6 +191,7 @@ export interface FileRoutesById {
   '/_app/vault': typeof AppVaultRoute
   '/dev/core': typeof DevCoreRoute
   '/dev/hyperkit': typeof DevHyperkitRoute
+  '/dev/posterract-v2': typeof DevPosterractV2Route
   '/_app/': typeof AppIndexRoute
   '/oauth/callback/$provider': typeof OauthCallbackProviderRoute
 }
@@ -182,6 +200,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/data-deletion'
+    | '/enter'
     | '/gate'
     | '/privacy'
     | '/terms'
@@ -196,10 +215,12 @@ export interface FileRouteTypes {
     | '/vault'
     | '/dev/core'
     | '/dev/hyperkit'
+    | '/dev/posterract-v2'
     | '/oauth/callback/$provider'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/data-deletion'
+    | '/enter'
     | '/gate'
     | '/privacy'
     | '/terms'
@@ -214,12 +235,14 @@ export interface FileRouteTypes {
     | '/vault'
     | '/dev/core'
     | '/dev/hyperkit'
+    | '/dev/posterract-v2'
     | '/'
     | '/oauth/callback/$provider'
   id:
     | '__root__'
     | '/_app'
     | '/data-deletion'
+    | '/enter'
     | '/gate'
     | '/privacy'
     | '/terms'
@@ -234,6 +257,7 @@ export interface FileRouteTypes {
     | '/_app/vault'
     | '/dev/core'
     | '/dev/hyperkit'
+    | '/dev/posterract-v2'
     | '/_app/'
     | '/oauth/callback/$provider'
   fileRoutesById: FileRoutesById
@@ -241,11 +265,13 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   DataDeletionRoute: typeof DataDeletionRoute
+  EnterRoute: typeof EnterRoute
   GateRoute: typeof GateRoute
   PrivacyRoute: typeof PrivacyRoute
   TermsRoute: typeof TermsRoute
   DevCoreRoute: typeof DevCoreRoute
   DevHyperkitRoute: typeof DevHyperkitRoute
+  DevPosterractV2Route: typeof DevPosterractV2Route
   OauthCallbackProviderRoute: typeof OauthCallbackProviderRoute
 }
 
@@ -272,6 +298,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof GateRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/enter': {
+      id: '/enter'
+      path: '/enter'
+      fullPath: '/enter'
+      preLoaderRoute: typeof EnterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/data-deletion': {
       id: '/data-deletion'
       path: '/data-deletion'
@@ -292,6 +325,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/dev/posterract-v2': {
+      id: '/dev/posterract-v2'
+      path: '/dev/posterract-v2'
+      fullPath: '/dev/posterract-v2'
+      preLoaderRoute: typeof DevPosterractV2RouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/dev/hyperkit': {
       id: '/dev/hyperkit'
@@ -411,11 +451,13 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   DataDeletionRoute: DataDeletionRoute,
+  EnterRoute: EnterRoute,
   GateRoute: GateRoute,
   PrivacyRoute: PrivacyRoute,
   TermsRoute: TermsRoute,
   DevCoreRoute: DevCoreRoute,
   DevHyperkitRoute: DevHyperkitRoute,
+  DevPosterractV2Route: DevPosterractV2Route,
   OauthCallbackProviderRoute: OauthCallbackProviderRoute,
 }
 export const routeTree = rootRouteImport
