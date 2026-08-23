@@ -5,8 +5,7 @@ import { ConvexReactClient } from "convex/react";
 import { ConvexBetterAuthProvider } from "@convex-dev/better-auth/react";
 import { authClient } from "./lib/authClient";
 
-import "@fontsource-variable/space-grotesk/index.css";
-import "@fontsource-variable/inter/index.css";
+import "@fontsource-variable/geist/index.css";
 import "@fontsource-variable/jetbrains-mono/index.css";
 import "./styles/app.css";
 

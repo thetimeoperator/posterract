@@ -164,6 +164,7 @@ export function useEngineActions() {
   const renameArtifactMut = useMutation(api.artifacts.rename);
   const removeArtifact = useMutation(api.artifacts.remove);
   const createTx = useMutation(api.transmissions.create);
+  const rescheduleTx = useMutation(api.transmissions.reschedule);
   const cancelTx = useMutation(api.transmissions.cancel);
   const duplicateTx = useMutation(api.transmissions.duplicate);
   const retryProj = useMutation(api.transmissions.retryProjection);
@@ -227,6 +228,8 @@ export function useEngineActions() {
     },
 
     cancelTransmission: (id: string) => void cancelTx({ transmissionId: id as Id<"transmissions"> }),
+    rescheduleTransmission: (id: string, scheduledFor: number) =>
+      rescheduleTx({ transmissionId: id as Id<"transmissions">, scheduledFor }),
     duplicateTransmission: (id: string) =>
       void duplicateTx({ transmissionId: id as Id<"transmissions"> }),
     retryProjection: (id: string) => void retryProj({ projectionId: id as Id<"projections"> }),

@@ -209,9 +209,17 @@ export async function threadsPublishVideo(args: {
 
 export async function threadsAccountInsights(args: {
   accessToken: string;
-}): Promise<{ audience?: number; totalViews?: number; totalLikes?: number }> {
+}): Promise<{
+  audience?: number;
+  totalViews?: number;
+  totalLikes?: number;
+  replies?: number;
+  reposts?: number;
+  quotes?: number;
+  clicks?: number;
+}> {
   const url = new URL(`${GRAPH}/${API_VERSION}/me/threads_insights`);
-  url.searchParams.set("metric", "views,likes,replies,reposts,quotes,followers_count");
+  url.searchParams.set("metric", "views,likes,replies,reposts,quotes,clicks,followers_count");
   url.searchParams.set("access_token", args.accessToken);
   const response = await fetch(url);
   const body = (await response.json()) as {
@@ -223,13 +231,29 @@ export async function threadsAccountInsights(args: {
     const metric = body.data?.find((row) => row.name === name);
     return metric?.total_value?.value ?? metric?.values?.at(-1)?.value;
   };
-  return { audience: value("followers_count"), totalViews: value("views"), totalLikes: value("likes") };
+  return {
+    audience: value("followers_count"),
+    totalViews: value("views"),
+    totalLikes: value("likes"),
+    replies: value("replies"),
+    reposts: value("reposts"),
+    quotes: value("quotes"),
+    clicks: value("clicks"),
+  };
 }
 
 export async function threadsPostInsights(args: {
   mediaId: string;
   accessToken: string;
-}): Promise<{ views: number; likes: number; comments: number; shares: number }> {
+}): Promise<{
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  replies: number;
+  reposts: number;
+  quotes: number;
+}> {
   const url = new URL(`${GRAPH}/${API_VERSION}/${args.mediaId}/insights`);
   url.searchParams.set("metric", "views,likes,replies,reposts,quotes");
   url.searchParams.set("access_token", args.accessToken);
@@ -248,5 +272,8 @@ export async function threadsPostInsights(args: {
     likes: value("likes"),
     comments: value("replies"),
     shares: value("reposts") + value("quotes"),
+    replies: value("replies"),
+    reposts: value("reposts"),
+    quotes: value("quotes"),
   };
 }

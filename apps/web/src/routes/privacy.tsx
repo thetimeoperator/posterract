@@ -7,14 +7,14 @@ export const Route = createFileRoute("/privacy")({
 
 function Privacy() {
   return (
-    <LegalPage title="Privacy Policy" updated="July 21, 2026" wide>
+    <LegalPage title="Privacy Policy" updated="August 20, 2026" wide>
       <section className="legal-verification" aria-labelledby="youtube-verification-title">
         <div className="legal-verification-heading">
           <div>
             <p>VERIFICATION SUMMARY // YOUTUBE + GOOGLE</p>
             <h2 id="youtube-verification-title">YouTube API Services privacy disclosure</h2>
           </div>
-          <span>ACTIVE INTEGRATION</span>
+          <span>PLANNED INTEGRATION</span>
         </div>
 
         <div className="legal-verification-links" aria-label="Google and YouTube policies">
@@ -27,7 +27,7 @@ function Privacy() {
         <div className="legal-verification-grid">
           <article>
             <span>01 // DATA ACCESSED</span>
-            <p>With consent, Posterract uses YouTube API Services and requests <code>youtube.upload</code>, <code>youtube.readonly</code>, and <code>yt-analytics.readonly</code>.</p>
+            <p>If the integration is activated, Posterract will use YouTube API Services only with consent and will request <code>youtube.upload</code>, <code>youtube.readonly</code>, and <code>yt-analytics.readonly</code>.</p>
             <p>We may store OAuth tokens, channel identity, subscriber totals, uploaded-video IDs and URLs, publishing status, and authorized views, likes, comments, shares, watch time, and subscriber changes.</p>
           </article>
           <article>
@@ -56,22 +56,30 @@ function Privacy() {
       <p className="legal-policy-continues">Complete Posterract Privacy Policy</p>
       <p className="legal-lede">
         This Privacy Policy explains how Posterract collects, uses, stores, shares, and deletes
-        information when you use posterract.app, connect a social-media account, publish content,
-        or view analytics. It also explains the additional rules that apply to data received from
-        each connected social platform.
+        information when you use posterract.app, use the agent harness, connect a social-media
+        account, publish content, or view analytics. It also explains where Posterract runs, where
+        each major category of data is stored, and the additional rules that apply to data received
+        from each connected social platform.
       </p>
 
       <div className="legal-summary">
-        <strong>Plain-language summary.</strong> You control what Posterract publishes. We use
-        connected-platform data only to provide the publishing, scheduling, account connection,
-        and analytics features you request. We do not sell personal information, store your social
-        media passwords, or use your content or platform data to train AI models.
+        <strong>Plain-language summary.</strong> Posterract&apos;s core web application, API,
+        databases, and publishing workers run as Docker services on a privately managed virtual
+        private server (&quot;VPS&quot;). Account, workspace, chat, schedule, publishing-history, and
+        analytics records are stored in PostgreSQL on that VPS. Video files are stored separately
+        in a private Cloudflare R2 bucket and are uploaded directly there using short-lived signed
+        URLs. Social OAuth tokens and user-supplied model-provider keys are encrypted before they
+        are stored; Posterract API keys are stored only as hashes. We do not sell personal
+        information or use your content to train a Posterract model. When you run an agent,
+        however, the prompt and limited recent chat context are sent to the model provider you
+        selected under that provider&apos;s terms.
       </div>
 
       <nav className="legal-toc" aria-label="Privacy policy contents">
         <a href="#information">Information collected</a>
         <a href="#uses">How information is used</a>
         <a href="#sharing">Sharing and processors</a>
+        <a href="#storage">Storage and security</a>
         <a href="#platforms">Platform-specific disclosures</a>
         <a href="#youtube-google">YouTube and Google</a>
         <a href="#deletion">Retention and deletion</a>
@@ -80,10 +88,11 @@ function Privacy() {
 
       <h2>1. What Posterract does</h2>
       <p>
-        Posterract (accessible at posterract.app) is a social media scheduling service. You upload
-        short-form videos, write captions, connect your social media accounts, and Posterract
-        publishes your content to those platforms at the times you choose — either through the web
-        app or through our API.
+        Posterract (accessible at posterract.app) is a content-agent harness and social media
+        scheduling service. You can use any AI model accessible through an API key you supply,
+        Posterract&apos;s private skills, and stored chats to develop content; upload short-form videos; write
+        captions; connect social media accounts; and publish at the times you choose through the
+        web app or API.
       </p>
 
       <h2 id="information">2. Information we collect</h2>
@@ -97,6 +106,20 @@ function Privacy() {
           <strong>Content you upload.</strong> Video files, captions, hashtags, and scheduling
           preferences you create in the product, as well as platform-specific publishing choices
           such as visibility, audience, and disclosure settings.
+        </li>
+        <li>
+          <strong>Agent credentials and configuration.</strong> Posterract supports AI models that
+          can be accessed through an API key. When you connect one, we collect the provider,
+          connection label, model selection, the last four
+          characters of the credential for display, its status, and the credential itself. The
+          complete credential is encrypted server-side before storage and is never returned to the
+          browser after submission.
+        </li>
+        <li>
+          <strong>Agent chats and runs.</strong> We store chat titles, your prompts, agent responses,
+          selected skills, provider and model, run status, generated output, errors, and timestamps.
+          When continuing a chat, Posterract currently sends the new prompt and a size-limited copy
+          of up to eight recent messages to the selected provider so that it can answer in context.
         </li>
         <li>
           <strong>Connected platform credentials.</strong> When you connect a social media account
@@ -118,17 +141,20 @@ function Privacy() {
         <li>
           <strong>Service and security information.</strong> We and our infrastructure providers may
           process ordinary technical records needed to deliver and secure the service, such as
-          request timing, error details, browser or device information, and IP address.
+          request timing, error details, request identifiers, actions taken through an API key,
+          browser or device information, user agent, and IP address. Workspace API credentials are
+          shown once and stored as one-way hashes; their name, prefix, scopes, status, and use times
+          remain in workspace records.
         </li>
       </ul>
 
       <h2 id="uses">3. How we use information</h2>
       <ul>
         <li>Authenticate you and maintain your Posterract workspace.</li>
+        <li>Store chats and run the private skills you select with your chosen model provider.</li>
         <li>Store, schedule, and publish the content you explicitly select.</li>
         <li>Connect and maintain authorized social-platform integrations.</li>
         <li>Show publishing status, account totals, and post-performance analytics.</li>
-        <li>Calculate Posterract features such as performance points from displayed metrics.</li>
         <li>Operate, troubleshoot, secure, and improve Posterract.</li>
         <li>Comply with law and enforce our Terms of Service.</li>
       </ul>
@@ -138,7 +164,7 @@ function Privacy() {
         <li>We do not sell your personal information.</li>
         <li>We do not post to your accounts except as you schedule or instruct.</li>
         <li>We do not request access to or read your private messages.</li>
-        <li>We do not use your content or connected-platform data to train AI models.</li>
+        <li>We do not use your content, chats, or connected-platform data to train a Posterract AI model.</li>
         <li>We do not use connected-platform data for targeted advertising.</li>
       </ul>
 
@@ -151,9 +177,19 @@ function Privacy() {
           publish or retrieve analytics.
         </li>
         <li>
-          <strong>Infrastructure providers.</strong> Convex provides database, file-storage, backend,
-          and scheduling infrastructure. Vercel provides web hosting and delivery. These providers
-          process information to operate Posterract on our behalf.
+          <strong>Model providers you select.</strong> When you validate a provider credential or
+          run an agent, Posterract connects to that provider on your behalf. You may use any AI
+          model that is accessible through an API key and a compatible Posterract connection. The provider receives the
+          credential needed to authenticate the request and, for a run, the prompt, limited recent
+          conversation context, selected private-skill instructions, and any other content you
+          deliberately include. The provider&apos;s own terms, privacy policy, account settings, and
+          data-retention practices govern its processing. Posterract does not control those practices.
+        </li>
+        <li>
+          <strong>Infrastructure providers.</strong> Our privately managed VPS and its hosting
+          provider process the application and database records described below. Cloudflare
+          provides private R2 object storage for uploaded media and network delivery services.
+          We use these providers as service providers needed to operate Posterract.
         </li>
         <li>
           <strong>Legal and safety requirements.</strong> We may disclose information when reasonably
@@ -162,13 +198,55 @@ function Privacy() {
       </ul>
       <p>We do not permit third parties to use connected-platform data for their own advertising.</p>
 
-      <h2>6. Storage and security</h2>
+      <h2 id="storage">6. Where data is stored and how it is protected</h2>
+      <ul>
+        <li>
+          <strong>VPS application and durable records.</strong> Posterract&apos;s core application is
+          operated as a Docker Compose stack on a privately managed VPS. PostgreSQL in that stack
+          is the source of truth for account and workspace records, authentication and session
+          records, chats and agent runs, provider/model connection metadata, encrypted credentials,
+          social connections, media metadata, drafts, schedules, delivery history, authorized
+          analytics snapshots, API-key metadata, idempotency records, audit records, and deletion
+          receipts. PostgreSQL and workflow data are held on persistent server-attached Docker
+          volumes.
+        </li>
+        <li>
+          <strong>Video files.</strong> The video bytes themselves are stored as private objects in
+          Cloudflare R2, not in PostgreSQL. In the normal upload path, the browser sends video parts
+          directly to R2 using time-limited signed URLs issued through Posterract&apos;s API; the VPS
+          stores the object key and related metadata. Cloudflare states in its{" "}
+          <a href="https://developers.cloudflare.com/r2/reference/data-security/" target="_blank" rel="noreferrer">
+            R2 data-security documentation
+          </a>{" "}
+          that R2 objects are encrypted at rest. Access to private objects is granted only as
+          needed for an authorized upload, preview, publishing job, or deletion.
+        </li>
+        <li>
+          <strong>Supporting VPS services.</strong> Redis holds temporary upload-session data,
+          rate-limit counters, and coordination state. Temporal and Elasticsearch hold publishing
+          and analytics workflow execution state and workflow-search indexes. These services run
+          inside the VPS stack and are not separate user-facing content stores.
+        </li>
+        <li>
+          <strong>Secrets and network security.</strong> Social OAuth tokens and model-provider
+          credentials are encrypted at the application layer using authenticated AES-256-GCM before
+          PostgreSQL storage. Posterract API keys are stored as SHA-256 hashes, and account
+          passwords are stored only in hashed form by our authentication system. Credential and
+          session headers are redacted from normal application logs. Data is encrypted in transit
+          using HTTPS/TLS. Other workspace records are ordinary database records protected by
+          network isolation, authentication, authorization, and workspace-level access checks.
+        </li>
+        <li>
+          <strong>Processing locations.</strong> The VPS, Cloudflare, connected social platforms,
+          and model provider you choose may process information in the countries where their
+          systems and personnel operate. Posterract does not promise a particular data-residency
+          region unless we expressly agree to one in writing.
+        </li>
+      </ul>
       <p>
-        Data is stored with our infrastructure providers: Convex (database, file storage, and
-        scheduling) and Vercel (web hosting). Data is encrypted in transit. Platform access tokens
-        are restricted to server-side functions and are not returned to other users. We use
-        reasonable technical and organizational safeguards, but no online service can guarantee
-        absolute security.
+        We use reasonable technical and organizational safeguards, but no online service can
+        guarantee absolute security. Posterract is a publishing service, not permanent archival
+        storage; keep your own original copies of content you cannot replace.
       </p>
 
       <h2>7. Essential cookies</h2>
@@ -190,10 +268,11 @@ function Privacy() {
       <section className="platform-policy platform-policy-featured" id="youtube-google">
         <div className="platform-policy-heading">
           <h3>YouTube</h3>
-          <span>Active integration</span>
+          <span>Planned integration</span>
         </div>
         <p>
-          Posterract uses YouTube API Services. With your consent, Posterract requests the
+          If and when this integration is activated, Posterract will use YouTube API Services. With
+          your consent, Posterract will request the
           <code>youtube.upload</code>, <code>youtube.readonly</code>, and
           <code>yt-analytics.readonly</code> scopes. Google provides OAuth authorization tokens and
           information associated with the YouTube channel you select.
@@ -208,7 +287,7 @@ function Privacy() {
           <strong>How it is used:</strong> to connect your channel; upload or schedule videos only
           when you instruct us; apply the title, description, privacy, audience, synthetic-media,
           and notification choices you select; show delivery status and analytics; and calculate
-          clearly labeled Posterract performance features. We do not access YouTube private
+          clearly labeled Posterract performance features. We will not access YouTube private
           messages, sell YouTube API Data, use it for advertising, or use it to train AI models.
         </p>
 
@@ -307,10 +386,11 @@ function Privacy() {
         </div>
         <p>
           With your consent, Posterract may receive TikTok OAuth tokens, Open ID, display name,
-          granted scopes, account totals (including followers, following, likes, and video count),
-          your Posterract-published TikTok video IDs and status, and video metrics such as views,
-          likes, comments, and shares. We use this information only to connect your account,
-          publish videos you direct us to publish, show delivery status, and display analytics.
+          granted scopes, account totals including followers, following, likes, and video count,
+          your Posterract-published TikTok video IDs and delivery status, and public per-video
+          views, likes, comments, shares, duration, and creation time. We use this information only
+          to connect your account, publish videos you direct us to publish, show delivery status,
+          and display the analytics you authorize.
         </p>
         <p>
           <strong>Retention and deletion:</strong> Disconnecting deletes stored TikTok tokens from
@@ -554,14 +634,30 @@ function Privacy() {
           platform-specific deletion deadline described above controls for that platform&apos;s data.
         </li>
         <li>
-          <strong>Uploaded media.</strong> Retained in your Library until you delete it, where the
-          file is not attached to an active scheduled transmission, or until your account is
-          deleted.
+          <strong>Chats and agent runs.</strong> Chat messages, agent responses, run metadata, and
+          generated outputs are retained with your workspace so you can reopen prior chats and
+          maintain a consistent app/API history. Archiving a chat removes it from the active list
+          but does not itself delete the stored messages. You may request deletion using the
+          contact address below; account-deletion timing follows the rule above.
         </li>
         <li>
-          <strong>OAuth credentials.</strong> Stored only while the platform connection is active
-          or needed to complete an authorized action. Disconnecting a platform deletes its stored
-          OAuth tokens from Posterract&apos;s active connection records.
+          <strong>Uploaded media.</strong> Posterract is not an unlimited media library. A completed
+          upload that is not attached to a post is normally deleted from R2 after about 24 hours.
+          After a publishing workflow reaches a terminal state, media is normally deleted after
+          about 48 hours for a successful post, 24 hours for a canceled post, or seven days for a
+          failed or partially successful post so that retries can finish. Deletion is postponed
+          while the same media is still needed by another scheduled or active transmission. A
+          manual media deletion removes the R2 object immediately when it is not in use. Captions,
+          post IDs, delivery events, analytics, and other history metadata may remain in PostgreSQL
+          after the original video object is removed.
+        </li>
+        <li>
+          <strong>OAuth and model-provider credentials.</strong> Social OAuth credentials are stored
+          only while the platform connection is active or needed to complete an authorized action;
+          disconnecting removes them from the active connection. Revoking a model-provider
+          connection replaces its stored secret so it cannot be used again. Historical run records
+          may continue to identify the provider and model used, but they do not contain the revoked
+          provider secret.
         </li>
         <li>
           <strong>Platform-derived data.</strong> Retained only as long as needed for the features
@@ -654,7 +750,7 @@ export function LegalPage({
         .legal-body ul { list-style: disc; padding-left: 22px; display: grid; gap: 8px; }
         .legal-body a { color: var(--neon); text-decoration: underline; text-underline-offset: 3px; }
         .legal-body strong { color: var(--starlight); }
-        .legal-body code { border: 1px solid var(--glass-border); border-radius: 5px; background: rgba(3, 11, 14, 0.52); padding: 1px 5px; color: var(--auroral); font-family: var(--font-mono); font-size: 11px; }
+        .legal-body code { border: 1px solid var(--glass-border); border-radius: 5px; background: rgba(3, 11, 14, 0.52); padding: 1px 5px; color: var(--auroral); font-family: var(--font-mono); font-size: 11px; overflow-wrap: anywhere; }
         .legal-lede { color: var(--starlight-dim); font-size: 15px; line-height: 1.75; }
         .legal-summary { border: 1px solid rgba(101, 255, 154, 0.3); border-radius: 12px; background: rgba(101, 255, 154, 0.055); padding: 16px 18px; }
         .legal-verification { overflow: hidden; border: 1px solid rgba(101, 255, 154, 0.42); border-radius: 14px; background: linear-gradient(145deg, rgba(101, 255, 154, 0.07), rgba(4, 13, 16, 0.76)); box-shadow: 0 26px 80px rgba(0, 0, 0, 0.24); }

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node --import tsx src/worker.js",
+    "test": "node --import tsx --test test/*.test.js",
     "typecheck": "node --check src/worker.js && node --check src/workflows.js"
   },
   "dependencies": {

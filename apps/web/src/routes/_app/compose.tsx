@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { CheckCircle2, CircleAlert, CircleX, Replace, Send, X as XIcon } from "lucide-react";
+import { ArrowLeft, CheckCircle2, CircleAlert, CircleX, Replace, Send, X as XIcon } from "lucide-react";
 import clsx from "clsx";
 import {
   Button,
@@ -143,6 +143,18 @@ function Composer() {
 
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.05fr_1.2fr_0.95fr]">
+      <div className="xl:col-span-3">
+        <button
+          type="button"
+          onClick={() => void navigate({ to: "/continuum" })}
+          className="compose-back-control"
+          aria-label="Back to calendar"
+        >
+          <span className="compose-back-control__icon" aria-hidden><ArrowLeft size={15} /></span>
+          <span>Back to calendar</span>
+        </button>
+      </div>
+
       {/* ── Left: the Containment Field ── */}
       <Panel kicker="Containment field" title="Artifact" brackets>
         {!artifact ? (
@@ -315,7 +327,7 @@ function Composer() {
                     step={300}
                     min={toDatetimeLocal(Date.now())}
                     onChange={(e) => setWhenLocal(e.target.value)}
-                    className="h-10 w-full rounded-[10px] border border-[rgba(155,255,197,0.25)] bg-void-2 px-3.5 text-[13px] text-starlight [color-scheme:dark] focus:border-[rgba(101,255,154,0.6)] focus:shadow-glow-neon-sm focus:outline-none"
+                    className="h-10 w-full rounded-[10px] border border-white/[0.09] bg-void-2 px-3.5 text-[13px] text-starlight [color-scheme:dark] focus:border-white/[0.2] focus:outline-none"
                   />
                 )}
               </FieldShell>

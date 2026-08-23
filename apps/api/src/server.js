@@ -23,6 +23,7 @@ import {
   PLATFORM_IDS,
   RequestValidationError,
   parseCreatePost,
+  parseReschedulePost,
   publicPost,
 } from "./domain.js";
 import {
@@ -42,6 +43,12 @@ import {
   validateProviderCredential,
 } from "./agents.js";
 import { listPublicSkills } from "./skills.js";
+import { loadWorkspaceApiKeys } from "./apiKeys.js";
+import {
+  createStripeBillingService,
+  registerBillingRoutes,
+  registerStripeWebhookRoutes,
+} from "./billing.js";
 
 const env = process.env;
 const port = Number(env.PORT ?? 3001);
@@ -107,6 +114,11 @@ const postgres = new Pool({
   idleTimeoutMillis: 30_000,
 });
 const auth = createPosterractAuth(postgres);
+const billing = createStripeBillingService({
+  postgres,
+  environment: env,
+  logger: app.log,
+});
 
 const redis = new Redis(env.REDIS_URL, {
   lazyConnect: true,
@@ -414,6 +426,24 @@ async function loadPost(workspaceId, transmissionId) {
   return publicPost(transmission.rows[0], projections.rows);
 }
 
+function publicAgentChat(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    messageCount: Number(row.message_count ?? 0),
+    createdAt: new Date(row.created_at).getTime(),
+    updatedAt: new Date(row.updated_at).getTime(),
+  };
+}
+
+function chatTitle(value) {
+  if (value === undefined) return "New chat";
+  if (typeof value !== "string") throw new Error("Chat title must be text");
+  const title = value.trim();
+  if (!title || title.length > 120) throw new Error("Chat title must be between 1 and 120 characters");
+  return title;
+}
+
 async function dispatchOutbox() {
   await ensureTemporal();
   const client = await postgres.connect();
@@ -426,6 +456,7 @@ async function dispatchOutbox() {
          and event_type in (
            'publication.requested',
            'publication.cancel_requested',
+           'publication.reschedule_requested',
            'transmission.analytics_index_requested'
          )
        order by id asc
@@ -454,6 +485,14 @@ async function dispatchOutbox() {
             await temporalClient.workflow
               .getHandle(workflowId)
               .signal("cancelPublication");
+          }
+        } else if (event.event_type === "publication.reschedule_requested") {
+          const workflowId = event.payload.workflowId;
+          const scheduledFor = Number(event.payload.scheduledFor);
+          if (workflowId && Number.isFinite(scheduledFor)) {
+            await temporalClient.workflow
+              .getHandle(workflowId)
+              .signal("reschedulePublication", scheduledFor);
           }
         } else if (event.event_type === "transmission.analytics_index_requested") {
           await temporalClient.workflow
@@ -664,6 +703,9 @@ app.get("/health/ready", async (_request, reply) => {
   return reply.code(result.ok ? 200 : 503).send(result);
 });
 
+registerBillingRoutes(app, { service: billing, requireSession });
+await registerStripeWebhookRoutes(app, { service: billing });
+
 app.route({
   method: ["GET", "POST"],
   url: "/api/auth/*",
@@ -698,8 +740,13 @@ app.get("/v1/openapi.json", async () => ({
     "/v1/skills": { get: { summary: "List safe metadata for private Posterract skills" } },
     "/v1/agent-runs": { post: { summary: "Run private skills with a workspace agent credential" } },
     "/v1/agent-runs/{id}": { get: { summary: "Read an agent run and its output" } },
+    "/v1/chats": {
+      get: { summary: "List retained agent chats" },
+      post: { summary: "Create a retained agent chat" },
+    },
+    "/v1/chats/{id}": { get: { summary: "Read a retained chat and its messages" } },
     "/v1/schedule": { get: { summary: "List scheduled publications in a time range" } },
-    "/v1/analytics": { get: { summary: "Read approved Instagram, Facebook, and Threads analytics" } },
+    "/v1/analytics": { get: { summary: "Read approved TikTok, Instagram, Facebook, and Threads analytics" } },
     "/v1/points": { get: { summary: "Read the workspace Resonance Points balance" } },
     "/v1/points/ledger": { get: { summary: "Read the immutable points ledger" } },
     "/v1/accounts": { get: { summary: "List connected social accounts" } },
@@ -708,7 +755,24 @@ app.get("/v1/openapi.json", async () => ({
     "/v1/posts/{id}": { get: { summary: "Read post and per-platform status" } },
     "/v1/posts/{id}/events": { get: { summary: "Read post events" } },
     "/v1/posts/{id}/cancel": { post: { summary: "Cancel a scheduled post" } },
+    "/v1/posts/{id}/reschedule": { post: { summary: "Move a scheduled post to a new date or time" } },
     "/v1/projections/{id}/retry": { post: { summary: "Retry one failed platform" } },
+    "/v1/billing/config": {
+      get: { summary: "Read the public live subscription catalog", security: [] },
+    },
+    "/v1/billing/subscription": {
+      get: { summary: "Read the current workspace subscription" },
+    },
+    "/v1/billing/checkout": {
+      post: { summary: "Create an idempotent Stripe subscription Checkout session" },
+    },
+    "/v1/billing/portal": {
+      post: { summary: "Open Stripe billing management for the workspace" },
+    },
+    "/v1/webhooks/stripe": {
+      get: { summary: "Check Stripe webhook readiness", security: [] },
+      post: { summary: "Receive signed Stripe events", security: [] },
+    },
   },
 }));
 
@@ -716,6 +780,104 @@ app.get(
   "/v1/skills",
   { preHandler: requireScope("skills:read") },
   async () => ({ skills: listPublicSkills() }),
+);
+
+app.get(
+  "/v1/chats",
+  { preHandler: requireScope("runs:read") },
+  async (request) => {
+    const result = await postgres.query(
+      `select c.id, c.title, c.created_at, c.updated_at, count(m.id)::integer as message_count
+       from agent_chats c
+       left join agent_chat_messages m
+         on m.chat_id = c.id and m.workspace_id = c.workspace_id
+       where c.workspace_id = $1 and c.archived_at is null
+       group by c.id
+       order by c.updated_at desc
+       limit 100`,
+      [requiredWorkspace(request)],
+    );
+    return { chats: result.rows.map(publicAgentChat) };
+  },
+);
+
+app.post(
+  "/v1/chats",
+  { preHandler: requireScope("runs:write") },
+  async (request, reply) => {
+    const key = idempotencyKey(request, reply);
+    if (!key) return;
+    let title;
+    try {
+      title = chatTitle(request.body?.title);
+    } catch (error) {
+      return reply.code(400).send({ error: "invalid_chat", detail: error.message });
+    }
+    const idempotency = await claimIdempotency(postgres, request, key, {
+      operation: "chat.create",
+      title,
+    });
+    if (idempotency.error) return reply.code(409).send({ error: idempotency.error });
+    if (idempotency.replay) {
+      return reply
+        .header("idempotent-replayed", "true")
+        .code(idempotency.replay.statusCode)
+        .send(idempotency.replay.body);
+    }
+    const created = await postgres.query(
+      `insert into agent_chats (workspace_id, created_by_user_id, title)
+       values ($1, $2, $3)
+       returning id, title, created_at, updated_at, 0::integer as message_count`,
+      [
+        requiredWorkspace(request),
+        request.authContext.userId ?? null,
+        title,
+      ],
+    );
+    const response = publicAgentChat(created.rows[0]);
+    await completeIdempotency(postgres, idempotency.actorKey, key, 201, response, "agent_chat", response.id);
+    await auditApiAction(request, "chat.create", "agent_chat", response.id).catch((error) =>
+      app.log.warn({ err: error }, "chat creation audit write failed"),
+    );
+    return reply.code(201).send(response);
+  },
+);
+
+app.get(
+  "/v1/chats/:id",
+  { preHandler: requireScope("runs:read") },
+  async (request, reply) => {
+    if (!uuidPattern.test(request.params.id)) return reply.code(400).send({ error: "invalid_chat_id" });
+    const workspaceId = requiredWorkspace(request);
+    const chatResult = await postgres.query(
+      `select c.id, c.title, c.created_at, c.updated_at, count(m.id)::integer as message_count
+       from agent_chats c
+       left join agent_chat_messages m
+         on m.chat_id = c.id and m.workspace_id = c.workspace_id
+       where c.id = $1 and c.workspace_id = $2 and c.archived_at is null
+       group by c.id`,
+      [request.params.id, workspaceId],
+    );
+    if (!chatResult.rows[0]) return reply.code(404).send({ error: "chat_not_found" });
+    const messages = await postgres.query(
+      `select id, role, body, skill_ids, run_id, created_at
+       from agent_chat_messages
+       where chat_id = $1 and workspace_id = $2
+       order by created_at asc, id asc`,
+      [request.params.id, workspaceId],
+    );
+    return {
+      chat: publicAgentChat(chatResult.rows[0]),
+      messages: messages.rows.map((row) => ({
+        id: row.id,
+        role: row.role,
+        body: row.body,
+        skillIds: row.skill_ids,
+        runId: row.run_id ?? undefined,
+        at: new Date(row.created_at).getTime(),
+      })),
+    };
+  },
 );
 
 app.get(
@@ -813,6 +975,10 @@ app.post(
     if (credentialId !== undefined && (typeof credentialId !== "string" || !uuidPattern.test(credentialId))) {
       return reply.code(400).send({ error: "invalid_agent_credential_id" });
     }
+    const chatId = request.body?.chatId;
+    if (chatId !== undefined && (typeof chatId !== "string" || !uuidPattern.test(chatId))) {
+      return reply.code(400).send({ error: "invalid_chat_id" });
+    }
     let runInput;
     try {
       runInput = validateAgentRunInput(request.body);
@@ -831,11 +997,20 @@ app.post(
     );
     const credential = credentialResult.rows[0];
     if (!credential) return reply.code(409).send({ error: "agent_credential_required" });
+    if (chatId) {
+      const chat = await postgres.query(
+        `select id from agent_chats
+         where id = $1 and workspace_id = $2 and archived_at is null`,
+        [chatId, workspaceId],
+      );
+      if (!chat.rows[0]) return reply.code(404).send({ error: "chat_not_found" });
+    }
     const { skillIds, message } = runInput;
     const source = request.authContext.kind === "api_key" ? "api" : "ui";
     const idempotency = await claimIdempotency(postgres, request, key, {
       operation: "agent.run",
       credentialId: credential.id,
+      chatId,
       skillIds,
       message,
     });
@@ -848,8 +1023,8 @@ app.post(
     }
     const created = await postgres.query(
       `insert into agent_runs
-        (workspace_id, credential_id, api_key_id, user_id, provider, model, skill_ids, input, status, source)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, 'running', $9)
+        (workspace_id, credential_id, api_key_id, user_id, provider, model, skill_ids, input, status, source, chat_id)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, 'running', $9, $10)
        returning id, created_at`,
       [
         workspaceId,
@@ -861,14 +1036,43 @@ app.post(
         Array.isArray(skillIds) ? skillIds : [],
         { message },
         source,
+        chatId ?? null,
       ],
     );
     const run = created.rows[0];
+    let modelMessage = message;
+    if (chatId) {
+      const priorMessages = await postgres.query(
+        `select role, right(body, 4000) as body
+         from agent_chat_messages
+         where chat_id = $1 and workspace_id = $2
+         order by created_at desc, id desc
+         limit 8`,
+        [chatId, workspaceId],
+      );
+      modelMessage = [
+        ...priorMessages.rows.reverse().map((item) => `${item.role === "user" ? "USER" : "ASSISTANT"}: ${item.body}`),
+        `USER: ${message}`,
+      ].join("\n\n");
+      await postgres.query(
+        `insert into agent_chat_messages
+          (chat_id, workspace_id, run_id, role, body, skill_ids)
+         values ($1, $2, $3, 'user', $4, $5)`,
+        [chatId, workspaceId, run.id, message, skillIds],
+      );
+      await postgres.query(
+        `update agent_chats
+         set title = case when title = 'New chat' then left($3, 80) else title end,
+             updated_at = now()
+         where id = $1 and workspace_id = $2`,
+        [chatId, workspaceId, message],
+      );
+    }
     try {
       const result = await executeAgentRun({
         credential,
         skillIds,
-        message,
+        message: modelMessage,
         signal: request.raw.signal,
       });
       await postgres.query(
@@ -877,8 +1081,22 @@ app.post(
          where id = $1`,
         [run.id, { text: result.output }, result.versions],
       );
+      if (chatId) {
+        await postgres.query(
+          `insert into agent_chat_messages
+            (chat_id, workspace_id, run_id, role, body, skill_ids)
+           values ($1, $2, $3, 'agent', $4, $5)`,
+          [chatId, workspaceId, run.id, result.output, skillIds],
+        );
+        await postgres.query(
+          `update agent_chats set updated_at = now()
+           where id = $1 and workspace_id = $2`,
+          [chatId, workspaceId],
+        );
+      }
       const response = {
         id: run.id,
+        chatId,
         status: "completed",
         source,
         provider: credential.provider,
@@ -911,7 +1129,7 @@ app.get(
   { preHandler: requireScope("runs:read") },
   async (request, reply) => {
     const result = await postgres.query(
-      `select id, provider, model, skill_ids, skill_versions, input, output, status, source,
+      `select id, chat_id, provider, model, skill_ids, skill_versions, input, output, status, source,
               error_summary, created_at, completed_at
        from agent_runs
        where id = $1 and workspace_id = $2`,
@@ -921,6 +1139,7 @@ app.get(
     if (!row) return reply.code(404).send({ error: "agent_run_not_found" });
     return {
       id: row.id,
+      chatId: row.chat_id ?? undefined,
       provider: row.provider,
       model: row.model,
       skillIds: row.skill_ids,
@@ -940,22 +1159,7 @@ app.get(
   "/v1/api-keys",
   { preHandler: requireSession },
   async (request) => {
-    const result = await postgres.query(
-      `select id, name, key_prefix, scopes, last_used_at, expires_at, created_at
-       from api_keys
-       where workspace_id = $1 and revoked_at is null
-       order by created_at desc`,
-      [requiredWorkspace(request)],
-    );
-    return { keys: result.rows.map((row) => ({
-      id: row.id,
-      name: row.name,
-      prefix: row.key_prefix,
-      scopes: row.scopes,
-      lastUsedAt: row.last_used_at ? new Date(row.last_used_at).getTime() : undefined,
-      expiresAt: row.expires_at ? new Date(row.expires_at).getTime() : undefined,
-      createdAt: new Date(row.created_at).getTime(),
-    })) };
+    return { keys: await loadWorkspaceApiKeys(postgres, requiredWorkspace(request)) };
   },
 );
 
@@ -985,6 +1189,7 @@ app.post(
       scopes: row.scopes,
       secret,
       createdAt: new Date(row.created_at).getTime(),
+      stats: { apiActions: 0, postsCreated: 0, postsScheduled: 0, postsPublished: 0 },
     });
   },
 );
@@ -1886,6 +2091,132 @@ app.get(
         occurredAt: event.occurred_at,
       })),
     };
+  },
+);
+
+app.post(
+  "/v1/posts/:id/reschedule",
+  { preHandler: requireScope("posts:write") },
+  async (request, reply) => {
+    if (!uuidPattern.test(request.params.id)) {
+      return reply.code(400).send({ error: "invalid_post_id" });
+    }
+    const key = idempotencyKey(request, reply);
+    if (!key) return;
+    const workspaceId = requiredWorkspace(request);
+    let scheduledFor;
+    try {
+      scheduledFor = parseReschedulePost(request.body);
+    } catch (error) {
+      if (error instanceof RequestValidationError) {
+        return reply.code(400).send({ error: error.code, details: error.details });
+      }
+      throw error;
+    }
+
+    const client = await postgres.connect();
+    let response;
+    try {
+      await client.query("begin");
+      const idempotency = await claimIdempotency(client, request, key, {
+        operation: "post.reschedule",
+        transmissionId: request.params.id,
+        scheduledFor: scheduledFor.toISOString(),
+      });
+      if (idempotency.error) {
+        await client.query("rollback");
+        return reply.code(409).send({ error: idempotency.error });
+      }
+      if (idempotency.replay) {
+        await client.query("commit");
+        return reply
+          .header("idempotent-replayed", "true")
+          .code(idempotency.replay.statusCode)
+          .send(idempotency.replay.body);
+      }
+
+      const transmission = await client.query(
+        `select status, scheduled_for, temporal_workflow_id
+         from transmissions
+         where id = $1 and workspace_id = $2
+         for update`,
+        [request.params.id, workspaceId],
+      );
+      const current = transmission.rows[0];
+      if (!current) {
+        await client.query("rollback");
+        return reply.code(404).send({ error: "post_not_found" });
+      }
+      if (current.status !== "scheduled") {
+        await client.query("rollback");
+        return reply.code(409).send({ error: "post_cannot_be_rescheduled" });
+      }
+
+      await client.query(
+        `update transmissions
+         set schedule_mode = 'at', scheduled_for = $2, updated_at = now()
+         where id = $1`,
+        [request.params.id, scheduledFor],
+      );
+      await client.query(
+        `insert into events
+          (workspace_id, transmission_id, type, message, payload)
+         values ($1, $2, 'transmission.rescheduled', 'Scheduled post moved', $3)`,
+        [
+          workspaceId,
+          request.params.id,
+          JSON.stringify({
+            from: current.scheduled_for,
+            to: scheduledFor.toISOString(),
+          }),
+        ],
+      );
+      await client.query(
+        `insert into outbox_events
+          (aggregate_type, aggregate_id, event_type, payload)
+         values ('transmission', $1, 'publication.reschedule_requested', $2)`,
+        [
+          request.params.id,
+          JSON.stringify({
+            workflowId: current.temporal_workflow_id,
+            scheduledFor: scheduledFor.getTime(),
+          }),
+        ],
+      );
+
+      response = {
+        id: request.params.id,
+        status: "scheduled",
+        scheduledFor: scheduledFor.toISOString(),
+      };
+      await completeIdempotency(
+        client,
+        idempotency.actorKey,
+        key,
+        200,
+        response,
+        "transmission",
+        request.params.id,
+      );
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback").catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    await auditApiAction(
+      request,
+      "post.reschedule",
+      "transmission",
+      request.params.id,
+      { scheduledFor: response.scheduledFor },
+    ).catch((error) => app.log.warn({ err: error }, "API audit write failed"));
+    void dispatchOutbox().catch((error) =>
+      app.log.warn({ err: error }, "reschedule outbox dispatch failed"),
+    );
+    return response;
   },
 );
 

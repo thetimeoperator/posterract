@@ -1,24 +1,25 @@
 /**
- * TikTok connector — Login Kit (web) + Content Posting API Direct Post.
+ * TikTok connector — Login Kit (web) + Content Posting API draft upload.
  * Pure fetch helpers; called from Convex actions. Endpoints verified against
  * developers.tiktok.com (July 2026):
  *  - authorize: https://www.tiktok.com/v2/auth/authorize/
  *  - token:     POST https://open.tiktokapis.com/v2/oauth/token/ (form-encoded;
  *               access_token lives 24h, refresh_token 365d and ROTATES on refresh)
- *  - publish:   creator_info/query → video/init (FILE_UPLOAD) → PUT chunks →
- *               status/fetch poll (PROCESSING_* → PUBLISH_COMPLETE | FAILED)
+ *  - upload:    inbox/video/init (FILE_UPLOAD) → PUT chunks → status/fetch
+ *               poll (PROCESSING_* → SEND_TO_USER_INBOX | FAILED)
  * Chunk rules: 5–64 MB per chunk (final chunk may run to 128 MB); videos
  * ≤ 64 MB go as a single chunk; ≥ 4 GB unsupported.
  */
 
 const OPEN_API = "https://open.tiktokapis.com";
 
-/** Production scopes confirmed for Login Kit + Content Posting API.
- * Analytics scopes stay out of OAuth until their separate Display API
- * approval is explicitly verified. */
+/** Scopes approved for Posterract in the TikTok developer portal. */
 export const TIKTOK_SCOPES = [
   "user.info.basic",
   "video.publish",
+  "video.upload",
+  "user.info.stats",
+  "video.list",
 ] as const;
 
 export function tiktokAuthUrl(args: { clientKey: string; redirectUri: string; state: string }): string {
@@ -158,6 +159,8 @@ export type TikTokVideoStats = {
   likes: number;
   comments: number;
   shares: number;
+  durationSeconds?: number;
+  createdAt?: number;
 };
 
 export async function tiktokGetVideoStats(
@@ -165,7 +168,7 @@ export async function tiktokGetVideoStats(
   videoIds: string[],
 ): Promise<TikTokVideoStats[]> {
   if (videoIds.length === 0) return [];
-  const fields = "id,view_count,like_count,comment_count,share_count";
+  const fields = "id,view_count,like_count,comment_count,share_count,duration,create_time";
   const data = await openApiPost<{
     videos?: Array<{
       id?: string;
@@ -173,6 +176,8 @@ export async function tiktokGetVideoStats(
       like_count?: number;
       comment_count?: number;
       share_count?: number;
+      duration?: number;
+      create_time?: number;
     }>;
   }>(`/v2/video/query/?fields=${fields}`, accessToken, { filters: { video_ids: videoIds.slice(0, 20) } });
   return (data.videos ?? []).flatMap((video) =>
@@ -183,6 +188,8 @@ export async function tiktokGetVideoStats(
           likes: video.like_count ?? 0,
           comments: video.comment_count ?? 0,
           shares: video.share_count ?? 0,
+          durationSeconds: video.duration,
+          createdAt: video.create_time,
         }]
       : [],
   );
@@ -213,44 +220,28 @@ const SINGLE_CHUNK_MAX = 64_000_000;
 const CHUNK_SIZE = 50_000_000;
 
 /**
- * Direct-post a video: creator_info → init (FILE_UPLOAD) → PUT chunk(s) →
- * poll status. Resume: pass the publish_id from a previous attempt to skip
- * re-uploading and go straight to polling.
+ * Upload a video draft to the creator's TikTok inbox. TikTok then asks the
+ * creator to review/edit the video and finish publishing in the TikTok app.
+ * Resume: pass the publish_id from a previous attempt to skip re-uploading
+ * and go straight to polling.
  */
-export async function tiktokPublishVideo(args: {
+export async function tiktokUploadVideoDraft(args: {
   accessToken: string;
   videoUrl: string;
-  caption: string;
   mimeType?: string;
   /** Known object size lets the worker stream upload ranges without buffering the whole video. */
   sizeBytes?: number;
   resumePublishId?: string;
   onPublishId?: (publishId: string) => Promise<void> | void;
   onProgress?: PublishProgress;
-}): Promise<{ publishId: string; postId?: string }> {
-  const { accessToken, videoUrl, caption } = args;
+}): Promise<{ publishId: string; inboxDelivered: boolean; postId?: string }> {
+  const { accessToken, videoUrl } = args;
 
   const initAndUpload = async (): Promise<string> => {
-    // 1. creator info — required pre-publish step; the post request MUST
-    // mirror these settings (guidelines reject contradictions, e.g. allowing
-    // duets on a private account where duet_disabled=true).
-    await args.onProgress?.("uploading", "Checking TikTok creator status");
-    const creator = await openApiPost<{
-      privacy_level_options?: string[];
-      creator_nickname?: string;
-      comment_disabled?: boolean;
-      duet_disabled?: boolean;
-      stitch_disabled?: boolean;
-    }>("/v2/post/publish/creator_info/query/", accessToken, {});
-    // Unaudited clients may only post privately; post-audit this becomes the user's choice.
-    const privacy = creator.privacy_level_options?.includes("SELF_ONLY")
-      ? "SELF_ONLY"
-      : (creator.privacy_level_options?.[0] ?? "SELF_ONLY");
-
-    // 2. Resolve the size. VPS workers pass sizeBytes from PostgreSQL, which
+    // 1. Resolve the size. VPS workers pass sizeBytes from PostgreSQL, which
     // avoids buffering a multi-gigabyte video in memory. The fallback keeps
     // the existing Convex call path compatible during the cutover window.
-    await args.onProgress?.("uploading", "Preparing video for TikTok");
+    await args.onProgress?.("uploading", "Preparing TikTok draft");
     let bufferedVideo: ArrayBuffer | undefined;
     let size = args.sizeBytes;
     if (!size) {
@@ -260,21 +251,15 @@ export async function tiktokPublishVideo(args: {
       size = bufferedVideo.byteLength;
     }
 
-    // 3. init — single chunk ≤64MB, else 50MB chunks with the final one absorbing the remainder
+    // 2. Initialize a draft upload. This endpoint requires video.upload and
+    // deliberately does not accept Direct Post's post_info payload.
     const single = size <= SINGLE_CHUNK_MAX;
     const chunkSize = single ? size : CHUNK_SIZE;
     const chunkCount = single ? 1 : Math.ceil(size / chunkSize);
     const init = await openApiPost<{ publish_id?: string; upload_url?: string }>(
-      "/v2/post/publish/video/init/",
+      "/v2/post/publish/inbox/video/init/",
       accessToken,
       {
-        post_info: {
-          title: caption.slice(0, 2200),
-          privacy_level: privacy,
-          disable_duet: creator.duet_disabled ?? false,
-          disable_comment: creator.comment_disabled ?? false,
-          disable_stitch: creator.stitch_disabled ?? false,
-        },
         source_info: {
           source: "FILE_UPLOAD",
           video_size: size,
@@ -286,8 +271,8 @@ export async function tiktokPublishVideo(args: {
     if (!init.publish_id || !init.upload_url) throw new Error("TikTok init returned no publish_id/upload_url");
     await args.onPublishId?.(init.publish_id);
 
-    // 4. PUT chunk(s) — 206 per partial chunk, 201 when complete
-    await args.onProgress?.("uploading", "Uploading video to TikTok");
+    // 3. PUT chunk(s) — 206 per partial chunk, 201 when complete.
+    await args.onProgress?.("uploading", "Uploading draft to TikTok");
     for (let i = 0; i < chunkCount; i++) {
       const start = i * chunkSize;
       const end = i === chunkCount - 1 ? size - 1 : start + chunkSize - 1;
@@ -306,6 +291,7 @@ export async function tiktokPublishVideo(args: {
         method: "PUT",
         headers: {
           "Content-Type": args.mimeType ?? "video/mp4",
+          "Content-Length": String(end - start + 1),
           "Content-Range": `bytes ${start}-${end}/${size}`,
         },
         body: chunk,
@@ -318,8 +304,10 @@ export async function tiktokPublishVideo(args: {
   let resumed = Boolean(args.resumePublishId);
   let publishId = args.resumePublishId ?? (await initAndUpload());
 
-  // 5. poll status (~2.5 min per attempt, then defer via retryable error)
-  await args.onProgress?.("processing", "TikTok is processing the video");
+  // 4. Stop as soon as TikTok confirms that the draft reached the creator's
+  // inbox. PUBLISH_COMPLETE is also possible if the creator finishes the
+  // TikTok editing flow while this request is still polling.
+  await args.onProgress?.("processing", "Delivering draft to the TikTok inbox");
   const deadline = Date.now() + 150_000;
   for (;;) {
     await sleep(4000);
@@ -330,7 +318,14 @@ export async function tiktokPublishVideo(args: {
     }>("/v2/post/publish/status/fetch/", accessToken, { publish_id: publishId });
 
     if (status.status === "PUBLISH_COMPLETE") {
-      return { publishId, postId: status.publicaly_available_post_id?.[0]?.toString() };
+      return {
+        publishId,
+        inboxDelivered: true,
+        postId: status.publicaly_available_post_id?.[0]?.toString(),
+      };
+    }
+    if (status.status === "SEND_TO_USER_INBOX") {
+      return { publishId, inboxDelivered: true };
     }
     // A resumed FILE_UPLOAD still in PROCESSING_UPLOAD means the prior
     // attempt died mid-transfer — its upload_url is gone, so the publish can
@@ -347,10 +342,10 @@ export async function tiktokPublishVideo(args: {
         publishId = await initAndUpload();
         continue;
       }
-      throw new Error(`TikTok publish failed: ${status.fail_reason ?? "unknown"}`);
+      throw new Error(`TikTok draft upload failed: ${status.fail_reason ?? "unknown"}`);
     }
     if (Date.now() > deadline) {
-      const err = new Error("TikTok still processing — will retry") as Error & { retryable?: boolean };
+      const err = new Error("TikTok draft is still processing — will retry") as Error & { retryable?: boolean };
       err.retryable = true;
       throw err;
     }

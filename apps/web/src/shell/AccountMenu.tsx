@@ -54,7 +54,7 @@ export function AccountMenu() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -4, scale: 0.98 }}
             transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
-            className="glass absolute right-0 top-11 z-50 w-60 overflow-hidden rounded-[var(--radius-card)] shadow-glow-neon-sm"
+            className="glass popup-menu-surface absolute right-0 top-11 z-50 w-60 overflow-hidden rounded-[var(--radius-card)]"
           >
             <div className="border-b border-[var(--glass-border)] px-4 py-3">
               <p className="font-display text-[13px] font-semibold text-starlight">{displayName}</p>

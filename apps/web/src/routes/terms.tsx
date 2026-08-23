@@ -7,19 +7,21 @@ export const Route = createFileRoute("/terms")({
 
 function Terms() {
   return (
-    <LegalPage title="Terms of Service" updated="July 21, 2026">
+    <LegalPage title="Terms of Service" updated="August 20, 2026">
       <h2>The service</h2>
       <p>
-        Posterract lets you upload short-form video content, connect your social media accounts, and
-        schedule or publish that content to those accounts. By creating an account you agree to
-        these terms.
+        Posterract is a content-agent harness and social publishing service. It lets you connect
+        any AI model accessible through an API key you supply, use Posterract&apos;s private skills, keep agent
+        chats, upload short-form video content, connect social media accounts, and schedule or
+        publish content. By creating an account you agree to these terms.
       </p>
 
       <h2>Your content and your accounts</h2>
       <ul>
         <li>
-          You retain all rights to the content you upload. You grant Posterract only the technical
-          permission to store it and transmit it to the platforms you select.
+          You retain all rights to the content and prompts you submit. You grant Posterract the
+          technical permission needed to store them, process them with the skills and model
+          provider you select, and transmit approved posts to the social platforms you select.
         </li>
         <li>
           You are responsible for the content you publish and for complying with each destination
@@ -29,6 +31,43 @@ function Terms() {
           You may only connect social media accounts you own or are authorized to manage.
         </li>
       </ul>
+
+      <h2>Agent connections, chats, and model providers</h2>
+      <ul>
+        <li>
+          You may connect only model-provider credentials you own or are authorized to use. You are
+          responsible for the provider account, its charges, usage limits, model availability, and
+          compliance with the provider&apos;s terms.
+        </li>
+        <li>
+          When you run an agent, Posterract sends your prompt, limited recent chat context, and the
+          private-skill instructions needed for that run to the model provider you selected. The
+          provider processes that request under its own terms, privacy policy, account settings,
+          and retention rules. Posterract does not control the provider&apos;s output or data practices.
+        </li>
+        <li>
+          Agent output can be inaccurate, incomplete, or unsuitable for publication. You are
+          responsible for reviewing generated content and confirming that you have the rights and
+          approvals required before scheduling or publishing it.
+        </li>
+      </ul>
+
+      <h2>Hosting, storage, and data processing</h2>
+      <p>
+        Posterract&apos;s core web application, API, PostgreSQL database, publishing workers, and
+        supporting workflow services run as a Docker Compose stack on a privately managed virtual
+        private server (&quot;VPS&quot;). Account, workspace, chat, schedule, publishing-history,
+        analytics, and credential records are stored in PostgreSQL and supporting persistent
+        volumes on that VPS. Uploaded video bytes are stored separately in private Cloudflare R2
+        object storage and ordinarily upload directly from your browser using temporary signed
+        URLs. See the <a href="/privacy">Privacy Policy</a> for the categories stored in each system,
+        security measures, third-party processing, retention, and deletion rules.
+      </p>
+      <p>
+        Posterract is not permanent archival or backup storage. Media may be automatically removed
+        after upload or publication according to the retention periods in the Privacy Policy. You
+        should keep your own copies of any content you cannot replace.
+      </p>
 
       <h2>Acceptable use</h2>
       <p>
@@ -48,7 +87,8 @@ function Terms() {
 
       <h2>YouTube</h2>
       <p>
-        By connecting or using YouTube through Posterract, you agree to be bound by the{" "}
+        If YouTube access is made available, by connecting or using YouTube through Posterract you
+        agree to be bound by the{" "}
         <a href="https://www.youtube.com/t/terms" target="_blank" rel="noreferrer">
           YouTube Terms of Service
         </a>

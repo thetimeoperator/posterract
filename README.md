@@ -10,28 +10,25 @@ whether your laptop is open or not.
 ## Stack
 
 - **Frontend** — React 19 · Vite · TanStack Router · Tailwind v4 · Three.js (`apps/web`)
-- **Backend** — [Convex](https://convex.dev): database, exact-time scheduler, file storage, crons (`apps/web/convex`)
-- **Auth** — [Better Auth](https://better-auth.com) running on Convex (users live in our database)
+- **Backend** — Fastify · PostgreSQL 17 · Redis · Temporal (`apps/api`, `apps/orchestrator`)
+- **Media** — Direct multipart uploads to Cloudflare R2 through the Posterract API
+- **Auth** — Better Auth backed by PostgreSQL
 - **Design system** — `packages/hyperkit` (tokens + components), `packages/contract` (shared types + platform capability registry)
 
 ## Develop
 
 ```bash
 pnpm install
-cd apps/web
-npx convex dev        # backend (first run links a Convex project)
-pnpm dev              # app on http://localhost:5173
-pnpm test:e2e         # Playwright suite (runs against the offline demo engine)
+pnpm dev
+pnpm test:e2e
 ```
 
-Without a `VITE_CONVEX_URL` env, the app boots in **demo mode** — a fully
-functional in-browser simulation used by the e2e suite.
+Without `VITE_API_URL`, the web app boots in the deterministic demo mode used by Playwright.
 
 ## Deploy
 
-- Frontend: Vercel (root directory `apps/web`), SPA rewrites via `apps/web/vercel.json`
-- Backend: `npx convex deploy` (production deployment)
-- Required Vercel env vars: `VITE_CONVEX_URL`, `VITE_CONVEX_SITE_URL`, `VITE_SITE_URL`
+Production uses the project Docker Compose stack on the private Posterract VPS.
+Follow the repository deployment instructions; never deploy Posterract to Vercel.
 
 ---
 

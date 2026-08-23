@@ -43,15 +43,15 @@ export const usePoints = () => {
     [stats, points],
   );
 };
-type DemoAnalyticsProvider = "instagram" | "facebook" | "threads";
+type DemoAnalyticsProvider = "instagram" | "tiktok" | "facebook" | "threads";
 
 const demoDaily = (provider: DemoAnalyticsProvider, rangeDays: AnalyticsRangeDays) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   return Array.from({ length: rangeDays }, (_, index) => {
     const date = new Date(today.getTime() - (rangeDays - index - 1) * 86400_000);
-    const offsets = { instagram: 0.4, facebook: 1.2, threads: 2.1 };
-    const baselines = { instagram: 980, facebook: 720, threads: 540 };
+    const offsets = { instagram: 0.4, tiktok: 0.9, facebook: 1.2, threads: 2.1 };
+    const baselines = { instagram: 980, tiktok: 1480, facebook: 720, threads: 540 };
     const wave = Math.sin(index * 0.72 + offsets[provider]);
     const lift = index / Math.max(1, rangeDays - 1);
     const views = Math.max(0, Math.round(baselines[provider] + wave * 280 + lift * 690));
@@ -61,7 +61,13 @@ const demoDaily = (provider: DemoAnalyticsProvider, rangeDays: AnalyticsRangeDay
       likes: Math.round(views * (provider === "threads" ? 0.095 : 0.072)),
       comments: Math.round(views * 0.009),
       shares: Math.round(views * (provider === "threads" ? 0.026 : 0.015)),
-      watchMinutes: undefined,
+      reach: provider === "instagram" ? Math.round(views * 0.82) : undefined,
+      saves: provider === "instagram" ? Math.round(views * 0.012) : undefined,
+      replies: provider === "threads" ? Math.round(views * 0.009) : undefined,
+      reposts: provider === "threads" ? Math.round(views * 0.018) : undefined,
+      quotes: provider === "threads" ? Math.round(views * 0.008) : undefined,
+      clicks: provider === "threads" ? Math.round(views * 0.006) : undefined,
+      watchMinutes: provider === "instagram" ? Math.round(views * 0.12) : undefined,
       audienceGained: Math.max(0, Math.round(views * 0.006 + wave * 2)),
       audienceLost: index % 9 === 0 ? 2 : 0,
     };
@@ -98,8 +104,29 @@ export function useAnalyticsDashboard(rangeDays: AnalyticsRangeDays): AnalyticsD
         likes: Math.round(totals.likes * 0.2 * post.factor),
         comments: Math.round(totals.comments * 0.2 * post.factor),
         shares: Math.round(totals.shares * 0.2 * post.factor),
-        watchMinutes: undefined,
+        reach: provider === "instagram" ? Math.round(totals.views * 0.14 * post.factor) : undefined,
+        saves: provider === "instagram" ? Math.round(totals.views * 0.002 * post.factor) : undefined,
+        replies: provider === "threads" ? Math.round(totals.comments * 0.2 * post.factor) : undefined,
+        reposts: provider === "threads" ? Math.round(totals.shares * 0.14 * post.factor) : undefined,
+        quotes: provider === "threads" ? Math.round(totals.shares * 0.06 * post.factor) : undefined,
+        watchMinutes: provider === "instagram" ? Math.round(totals.views * 0.02 * post.factor) : undefined,
+        averageWatchSeconds: provider === "instagram" ? 8.4 + index * 0.7 : undefined,
+        skipRate: provider === "instagram" ? 31 + index * 3 : undefined,
+        durationSeconds: provider === "tiktok" ? 24 + index * 8 : undefined,
       }));
+      const providerMetrics = {
+        instagram: ["views", "reach", "likes", "comments", "shares", "saves", "watchTime", "averageWatchTime", "skipRate"],
+        tiktok: ["views", "likes", "comments", "shares", "followers", "following", "totalLikes", "publishedVideos", "duration"],
+        facebook: ["views", "likes", "comments", "shares", "pageViews", "pageEngagements"],
+        threads: ["views", "likes", "replies", "reposts", "quotes", "clicks", "followers"],
+      };
+      const audience = provider === "instagram"
+        ? 21470
+        : provider === "tiktok"
+          ? 38200
+          : provider === "facebook"
+            ? 12840
+            : 7460;
       return {
         provider,
         connected: true,
@@ -107,20 +134,58 @@ export function useAnalyticsDashboard(rangeDays: AnalyticsRangeDays): AnalyticsD
         missingScopes: [],
         handle: provider === "facebook" ? "Posterract Lab" : "@posterract-lab",
         audienceLabel: "Followers" as const,
-        audience: provider === "instagram" ? 21470 : provider === "facebook" ? 12840 : 7460,
+        audience,
         audienceDelta: totals.audienceDelta,
+        following: provider === "tiktok" ? 412 : undefined,
+        totalLikes: provider === "tiktok" ? 486300 : undefined,
+        publishedVideos: provider === "tiktok" ? 184 : undefined,
+        reach: provider === "instagram" ? Math.round(totals.views * 0.82) : undefined,
+        saves: provider === "instagram" ? Math.round(totals.views * 0.012) : undefined,
+        replies: provider === "threads" ? totals.comments : undefined,
+        reposts: provider === "threads" ? Math.round(totals.shares * 0.7) : undefined,
+        quotes: provider === "threads" ? Math.round(totals.shares * 0.3) : undefined,
+        clicks: provider === "threads" ? Math.round(totals.views * 0.006) : undefined,
+        pageViews: provider === "facebook" ? Math.round(totals.views * 0.18) : undefined,
+        postViews: provider === "facebook" ? totals.views : undefined,
+        totalInteractions: totals.likes + totals.comments + totals.shares,
+        averageWatchSeconds: provider === "instagram" ? 9.1 : undefined,
+        skipRate: provider === "instagram" ? 34 : undefined,
         views: totals.views,
         likes: totals.likes,
         comments: totals.comments,
         shares: totals.shares,
-        watchMinutes: undefined,
+        watchMinutes: provider === "instagram" ? totals.watchMinutes : undefined,
         publishedPosts: rangeDays === 7 ? 4 : rangeDays === 30 ? 17 : 48,
         lastSyncedAt: Date.now() - 11 * 60_000,
+        availableMetrics: providerMetrics[provider],
+        metricNotes: provider === "tiktok"
+          ? ["TikTok analytics cover public account and per-video counters; watch time and retention are not exposed by the approved scopes."]
+          : provider === "facebook"
+            ? ["Page activity and Posterract-published post views remain separate."]
+            : provider === "threads"
+              ? ["Replies, reposts, and quotes remain separate signals."]
+              : ["Advanced Reel metrics depend on media type and Meta availability."],
         daily,
         posts,
+        previousPeriod: {
+          audience: audience - totals.audienceDelta,
+          audienceDelta: Math.round(totals.audienceDelta * 0.72),
+          views: Math.round(totals.views * 0.84),
+          likes: Math.round(totals.likes * 0.81),
+          comments: Math.round(totals.comments * 0.87),
+          shares: Math.round(totals.shares * 0.78),
+          reach: provider === "instagram" ? Math.round(totals.views * 0.69) : undefined,
+          saves: provider === "instagram" ? Math.round(totals.views * 0.009) : undefined,
+          replies: provider === "threads" ? Math.round(totals.comments * 0.84) : undefined,
+          reposts: provider === "threads" ? Math.round(totals.shares * 0.58) : undefined,
+          quotes: provider === "threads" ? Math.round(totals.shares * 0.22) : undefined,
+          clicks: provider === "threads" ? Math.round(totals.views * 0.004) : undefined,
+          watchMinutes: provider === "instagram" ? Math.round(totals.watchMinutes * 0.8) : undefined,
+          publishedPosts: rangeDays === 7 ? 3 : rangeDays === 30 ? 14 : 42,
+        },
       };
     };
-    return { rangeDays, platforms: [makePlatform("instagram"), makePlatform("facebook"), makePlatform("threads")] };
+    return { rangeDays, platforms: [makePlatform("instagram"), makePlatform("tiktok"), makePlatform("facebook"), makePlatform("threads")] };
   }, [rangeDays]);
 }
 export const useEngineActions = () =>
@@ -130,6 +195,7 @@ export const useEngineActions = () =>
       renameArtifact: s.renameArtifact,
       deleteArtifact: s.deleteArtifact,
       createTransmission: s.createTransmission,
+      rescheduleTransmission: s.rescheduleTransmission,
       cancelTransmission: s.cancelTransmission,
       duplicateTransmission: s.duplicateTransmission,
       retryProjection: s.retryProjection,

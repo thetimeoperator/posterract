@@ -47,7 +47,7 @@ export function Dock({
   distance = 132,
   panelHeight = 58,
   magnification = 70,
-  spring = { mass: 0.1, stiffness: 150, damping: 12 },
+  spring = { mass: 0.12, stiffness: 650, damping: 18 },
   ...rest
 }: DockProps) {
   const mouseX = useMotionValue(Number.POSITIVE_INFINITY);
@@ -58,10 +58,10 @@ export function Dock({
       <motion.div
         role="toolbar"
         aria-label="Posterract navigation"
-        onMouseMove={(event) => mouseX.set(event.pageX)}
+        onMouseMove={(event) => mouseX.set(event.clientX)}
         onMouseLeave={() => mouseX.set(Number.POSITIVE_INFINITY)}
         className={clsx(
-          "flex h-[var(--dock-height)] max-w-full items-center gap-1 overflow-x-auto px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+          "flex h-[var(--dock-height)] max-w-full items-center gap-1 overflow-visible px-2",
           className,
         )}
         style={{ "--dock-height": `${panelHeight}px` } as CSSProperties}
@@ -90,37 +90,46 @@ export function DockItem({ children, className, label, active, disabled }: DockI
     if (!rect) return Number.POSITIVE_INFINITY;
     return value - rect.x - rect.width / 2;
   });
-  const widthTarget = useTransform(
+  const sizeTarget = useTransform(
     mouseDistance,
     [-distance, 0, distance],
     [40, reducedMotion ? 40 : magnification, 40],
   );
-  const focusWidth = useMotionValue(40);
-  const combinedWidth = useTransform(
-    [widthTarget, focusWidth],
+  const focusSize = useMotionValue(40);
+  const combinedSize = useTransform(
+    [sizeTarget, focusSize],
     ([hoverValue, focusValue]: number[]) => Math.max(hoverValue, focusValue),
   );
-  const width = useSpring(combinedWidth, spring);
+  const size = useSpring(combinedSize, spring);
+  const scale = useTransform(size, (value) => value / 40);
 
   return (
     <motion.div
       ref={ref}
-      style={{ width }}
-      onFocusCapture={() => focusWidth.set(reducedMotion ? 40 : magnification)}
-      onBlurCapture={() => focusWidth.set(40)}
+      style={{ width: size, willChange: "width" }}
+      onFocusCapture={(event) => {
+        const focusVisible = event.target instanceof HTMLElement && event.target.matches(":focus-visible");
+        focusSize.set(reducedMotion || !focusVisible ? 40 : magnification);
+      }}
+      onBlurCapture={() => focusSize.set(40)}
       className={clsx(
-        "group/dock relative flex h-10 flex-none items-center justify-center",
+        "group/dock relative flex h-10 flex-none self-center items-center justify-center",
         disabled && "opacity-45",
         className,
       )}
       data-active={active ? "true" : "false"}
     >
-      {children}
+      <motion.div
+        className="absolute left-1/2 top-1/2 flex h-10 w-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center"
+        style={{ scale, willChange: "transform" }}
+      >
+        {children}
+      </motion.div>
       <span
         role="tooltip"
         className={clsx(
-          "pointer-events-none absolute left-1/2 top-[calc(100%+10px)] z-50 -translate-x-1/2 whitespace-nowrap rounded-full border border-[var(--glass-border)] bg-[rgba(5,10,12,0.94)] px-2.5 py-1 font-display text-[10px] font-semibold tracking-wide text-starlight opacity-0 shadow-glow-neon-sm backdrop-blur-xl transition-all duration-150 group-hover/dock:translate-y-0 group-hover/dock:opacity-100 group-focus-within/dock:opacity-100",
-          active && "text-neon opacity-100",
+          "pointer-events-none absolute left-1/2 top-[calc(100%+10px)] z-50 -translate-x-1/2 whitespace-nowrap rounded-full border border-[var(--glass-border)] bg-[rgba(5,10,12,0.9)] px-2.5 py-1 font-display text-[10px] font-semibold tracking-wide text-starlight opacity-0 shadow-glow-neon-sm backdrop-blur-sm transition-all duration-150 group-hover/dock:translate-y-0 group-hover/dock:opacity-100 group-focus-within/dock:opacity-100",
+          active && "text-neon",
         )}
       >
         {label}

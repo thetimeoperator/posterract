@@ -9,7 +9,7 @@ import type { FunctionArgs } from "convex/server";
 import { internalAction, type ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { tiktokPublishVideo, tiktokRefreshToken } from "./connectors/tiktok";
+import { tiktokRefreshToken, tiktokUploadVideoDraft } from "./connectors/tiktok";
 import {
   youtubeGetVideo,
   youtubeRefreshToken,
@@ -113,10 +113,9 @@ export const tiktokPublish = internalAction({
     }
 
     try {
-      const result = await tiktokPublishVideo({
+      const result = await tiktokUploadVideoDraft({
         accessToken,
         videoUrl: job.videoUrl,
-        caption: job.caption,
         mimeType: job.mimeType,
         resumePublishId: job.pendingContainerId,
         onPublishId: async (publishId) => {
@@ -132,14 +131,16 @@ export const tiktokPublish = internalAction({
       });
       await patch({
         projectionId: job.projectionId,
-        status: "live",
-        platformPostId: result.postId ?? result.publishId,
+        status: result.postId ? "live" : "awaiting_user",
+        platformPostId: result.postId,
         clearError: true,
-        clearPendingContainer: true,
+        clearPendingContainer: Boolean(result.postId),
       });
       await emit(
-        "projection.live",
-        result.postId ? `TikTok LIVE → video ${result.postId}` : "TikTok LIVE — private while the app is unaudited",
+        result.postId ? "projection.live" : "projection.awaiting_user",
+        result.postId
+          ? `TikTok LIVE → video ${result.postId}`
+          : "TikTok draft sent — open TikTok inbox to review and post",
       );
     } catch (e) {
       const retryable = (e as { retryable?: boolean }).retryable === true && job.attempt < 5;

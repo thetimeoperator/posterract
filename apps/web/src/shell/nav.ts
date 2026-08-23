@@ -3,51 +3,48 @@ import {
   BarChart3,
   Bot,
   CalendarDays,
-  KeyRound,
   Orbit,
   Radio,
   Settings,
-  Sparkles,
-  TerminalSquare,
-  Zap,
+  Plus,
   type LucideIcon,
 } from "lucide-react";
 
 export type NavItem = {
-  path: "/forge" | "/skills" | "/continuum" | "/transmissions" | "/echoes" | "/points" | "/vault" | "/portals" | "/uplink" | "/settings";
+  path: "/forge" | "/skills" | "/continuum" | "/transmissions" | "/echoes" | "/vault" | "/portals" | "/uplink" | "/settings";
   label: string;
   flavor: string;
   icon: LucideIcon;
-  section: "primary" | "secondary" | "main" | "system";
+  section: "mvp" | "future" | "main" | "system";
   locked?: string;
 };
 
-export const PRIMARY_NAV_ITEMS: NavItem[] = [
-  { path: "/forge", label: "Forge", flavor: "Agent workspace", icon: Sparkles, section: "primary" },
-  { path: "/skills", label: "Skills", flavor: "Private workflows", icon: Bot, section: "primary" },
-  { path: "/continuum", label: "Schedule", flavor: "Continuum", icon: CalendarDays, section: "primary" },
-  { path: "/transmissions", label: "History", flavor: "Transmissions", icon: Radio, section: "primary" },
-  { path: "/echoes", label: "Analytics", flavor: "Echoes", icon: BarChart3, section: "primary" },
-  { path: "/points", label: "Points", flavor: "Resonance", icon: Zap, section: "primary" },
+/** The six destinations included in the MVP, in visible dock order. */
+export const MVP_NAV_ITEMS: NavItem[] = [
+  { path: "/continuum", label: "Calendar", flavor: "Publishing schedule", icon: CalendarDays, section: "mvp" },
+  { path: "/uplink", label: "API Keys", flavor: "Agent access", icon: Bot, section: "mvp" },
+  { path: "/echoes", label: "Analytics", flavor: "Performance", icon: BarChart3, section: "mvp" },
+  { path: "/portals", label: "Social accounts", flavor: "Connections", icon: Orbit, section: "mvp" },
+  { path: "/vault", label: "Assets", flavor: "Media library", icon: Archive, section: "mvp" },
+  { path: "/settings", label: "Settings", flavor: "Workspace", icon: Settings, section: "mvp" },
 ];
 
-export const SECONDARY_NAV_ITEMS: NavItem[] = [
-  { path: "/vault", label: "Assets", flavor: "The Vault", icon: Archive, section: "secondary" },
-  { path: "/portals", label: "Social accounts", flavor: "Portals", icon: Orbit, section: "secondary" },
-  { path: "/uplink", label: "Agent API", flavor: "Uplink", icon: TerminalSquare, section: "secondary" },
-  { path: "/settings", label: "Settings", flavor: "Ship systems", icon: Settings, section: "secondary" },
+/** Retained product routes for later phases; deliberately absent from MVP navigation. */
+export const FUTURE_NAV_ITEMS: NavItem[] = [
+  { path: "/forge", label: "Create", flavor: "Agent workspace", icon: Plus, section: "future" },
+  { path: "/skills", label: "Skills", flavor: "Private workflows", icon: Bot, section: "future" },
+  { path: "/transmissions", label: "History", flavor: "Publishing history", icon: Radio, section: "future" },
 ];
 
-export const NAV_ITEMS = [...PRIMARY_NAV_ITEMS, ...SECONDARY_NAV_ITEMS];
+export const NAV_ITEMS = MVP_NAV_ITEMS;
+const ALL_NAV_ITEMS = [...MVP_NAV_ITEMS, ...FUTURE_NAV_ITEMS];
 
 export function isNavActive(pathname: string, path: NavItem["path"]) {
   return pathname === path || pathname.startsWith(`${path}/`);
 }
 
 export function navItemForPath(pathname: string): Pick<NavItem, "label" | "flavor"> | undefined {
-  if (pathname === "/") return { label: "Forge", flavor: "Agent workspace" };
-  if (pathname.startsWith("/compose")) return { label: "Prepare post", flavor: "Transmission composer" };
-  return NAV_ITEMS.find((item) => isNavActive(pathname, item.path));
+  if (pathname === "/") return { label: "Calendar", flavor: "Publishing schedule" };
+  if (pathname.startsWith("/compose")) return { label: "New post", flavor: "Schedule or publish" };
+  return ALL_NAV_ITEMS.find((item) => isNavActive(pathname, item.path));
 }
-
-export const AGENT_KEY_ICON = KeyRound;

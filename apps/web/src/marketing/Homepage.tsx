@@ -1,10 +1,11 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { PLATFORM_MARK_SOURCES } from "@posterract/hyperkit";
-import AetherRibbonMesh from "@/components/ui/aether-ribbon-mesh";
 import { Hero } from "@/components/ui/animated-hero";
+import { ShaderBackground } from "@/components/ui/blue-noise";
 import { authClient } from "@/lib/authClient";
 import "@/styles/homepage.css";
+import "@/styles/homepage-readability.css";
 
 type AuthMode = "signin" | "signup";
 type PlatformPhase = "live" | "next";
@@ -18,20 +19,21 @@ type Platform = {
 };
 
 const PLATFORMS: Platform[] = [
-  { id: "youtube", name: "YouTube", mark: PLATFORM_MARK_SOURCES.youtube, phase: "live", capability: "Publishing + analytics" },
-  { id: "tiktok", name: "TikTok", mark: PLATFORM_MARK_SOURCES.tiktok, phase: "live", capability: "Publishing + analytics" },
+  { id: "youtube", name: "YouTube", mark: PLATFORM_MARK_SOURCES.youtube, phase: "next", capability: "Integration roadmap" },
+  { id: "tiktok", name: "TikTok", mark: PLATFORM_MARK_SOURCES.tiktok, phase: "next", capability: "Integration roadmap" },
   { id: "instagram", name: "Instagram", mark: PLATFORM_MARK_SOURCES.instagram, phase: "live", capability: "Publishing + insights" },
-  { id: "facebook", name: "Facebook", mark: PLATFORM_MARK_SOURCES.facebook, phase: "next", capability: "Integration roadmap" },
-  { id: "threads", name: "Threads", mark: PLATFORM_MARK_SOURCES.threads, phase: "next", capability: "Integration roadmap" },
+  { id: "facebook", name: "Facebook", mark: PLATFORM_MARK_SOURCES.facebook, phase: "live", capability: "Publishing + insights" },
+  { id: "threads", name: "Threads", mark: PLATFORM_MARK_SOURCES.threads, phase: "live", capability: "Publishing + insights" },
   { id: "x", name: "X", mark: PLATFORM_MARK_SOURCES.x, phase: "next", capability: "Integration roadmap" },
   { id: "linkedin", name: "LinkedIn", mark: PLATFORM_MARK_SOURCES.linkedin, phase: "next", capability: "Integration roadmap" },
+  { id: "reddit", name: "Reddit", mark: PLATFORM_MARK_SOURCES.reddit, phase: "next", capability: "Integration roadmap" },
 ];
 
 function PlatformNetwork() {
   return (
     <section className="site-platforms" id="platforms" aria-labelledby="platform-title">
       <div className="site-platforms-heading">
-        <div><p className="site-kicker">THE NETWORK // 07 DESTINATIONS</p><h2 id="platform-title">Where Posterract publishes.</h2></div>
+        <div><p className="site-kicker">THE NETWORK // 08 DESTINATIONS</p><h2 id="platform-title">Where Posterract publishes.</h2></div>
         <p>Live connections today, with the same system expanding across the rest of the network.</p>
       </div>
       <div className="site-platform-grid">
@@ -52,13 +54,13 @@ function PlatformNetwork() {
               <div className="site-platform-mark"><img src={platform.mark} alt={`${platform.name} logo`} /></div>
             )}
             <div><h3>{platform.name}</h3><p>{platform.capability}</p></div>
-            <strong>{platform.phase === "live" ? "LIVE" : "NEXT"}</strong>
+            <strong>{platform.phase === "live" ? "LIVE" : "COMING SOON"}</strong>
           </article>
         ))}
       </div>
       <div className="site-platform-note">
-        <p><strong>LIVE NOW</strong> YouTube / TikTok / Instagram</p>
-        <p><strong>EXPANSION</strong> Facebook / Threads / X / LinkedIn</p>
+        <p><strong>LIVE NOW</strong> Instagram / Facebook / Threads</p>
+        <p><strong>COMING SOON</strong> YouTube / TikTok / X / LinkedIn / Reddit</p>
       </div>
     </section>
   );
@@ -127,10 +129,10 @@ export function Homepage() {
       <div className="site-grid" aria-hidden />
 
       <section className="site-hero" aria-labelledby="site-title">
-        <div className="site-hero-background" aria-hidden="true">
-          <AetherRibbonMesh />
+        <div className="site-hero-background" style={{ zIndex: 0 }} aria-hidden="true">
+          <ShaderBackground className="site-aether-canvas" />
         </div>
-        <div className="site-hero-shade" aria-hidden="true" />
+        <div className="site-hero-shade" style={{ zIndex: 1 }} aria-hidden="true" />
 
         <header className="site-nav">
           <div className="site-nav-brand">
@@ -155,7 +157,7 @@ export function Homepage() {
         <div className="site-hero-stats" aria-label="Posterract capabilities">
           <div><span>01</span><p>One source video</p></div>
           <div><span>04</span><p>One launch workflow</p></div>
-          <div><span>07</span><p>Platform destinations</p></div>
+          <div><span>08</span><p>Platform destinations</p></div>
           <div><span>24/7</span><p>Publishing status</p></div>
         </div>
       </section>
@@ -191,7 +193,7 @@ export function Homepage() {
         </div>
         <div className="site-pipeline-copy">
           <p className="site-kicker">NO MORE REPETITION</p>
-          <h2 id="pipeline-title">A real publishing sequence—not seven separate chores.</h2>
+          <h2 id="pipeline-title">A real publishing sequence—not eight separate chores.</h2>
           <p>Prepare the work once. Posterract handles the timing, destination state, retries, and publishing record around it.</p>
         </div>
       </section>
@@ -220,7 +222,7 @@ export function Homepage() {
 
       <footer className="site-footer" id="footer">
         <div className="site-footer-platforms" aria-label="Posterract platform network">
-          <p>NETWORK MIRROR // 07</p>
+          <p>NETWORK MIRROR // 08</p>
           <div>
             {PLATFORMS.map((platform) => (
               <span className="site-footer-platform" data-platform={platform.id} key={platform.id}>

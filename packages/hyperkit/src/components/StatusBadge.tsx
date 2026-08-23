@@ -43,6 +43,11 @@ const SPECS: Record<BadgeStatus, StatusSpec> = {
     className: "text-ice border-[rgba(124,247,255,0.4)] bg-[rgba(124,247,255,0.08)]",
     pulse: true,
   },
+  awaiting_user: {
+    label: "Finish in TikTok",
+    glyph: "↗",
+    className: "text-solar border-[rgba(255,204,102,0.4)] bg-[rgba(255,204,102,0.07)]",
+  },
   live: {
     label: "Live",
     glyph: "●",

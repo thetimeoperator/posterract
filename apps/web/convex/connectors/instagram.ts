@@ -213,7 +213,16 @@ export async function instagramPublishReel(args: {
 export async function instagramAccountSummary(args: {
   userId: string;
   accessToken: string;
-}): Promise<{ audience?: number; publishedVideos?: number }> {
+}): Promise<{
+  audience?: number;
+  publishedVideos?: number;
+  views?: number;
+  reach?: number;
+  accountsEngaged?: number;
+  totalInteractions?: number;
+  profileViews?: number;
+  clicks?: number;
+}> {
   const url = new URL(`${GRAPH}/${API_VERSION}/${args.userId}`);
   url.searchParams.set("fields", "followers_count,media_count");
   url.searchParams.set("access_token", args.accessToken);
@@ -226,13 +235,78 @@ export async function instagramAccountSummary(args: {
   if (!response.ok) {
     throw new Error(`Instagram account insights failed: ${body.error?.message ?? response.status}`);
   }
-  return { audience: body.followers_count, publishedVideos: body.media_count };
+  const summary: {
+    audience?: number;
+    publishedVideos?: number;
+    views?: number;
+    reach?: number;
+    accountsEngaged?: number;
+    totalInteractions?: number;
+    profileViews?: number;
+    clicks?: number;
+  } = { audience: body.followers_count, publishedVideos: body.media_count };
+  try {
+    const metricNames = [
+      "views",
+      "reach",
+      "accounts_engaged",
+      "total_interactions",
+      "profile_views",
+      "profile_links_taps",
+    ] as const;
+    const results = await Promise.allSettled(metricNames.map(async (name) => {
+      const insightsUrl = new URL(`${GRAPH}/${API_VERSION}/${args.userId}/insights`);
+      insightsUrl.searchParams.set("metric", name);
+      insightsUrl.searchParams.set("period", "day");
+      insightsUrl.searchParams.set("access_token", args.accessToken);
+      const insightsResponse = await fetch(insightsUrl);
+      const insights = (await insightsResponse.json()) as {
+        data?: Array<{
+          total_value?: { value?: number };
+          values?: Array<{ value?: number }>;
+        }>;
+      };
+      if (!insightsResponse.ok) throw new Error(`Instagram account metric ${name} unavailable`);
+      const metric = insights.data?.[0];
+      return [name, metric?.total_value?.value ?? metric?.values?.at(-1)?.value] as const;
+    }));
+    const values = new Map(
+      results.flatMap((result) => result.status === "fulfilled" ? [result.value] : []),
+    );
+    const assign = (key: keyof typeof summary, metricName: (typeof metricNames)[number]) => {
+      const value = values.get(metricName);
+      if (typeof value === "number") summary[key] = value;
+    };
+    assign("views", "views");
+    assign("reach", "reach");
+    assign("accountsEngaged", "accounts_engaged");
+    assign("totalInteractions", "total_interactions");
+    assign("profileViews", "profile_views");
+    assign("clicks", "profile_links_taps");
+  } catch {
+    // Account detail metrics are additive; follower/media totals still sync.
+  }
+  return summary;
 }
 
 export async function instagramPostInsights(args: {
   mediaId: string;
   accessToken: string;
-}): Promise<{ views: number; likes: number; comments: number; shares: number }> {
+}): Promise<{
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  reach?: number;
+  saves?: number;
+  totalInteractions?: number;
+  replays?: number;
+  watchTimeSeconds?: number;
+  averageWatchSeconds?: number;
+  skipRate?: number;
+  follows?: number;
+  profileViews?: number;
+}> {
   const fetchMetrics = async (metrics: string) => {
     const url = new URL(`${GRAPH}/${API_VERSION}/${args.mediaId}/insights`);
     url.searchParams.set("metric", metrics);
@@ -259,14 +333,43 @@ export async function instagramPostInsights(args: {
     // Older Reel objects expose `plays` where newer versions expose `views`.
     data = await fetchMetrics("plays,likes,comments,shares");
   }
-  const value = (name: string) => {
+  const optionalNames = [
+    "reach",
+    "saved",
+    "total_interactions",
+    "ig_reels_video_view_total_time",
+    "ig_reels_avg_watch_time",
+    "clips_replays_count",
+    "reels_skip_rate",
+    "follows",
+    "profile_visits",
+  ];
+  const optionalResults = await Promise.allSettled(
+    optionalNames.map((name) => fetchMetrics(name)),
+  );
+  for (const result of optionalResults) {
+    if (result.status === "fulfilled") data.push(...result.value);
+  }
+  const optionalValue = (name: string) => {
     const metric = data.find((row) => row.name === name);
-    return metric?.total_value?.value ?? metric?.values?.at(-1)?.value ?? 0;
+    return metric?.total_value?.value ?? metric?.values?.at(-1)?.value;
   };
+  const value = (name: string) => optionalValue(name) ?? 0;
+  const watchTime = optionalValue("ig_reels_video_view_total_time");
+  const averageWatchTime = optionalValue("ig_reels_avg_watch_time");
   return {
     views: value("views") || value("plays"),
     likes: value("likes"),
     comments: value("comments"),
     shares: value("shares"),
+    reach: optionalValue("reach"),
+    saves: optionalValue("saved"),
+    totalInteractions: optionalValue("total_interactions"),
+    replays: optionalValue("clips_replays_count"),
+    watchTimeSeconds: watchTime === undefined ? undefined : watchTime / 1000,
+    averageWatchSeconds: averageWatchTime === undefined ? undefined : averageWatchTime / 1000,
+    skipRate: optionalValue("reels_skip_rate"),
+    follows: optionalValue("follows"),
+    profileViews: optionalValue("profile_visits"),
   };
 }

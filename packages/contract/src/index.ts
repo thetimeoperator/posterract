@@ -22,7 +22,7 @@ export type PlatformId = (typeof PLATFORM_IDS)[number];
 
 /** Product availability is deliberately separate from connector presence. */
 export const PUBLISHING_PLATFORM_IDS = ["instagram", "tiktok", "facebook", "threads"] as const satisfies readonly PlatformId[];
-export const ANALYTICS_PLATFORM_IDS = ["instagram", "facebook", "threads"] as const satisfies readonly PlatformId[];
+export const ANALYTICS_PLATFORM_IDS = ["instagram", "tiktok", "facebook", "threads"] as const satisfies readonly PlatformId[];
 export const COMING_SOON_PLATFORM_IDS = ["youtube", "x"] as const satisfies readonly PlatformId[];
 
 export type PublishingPlatformId = (typeof PUBLISHING_PLATFORM_IDS)[number];
@@ -41,6 +41,7 @@ export type TransmissionStatus =
   | "draft"
   | "scheduled"
   | "transmitting"
+  | "awaiting_user"
   | "live"
   | "partial"
   | "failed"
@@ -53,6 +54,7 @@ export type ProjectionStatus =
   | "uploading"
   | "publishing"
   | "processing"
+  | "awaiting_user"
   | "live"
   | "failed"
   | "retrying"
@@ -247,7 +249,7 @@ export type PublishInput = {
 };
 
 export type PublishResult = {
-  status: "live" | "processing";
+  status: "live" | "processing" | "awaiting_user";
   platformMediaId?: string;
   platformPostId?: string;
   platformPostUrl?: string;
@@ -255,7 +257,7 @@ export type PublishResult = {
 };
 
 export type PublishStatusResult = {
-  status: "processing" | "live" | "failed";
+  status: "processing" | "awaiting_user" | "live" | "failed";
   platformPostUrl?: string;
   summary?: string;
 };
@@ -342,6 +344,12 @@ export type AnalyticsDailyPointDTO = {
   likes: number;
   comments: number;
   shares: number;
+  reach?: number;
+  saves?: number;
+  replies?: number;
+  reposts?: number;
+  quotes?: number;
+  clicks?: number;
   watchMinutes?: number;
   audienceGained: number;
   audienceLost: number;
@@ -358,7 +366,35 @@ export type AnalyticsPostDTO = {
   likes: number;
   comments: number;
   shares: number;
+  reach?: number;
+  saves?: number;
+  replies?: number;
+  reposts?: number;
+  quotes?: number;
+  clicks?: number;
+  replays?: number;
   watchMinutes?: number;
+  averageWatchSeconds?: number;
+  skipRate?: number;
+  durationSeconds?: number;
+};
+
+export type AnalyticsPeriodSummaryDTO = {
+  /** Point-in-time audience recorded at the end of the comparison period. */
+  audience?: number;
+  audienceDelta: number;
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  reach?: number;
+  saves?: number;
+  replies?: number;
+  reposts?: number;
+  quotes?: number;
+  clicks?: number;
+  watchMinutes?: number;
+  publishedPosts: number;
 };
 
 export type PlatformAnalyticsDTO = {
@@ -370,6 +406,21 @@ export type PlatformAnalyticsDTO = {
   audienceLabel: "Subscribers" | "Followers";
   audience?: number;
   audienceDelta: number;
+  following?: number;
+  totalLikes?: number;
+  publishedVideos?: number;
+  reach?: number;
+  saves?: number;
+  replies?: number;
+  reposts?: number;
+  quotes?: number;
+  clicks?: number;
+  replays?: number;
+  profileViews?: number;
+  accountsEngaged?: number;
+  totalInteractions?: number;
+  averageWatchSeconds?: number;
+  skipRate?: number;
   /** Facebook Page-level views returned by the Page Insights API. */
   pageViews?: number;
   /** Total views on Facebook posts published through Posterract. */
@@ -381,8 +432,14 @@ export type PlatformAnalyticsDTO = {
   watchMinutes?: number;
   publishedPosts: number;
   lastSyncedAt?: number;
+  /** Signals available through the provider's approved analytics integration. */
+  availableMetrics: string[];
+  /** Honest provider-specific limitations and connection guidance. */
+  metricNotes: string[];
   daily: AnalyticsDailyPointDTO[];
   posts: AnalyticsPostDTO[];
+  /** Same-length period immediately preceding the selected range. */
+  previousPeriod?: AnalyticsPeriodSummaryDTO;
 };
 
 export type AnalyticsDashboardDTO = {
@@ -437,6 +494,58 @@ export type PointsSummaryDTO = {
   streakDays: number;
   badges: string[];
   recent: PointsEntryDTO[];
+};
+
+// ---------------------------------------------------------------------------
+// Billing — public catalog and workspace subscription state. Stripe customer,
+// subscription, and invoice identifiers intentionally stay server-side.
+// ---------------------------------------------------------------------------
+
+export type BillingInterval = "month" | "year";
+
+export type BillingPlanDTO = {
+  priceId: string;
+  amount: number;
+  currency: "usd";
+  interval: BillingInterval;
+};
+
+export type BillingConfigDTO = {
+  configured: boolean;
+  publishableKey?: string;
+  productId?: string;
+  plans?: {
+    monthly: BillingPlanDTO;
+    yearly: BillingPlanDTO;
+  };
+};
+
+export type BillingSubscriptionDTO = {
+  status: string;
+  accessState: "active" | "grace" | "inactive";
+  entitled: boolean;
+  plan: {
+    unitAmount: number;
+    currency: "usd";
+    interval: BillingInterval;
+  } | null;
+  cancelAtPeriodEnd: boolean;
+  currentPeriodStart?: number;
+  currentPeriodEnd?: number;
+  trialEnd?: number;
+  cancelAt?: number;
+  canceledAt?: number;
+  lastPaymentStatus?: string;
+  lastPaymentAt?: number;
+  updatedAt?: number;
+};
+
+export type BillingCheckoutDTO = {
+  sessionId: string;
+  url: string;
+  status?: string;
+  expiresAt?: number;
+  replayed?: boolean;
 };
 
 // ---------------------------------------------------------------------------

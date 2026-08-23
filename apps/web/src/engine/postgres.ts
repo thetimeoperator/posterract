@@ -12,7 +12,6 @@ import type {
   TransmissionDTO,
 } from "@posterract/contract";
 import type { CreateTransmissionInput } from "./store";
-import { uploadVideoToR2 } from "@/lib/r2MultipartUpload";
 
 const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "/api";
 
@@ -94,10 +93,8 @@ export function useEngineBoot() {
         if (active) console.error("PostgreSQL engine refresh failed", error);
       });
     run();
-    const timer = window.setInterval(run, 5_000);
     return () => {
       active = false;
-      window.clearInterval(timer);
     };
   }, [refresh]);
 }
@@ -135,6 +132,7 @@ export function useEngineActions() {
       file: File,
       meta: { durationMs?: number; width?: number; height?: number },
     ) => {
+      const { uploadVideoToR2 } = await import("@/lib/r2MultipartUpload");
       const result = await uploadVideoToR2({
         file,
         workspaceId,
@@ -206,6 +204,36 @@ export function useEngineActions() {
         createdAt: Date.now(),
         updatedAt: Date.now(),
       } satisfies TransmissionDTO;
+    },
+    rescheduleTransmission: async (id: string, scheduledFor: number) => {
+      const previous = usePostgresStore
+        .getState()
+        .transmissions.find((item) => item.id === id);
+      if (!previous || previous.status !== "scheduled") {
+        throw new Error("Only scheduled posts can be moved");
+      }
+      usePostgresStore.setState((state) => ({
+        transmissions: state.transmissions.map((item) =>
+          item.id === id
+            ? { ...item, scheduleMode: "at", scheduledFor, updatedAt: Date.now() }
+            : item,
+        ),
+      }));
+      try {
+        await request(`/v1/posts/${encodeURIComponent(id)}/reschedule`, {
+          method: "POST",
+          headers: { "Idempotency-Key": crypto.randomUUID() },
+          body: JSON.stringify({ scheduledFor: new Date(scheduledFor).toISOString() }),
+        });
+        await refresh();
+      } catch (error) {
+        usePostgresStore.setState((state) => ({
+          transmissions: state.transmissions.map((item) =>
+            item.id === id ? previous : item,
+          ),
+        }));
+        throw error;
+      }
     },
     cancelTransmission: (id: string) => {
       void request(`/v1/posts/${encodeURIComponent(id)}/cancel`, {

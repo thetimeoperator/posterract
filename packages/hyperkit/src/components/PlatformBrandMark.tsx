@@ -24,7 +24,11 @@ export function PlatformBrandMark({
   const renderedWidth =
     platform === "youtube" ? (renderedHeight * 98) / 68 : undefined;
   const label =
-    platform === "linkedin" ? "LinkedIn" : PLATFORM_CAPABILITIES[platform].label;
+    platform === "linkedin"
+      ? "LinkedIn"
+      : platform === "reddit"
+        ? "Reddit"
+        : PLATFORM_CAPABILITIES[platform].label;
 
   return (
     <img

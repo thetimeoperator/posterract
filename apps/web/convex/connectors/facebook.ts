@@ -369,7 +369,12 @@ export async function facebookPublishReel(args: {
 export async function facebookPageSummary(args: {
   pageId: string;
   pageAccessToken: string;
-}): Promise<{ audience?: number; totalViews: number }> {
+}): Promise<{
+  audience?: number;
+  totalViews: number;
+  pageEngagements?: number;
+  profileViews?: number;
+}> {
   const url = new URL(`${GRAPH}/${API_VERSION}/${args.pageId}`);
   url.searchParams.set("fields", "followers_count,fan_count");
   url.searchParams.set("access_token", args.pageAccessToken);
@@ -381,35 +386,60 @@ export async function facebookPageSummary(args: {
   };
   if (!response.ok) throw new Error(`Facebook Page lookup failed: ${body.error?.message ?? response.status}`);
 
-  // Exercise the Page Insights edge with the permission Meta reviews for
-  // analytics. Page media views are not mixed into our normalized post views;
-  // post-level video counters continue to power the visible Views metric.
-  const insightsUrl = new URL(
-    `${GRAPH}/${API_VERSION}/${args.pageId}/insights/${PAGE_INSIGHTS_METRIC}`,
-  );
-  insightsUrl.searchParams.set("period", "day");
-  insightsUrl.searchParams.set("since", String(Math.floor(Date.now() / 1000) - 7 * 86400));
-  insightsUrl.searchParams.set("access_token", args.pageAccessToken);
-  const insightsResponse = await fetch(insightsUrl);
-  const insightsBody = (await insightsResponse.json()) as {
-    data?: Array<{ values?: Array<{ value?: number }> }>;
-    error?: { message?: string };
-  };
-  if (!insightsResponse.ok) {
-    throw new Error(
-      `Facebook Page insights failed: ${insightsBody.error?.message ?? insightsResponse.status}`,
+  const fetchMetric = async (metric: string) => {
+    const insightsUrl = new URL(
+      `${GRAPH}/${API_VERSION}/${args.pageId}/insights/${metric}`,
     );
-  }
-  const totalViews = (insightsBody.data ?? [])
-    .flatMap((metric) => metric.values ?? [])
-    .reduce((sum, point) => sum + (typeof point.value === "number" ? point.value : 0), 0);
-  return { audience: body.followers_count ?? body.fan_count, totalViews };
+    insightsUrl.searchParams.set("period", "day");
+    insightsUrl.searchParams.set("since", String(Math.floor(Date.now() / 1000) - 7 * 86400));
+    insightsUrl.searchParams.set("access_token", args.pageAccessToken);
+    const insightsResponse = await fetch(insightsUrl);
+    const insightsBody = (await insightsResponse.json()) as {
+      data?: Array<{
+        total_value?: { value?: number };
+        values?: Array<{ value?: number }>;
+      }>;
+      error?: { message?: string };
+    };
+    if (!insightsResponse.ok) {
+      throw new Error(
+        `Facebook Page insight ${metric} failed: ${insightsBody.error?.message ?? insightsResponse.status}`,
+      );
+    }
+    const rows = insightsBody.data ?? [];
+    const totalValue = rows.at(-1)?.total_value?.value;
+    if (typeof totalValue === "number") return totalValue;
+    return rows
+      .flatMap((row) => row.values ?? [])
+      .reduce((sum, point) => sum + (typeof point.value === "number" ? point.value : 0), 0);
+  };
+  const [mediaViews, engagements, profileViews] = await Promise.allSettled([
+    fetchMetric(PAGE_INSIGHTS_METRIC),
+    fetchMetric("page_post_engagements"),
+    fetchMetric("page_views_total"),
+  ]);
+  if (mediaViews.status === "rejected") throw mediaViews.reason;
+  return {
+    audience: body.followers_count ?? body.fan_count,
+    totalViews: mediaViews.value,
+    pageEngagements: engagements.status === "fulfilled" ? engagements.value : undefined,
+    profileViews: profileViews.status === "fulfilled" ? profileViews.value : undefined,
+  };
 }
 
 export async function facebookPostInsights(args: {
   videoId: string;
   pageAccessToken: string;
-}): Promise<{ views: number; likes: number; comments: number; shares: number }> {
+}): Promise<{
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  reactions?: number;
+  sharesAvailable: boolean;
+  watchTimeSeconds?: number;
+  threeSecondViews?: number;
+}> {
   const url = new URL(`${GRAPH}/${API_VERSION}/${args.videoId}`);
   url.searchParams.set("fields", "views,likes.summary(true),comments.summary(true)");
   url.searchParams.set("access_token", args.pageAccessToken);
@@ -421,10 +451,53 @@ export async function facebookPostInsights(args: {
     error?: { message?: string };
   };
   if (!response.ok) throw new Error(`Facebook post insights failed: ${body.error?.message ?? response.status}`);
+  let shares: number | undefined;
+  let reactions: number | undefined;
+  try {
+    const engagementUrl = new URL(`${GRAPH}/${API_VERSION}/${args.videoId}`);
+    engagementUrl.searchParams.set("fields", "shares,reactions.summary(true)");
+    engagementUrl.searchParams.set("access_token", args.pageAccessToken);
+    const engagementResponse = await fetch(engagementUrl);
+    const engagement = (await engagementResponse.json()) as {
+      shares?: { count?: number } | number;
+      reactions?: { summary?: { total_count?: number } };
+    };
+    if (engagementResponse.ok) {
+      shares = typeof engagement.shares === "number"
+        ? engagement.shares
+        : engagement.shares?.count;
+      reactions = engagement.reactions?.summary?.total_count;
+    }
+  } catch {
+    // Some Page Reel objects do not expose post engagement fields directly.
+  }
+  let watchTimeSeconds: number | undefined;
+  let threeSecondViews: number | undefined;
+  try {
+    const insightsUrl = new URL(`${GRAPH}/${API_VERSION}/${args.videoId}/video_insights`);
+    insightsUrl.searchParams.set("metric", "total_video_view_time,total_video_views");
+    insightsUrl.searchParams.set("access_token", args.pageAccessToken);
+    const insightsResponse = await fetch(insightsUrl);
+    const insights = (await insightsResponse.json()) as {
+      data?: Array<{ name?: string; values?: Array<{ value?: number }> }>;
+    };
+    if (insightsResponse.ok) {
+      const value = (name: string) =>
+        insights.data?.find((row) => row.name === name)?.values?.at(-1)?.value;
+      watchTimeSeconds = value("total_video_view_time");
+      threeSecondViews = value("total_video_views");
+    }
+  } catch {
+    // Facebook insight catalogs vary by Page and Graph version; base data stays valid.
+  }
   return {
     views: body.views ?? 0,
     likes: body.likes?.summary?.total_count ?? 0,
     comments: body.comments?.summary?.total_count ?? 0,
-    shares: 0,
+    shares: shares ?? 0,
+    reactions,
+    sharesAvailable: shares !== undefined,
+    watchTimeSeconds,
+    threeSecondViews,
   };
 }

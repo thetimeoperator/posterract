@@ -37,6 +37,9 @@ importers:
       pg:
         specifier: ^8.16.3
         version: 8.22.0
+      stripe:
+        specifier: ^22.5.0
+        version: 22.5.0(@types/node@25.9.5)
       tsx:
         specifier: ^4.23.12
         version: 4.23.12
@@ -83,15 +86,12 @@ importers:
       '@convex-dev/better-auth':
         specifier: ^0.12.3
         version: 0.12.3(@standard-schema/spec@1.1.0)(better-auth@1.6.16(@opentelemetry/api@1.9.1)(pg@8.22.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(convex@1.41.0(react@19.2.7))(react@19.2.7)(typescript@6.0.3)
-      '@fontsource-variable/inter':
-        specifier: ^5.2.5
-        version: 5.2.8
+      '@fontsource-variable/geist':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@fontsource-variable/jetbrains-mono':
         specifier: ^5.2.5
         version: 5.2.8
-      '@fontsource-variable/space-grotesk':
-        specifier: ^5.2.5
-        version: 5.2.10
       '@posterract/contract':
         specifier: workspace:*
         version: link:../../packages/contract
@@ -131,9 +131,6 @@ importers:
       gsap:
         specifier: ^3.15.0
         version: 3.15.0
-      liquid-glass-react:
-        specifier: 1.1.1
-        version: 1.1.1(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       lucide-react:
         specifier: ^1.16.0
         version: 1.17.0(react@19.2.7)
@@ -818,14 +815,11 @@ packages:
   '@fastify/proxy-addr@5.1.0':
     resolution: {integrity: sha512-INS+6gh91cLUjB+PVHfu1UqcB76Sqtpyp7bnL+FYojhjygvOPA9ctiD/JDKsyD9Xgu4hUhCSJBPig/w7duNajw==}
 
-  '@fontsource-variable/inter@5.2.8':
-    resolution: {integrity: sha512-kOfP2D+ykbcX/P3IFnokOhVRNoTozo5/JxhAIVYLpea/UBmCQ/YWPBfWIDuBImXX/15KH+eKh4xpEUyS2sQQGQ==}
+  '@fontsource-variable/geist@5.3.0':
+    resolution: {integrity: sha512-j0m+vLQuG5XAYoHtGCVu0spvlGreR3EzpECUVzkFmI1mTVnAO38l/NEPDCFgZ177JxzYJCLSmTQibIiYPilGrA==}
 
   '@fontsource-variable/jetbrains-mono@5.2.8':
     resolution: {integrity: sha512-WBA9elru6Jdp5df2mES55wuOO0WIrn3kpXnI4+W2ek5u3ZgLS9XS4gmIlcQhiZOWEKl95meYdvK7xI+ETLCq/Q==}
-
-  '@fontsource-variable/space-grotesk@5.2.10':
-    resolution: {integrity: sha512-yJQO/o35/hAP3CFnpdFTwQku2yzJOae2HIpBmqkOVoxhhXJaQP3g+b6Jrz7u+eI7A5ZdCIf88uMWpBJdFiGr5w==}
 
   '@grpc/grpc-js@1.14.4':
     resolution: {integrity: sha512-k9Dj3DV/itK9D06Y8f190Qgop7/Ui+D0njFV3LHMPwPT75DpXLQohE9Wmz0QElrJnzsjB7KPWiKJbOl7IPDArQ==}
@@ -2247,12 +2241,6 @@ packages:
     resolution: {integrity: sha512-NXYBzinNrblfraPGyrbPoD19C1h9lfI/1mzgWYvXUTe414Gz/X1FD2XBZSZM7rRTrMA8JL3OtAaGifrIKhQ5yQ==}
     engines: {node: '>= 12.0.0'}
 
-  liquid-glass-react@1.1.1:
-    resolution: {integrity: sha512-pKzaktaMAEztd93wpWcz2Z5Z9qdLJUNJdMX+n00Ca4XsnrLTQ5xJzm/+GQXZUeuFXe/PQ8ziVMZO6531PyaFJw==}
-    peerDependencies:
-      react: '>=19'
-      react-dom: '>=19'
-
   lodash.camelcase@4.3.0:
     resolution: {integrity: sha512-TwuEnCnxbc3rAvhf/LbG7tJUDzhqXyFnv3dtzLOPgCG/hODL7WFnsbwktkD7yUV0RrreP/l1PALq/YSg6VvjlA==}
 
@@ -2714,6 +2702,15 @@ packages:
   strip-ansi@6.0.1:
     resolution: {integrity: sha512-Y38VPSHcqkFrCpFnQ9vuSXmquuv5oXOKpGeT6aGrr3o3Gc9AlVa6JBfUSOCnbxGGZF+/0ooI7KrPuUSztUdU5A==}
     engines: {node: '>=8'}
+
+  stripe@22.5.0:
+    resolution: {integrity: sha512-QVwMwriC0bbySx6R4dpsvJ0W//GojC1kwWVS6rPSoVqDUIZX4Hy3TaUrd2AZeXEAaKbfWIjQjvo3vKAReHZ0vQ==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@types/node': '>=18'
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
 
   supports-color@8.1.1:
     resolution: {integrity: sha512-MpUEN2OodtUzxvKQl72cUF7RQ5EiHsGvSsVG0ia9c5RbWGL2CI4C7EpPS8UTBIplnlzZiNuV56w+FuNxy3ty2Q==}
@@ -3572,11 +3569,9 @@ snapshots:
       '@fastify/forwarded': 3.0.1
       ipaddr.js: 2.4.0
 
-  '@fontsource-variable/inter@5.2.8': {}
+  '@fontsource-variable/geist@5.3.0': {}
 
   '@fontsource-variable/jetbrains-mono@5.2.8': {}
-
-  '@fontsource-variable/space-grotesk@5.2.10': {}
 
   '@grpc/grpc-js@1.14.4':
     dependencies:
@@ -4947,11 +4942,6 @@ snapshots:
       lightningcss-win32-arm64-msvc: 1.32.0
       lightningcss-win32-x64-msvc: 1.32.0
 
-  liquid-glass-react@1.1.1(react-dom@19.2.7(react@19.2.7))(react@19.2.7):
-    dependencies:
-      react: 19.2.7
-      react-dom: 19.2.7(react@19.2.7)
-
   lodash.camelcase@4.3.0: {}
 
   lodash@4.18.1: {}
@@ -5343,6 +5333,10 @@ snapshots:
   strip-ansi@6.0.1:
     dependencies:
       ansi-regex: 5.0.1
+
+  stripe@22.5.0(@types/node@25.9.5):
+    optionalDependencies:
+      '@types/node': 25.9.5
 
   supports-color@8.1.1:
     dependencies:

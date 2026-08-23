@@ -1,64 +1,237 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import {
   ArrowUpRight,
-  Clock3,
-  Eye,
+  BarChart3,
+  Bookmark,
   Heart,
   MessageCircle,
   RadioTower,
   Share2,
-  Sparkles,
-  TrendingUp,
-  Users,
 } from "lucide-react";
-import { Button, EmptyState, Panel, Segmented } from "@posterract/hyperkit";
+import { Button, EmptyState, Panel, PlatformBrandMark, Segmented } from "@posterract/hyperkit";
 import {
-  PLATFORM_CAPABILITIES,
   ANALYTICS_PLATFORM_IDS,
+  PLATFORM_CAPABILITIES,
+  type AnalyticsPlatformId,
+  type AnalyticsPostDTO,
   type AnalyticsRangeDays,
   type PlatformAnalyticsDTO,
   type PlatformId,
 } from "@posterract/contract";
-import { PlatformBrandMark } from "@posterract/hyperkit";
 import { useAnalyticsDashboard, useProjections, useTransmissions } from "@/engine/useEngine";
 
 export const Route = createFileRoute("/_app/echoes")({ component: Analytics });
 
-type PlatformFilter = "all" | "instagram" | "facebook" | "threads";
+type PlatformFilter = "all" | AnalyticsPlatformId;
+type ChartMetric = "views" | "interactions" | "growth";
+type SignalMetric =
+  | "audience"
+  | "views"
+  | "interactions"
+  | "engagementRate"
+  | "likes"
+  | "comments"
+  | "shares"
+  | "reach"
+  | "saves"
+  | "watchMinutes"
+  | "growth";
+
+type SignalMetricModel = {
+  id: SignalMetric;
+  label: string;
+  value: number | undefined;
+  previous: number | undefined;
+  series: Array<number | null>;
+  scope: string;
+};
+
 const FILTERS: Array<{ value: PlatformFilter; label: string }> = [
-  { value: "all", label: "All signals" },
+  { value: "all", label: "All" },
   { value: "instagram", label: "Instagram" },
+  { value: "tiktok", label: "TikTok" },
   { value: "facebook", label: "Facebook" },
   { value: "threads", label: "Threads" },
 ];
+
 const RANGES: Array<{ value: `${AnalyticsRangeDays}`; label: string }> = [
   { value: "7", label: "7D" },
   { value: "30", label: "30D" },
   { value: "90", label: "90D" },
 ];
 
+const CHART_METRICS: Array<{ value: ChartMetric; label: string }> = [
+  { value: "views", label: "Views" },
+  { value: "interactions", label: "Interactions" },
+  { value: "growth", label: "Growth" },
+];
+
+const SIGNAL_METRICS: Record<PlatformFilter, SignalMetric[]> = {
+  all: ["audience", "views", "interactions", "engagementRate", "likes", "growth"],
+  instagram: ["audience", "reach", "views", "likes", "saves", "engagementRate"],
+  tiktok: ["audience", "views", "likes", "comments", "shares", "engagementRate"],
+  facebook: ["audience", "views", "interactions", "likes", "watchMinutes", "engagementRate"],
+  threads: ["audience", "views", "likes", "comments", "shares", "engagementRate"],
+};
+
+const SIGNAL_TONES = [
+  { primary: "101,255,154", secondary: "124,247,255" },
+  { primary: "37,244,238", secondary: "35,124,255" },
+  { primary: "255,0,105", secondary: "168,85,247" },
+  { primary: "255,151,64", secondary: "255,58,148" },
+  { primary: "139,92,246", secondary: "34,211,238" },
+  { primary: "255,214,102", secondary: "101,255,154" },
+] as const;
+
+const ANALYTICS_STYLES = `
+  .analytics-signal-tile {
+    position: relative;
+    isolation: isolate;
+    min-width: 0;
+    min-height: 270px;
+    overflow: hidden;
+    border: 1px solid rgba(226, 255, 238, .055);
+    border-radius: 17px;
+    background:
+      radial-gradient(ellipse at 50% 108%, rgba(var(--signal-a), .065), transparent 58%),
+      linear-gradient(155deg, rgba(8, 13, 14, .96), rgba(2, 5, 7, .985));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.025), 0 16px 38px rgba(0,0,0,.24);
+    transition: transform 180ms ease, box-shadow 180ms ease;
+  }
+  .analytics-signal-tile::before {
+    content: "";
+    position: absolute;
+    z-index: 2;
+    inset: -1px;
+    pointer-events: none;
+    border-top: 2px solid rgba(var(--signal-a), .92);
+    border-left: 2px solid rgba(var(--signal-b), .76);
+    border-radius: inherit;
+    filter: drop-shadow(0 0 7px rgba(var(--signal-a), .2));
+    animation: analytics-signal-frame 4.8s ease-in-out infinite alternate;
+    animation-delay: calc(var(--signal-i) * -.55s);
+  }
+  .analytics-signal-tile::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(circle at 0 0, rgba(var(--signal-a), .13), transparent 36%);
+  }
+  .analytics-signal-tile:hover {
+    transform: translateY(-2px);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.035), 0 20px 44px rgba(0,0,0,.3), 0 0 28px rgba(var(--signal-a), .045);
+  }
+  .analytics-signal-graph {
+    filter: drop-shadow(0 0 6px rgba(var(--signal-a), .12));
+  }
+  .analytics-signal-line-glow {
+    opacity: .14;
+    filter: blur(1.1px);
+  }
+  .analytics-signal-line:not(.analytics-signal-line-glow) {
+    filter: drop-shadow(0 0 2px rgba(var(--signal-a), .9)) drop-shadow(0 0 5px rgba(var(--signal-a), .34));
+  }
+  .analytics-signal-line {
+    animation: analytics-line-arrive 520ms cubic-bezier(.22,.7,.2,1) both;
+  }
+  .analytics-signal-area {
+    animation: analytics-area-arrive 620ms ease-out both;
+  }
+  .analytics-platform-card {
+    position: relative;
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid rgba(173, 255, 205, .14);
+    border-radius: 20px;
+    background:
+      radial-gradient(circle at 8% 0%, color-mix(in srgb, var(--platform-accent) 13%, transparent), transparent 43%),
+      linear-gradient(145deg, rgba(10, 23, 21, .78), rgba(3, 10, 12, .87));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.025), 0 14px 36px rgba(0,0,0,.18);
+  }
+  .analytics-platform-card__rail {
+    height: 2px;
+    margin: 0 16px;
+    background: linear-gradient(90deg, transparent, var(--platform-accent) 18%, var(--platform-secondary) 82%, transparent);
+    box-shadow: 0 0 16px color-mix(in srgb, var(--platform-accent) 28%, transparent);
+  }
+  .analytics-platform-summary {
+    background: linear-gradient(110deg, color-mix(in srgb, var(--platform-accent) 10%, transparent), rgba(255,255,255,.018));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--platform-accent) 13%, transparent);
+  }
+  .analytics-platform-metric {
+    min-width: 0;
+    border-radius: 12px;
+    background: linear-gradient(145deg, rgba(231,255,240,.045), rgba(255,255,255,.012));
+    box-shadow: inset 0 0 0 1px rgba(221,255,233,.07);
+  }
+  .analytics-panel > header {
+    padding: 20px 22px 0;
+  }
+  .analytics-panel > header .kicker {
+    font-size: 10.5px;
+  }
+  .analytics-panel > header h2 {
+    margin-top: 4px;
+    font-size: 18px;
+    letter-spacing: -.012em;
+  }
+  @keyframes analytics-signal-frame {
+    from { opacity: .6; filter: drop-shadow(0 0 5px rgba(var(--signal-a), .13)); }
+    to { opacity: 1; filter: drop-shadow(0 0 10px rgba(var(--signal-a), .3)); }
+  }
+  @keyframes analytics-line-arrive {
+    from { opacity: 0; transform: translateY(3px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes analytics-area-arrive {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .analytics-signal-tile::before { animation: none; }
+    .analytics-signal-tile:hover { transform: none; }
+    .analytics-signal-line, .analytics-signal-area { animation: none; }
+  }
+`;
+
 function Analytics() {
   const [platform, setPlatform] = useState<PlatformFilter>("all");
   const [rangeValue, setRangeValue] = useState<`${AnalyticsRangeDays}`>("30");
+  const [chartMetric, setChartMetric] = useState<ChartMetric>("views");
   const rangeDays = Number(rangeValue) as AnalyticsRangeDays;
   const dashboard = useAnalyticsDashboard(rangeDays);
   const transmissions = useTransmissions();
   const projections = useProjections();
 
   const selected = useMemo(
-    () => (dashboard?.platforms ?? []).filter(
-      (row) => (ANALYTICS_PLATFORM_IDS as readonly string[]).includes(row.provider) && (platform === "all" || row.provider === platform),
-    ),
+    () =>
+      (dashboard?.platforms ?? []).filter(
+        (row) =>
+          (ANALYTICS_PLATFORM_IDS as readonly string[]).includes(row.provider) &&
+          (platform === "all" || row.provider === platform),
+      ),
     [dashboard, platform],
   );
   const totals = useMemo(() => summarize(selected), [selected]);
-  const isFacebook = platform === "facebook";
-  const isThreads = platform === "threads";
-  const facebookPageViews = isFacebook ? (selected[0]?.pageViews ?? 0) : undefined;
-  const facebookPostViews = isFacebook ? (selected[0]?.postViews ?? totals.views) : undefined;
+  const signalMetrics = useMemo(
+    () => buildSignalMetrics(selected, platform, rangeDays),
+    [selected, platform, rangeDays],
+  );
+  const lastSyncedAt = useMemo(() => {
+    const timestamps = selected
+      .map((row) => row.lastSyncedAt)
+      .filter((value): value is number => value !== undefined);
+    return timestamps.length ? Math.max(...timestamps) : undefined;
+  }, [selected]);
   const topPosts = useMemo(
-    () => selected.flatMap((row) => row.posts).sort((a, b) => b.views - a.views).slice(0, 8),
+    () =>
+      selected
+        .flatMap((row) => row.posts)
+        .sort((left, right) => scorePost(right) - scorePost(left))
+        .slice(0, 10),
     [selected],
   );
   const delivery = useMemo(() => {
@@ -77,15 +250,22 @@ function Analytics() {
     };
   }, [projections, transmissions]);
 
-  const anyConnected = (dashboard?.platforms ?? []).some((row) => row.connected);
+  const anyConnected = (dashboard?.platforms ?? []).some(
+    (row) =>
+      (ANALYTICS_PLATFORM_IDS as readonly string[]).includes(row.provider) && row.connected,
+  );
   const isEmpty = dashboard && !anyConnected && delivery.published === 0 && delivery.scheduled === 0;
   if (isEmpty) {
     return (
-      <Panel className="min-h-[60vh]" brackets>
+      <Panel className="min-h-[60vh]">
         <EmptyState
-          title="Listening for echoes…"
-          detail="Connect a platform, then publish your first transmission. Audience and performance signals will resolve here."
-          action={<Link to="/portals"><Button variant="primary">Connect a platform</Button></Link>}
+          title="No analytics yet"
+          detail="Connect TikTok, Instagram, Facebook, or Threads, then publish your first post. Performance data will appear here after the first analytics sync."
+          action={
+            <Link to="/portals">
+              <Button variant="primary">Connect a platform</Button>
+            </Link>
+          }
         />
       </Panel>
     );
@@ -93,23 +273,27 @@ function Analytics() {
 
   return (
     <div className="space-y-4" data-testid="analytics-dashboard">
+      <style>{ANALYTICS_STYLES}</style>
       <section className="glass relative overflow-hidden px-5 py-5 sm:px-6">
         <div
-          className="pointer-events-none absolute inset-0 opacity-70"
-          style={{ background: "radial-gradient(circle at 16% 0%, rgba(101,255,154,.13), transparent 34%), radial-gradient(circle at 88% 8%, rgba(124,247,255,.08), transparent 26%)" }}
+          className="pointer-events-none absolute inset-0 opacity-80"
+          style={{
+            background:
+              "radial-gradient(circle at 14% 0%, rgba(101,255,154,.12), transparent 31%), radial-gradient(circle at 90% 10%, rgba(124,247,255,.08), transparent 28%)",
+          }}
           aria-hidden
         />
-        <div className="relative flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div className="max-w-2xl">
+        <div className="relative flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+          <div>
             <div className="mb-2 flex items-center gap-2 text-neon">
-              <RadioTower size={14} />
-              <span className="kicker !text-neon">Signal intelligence</span>
+              <BarChart3 size={14} />
+              <span className="kicker !text-neon">Cross-platform performance</span>
             </div>
-            <h1 className="font-display text-[25px] font-semibold tracking-[-0.025em] text-starlight sm:text-[30px]">
-              What returned from the transmission.
+            <h1 className="font-display text-[28px] font-semibold tracking-[-0.03em] text-starlight sm:text-[34px]">
+              Analytics
             </h1>
-            <p className="mt-1.5 max-w-xl text-[12.5px] text-starlight-dim">
-              One performance surface for every connected dimension—without flattening the signals that make each platform different.
+            <p className="mt-1.5 max-w-2xl text-[14px] leading-relaxed text-starlight-dim">
+              TikTok, Instagram, Facebook, and Threads performance in one dashboard.
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -128,87 +312,92 @@ function Analytics() {
         <ScopeNotice platforms={selected.filter((row) => row.connected && !row.ready)} />
       )}
 
-      <div
-        className={`grid grid-cols-2 gap-3 ${isFacebook || isThreads ? "xl:grid-cols-6" : "xl:grid-cols-5"}`}
-      >
-        <MetricCard icon={<Users size={15} />} label={totals.audienceLabel} value={compact(totals.audience)} delta={totals.audienceDelta} />
-        {isFacebook && (
-          <MetricCard
-            icon={<Eye size={15} />}
-            label="Page views"
-            value={compact(facebookPageViews ?? 0)}
-          />
-        )}
-        <MetricCard
-          icon={<Eye size={15} />}
-          label={isFacebook ? "Post views" : "Views"}
-          value={compact(facebookPostViews ?? totals.views)}
-        />
-        {isThreads ? (
-          <>
-            <MetricCard icon={<Heart size={15} />} label="Likes" value={compact(totals.likes)} />
-            <MetricCard icon={<MessageCircle size={15} />} label="Replies" value={compact(totals.comments)} />
-            <MetricCard icon={<Share2 size={15} />} label="Reposts + quotes" value={compact(totals.shares)} />
-            <MetricCard icon={<Sparkles size={15} />} label="Published" value={String(totals.publishedPosts)} />
-          </>
-        ) : (
-          <>
-            <MetricCard icon={<TrendingUp size={15} />} label="Engagement" value={`${totals.engagementRate.toFixed(1)}%`} />
-            <MetricCard icon={<Sparkles size={15} />} label="Published" value={String(totals.publishedPosts)} />
-            <MetricCard
-              icon={<Clock3 size={15} />}
-              label={totals.watchMinutes > 0 ? "Watch time" : "Interactions"}
-              value={totals.watchMinutes > 0 ? formatMinutes(totals.watchMinutes) : compact(totals.interactions)}
-              className="col-span-2 xl:col-span-1"
-            />
-          </>
-        )}
-      </div>
+      <section aria-labelledby="performance-pulse-title">
+        <div className="mb-3 flex flex-col gap-1 px-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="kicker !text-[10.5px]">Performance pulse</p>
+            <h2 id="performance-pulse-title" className="mt-1 font-display text-[25px] font-semibold tracking-[-0.025em] text-starlight">
+              The signals shaping your growth
+            </h2>
+          </div>
+          <p className="text-[11.5px] text-starlight-faint">
+            {lastSyncedAt ? `Latest account sync ${relativeTime(lastSyncedAt)}` : "Trend baselines begin after your first analytics sync"}
+          </p>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-label="Performance overview">
+          {signalMetrics.map((metric, index) => (
+            <MetricCard key={metric.id} tone={index} metric={metric} rangeDays={rangeDays} />
+          ))}
+        </div>
+      </section>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(300px,.85fr)]">
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(300px,.75fr)]">
         <Panel
-          kicker="Resonance curve"
-          title={`Views · last ${rangeDays} days`}
-          actions={<ChartLegend platforms={selected} />}
-          brackets
-          className="min-w-0"
+          kicker="Performance over time"
+          title={`${chartLabel(chartMetric)} · last ${rangeDays} days`}
+          actions={
+            <MiniTabs options={CHART_METRICS} value={chartMetric} onChange={setChartMetric} />
+          }
+          className="analytics-panel min-w-0"
         >
-          <SignalChart platforms={selected} rangeDays={rangeDays} />
+          <SignalChart platforms={selected} rangeDays={rangeDays} metric={chartMetric} />
+          <ChartLegend platforms={selected} />
         </Panel>
-        <Panel kicker="Engagement mix" title="How the audience responded" brackets>
-          <EngagementMix totals={totals} platform={platform} />
+        <Panel kicker="Platform contribution" title="Where performance came from" className="analytics-panel">
+          <PlatformContribution platforms={selected} totalViews={totals.views} />
         </Panel>
-      </div>
+      </section>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,.65fr)]">
-        <Panel kicker="Strongest signals" title="Top-performing transmissions" brackets>
+      <section>
+        <div className="mb-3 flex items-end justify-between gap-4 px-1">
+          <div>
+            <p className="kicker !text-[10.5px]">Platform intelligence</p>
+            <h2 className="mt-1 font-display text-[25px] font-semibold tracking-[-0.025em] text-starlight">
+              Metrics that matter on each network
+            </h2>
+          </div>
+          <p className="hidden text-right text-[11.5px] text-starlight-faint sm:block">
+            Account totals and selected-period results are labeled separately.
+          </p>
+        </div>
+        <div className={`grid gap-4 ${selected.length === 1 ? "max-w-[920px] grid-cols-1" : "md:grid-cols-2"}`}>
+          {selected.map((row) => (
+            <PlatformIntelligence key={row.provider} platform={row} rangeDays={rangeDays} />
+          ))}
+        </div>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(300px,.55fr)]">
+        <Panel kicker="Content leaderboard" title="Top posts by impact" className="analytics-panel">
           <TopPosts posts={topPosts} />
         </Panel>
-        <Panel kicker="Portal telemetry" title="Connected analytics" brackets>
-          <div className="space-y-3">
-            {(dashboard?.platforms ?? []).map((row) => <PlatformStatus key={row.provider} platform={row} />)}
-          </div>
+        <Panel kicker="Audience response" title="Interaction mix" className="analytics-panel">
+          <EngagementMix totals={totals} platform={platform} />
         </Panel>
-      </div>
+      </section>
 
-      <Panel kicker="Publishing telemetry" title="Delivery health" brackets>
-        <p className="mb-4 text-[11px] text-starlight-faint">TikTok delivery status appears in History. Audience analytics currently cover Instagram, Facebook, and Threads only.</p>
-        <div className="grid gap-5 lg:grid-cols-[240px_minmax(0,1fr)]">
-          <div className="grid grid-cols-3 gap-2">
-            <SmallReadout label="Posts" value={delivery.published} />
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,.8fr)]">
+        <Panel kicker="Data coverage" title="Available analytics" className="analytics-panel">
+          <Coverage platforms={selected} />
+        </Panel>
+        <Panel kicker="Publishing telemetry" title="Delivery health" className="analytics-panel">
+          <div className="grid grid-cols-3 gap-3">
+            <SmallReadout label="Published" value={delivery.published} />
             <SmallReadout label="Success" value={delivery.successRate === undefined ? "—" : `${delivery.successRate}%`} />
             <SmallReadout label="Queued" value={delivery.scheduled} />
           </div>
-          <DeliveryBars rows={delivery.byPlatform} />
-        </div>
-      </Panel>
+          <div className="mt-5 border-t border-[var(--glass-border)] pt-4">
+            <DeliveryBars rows={delivery.byPlatform} />
+          </div>
+        </Panel>
+      </section>
     </div>
   );
 }
 
 function PlatformSelector({ value, onChange }: { value: PlatformFilter; onChange: (value: PlatformFilter) => void }) {
   return (
-    <div className="inline-flex rounded-[10px] border border-[var(--glass-border)] bg-void-2 p-1" role="radiogroup" aria-label="Platform filter">
+    <div className="flex max-w-full items-center overflow-x-auto rounded-[10px] bg-void-2/80 p-1" role="radiogroup" aria-label="Platform filter">
       {FILTERS.map((option) => {
         const active = option.value === value;
         return (
@@ -218,8 +407,13 @@ function PlatformSelector({ value, onChange }: { value: PlatformFilter; onChange
             role="radio"
             aria-checked={active}
             onClick={() => onChange(option.value)}
-            className={`flex h-8 items-center gap-1.5 rounded-[7px] px-3 font-display text-[11.5px] transition ${active ? "border border-[rgba(101,255,154,.36)] bg-[rgba(101,255,154,.08)] text-starlight shadow-glow-neon-sm" : "border border-transparent text-starlight-dim hover:text-starlight"}`}
+            className={`flex h-9 flex-none items-center gap-2 rounded-[7px] px-3 font-display text-[12px] transition-colors ${
+              active
+                ? "bg-[rgba(101,255,154,.1)] text-starlight"
+                : "text-starlight-faint hover:text-starlight"
+            }`}
           >
+            {option.value !== "all" && <PlatformBrandMark platform={option.value} height={14} />}
             {option.label}
           </button>
         );
@@ -228,217 +422,460 @@ function PlatformSelector({ value, onChange }: { value: PlatformFilter; onChange
   );
 }
 
-function ScopeNotice({ platforms }: { platforms: PlatformAnalyticsDTO[] }) {
+function MiniTabs<T extends string>({ options, value, onChange }: { options: Array<{ value: T; label: string }>; value: T; onChange: (value: T) => void }) {
   return (
-    <div className="flex flex-col gap-3 rounded-[14px] border border-solar/30 bg-[rgba(255,204,102,.06)] px-4 py-3 sm:flex-row sm:items-center">
-      <div className="flex min-w-0 flex-1 gap-3">
-        <RadioTower size={17} className="mt-0.5 flex-none text-solar" />
-        <div>
-          <p className="font-display text-[12.5px] font-semibold text-starlight">Analytics permission required</p>
-          <p className="mt-0.5 text-[11px] text-starlight-dim">
-            Reconnect {platforms.map((row) => PLATFORM_CAPABILITIES[row.provider].label).join(" and ")} once to authorize the new read-only analytics scopes.
-          </p>
-        </div>
-      </div>
-      <Link to="/portals"><Button variant="secondary" size="sm">Open portals</Button></Link>
+    <div className="flex items-center gap-1 rounded-[8px] bg-void-2/75 p-1" role="radiogroup">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          role="radio"
+          aria-checked={value === option.value}
+          onClick={() => onChange(option.value)}
+          className={`rounded-[6px] px-2.5 py-1.5 font-display text-[10.5px] transition-colors ${
+            value === option.value ? "bg-[rgba(124,247,255,.09)] text-ice" : "text-starlight-faint hover:text-starlight"
+          }`}
+        >
+          {option.label}
+        </button>
+      ))}
     </div>
   );
 }
 
-function MetricCard({ icon, label, value, delta, className = "" }: { icon: ReactNode; label: string; value: string; delta?: number; className?: string }) {
+function ScopeNotice({ platforms }: { platforms: PlatformAnalyticsDTO[] }) {
   return (
-    <Panel className={`!overflow-hidden !p-0 ${className}`}>
-      <div className="relative p-4">
-        <div className="mb-3 flex items-center justify-between text-starlight-faint">
-          {icon}<span className="kicker !text-[8px]">Live signal</span>
-        </div>
-        <p className="telemetry text-[23px] font-medium leading-none text-starlight">{value}</p>
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <p className="kicker !text-[9px]">{label}</p>
-          {delta !== undefined && delta !== 0 && <span className={`telemetry text-[9px] ${delta > 0 ? "text-neon" : "text-redshift"}`}>{delta > 0 ? "+" : ""}{delta.toLocaleString()}</span>}
+    <div className="flex flex-col gap-3 rounded-[14px] bg-[rgba(255,204,102,.065)] px-4 py-3 sm:flex-row sm:items-center">
+      <div className="flex min-w-0 flex-1 gap-3">
+        <RadioTower size={17} className="mt-0.5 flex-none text-solar" />
+        <div>
+          <p className="font-display text-[14px] font-semibold text-starlight">Analytics access needs attention</p>
+          <p className="mt-1 text-[12.5px] leading-relaxed text-starlight-dim">
+            Reconnect {platforms.map((row) => PLATFORM_CAPABILITIES[row.provider].label).join(" and ")} to grant the approved read-only analytics permissions.
+          </p>
         </div>
       </div>
-    </Panel>
+      <Link to="/portals">
+        <Button variant="secondary" size="sm">Open accounts</Button>
+      </Link>
+    </div>
   );
 }
 
-function SignalChart({ platforms, rangeDays }: { platforms: PlatformAnalyticsDTO[]; rangeDays: number }) {
-  const W = 780;
-  const H = 252;
-  const P = { left: 42, right: 14, top: 15, bottom: 30 };
+type SignalStyle = CSSProperties & {
+  "--signal-a": string;
+  "--signal-b": string;
+  "--signal-i": number;
+};
+
+function MetricCard({
+  tone,
+  metric,
+  rangeDays,
+}: {
+  tone: number;
+  metric: SignalMetricModel;
+  rangeDays: number;
+}) {
+  const colors = SIGNAL_TONES[tone % SIGNAL_TONES.length];
+  const style = {
+    "--signal-a": colors.primary,
+    "--signal-b": colors.secondary,
+    "--signal-i": tone,
+  } as SignalStyle;
+  const comparison = comparisonPercent(metric.value, metric.previous);
+  const comparisonLabel = comparison === undefined
+    ? "Baseline"
+    : `${comparison >= 0 ? "+" : ""}${comparison.toFixed(Math.abs(comparison) >= 10 ? 0 : 1)}%`;
+  return (
+    <article
+      className="analytics-signal-tile"
+      style={style}
+      data-signal-metric={metric.id}
+      aria-label={`${metric.label}: ${formatSignalValue(metric.id, metric.value)}. ${comparisonLabel} compared with the previous ${rangeDays} days.`}
+    >
+      <div className="relative flex h-full min-h-[270px] flex-col px-[18px] pb-4 pt-[17px]">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="h-2.5 w-2.5 flex-none rounded-full bg-[rgb(var(--signal-a))] shadow-[0_0_12px_rgba(var(--signal-a),.5)]" />
+            <p className="truncate font-display text-[15px] font-semibold tracking-[-0.015em] text-starlight">{metric.label}</p>
+          </div>
+          <div className={`flex flex-none items-center gap-1.5 ${comparison === undefined ? "text-starlight-faint" : comparison >= 0 ? "text-neon" : "text-redshift"}`}>
+            {comparison !== undefined && <ArrowUpRight size={12} strokeWidth={2.5} className={comparison < 0 ? "rotate-90" : ""} />}
+            <p className="telemetry text-[11.5px] font-medium">{comparisonLabel}</p>
+          </div>
+        </div>
+
+        <MetricSparkline metric={metric} tone={tone} />
+
+        <div className="mt-auto pt-2">
+          <p className="telemetry text-[36px] font-medium leading-none tracking-[-0.05em] text-starlight">
+            {formatSignalValue(metric.id, metric.value)}
+          </p>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function MetricSparkline({ metric, tone }: { metric: SignalMetricModel; tone: number }) {
+  const width = 480;
+  const height = 154;
+  const insetX = -2;
+  const insetY = 7;
+  const values = metric.series;
+  const observedValues = values.filter((value): value is number => value !== null);
+  const rawMinimum = observedValues.length ? Math.min(...observedValues) : 0;
+  const rawMaximum = observedValues.length ? Math.max(...observedValues) : 0;
+  const rawSpan = rawMaximum - rawMinimum;
+  const visualPadding = rawSpan === 0 ? Math.max(Math.abs(rawMaximum) * .08, 1) : rawSpan * .12;
+  const minimum = rawMinimum - visualPadding;
+  const maximum = rawMaximum + visualPadding;
+  const span = Math.max(1, maximum - minimum);
+  const points = observedValues.map((value, index) => ({
+    x: insetX + (index / Math.max(1, observedValues.length - 1)) * (width - insetX * 2),
+    y: height - insetY - ((value - minimum) / span) * (height - insetY * 2),
+  }));
+  const gradientId = `signal-area-${metric.id}-${tone}`;
+  const hasHistory = observedValues.length >= 2;
+  const line = smoothPath(points);
+  const first = points[0];
+  const last = points.at(-1);
+  const area = first && last ? `${line} L ${last.x} ${height + 2} L ${first.x} ${height + 2} Z` : "";
+  return (
+    <div className="relative mt-1 h-[154px] overflow-hidden" aria-hidden>
+        {hasHistory ? (
+        <svg
+          data-testid="signal-sparkline"
+          data-observed-points={observedValues.length}
+          viewBox={`0 0 ${width} ${height}`}
+          preserveAspectRatio="none"
+          className="analytics-signal-graph block h-full w-full overflow-hidden"
+        >
+          <defs>
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor={`rgb(${SIGNAL_TONES[tone % SIGNAL_TONES.length].primary})`} stopOpacity=".68" />
+              <stop offset=".58" stopColor={`rgb(${SIGNAL_TONES[tone % SIGNAL_TONES.length].primary})`} stopOpacity=".24" />
+              <stop offset="1" stopColor={`rgb(${SIGNAL_TONES[tone % SIGNAL_TONES.length].secondary})`} stopOpacity=".015" />
+            </linearGradient>
+          </defs>
+          <path className="analytics-signal-area" d={area} fill={`url(#${gradientId})`} stroke="none" />
+          <path
+            className="analytics-signal-line analytics-signal-line-glow"
+            d={line}
+            fill="none"
+            stroke={`rgb(${SIGNAL_TONES[tone % SIGNAL_TONES.length].primary})`}
+            strokeWidth="4.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke"
+          />
+          <path
+            data-signal-line
+            className="analytics-signal-line"
+            d={line}
+            fill="none"
+            stroke={`rgb(${SIGNAL_TONES[tone % SIGNAL_TONES.length].primary})`}
+            strokeWidth="1.65"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
+        ) : null}
+        {!hasHistory && (
+          <span className="absolute inset-0 flex items-center justify-center font-display text-[11px] uppercase tracking-[.12em] text-starlight-faint">
+            Waiting for daily trend data
+          </span>
+        )}
+    </div>
+  );
+}
+
+function SignalChart({ platforms, rangeDays, metric }: { platforms: PlatformAnalyticsDTO[]; rangeDays: number; metric: ChartMetric }) {
+  const width = 820;
+  const height = 270;
+  const padding = { left: 45, right: 15, top: 16, bottom: 31 };
   const dates = dateRange(rangeDays);
   const series = platforms.map((platform) => {
-    const map = new Map(platform.daily.map((row) => [row.date, row.views]));
+    const map = new Map(platform.daily.map((row) => [row.date, dailyMetric(row, metric)]));
     const values = dates.map((date) => map.get(date) ?? 0);
-    const observedViews = platform.provider === "facebook"
-      ? (platform.postViews ?? platform.views)
-      : platform.views;
-
-    // Meta returns cumulative post counters, but a reconnect intentionally
-    // clears the cached daily deltas. Keep the chart honest and visible by
-    // plotting the newly observed cumulative baseline on the current day;
-    // subsequent refreshes continue filling true daily deltas as normal.
-    if (
-      platform.connected &&
-      observedViews > 0 &&
-      !values.some((value) => value > 0) &&
-      values.length > 0
-    ) {
-      values[values.length - 1] = observedViews;
+    const observed = metric === "views"
+      ? platform.provider === "facebook" ? platform.postViews ?? platform.views : platform.views
+      : metric === "interactions"
+        ? platform.likes + platform.comments + platform.shares
+        : platform.audienceDelta;
+    if (platform.connected && observed !== 0 && !values.some((value) => value !== 0) && values.length) {
+      values[values.length - 1] = observed;
     }
-
     return { platform: platform.provider, values };
   });
+  const min = Math.min(0, ...series.flatMap((row) => row.values));
   const max = Math.max(10, ...series.flatMap((row) => row.values));
-  const x = (index: number) => P.left + (index / Math.max(1, dates.length - 1)) * (W - P.left - P.right);
-  const y = (value: number) => H - P.bottom - (value / max) * (H - P.top - P.bottom);
-  const hasData = series.some((row) => row.values.some((value) => value > 0));
+  const span = Math.max(1, max - min);
+  const x = (index: number) => padding.left + (index / Math.max(1, dates.length - 1)) * (width - padding.left - padding.right);
+  const y = (value: number) => height - padding.bottom - ((value - min) / span) * (height - padding.top - padding.bottom);
+  const hasData = series.some((row) => row.values.some((value) => value !== 0));
   if (!hasData) {
-    const connectedNames = platforms
-      .filter((platform) => platform.connected)
-      .map((platform) => PLATFORM_CAPABILITIES[platform.provider].label)
-      .join(" and ");
     return (
-      <div className="flex h-[250px] items-center justify-center text-center text-[12px] text-starlight-faint">
-        {connectedNames
-          ? `${connectedNames} connected · waiting for the first recorded view.`
+      <div className="flex h-[300px] items-center justify-center text-center text-[13.5px] text-starlight-faint">
+        {platforms.some((row) => row.connected)
+          ? `Waiting for the first ${chartLabel(metric).toLowerCase()} sync.`
           : "Connect a platform to begin receiving analytics."}
       </div>
     );
   }
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full overflow-visible" role="img" aria-label="Daily views by platform">
+    <svg viewBox={`0 0 ${width} ${height}`} className="w-full overflow-visible" role="img" aria-label={`Daily ${chartLabel(metric).toLowerCase()} by platform`}>
       <defs>
         {series.map((row) => {
           const color = PLATFORM_CAPABILITIES[row.platform].accent;
-          return <linearGradient key={row.platform} id={`echo-${row.platform}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={color} stopOpacity=".28" /><stop offset="1" stopColor={color} stopOpacity="0" /></linearGradient>;
+          return (
+            <linearGradient key={row.platform} id={`analytics-${row.platform}-${metric}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor={color} stopOpacity=".25" />
+              <stop offset="1" stopColor={color} stopOpacity="0" />
+            </linearGradient>
+          );
         })}
       </defs>
-      {[0, .25, .5, .75, 1].map((fraction) => {
-        const value = Math.round(max * fraction);
-        return <g key={fraction}><line x1={P.left} x2={W - P.right} y1={y(value)} y2={y(value)} stroke="rgba(155,255,197,.085)" /><text x={P.left - 9} y={y(value) + 3} textAnchor="end" fontSize="8" fill="var(--starlight-faint)" fontFamily="var(--font-mono)">{compact(value)}</text></g>;
+      {[0, 0.25, 0.5, 0.75, 1].map((fraction) => {
+        const value = min + span * fraction;
+        return (
+          <g key={fraction}>
+            <line x1={padding.left} x2={width - padding.right} y1={y(value)} y2={y(value)} stroke="rgba(155,255,197,.075)" />
+            <text x={padding.left - 9} y={y(value) + 3} textAnchor="end" fontSize="9.5" fill="var(--starlight-faint)" fontFamily="var(--font-mono)">
+              {compact(Math.round(value))}
+            </text>
+          </g>
+        );
       })}
       {series.map((row) => {
         const color = PLATFORM_CAPABILITIES[row.platform].accent;
         const points = row.values.map((value, index) => `${x(index)},${y(value)}`).join(" ");
-        const area = `${P.left},${H - P.bottom} ${points} ${W - P.right},${H - P.bottom}`;
-        return <g key={row.platform}><polygon points={area} fill={`url(#echo-${row.platform})`} /><polyline points={points} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" style={{ filter: `drop-shadow(0 0 6px ${color}70)` }} /></g>;
+        const area = `${padding.left},${y(0)} ${points} ${width - padding.right},${y(0)}`;
+        return (
+          <g key={row.platform}>
+            <polygon points={area} fill={`url(#analytics-${row.platform}-${metric})`} />
+            <polyline points={points} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+          </g>
+        );
       })}
       {dates.map((date, index) => {
         const stride = rangeDays <= 7 ? 1 : rangeDays <= 30 ? 5 : 15;
         if (index % stride !== 0 && index !== dates.length - 1) return null;
-        return <text key={date} x={x(index)} y={H - 8} textAnchor="middle" fontSize="8" fill="var(--starlight-faint)" fontFamily="var(--font-mono)">{new Date(`${date}T00:00:00`).toLocaleDateString([], { month: "short", day: "numeric" })}</text>;
+        return (
+          <text key={date} x={x(index)} y={height - 8} textAnchor="middle" fontSize="9.5" fill="var(--starlight-faint)" fontFamily="var(--font-mono)">
+            {new Date(`${date}T00:00:00`).toLocaleDateString([], { month: "short", day: "numeric" })}
+          </text>
+        );
       })}
     </svg>
   );
 }
 
 function ChartLegend({ platforms }: { platforms: PlatformAnalyticsDTO[] }) {
-  return <div className="flex items-center gap-3">{platforms.map((row) => <span key={row.provider} className="flex items-center gap-1.5 text-[9px] text-starlight-dim"><span className="h-1.5 w-4 rounded-full" style={{ background: PLATFORM_CAPABILITIES[row.provider].accent, boxShadow: `0 0 8px ${PLATFORM_CAPABILITIES[row.provider].accent}` }} />{PLATFORM_CAPABILITIES[row.provider].label}{row.connected && <span className="telemetry text-[7px] uppercase text-neon">Connected</span>}</span>)}</div>;
-}
-
-function EngagementMix({ totals, platform }: { totals: ReturnType<typeof summarize>; platform: PlatformFilter }) {
-  const isThreads = platform === "threads";
-  const rows = [
-    { label: "Likes", value: totals.likes, icon: <Heart size={13} />, color: "var(--neon)" },
-    { label: isThreads ? "Replies" : "Comments", value: totals.comments, icon: <MessageCircle size={13} />, color: "var(--ice)" },
-    { label: isThreads ? "Reposts + quotes" : "Shares", value: totals.shares, icon: <Share2 size={13} />, color: "var(--pure)" },
-  ];
-  const max = Math.max(1, ...rows.map((row) => row.value));
   return (
-    <div className="space-y-5 pt-1">
-      {rows.map((row) => <div key={row.label}><div className="mb-1.5 flex items-center gap-2 text-[11px] text-starlight-dim"><span style={{ color: row.color }}>{row.icon}</span><span>{row.label}</span><span className="telemetry ml-auto text-starlight">{compact(row.value)}</span></div><div className="h-1.5 overflow-hidden rounded-full bg-void-3"><div className="h-full rounded-full" style={{ width: `${(row.value / max) * 100}%`, background: row.color, boxShadow: `0 0 10px ${row.color}` }} /></div></div>)}
-      <div className="border-t border-[var(--glass-border)] pt-3"><p className="kicker !text-[8px]">Total response</p><p className="telemetry mt-1 text-[20px] text-starlight">{compact(totals.interactions)} <span className="font-body text-[10px] text-starlight-faint">interactions</span></p></div>
-    </div>
-  );
-}
-
-function TopPosts({ posts }: { posts: PlatformAnalyticsDTO["posts"] }) {
-  if (!posts.length) return <p className="py-8 text-center text-[12px] text-starlight-faint">Published-post metrics will resolve here.</p>;
-  return (
-    <div className="divide-y divide-[var(--glass-border)]">
-      {posts.map((post, index) => (
-        <div
-          key={post.projectionId}
-          className="grid grid-cols-[22px_minmax(0,1fr)_64px_52px_24px] items-center gap-3 py-3 first:pt-0 last:pb-0"
-        >
-          <span className="telemetry text-[10px] text-starlight-faint">
-            {String(index + 1).padStart(2, "0")}
+    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-[var(--glass-border)] pt-3">
+      {platforms.map((row) => (
+        <span key={row.provider} className="flex items-center gap-2 text-[11px] text-starlight-dim">
+          <span className="h-1.5 w-4 rounded-full" style={{ background: PLATFORM_CAPABILITIES[row.provider].accent }} />
+          {PLATFORM_CAPABILITIES[row.provider].label}
+          <span className={`telemetry text-[8.5px] uppercase ${row.ready ? "text-neon" : "text-starlight-faint"}`}>
+            {row.ready ? "Live" : row.connected ? "Limited" : "Offline"}
           </span>
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="w-[52px] flex-none font-display text-[8.5px] font-semibold text-starlight-dim">
-              {PLATFORM_CAPABILITIES[post.provider].label}
-            </span>
-            <div className="min-w-0">
-              <p className="truncate text-[12px] text-starlight">{post.title}</p>
-              <p className="telemetry mt-0.5 text-[8.5px] text-starlight-faint">
-                {post.publishedAt
-                  ? new Date(post.publishedAt).toLocaleDateString([], { month: "short", day: "numeric" })
-                  : "Published"}
-              </p>
-            </div>
-          </div>
-          <div className="text-right">
-            <p className="telemetry text-[11px] text-starlight">{compact(post.views)}</p>
-            <p className="kicker !text-[7px]">Views</p>
-          </div>
-          <div className="text-right">
-            <p className="telemetry text-[11px] text-starlight">
-              {compact(post.likes + post.comments + post.shares)}
-            </p>
-            <p className="kicker !text-[7px]">Acts</p>
-          </div>
-          {post.platformPostUrl ? (
-            <a
-              href={post.platformPostUrl}
-              target="_blank"
-              rel="noreferrer"
-              aria-label={`Open ${post.title}`}
-              className="text-starlight-faint transition hover:text-neon"
-            >
-              <ArrowUpRight size={14} />
-            </a>
-          ) : (
-            <span />
-          )}
-        </div>
+        </span>
       ))}
     </div>
   );
 }
 
-function PlatformStatus({ platform }: { platform: PlatformAnalyticsDTO }) {
-  const caps = PLATFORM_CAPABILITIES[platform.provider];
-  const status = !platform.connected ? "Not connected" : platform.ready ? "Receiving" : "Reconnect";
+function PlatformContribution({ platforms, totalViews }: { platforms: PlatformAnalyticsDTO[]; totalViews: number }) {
+  const max = Math.max(1, ...platforms.map((row) => row.views));
   return (
-    <div className="rounded-[12px] border border-[var(--glass-border)] bg-void-2/45 p-3">
-      <div className="flex items-center gap-2">
-        <span className="flex h-8 w-10 flex-none items-center justify-center">
-          <PlatformBrandMark platform={platform.provider} height={24} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="font-display text-[12px] font-medium text-starlight">{caps.label}</p>
-          <p className="truncate text-[9.5px] text-starlight-faint">{platform.handle ?? "Awaiting portal"}</p>
+    <div className="space-y-4">
+      {platforms.map((row) => {
+        const caps = PLATFORM_CAPABILITIES[row.provider];
+        const share = totalViews ? (row.views / totalViews) * 100 : 0;
+        return (
+          <div key={row.provider}>
+            <div className="mb-2 flex items-center gap-2">
+              <span className="flex h-7 w-8 items-center justify-center"><PlatformBrandMark platform={row.provider} height={20} /></span>
+              <div className="min-w-0 flex-1">
+                <p className="font-display text-[13px] text-starlight">{caps.label}</p>
+                <p className="truncate text-[10px] text-starlight-faint">{row.handle ?? "Not connected"}</p>
+              </div>
+              <div className="text-right">
+                <p className="telemetry text-[13px] text-starlight">{compact(row.views)}</p>
+                <p className="telemetry text-[9px] text-starlight-faint">{share.toFixed(0)}%</p>
+              </div>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-void-3">
+              <div className="h-full rounded-full" style={{ width: `${(row.views / max) * 100}%`, background: caps.accent }} />
+            </div>
+          </div>
+        );
+      })}
+      {!platforms.length && <p className="py-8 text-center text-[13px] text-starlight-faint">No platform data available.</p>}
+    </div>
+  );
+}
+
+function PlatformIntelligence({ platform, rangeDays }: { platform: PlatformAnalyticsDTO; rangeDays: number }) {
+  const caps = PLATFORM_CAPABILITIES[platform.provider];
+  const stats = platformStats(platform);
+  const interactions = platform.likes + platform.comments + platform.shares + (platform.saves ?? 0);
+  const style = {
+    "--platform-accent": caps.accent,
+    "--platform-secondary": caps.accentSecondary,
+  } as CSSProperties;
+  return (
+    <article className="analytics-platform-card" style={style}>
+      <div className="analytics-platform-card__rail" />
+      <div className="p-4 sm:p-[18px]">
+        <div className="flex items-center gap-3">
+          <span className="flex h-11 w-12 flex-none items-center justify-center rounded-[12px] bg-void-2/75 shadow-[inset_0_0_0_1px_rgba(255,255,255,.045)]">
+            <PlatformBrandMark platform={platform.provider} height={29} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="font-display text-[18px] font-semibold tracking-[-0.015em] text-starlight">{caps.label}</p>
+            <p className="mt-1 truncate text-[12px] text-starlight-faint">{platform.handle ?? "Not connected"}</p>
+          </div>
+          <span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1.5 font-display text-[9.5px] font-semibold uppercase tracking-[.12em] ${platform.ready ? "bg-[rgba(101,255,154,.075)] text-neon" : platform.connected ? "bg-[rgba(255,214,102,.07)] text-solar" : "bg-white/[.025] text-starlight-faint"}`}>
+            <span className="h-1.5 w-1.5 rounded-full bg-current shadow-[0_0_8px_currentColor]" />
+            {platform.ready ? "Live" : platform.connected ? "Limited" : "Offline"}
+          </span>
         </div>
-        <span
-          className={`telemetry text-[8px] uppercase ${
-            platform.ready ? "text-neon" : platform.connected ? "text-solar" : "text-starlight-faint"
-          }`}
-        >
-          {status}
-        </span>
-      </div>
-      <div className="mt-3 flex items-end justify-between border-t border-[var(--glass-border)] pt-2.5">
-        <div>
-          <p className="telemetry text-[16px] text-starlight">
-            {platform.audience === undefined ? "—" : compact(platform.audience)}
-          </p>
-          <p className="kicker !text-[7px]">{platform.audienceLabel}</p>
+
+        <div className="analytics-platform-summary mt-4 flex items-center justify-between gap-3 rounded-[13px] px-3.5 py-3">
+          <div>
+            <p className="font-display text-[10.5px] font-semibold uppercase tracking-[.13em] text-starlight-faint">{rangeDays}-day views</p>
+            <p className="telemetry mt-1.5 text-[27px] leading-none text-starlight">{compact(platform.views)}</p>
+          </div>
+          <div className="text-right">
+            <p className="font-display text-[10.5px] font-semibold uppercase tracking-[.13em] text-starlight-faint">Interactions</p>
+            <p className="telemetry mt-1.5 text-[23px] leading-none text-starlight-dim">{compact(interactions)}</p>
+          </div>
         </div>
-        <p className="telemetry text-[8.5px] text-starlight-faint">
-          {platform.lastSyncedAt ? `Synced ${relativeTime(platform.lastSyncedAt)}` : "No signal yet"}
-        </p>
+
+        <div className="mt-3 grid grid-cols-2 gap-2.5">
+          {stats.map((stat) => (
+            <div key={stat.label} className="analytics-platform-metric p-3">
+              <p className="telemetry text-[25px] leading-none text-starlight">{stat.value}</p>
+              <p className="mt-2.5 font-display text-[12px] font-semibold uppercase leading-[1.35] tracking-[.07em] text-starlight-dim">{stat.label}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 flex items-center justify-between gap-3 px-0.5 text-[10.5px] text-starlight-faint">
+          <span>Period results + account totals</span>
+          <span className="flex-none">{platform.lastSyncedAt ? `Synced ${relativeTime(platform.lastSyncedAt)}` : "No sync yet"}</span>
+        </div>
       </div>
+    </article>
+  );
+}
+
+function TopPosts({ posts }: { posts: AnalyticsPostDTO[] }) {
+  if (!posts.length) {
+    return <p className="py-10 text-center text-[13.5px] text-starlight-faint">Post metrics will appear after the first analytics sync.</p>;
+  }
+  return (
+    <div className="overflow-x-auto">
+      <div className="min-w-[660px]">
+        <div className="grid grid-cols-[28px_minmax(220px,1fr)_88px_88px_72px_28px] gap-3 border-b border-[var(--glass-border)] pb-2">
+          <span />
+          <span className="kicker !text-[10px]">Post</span>
+          <span className="kicker text-right !text-[10px]">Views</span>
+          <span className="kicker text-right !text-[10px]">Interactions</span>
+          <span className="kicker text-right !text-[10px]">Rate</span>
+          <span />
+        </div>
+        {posts.map((post, index) => {
+          const interactions = post.likes + post.comments + post.shares + (post.saves ?? 0);
+          const rate = post.views ? (interactions / post.views) * 100 : 0;
+          return (
+            <div key={post.projectionId} className="grid grid-cols-[28px_minmax(220px,1fr)_88px_88px_72px_28px] items-center gap-3 border-b border-[var(--glass-border)] py-3 last:border-b-0 last:pb-0">
+              <span className="telemetry text-[10.5px] text-starlight-faint">{String(index + 1).padStart(2, "0")}</span>
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className="flex h-8 w-9 flex-none items-center justify-center rounded-[8px] bg-void-2/65">
+                  <PlatformBrandMark platform={post.provider} height={19} />
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-[14px] text-starlight">{post.title}</p>
+                  <p className="telemetry mt-1 text-[9.5px] text-starlight-faint">
+                    {post.publishedAt ? new Date(post.publishedAt).toLocaleDateString([], { month: "short", day: "numeric" }) : "Published"}
+                  </p>
+                </div>
+              </div>
+              <p className="telemetry text-right text-[12.5px] text-starlight">{compact(post.views)}</p>
+              <p className="telemetry text-right text-[12.5px] text-starlight">{compact(interactions)}</p>
+              <p className="telemetry text-right text-[11.5px] text-ice">{percent(rate)}</p>
+              {post.platformPostUrl ? (
+                <a href={post.platformPostUrl} target="_blank" rel="noreferrer" aria-label={`Open ${post.title}`} className="text-starlight-faint transition-colors hover:text-neon">
+                  <ArrowUpRight size={14} />
+                </a>
+              ) : <span />}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function EngagementMix({ totals, platform }: { totals: ReturnType<typeof summarize>; platform: PlatformFilter }) {
+  const rows = [
+    { label: "Likes", value: totals.likes, icon: <Heart size={13} />, color: "var(--neon)" },
+    { label: platform === "threads" ? "Replies" : "Comments", value: totals.comments, icon: <MessageCircle size={13} />, color: "var(--ice)" },
+    { label: platform === "threads" ? "Reposts + quotes" : "Shares", value: totals.shares, icon: <Share2 size={13} />, color: "var(--pure)" },
+    { label: "Saves", value: totals.saves, icon: <Bookmark size={13} />, color: "var(--solar)" },
+  ].filter((row) => row.value > 0 || row.label !== "Saves");
+  const max = Math.max(1, ...rows.map((row) => row.value));
+  return (
+    <div className="space-y-4 pt-1">
+      {rows.map((row) => (
+        <div key={row.label}>
+          <div className="mb-2 flex items-center gap-2.5 text-[12px] text-starlight-dim">
+            <span style={{ color: row.color }}>{row.icon}</span>
+            <span>{row.label}</span>
+            <span className="telemetry ml-auto text-starlight">{compact(row.value)}</span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-void-3">
+            <div className="h-full rounded-full" style={{ width: `${(row.value / max) * 100}%`, background: row.color }} />
+          </div>
+        </div>
+      ))}
+      <div className="grid grid-cols-2 gap-3 border-t border-[var(--glass-border)] pt-4">
+        <SmallReadout label="Total response" value={compact(totals.interactions)} />
+        <SmallReadout label="Response rate" value={percent(totals.engagementRate)} />
+      </div>
+    </div>
+  );
+}
+
+function Coverage({ platforms }: { platforms: PlatformAnalyticsDTO[] }) {
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      {platforms.map((platform) => {
+        const caps = PLATFORM_CAPABILITIES[platform.provider];
+        return (
+          <div key={platform.provider} className="rounded-[12px] bg-void-2/50 p-3.5">
+            <div className="flex items-center gap-2">
+              <PlatformBrandMark platform={platform.provider} height={20} />
+              <p className="font-display text-[13px] font-medium text-starlight">{caps.label}</p>
+              <span className="telemetry ml-auto text-[8.5px] uppercase text-starlight-faint">{platform.availableMetrics.length} signals</span>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {platform.availableMetrics.map((metricName) => (
+                <span key={metricName} className="rounded-full bg-[rgba(124,247,255,.055)] px-2.5 py-1.5 font-display text-[10px] text-starlight-dim">
+                  {metricLabel(metricName)}
+                </span>
+              ))}
+            </div>
+            {platform.metricNotes[0] && <p className="mt-3 text-[10.5px] leading-relaxed text-starlight-faint">{platform.metricNotes[0]}</p>}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -446,19 +883,18 @@ function PlatformStatus({ platform }: { platform: PlatformAnalyticsDTO }) {
 function DeliveryBars({ rows }: { rows: Array<{ provider: PlatformId; count: number }> }) {
   const max = Math.max(1, ...rows.map((row) => row.count));
   return (
-    <div className="grid grid-cols-2 gap-x-5 gap-y-2.5 sm:grid-cols-3">
+    <div className="grid grid-cols-2 gap-x-5 gap-y-3">
       {rows.map((row) => {
         const caps = PLATFORM_CAPABILITIES[row.provider];
         return (
-          <div key={row.provider} className="flex items-center gap-2">
-            <span className="w-14 text-[9.5px] text-starlight-dim">{caps.label}</span>
-            <div className="h-1 flex-1 rounded-full bg-void-3">
-              <div
-                className="h-full rounded-full"
-                style={{ width: `${(row.count / max) * 100}%`, background: caps.accent }}
-              />
+          <div key={row.provider}>
+            <div className="mb-1.5 flex items-center justify-between text-[10px] text-starlight-dim">
+              <span>{caps.label}</span>
+              <span className="telemetry text-starlight-faint">{row.count}</span>
             </div>
-            <span className="telemetry w-4 text-right text-[9px] text-starlight-faint">{row.count}</span>
+            <div className="h-1 rounded-full bg-void-3">
+              <div className="h-full rounded-full" style={{ width: `${(row.count / max) * 100}%`, background: caps.accent }} />
+            </div>
           </div>
         );
       })}
@@ -467,20 +903,332 @@ function DeliveryBars({ rows }: { rows: Array<{ provider: PlatformId; count: num
 }
 
 function SmallReadout({ label, value }: { label: string; value: number | string }) {
-  return <div><p className="telemetry text-[17px] text-starlight">{value}</p><p className="kicker mt-1 !text-[7px]">{label}</p></div>;
+  return (
+    <div>
+      <p className="telemetry text-[20px] text-starlight">{value}</p>
+      <p className="kicker mt-1.5 !text-[8.5px]">{label}</p>
+    </div>
+  );
+}
+
+function platformStats(platform: PlatformAnalyticsDTO) {
+  const interactions = platform.likes + platform.comments + platform.shares;
+  if (platform.provider === "instagram") {
+    return [
+      { label: "Reach", value: optionalCompact(platform.reach) },
+      { label: "Saves", value: optionalCompact(platform.saves) },
+      { label: "Avg watch", value: optionalSeconds(platform.averageWatchSeconds) },
+      { label: "Latest profile actions", value: optionalCompact(sumKnown(platform.profileViews, platform.clicks)) },
+    ];
+  }
+  if (platform.provider === "tiktok") {
+    return [
+      { label: "Total likes", value: optionalCompact(platform.totalLikes) },
+      { label: "Following", value: optionalCompact(platform.following) },
+      { label: "Videos", value: optionalCompact(platform.publishedVideos) },
+      { label: "Views / post", value: compact(platform.publishedPosts ? platform.views / platform.publishedPosts : 0) },
+    ];
+  }
+  if (platform.provider === "facebook") {
+    return [
+      { label: "Page views", value: optionalCompact(platform.pageViews) },
+      { label: "Post views", value: optionalCompact(platform.postViews) },
+      { label: "Interactions", value: compact(interactions) },
+      { label: "Watch time", value: optionalMinutes(platform.watchMinutes) },
+    ];
+  }
+  return [
+    { label: "Replies", value: optionalCompact(platform.replies ?? platform.comments) },
+    { label: "Reposts", value: optionalCompact(platform.reposts) },
+    { label: "Quotes", value: optionalCompact(platform.quotes) },
+    { label: "Clicks", value: optionalCompact(platform.clicks) },
+  ];
+}
+
+function buildSignalMetrics(
+  platforms: PlatformAnalyticsDTO[],
+  filter: PlatformFilter,
+  rangeDays: AnalyticsRangeDays,
+): SignalMetricModel[] {
+  const current = summarize(platforms);
+  const previous = summarizePrevious(platforms);
+  return SIGNAL_METRICS[filter].map((id) => ({
+    id,
+    label: signalLabel(id, filter),
+    value: signalValue(current, id),
+    previous: signalValue(previous, id),
+    series: signalSeries(platforms, id, rangeDays),
+    scope: id === "audience"
+      ? "Current account total"
+      : id === "engagementRate"
+        ? `${rangeDays}-day rate`
+        : id === "growth"
+          ? `${rangeDays}-day net change`
+          : `${rangeDays}-day activity`,
+  }));
+}
+
+function signalSeries(
+  platforms: PlatformAnalyticsDTO[],
+  metric: SignalMetric,
+  rangeDays: AnalyticsRangeDays,
+): Array<number | null> {
+  const dates = dateRange(rangeDays);
+  if (metric === "audience") {
+    const audiencePlatforms = platforms.filter((platform) => platform.audience !== undefined);
+    if (!audiencePlatforms.length || audiencePlatforms.some((platform) =>
+      !platform.daily.some((row) => dates.includes(row.date)))) {
+      return dates.map(() => null);
+    }
+    const platformSeries = audiencePlatforms.map((platform) => {
+      const netByDate = new Map(
+        platform.daily.map((row) => [row.date, row.audienceGained - row.audienceLost]),
+      );
+      const reconstructed: Array<number | null> = Array.from({ length: dates.length }, () => null);
+      let audience = platform.audience!;
+      for (let index = dates.length - 1; index >= 0; index -= 1) {
+        const dailyChange = netByDate.get(dates[index]);
+        if (dailyChange === undefined) continue;
+        reconstructed[index] = audience;
+        audience -= dailyChange;
+      }
+      return reconstructed;
+    });
+    return dates.map((_, index) => {
+      const points = platformSeries.map((values) => values[index]);
+      if (!points.length || points.some((value) => value === null)) return null;
+      return points.reduce<number>((sum, value) => sum + (value ?? 0), 0);
+    });
+  }
+
+  const rowsByPlatform = platforms
+    .map((platform) => new Map(platform.daily.map((row) => [row.date, row])))
+    .filter((rowsByDate) => rowsByDate.size > 0);
+  return dates.map((date) => {
+    if (!rowsByPlatform.length) return null;
+    const rows = rowsByPlatform
+      .map((rowsByDate) => rowsByDate.get(date))
+      .filter((row): row is PlatformAnalyticsDTO["daily"][number] => row !== undefined);
+    if (rows.length !== rowsByPlatform.length) return null;
+    const views = rows.reduce((sum, row) => sum + row.views, 0);
+    const interactions = rows.reduce(
+      (sum, row) => sum + row.likes + row.comments + row.shares + (row.saves ?? 0),
+      0,
+    );
+    if (metric === "engagementRate") return views ? (interactions / views) * 100 : 0;
+    if (metric === "interactions") return interactions;
+    if (metric === "growth") {
+      return rows.reduce((sum, row) => sum + row.audienceGained - row.audienceLost, 0);
+    }
+    if (metric === "views") return views;
+    if (metric === "likes") return rows.reduce((sum, row) => sum + row.likes, 0);
+    if (metric === "comments") return rows.reduce((sum, row) => sum + row.comments, 0);
+    if (metric === "shares") return rows.reduce((sum, row) => sum + row.shares, 0);
+    if (metric === "reach") {
+      const known = rows.flatMap((row) => row.reach === undefined ? [] : [row.reach]);
+      return known.length ? known.reduce((sum, value) => sum + value, 0) : null;
+    }
+    if (metric === "saves") {
+      const known = rows.flatMap((row) => row.saves === undefined ? [] : [row.saves]);
+      return known.length ? known.reduce((sum, value) => sum + value, 0) : null;
+    }
+    if (metric === "watchMinutes") {
+      const known = rows.flatMap((row) => row.watchMinutes === undefined ? [] : [row.watchMinutes]);
+      return known.length ? known.reduce((sum, value) => sum + value, 0) : null;
+    }
+    return 0;
+  });
+}
+
+type MetricSummary = ReturnType<typeof summarize>;
+
+function signalValue(summary: MetricSummary, metric: SignalMetric) {
+  if (metric === "audience") return summary.audienceKnown ? summary.audience : undefined;
+  if (metric === "views") return summary.views;
+  if (metric === "interactions") return summary.interactions;
+  if (metric === "engagementRate") return summary.engagementRate;
+  if (metric === "likes") return summary.likes;
+  if (metric === "comments") return summary.comments;
+  if (metric === "shares") return summary.shares;
+  if (metric === "reach") return summary.reach;
+  if (metric === "saves") return summary.savesKnown ? summary.saves : undefined;
+  if (metric === "watchMinutes") return summary.watchKnown ? summary.watchMinutes : undefined;
+  return summary.audienceDelta;
+}
+
+function signalLabel(metric: SignalMetric, filter: PlatformFilter) {
+  if (metric === "audience") {
+    if (filter === "all") return "Combined followers";
+    if (filter === "facebook") return "Page followers";
+    return "Followers";
+  }
+  if (metric === "views") return filter === "facebook" ? "Post views" : "Views";
+  if (metric === "comments") return filter === "threads" ? "Replies" : "Comments";
+  if (metric === "shares") return filter === "threads" ? "Reposts + quotes" : "Shares";
+  if (metric === "engagementRate") return "Engagement rate";
+  if (metric === "watchMinutes") return "Watch time";
+  if (metric === "growth") return "Follower growth";
+  return metric.charAt(0).toUpperCase() + metric.slice(1);
+}
+
+function summarizePrevious(platforms: PlatformAnalyticsDTO[]) {
+  return summarize(
+    platforms.map((platform) => {
+      const previous = platform.previousPeriod;
+      return {
+        ...platform,
+        audience: previous?.audience,
+        audienceDelta: previous?.audienceDelta ?? 0,
+        views: previous?.views ?? 0,
+        likes: previous?.likes ?? 0,
+        comments: previous?.comments ?? 0,
+        shares: previous?.shares ?? 0,
+        reach: previous?.reach,
+        saves: previous?.saves,
+        replies: previous?.replies,
+        reposts: previous?.reposts,
+        quotes: previous?.quotes,
+        clicks: previous?.clicks,
+        watchMinutes: previous?.watchMinutes,
+        publishedPosts: previous?.publishedPosts ?? 0,
+      };
+    }),
+  );
 }
 
 function summarize(platforms: PlatformAnalyticsDTO[]) {
-  const result = platforms.reduce((total, row) => ({
-    audience: total.audience + (row.audience ?? 0), audienceDelta: total.audienceDelta + row.audienceDelta,
-    views: total.views + row.views, likes: total.likes + row.likes, comments: total.comments + row.comments,
-    shares: total.shares + row.shares, watchMinutes: total.watchMinutes + (row.watchMinutes ?? 0), publishedPosts: total.publishedPosts + row.publishedPosts,
-  }), { audience: 0, audienceDelta: 0, views: 0, likes: 0, comments: 0, shares: 0, watchMinutes: 0, publishedPosts: 0 });
-  const interactions = result.likes + result.comments + result.shares;
-  return { ...result, interactions, engagementRate: result.views ? (interactions / result.views) * 100 : 0, audienceLabel: platforms.length === 1 ? platforms[0].audienceLabel : "Total audience" };
+  const result = platforms.reduce(
+    (total, row) => ({
+      audience: total.audience + (row.audience ?? 0),
+      audienceKnown: total.audienceKnown || row.audience !== undefined,
+      audienceDelta: total.audienceDelta + row.audienceDelta,
+      views: total.views + row.views,
+      likes: total.likes + row.likes,
+      comments: total.comments + row.comments,
+      shares: total.shares + row.shares,
+      saves: total.saves + (row.saves ?? 0),
+      savesKnown: total.savesKnown || row.saves !== undefined,
+      reach: total.reach + (row.reach ?? 0),
+      reachKnown: total.reachKnown || row.reach !== undefined,
+      watchMinutes: total.watchMinutes + (row.watchMinutes ?? 0),
+      watchKnown: total.watchKnown || row.watchMinutes !== undefined,
+      publishedPosts: total.publishedPosts + row.publishedPosts,
+    }),
+    {
+      audience: 0,
+      audienceKnown: false,
+      audienceDelta: 0,
+      views: 0,
+      likes: 0,
+      comments: 0,
+      shares: 0,
+      saves: 0,
+      savesKnown: false,
+      reach: 0,
+      reachKnown: false,
+      watchMinutes: 0,
+      watchKnown: false,
+      publishedPosts: 0,
+    },
+  );
+  const interactions = result.likes + result.comments + result.shares + result.saves;
+  return {
+    ...result,
+    interactions,
+    engagementRate: result.views ? (interactions / result.views) * 100 : 0,
+    viewsPerPost: result.publishedPosts ? result.views / result.publishedPosts : 0,
+    audienceLabel: platforms.length === 1 ? platforms[0].audienceLabel : "Total followers",
+    reach: result.reachKnown ? result.reach : undefined,
+  };
 }
 
-function dateRange(days: number) { const today = new Date(); today.setHours(0, 0, 0, 0); return Array.from({ length: days }, (_, index) => new Date(today.getTime() - (days - index - 1) * 86400_000).toISOString().slice(0, 10)); }
-function compact(value: number) { return new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: value >= 1000 ? 1 : 0 }).format(value); }
-function formatMinutes(minutes: number) { return minutes >= 60 ? `${compact(minutes / 60)}h` : `${Math.round(minutes)}m`; }
-function relativeTime(timestamp: number) { const minutes = Math.max(1, Math.round((Date.now() - timestamp) / 60_000)); return minutes < 60 ? `${minutes}m ago` : minutes < 1440 ? `${Math.round(minutes / 60)}h ago` : `${Math.round(minutes / 1440)}d ago`; }
+function dailyMetric(row: PlatformAnalyticsDTO["daily"][number], metric: ChartMetric) {
+  if (metric === "views") return row.views;
+  if (metric === "interactions") return row.likes + row.comments + row.shares + (row.saves ?? 0);
+  return row.audienceGained - row.audienceLost;
+}
+
+function scorePost(post: AnalyticsPostDTO) {
+  const interactions = post.likes + post.comments + post.shares + (post.saves ?? 0);
+  return post.views + interactions * 8;
+}
+
+function chartLabel(metric: ChartMetric) {
+  return metric === "growth" ? "Follower growth" : metric === "interactions" ? "Interactions" : "Views";
+}
+
+function metricLabel(value: string) {
+  return value.replace(/([A-Z])/g, " $1").replace(/^./, (character) => character.toUpperCase());
+}
+
+function dateRange(days: number) {
+  const now = new Date();
+  const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return Array.from({ length: days }, (_, index) =>
+    new Date(todayUtc - (days - index - 1) * 86_400_000).toISOString().slice(0, 10),
+  );
+}
+
+function compact(value: number) {
+  return new Intl.NumberFormat(undefined, {
+    notation: "compact",
+    maximumFractionDigits: Math.abs(value) >= 1000 ? 1 : 0,
+  }).format(value);
+}
+
+function comparisonPercent(current: number | undefined, previous: number | undefined) {
+  if (current === undefined || previous === undefined || previous === 0) return undefined;
+  return ((current - previous) / Math.abs(previous)) * 100;
+}
+
+function formatSignalValue(metric: SignalMetric, value: number | undefined) {
+  if (value === undefined) return "—";
+  if (metric === "engagementRate") return percent(value);
+  if (metric === "watchMinutes") return optionalMinutes(value);
+  if (metric === "growth") return `${value > 0 ? "+" : ""}${compact(value)}`;
+  return compact(value);
+}
+
+function smoothPath(points: Array<{ x: number; y: number }>) {
+  if (!points.length) return "";
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+  let path = `M ${points[0].x} ${points[0].y}`;
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1];
+    const current = points[index];
+    const midpoint = (previous.x + current.x) / 2;
+    path += ` C ${midpoint} ${previous.y}, ${midpoint} ${current.y}, ${current.x} ${current.y}`;
+  }
+  return path;
+}
+
+function percent(value: number) {
+  return `${value.toFixed(value >= 10 ? 0 : 1)}%`;
+}
+
+function optionalCompact(value: number | undefined) {
+  return value === undefined ? "—" : compact(value);
+}
+
+function optionalSeconds(value: number | undefined) {
+  return value === undefined ? "—" : `${value.toFixed(1)}s`;
+}
+
+function optionalMinutes(value: number | undefined) {
+  if (value === undefined) return "—";
+  return value >= 60 ? `${compact(value / 60)}h` : `${Math.round(value)}m`;
+}
+
+function sumKnown(...values: Array<number | undefined>) {
+  const known = values.filter((value): value is number => value !== undefined);
+  return known.length ? known.reduce((sum, value) => sum + value, 0) : undefined;
+}
+
+function relativeTime(timestamp: number) {
+  const minutes = Math.max(1, Math.round((Date.now() - timestamp) / 60_000));
+  return minutes < 60
+    ? `${minutes}m ago`
+    : minutes < 1440
+      ? `${Math.round(minutes / 60)}h ago`
+      : `${Math.round(minutes / 1440)}d ago`;
+}

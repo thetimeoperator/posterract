@@ -5,6 +5,7 @@
  * re-dispatches can never double-award.
  */
 import { internalMutation, query, type MutationCtx } from "./_generated/server";
+import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { getOwnedWorkspace } from "./lib";
 import {
@@ -14,6 +15,9 @@ import {
   RP_POSTING_DAILY_CAP,
   RP_STREAK_DAILY_CAP,
   RP_STREAK_PER_DAY,
+  RP_PER_100_VIEWS,
+  RP_PER_10_LIKES,
+  RP_PER_COMMENT,
   rankFor,
 } from "@posterract/contract";
 
@@ -232,5 +236,105 @@ export const resetWeekly = internalMutation({
     for (const s of all) {
       if (s.weekStartAt < week) await ctx.db.patch(s._id, { weekRP: 0, weekStartAt: week });
     }
+  },
+});
+
+/**
+ * Store raw YouTube metrics and award delta-based points from the post's
+ * view, like, and comment totals.
+ */
+export const applyYouTubeMetricSnapshot = internalMutation({
+  args: {
+    projectionId: v.id("projections"),
+    views: v.number(),
+    engagedViews: v.number(),
+    likes: v.number(),
+    comments: v.number(),
+    shares: v.number(),
+    estimatedMinutesWatched: v.number(),
+    averageViewDuration: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const projection = await ctx.db.get(args.projectionId);
+    if (!projection || projection.provider !== "youtube") return;
+    const previous = await ctx.db
+      .query("metricSnapshots")
+      .withIndex("by_projection", (q) => q.eq("projectionId", args.projectionId))
+      .first();
+    const now = Date.now();
+    const snapshot = {
+      projectionId: args.projectionId,
+      workspaceId: projection.workspaceId,
+      provider: "youtube" as const,
+      views: args.views,
+      engagedViews: args.engagedViews,
+      likes: args.likes,
+      comments: args.comments,
+      shares: args.shares,
+      estimatedMinutesWatched: args.estimatedMinutesWatched,
+      averageViewDuration: args.averageViewDuration,
+      fetchedAt: now,
+    };
+    if (previous) await ctx.db.patch(previous._id, snapshot);
+    else await ctx.db.insert("metricSnapshots", snapshot);
+
+    const oldViews = previous?.views ?? 0;
+    const oldLikes = previous?.likes ?? 0;
+    const oldComments = previous?.comments ?? 0;
+    const awards = [
+      {
+        source: "views" as const,
+        amount:
+          Math.max(0, Math.floor(args.views / 100) - Math.floor(oldViews / 100)) *
+          RP_PER_100_VIEWS,
+        refId: `${args.projectionId}:views:${Math.floor(args.views / 100)}`,
+        note: `YouTube stats — ${args.views.toLocaleString()} views`,
+      },
+      {
+        source: "likes" as const,
+        amount:
+          Math.max(0, Math.floor(args.likes / 10) - Math.floor(oldLikes / 10)) *
+          RP_PER_10_LIKES,
+        refId: `${args.projectionId}:likes:${Math.floor(args.likes / 10)}`,
+        note: `YouTube stats — ${args.likes.toLocaleString()} likes`,
+      },
+      {
+        source: "comments" as const,
+        amount: Math.max(0, args.comments - oldComments) * RP_PER_COMMENT,
+        refId: `${args.projectionId}:comments:${args.comments}`,
+        note: `YouTube stats — ${args.comments.toLocaleString()} comments`,
+      },
+    ].filter((award) => award.amount > 0);
+    if (awards.length === 0) return;
+
+    const stats = await getOrCreateStats(ctx, projection.workspaceId);
+    const total = awards.reduce((sum, award) => sum + award.amount, 0);
+    for (const award of awards) {
+      const duplicate = await ctx.db
+        .query("pointsLedger")
+        .withIndex("by_ref", (q) => q.eq("refId", award.refId).eq("source", award.source))
+        .first();
+      if (!duplicate) {
+        await ctx.db.insert("pointsLedger", {
+          workspaceId: projection.workspaceId,
+          ...award,
+          at: now,
+        });
+      }
+    }
+    const week = startOfWeek(now);
+    await ctx.db.patch(stats._id, {
+      lifetimeRP: stats.lifetimeRP + total,
+      weekRP: (stats.weekStartAt < week ? 0 : stats.weekRP) + total,
+      weekStartAt: week,
+    });
+    await ctx.db.insert("events", {
+      workspaceId: projection.workspaceId,
+      transmissionId: projection.transmissionId,
+      projectionId: projection._id,
+      type: "points.awarded",
+      message: `+${total} YouTube stats points`,
+      at: now,
+    });
   },
 });

@@ -30,7 +30,7 @@ import {
 import {
   tiktokGetUserStats,
   tiktokGetVideoStats,
-  tiktokPublishVideo,
+  tiktokUploadVideoDraft,
   tiktokRefreshToken,
 } from "../../web/convex/connectors/tiktok.ts";
 import {
@@ -372,10 +372,9 @@ async function executeConnector(row, accessToken, videoUrl) {
     };
   }
   if (row.provider === "tiktok") {
-    const result = await tiktokPublishVideo({
+    const result = await tiktokUploadVideoDraft({
       accessToken,
       videoUrl,
-      caption: row.caption,
       mimeType: row.mime_type,
       sizeBytes: Number(row.size_bytes),
       resumePublishId: row.pending_container_id ?? undefined,
@@ -383,11 +382,14 @@ async function executeConnector(row, accessToken, videoUrl) {
       onProgress,
     });
     return {
-      status: "live",
-      platformPostId: result.postId ?? result.publishId,
+      status: result.postId ? "live" : "awaiting_user",
+      platformPostId: result.postId,
       platformPostUrl: result.postId
         ? `https://www.tiktok.com/@${row.handle}/video/${result.postId}`
         : undefined,
+      summary: result.postId
+        ? "TikTok post is live"
+        : "TikTok draft sent — open TikTok inbox to review and post",
     };
   }
   if (row.provider === "youtube") {
@@ -469,16 +471,35 @@ async function applyCumulativeAnalytics(account, summary, videos) {
       ],
     );
 
-    const deltas = { views: 0, likes: 0, comments: 0, shares: 0 };
+    const deltas = {
+      views: 0,
+      likes: 0,
+      comments: 0,
+      shares: 0,
+      watchTimeSeconds: 0,
+      extra: {},
+    };
+    const cumulativeMetricKeys = [
+      "reach",
+      "saves",
+      "replies",
+      "reposts",
+      "quotes",
+      "clicks",
+      "replays",
+      "totalInteractions",
+      "profileViews",
+    ];
     for (const video of videos) {
       const previous = await client.query(
-        `select views, likes, comments, shares
+        `select views, likes, comments, shares, watch_time_seconds, raw_metrics
          from publication_metric_snapshots
          where projection_id = $1
          order by fetched_at desc, id desc limit 1`,
         [video.projectionId],
       );
       const prior = previous.rows[0] ?? video;
+      const priorRaw = previous.rows[0]?.raw_metrics ?? video;
       deltas.views += Math.max(0, Number(video.views) - Number(prior.views ?? 0));
       deltas.likes += Math.max(0, Number(video.likes) - Number(prior.likes ?? 0));
       deltas.comments += Math.max(
@@ -486,11 +507,25 @@ async function applyCumulativeAnalytics(account, summary, videos) {
         Number(video.comments) - Number(prior.comments ?? 0),
       );
       deltas.shares += Math.max(0, Number(video.shares) - Number(prior.shares ?? 0));
+      if (video.watchTimeSeconds !== undefined) {
+        const priorWatch = previous.rows[0]
+          ? Number(previous.rows[0].watch_time_seconds ?? video.watchTimeSeconds)
+          : Number(video.watchTimeSeconds);
+        deltas.watchTimeSeconds += Math.max(0, Number(video.watchTimeSeconds) - priorWatch);
+      }
+      for (const key of cumulativeMetricKeys) {
+        if (video[key] === undefined) continue;
+        const priorValue = Number(priorRaw?.[key] ?? video[key]);
+        deltas.extra[key] =
+          Number(deltas.extra[key] ?? 0) +
+          Math.max(0, Number(video[key]) - priorValue);
+      }
       await client.query(
         `insert into publication_metric_snapshots
           (projection_id, workspace_id, provider, views, likes, comments,
-           shares, raw_metrics, fetched_at)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, now())`,
+           shares, watch_time_seconds, average_view_duration_seconds,
+           raw_metrics, fetched_at)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())`,
         [
           video.projectionId,
           account.workspace_id,
@@ -499,22 +534,38 @@ async function applyCumulativeAnalytics(account, summary, videos) {
           video.likes,
           video.comments,
           video.shares,
+          video.watchTimeSeconds ?? null,
+          video.averageWatchSeconds ?? null,
           JSON.stringify(video),
         ],
       );
     }
+    const previousDaily = await client.query(
+      `select raw_metrics
+       from daily_metric_snapshots
+       where social_account_id = $1 and metric_date = $2`,
+      [account.id, metricDate()],
+    );
+    const dailyRaw = previousDaily.rows[0]?.raw_metrics ?? {};
+    const mergedRaw = { ...dailyRaw };
+    for (const [key, value] of Object.entries(deltas.extra)) {
+      mergedRaw[key] = Number(mergedRaw[key] ?? 0) + Number(value);
+    }
     await client.query(
       `insert into daily_metric_snapshots
         (social_account_id, workspace_id, provider, metric_date, views, likes,
-         comments, shares, audience_gained, audience_lost, fetched_at)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())
+         comments, shares, watch_minutes, audience_gained, audience_lost,
+         raw_metrics, fetched_at)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now())
        on conflict (social_account_id, metric_date) do update
        set views = daily_metric_snapshots.views + excluded.views,
            likes = daily_metric_snapshots.likes + excluded.likes,
            comments = daily_metric_snapshots.comments + excluded.comments,
            shares = daily_metric_snapshots.shares + excluded.shares,
+           watch_minutes = coalesce(daily_metric_snapshots.watch_minutes, 0) + coalesce(excluded.watch_minutes, 0),
            audience_gained = daily_metric_snapshots.audience_gained + excluded.audience_gained,
            audience_lost = daily_metric_snapshots.audience_lost + excluded.audience_lost,
+           raw_metrics = excluded.raw_metrics,
            fetched_at = now()`,
       [
         account.id,
@@ -525,8 +576,10 @@ async function applyCumulativeAnalytics(account, summary, videos) {
         deltas.likes,
         deltas.comments,
         deltas.shares,
+        deltas.watchTimeSeconds > 0 ? deltas.watchTimeSeconds / 60 : null,
         Math.max(0, audienceDelta),
         Math.max(0, -audienceDelta),
+        JSON.stringify(mergedRaw),
       ],
     );
     await client.query("commit");
@@ -728,6 +781,7 @@ async function refreshAccountAnalytics(accountId) {
         }
         summary = {
           audience: user.followers,
+          following: user.following,
           totalLikes: user.totalLikes,
           publishedVideos: user.videos,
         };
@@ -947,9 +1001,9 @@ const activities = {
       await emit(
         row,
         `projection.${result.status}`,
-        result.status === "live"
+        result.summary ?? (result.status === "live"
           ? `${row.provider} post is live`
-          : `${row.provider} is processing the post`,
+          : `${row.provider} is processing the post`),
         { platformPostUrl: result.platformPostUrl },
       );
       return result;
@@ -1003,6 +1057,7 @@ const activities = {
       `with counts as (
          select count(*) as total,
                 count(*) filter (where status = 'live') as live,
+                count(*) filter (where status = 'awaiting_user') as awaiting_user,
                 count(*) filter (where status in ('failed', 'blocked', 'needs_reauth', 'canceled')) as terminal
          from projections where transmission_id = $1
        )
@@ -1010,7 +1065,10 @@ const activities = {
        set status = case
          when transmissions.status = 'canceled' then 'canceled'
          when counts.live = counts.total and counts.total > 0 then 'live'
-         when counts.live > 0 and counts.live + counts.terminal = counts.total then 'partial'
+         when counts.awaiting_user > 0
+           and counts.live + counts.awaiting_user = counts.total then 'awaiting_user'
+         when counts.live + counts.awaiting_user > 0
+           and counts.live + counts.awaiting_user + counts.terminal = counts.total then 'partial'
          when counts.terminal = counts.total then 'failed'
          else 'transmitting'
        end,

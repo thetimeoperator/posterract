@@ -1,0 +1,148 @@
+/* Keep HUD typography readable instead of treating essential labels as texture. */
+.site-skip,
+.site-nav-system,
+.site-nav nav,
+.site-nav nav a span,
+.site-nav-signin,
+.site-nav-cta,
+.site-kicker,
+.site-hero-pill,
+.site-primary,
+.site-secondary,
+.site-live,
+.site-console-bar,
+.site-console-header,
+.site-pipeline-header,
+.site-analytics-top,
+.site-media-core span,
+.site-media-preview > p,
+.site-console-meta dt,
+.site-console-route,
+.site-hero-stats span,
+.site-hero-stats p,
+.site-workflow-list li > span,
+.site-pipeline-track > div span,
+.site-pipeline-track > div small,
+.site-analytics-number span,
+.site-analytics-axis,
+.site-platform-index,
+.site-platform > strong,
+.site-platform p,
+.site-platform-note,
+.site-footer-platforms > p,
+.site-footer-platform small,
+.site-footer-main nav,
+.site-footer-meta,
+.site-final-cta > button,
+.site-auth-topline,
+.site-auth-modes button,
+.site-auth-form label > span,
+.site-auth-submit {
+  font-size: 12px !important;
+}
+
+.site-nav-system,
+.site-nav nav,
+.site-nav-signin,
+.site-nav-cta,
+.site-kicker,
+.site-hero-pill,
+.site-primary,
+.site-secondary,
+.site-live,
+.site-console-bar,
+.site-console-header,
+.site-pipeline-header,
+.site-analytics-top,
+.site-console-meta dt,
+.site-console-route,
+.site-platform > strong,
+.site-platform p,
+.site-platform-note,
+.site-footer-platforms > p,
+.site-footer-main nav,
+.site-footer-meta,
+.site-final-cta > button,
+.site-auth-topline,
+.site-auth-modes button,
+.site-auth-form label > span,
+.site-auth-submit {
+  letter-spacing: 0.06em !important;
+}
+
+.site-hero-lede,
+.site-section-heading > p:last-child,
+.site-pipeline-copy > p:last-child,
+.site-analytics-copy > p:last-child,
+.site-platforms-heading > p {
+  font-size: 16px;
+}
+
+.site-workflow-list p {
+  font-size: 15px;
+}
+
+.site-console-meta dd,
+.site-pipeline-track > div strong {
+  font-size: 14px;
+}
+
+.site-footer-main > p,
+.site-auth-heading > p:last-child,
+.site-auth-form input {
+  font-size: 14px;
+}
+
+.site-auth-error {
+  font-size: 13px;
+}
+
+.site-platform-index {
+  color: #789080;
+}
+
+.site-platform p,
+.site-platform-note,
+.site-footer-platforms > p,
+.site-footer-main > p,
+.site-footer-meta {
+  color: #91aa9b;
+}
+
+.site-platform > strong {
+  color: #b4c8bb;
+  line-height: 1.4;
+}
+
+.site-platform-live > strong {
+  color: var(--site-green);
+}
+
+.site-nav-system,
+.site-nav nav,
+.site-nav-signin,
+.site-hero-pill,
+.site-live,
+.site-console-bar,
+.site-console-header,
+.site-console-meta dt,
+.site-console-route,
+.site-hero-stats p,
+.site-pipeline-track > div,
+.site-analytics-number span,
+.site-analytics-axis,
+.site-footer-platform,
+.site-auth-topline,
+.site-auth-form label > span {
+  color: #9bb4a4;
+}
+
+@media (max-width: 520px) {
+  .site-platform {
+    min-height: 225px;
+  }
+
+  .site-footer-platform {
+    min-height: 68px;
+  }
+}

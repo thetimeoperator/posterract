@@ -63,7 +63,7 @@ export function Hero({ onLaunch }: HeroProps) {
       </div>
 
       <p className="site-live site-live-centered">
-        <span /> Publishing live on YouTube, TikTok, and Instagram.
+        <span /> Publishing live on Instagram, Facebook, and Threads.
       </p>
     </div>
   );

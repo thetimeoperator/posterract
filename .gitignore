@@ -13,3 +13,7 @@ test-results/
 .wrangler/
 .vercel
 .env*
+output/
+tmp/
+next_steps.md
+onboarding.md

@@ -23,6 +23,22 @@ const REQUIRED_SCOPES = {
   threads: ["threads_basic", "threads_manage_insights"],
 } as const;
 
+const AVAILABLE_METRICS: Record<(typeof ANALYTICS_PROVIDERS)[number], string[]> = {
+  instagram: ["views", "reach", "likes", "comments", "shares", "saves", "watchTime"],
+  tiktok: ["views", "likes", "comments", "shares", "followers", "totalLikes", "publishedVideos"],
+  youtube: ["views", "likes", "comments", "watchTime", "subscribers"],
+  facebook: ["views", "likes", "comments", "shares", "pageViews"],
+  threads: ["views", "likes", "replies", "reposts", "quotes", "clicks"],
+};
+
+const METRIC_NOTES: Record<(typeof ANALYTICS_PROVIDERS)[number], string[]> = {
+  instagram: ["Advanced Reel metrics depend on media type and Meta availability."],
+  tiktok: ["Approved TikTok scopes do not expose watch time, retention, traffic sources, or audience demographics."],
+  youtube: ["YouTube analytics are not part of the current Posterract launch surface."],
+  facebook: ["Page activity and Posterract-published post views remain separate."],
+  threads: ["Replies, reposts, and quotes remain separate signals."],
+};
+
 const dateOf = (timestamp: number) => new Date(timestamp).toISOString().slice(0, 10);
 
 /** Server-only credentials and projections, grouped once per connected account. */
@@ -457,6 +473,8 @@ export const dashboard = query({
         watchMinutes: provider === "youtube" ? dailyTotals.watchMinutes : undefined,
         publishedPosts: providerProjections.filter((row) => row.updatedAt >= cutoffTime).length,
         lastSyncedAt: account?.fetchedAt,
+        availableMetrics: AVAILABLE_METRICS[provider],
+        metricNotes: METRIC_NOTES[provider],
         daily: daily
           .sort((a, b) => a.date.localeCompare(b.date))
           .map((row) => ({

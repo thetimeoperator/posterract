@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   RequestValidationError,
   parseCreatePost,
+  parseReschedulePost,
   transmissionStatus,
 } from "../src/domain.js";
 import {
@@ -54,6 +55,18 @@ test("post input is normalized without accepting duplicate platforms", () => {
   );
 });
 
+test("rescheduling accepts a future timestamp and rejects immediate publishing", () => {
+  const now = new Date("2026-08-22T18:00:00.000Z");
+  assert.equal(
+    parseReschedulePost({ scheduledFor: "2026-08-24T18:00:00.000Z" }, now).toISOString(),
+    "2026-08-24T18:00:00.000Z",
+  );
+  assert.throws(
+    () => parseReschedulePost({ scheduledFor: "now" }, now),
+    (error) => error instanceof RequestValidationError && error.code === "invalid_scheduled_for",
+  );
+});
+
 test("request hashes are stable across object key order", () => {
   assert.equal(hashRequest({ b: 2, a: 1 }), hashRequest({ a: 1, b: 2 }));
 });
@@ -71,6 +84,9 @@ test("token encryption is authenticated and reversible", () => {
 test("master status distinguishes partial and total failure", () => {
   assert.equal(transmissionStatus(["live", "live"]), "live");
   assert.equal(transmissionStatus(["live", "failed"]), "partial");
+  assert.equal(transmissionStatus(["awaiting_user"]), "awaiting_user");
+  assert.equal(transmissionStatus(["live", "awaiting_user"]), "awaiting_user");
+  assert.equal(transmissionStatus(["awaiting_user", "failed"]), "partial");
   assert.equal(transmissionStatus(["failed", "needs_reauth"]), "failed");
   assert.equal(transmissionStatus(["live", "processing"]), "transmitting");
 });

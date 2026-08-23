@@ -19,7 +19,7 @@ const migrationDirectory = resolve(
 test("PostgreSQL application migrations apply cleanly and idempotently", async () => {
   const postgres = new PGlite({ extensions: { pgcrypto } });
   const migrations = await Promise.all(
-    ["001-posterract.sql", "002-postgres-cutover.sql", "003-agent-harness.sql"].map(async (name) => ({
+    ["001-posterract.sql", "002-postgres-cutover.sql", "003-agent-harness.sql", "004-agent-chats.sql", "005-tiktok-draft-status.sql", "006-stripe-billing.sql"].map(async (name) => ({
       name,
       sql: await readFile(resolve(migrationDirectory, name), "utf8"),
     })),
@@ -50,6 +50,12 @@ test("PostgreSQL application migrations apply cleanly and idempotently", async (
       "meta_deletion_requests",
       "agent_credentials",
       "agent_runs",
+      "agent_chats",
+      "agent_chat_messages",
+      "billing_customers",
+      "billing_subscriptions",
+      "billing_checkout_sessions",
+      "stripe_webhook_events",
     ]) {
       assert.equal(names.has(required), true, `${required} table is missing`);
     }
@@ -95,7 +101,7 @@ test("PostgreSQL Better Auth creates a complete Posterract workspace", async () 
   };
 
   try {
-    for (const name of ["001-posterract.sql", "002-postgres-cutover.sql", "003-agent-harness.sql"]) {
+    for (const name of ["001-posterract.sql", "002-postgres-cutover.sql", "003-agent-harness.sql", "004-agent-chats.sql", "005-tiktok-draft-status.sql", "006-stripe-billing.sql"]) {
       await postgres.exec(await readFile(resolve(migrationDirectory, name), "utf8"));
     }
     const migrations = await getMigrations(authOptions(pool));
@@ -151,7 +157,7 @@ test("analytics reads normalized PostgreSQL snapshot history", async () => {
   const transmissionId = "00000000-0000-4000-8000-000000000005";
   const projectionId = "00000000-0000-4000-8000-000000000006";
   try {
-    for (const name of ["001-posterract.sql", "002-postgres-cutover.sql", "003-agent-harness.sql"]) {
+    for (const name of ["001-posterract.sql", "002-postgres-cutover.sql", "003-agent-harness.sql", "004-agent-chats.sql", "005-tiktok-draft-status.sql", "006-stripe-billing.sql"]) {
       await postgres.exec(await readFile(resolve(migrationDirectory, name), "utf8"));
     }
     await postgres.query(
@@ -195,7 +201,9 @@ test("analytics reads normalized PostgreSQL snapshot history", async () => {
     await postgres.query(
       `insert into account_metric_snapshots
         (social_account_id, workspace_id, provider, audience, fetched_at)
-       values ($1, $2, 'instagram', 1234, now())`,
+       values
+         ($1, $2, 'instagram', 1200, now() - interval '8 days'),
+         ($1, $2, 'instagram', 1234, now())`,
       [accountId, workspaceId],
     );
     await postgres.query(
@@ -206,10 +214,18 @@ test("analytics reads normalized PostgreSQL snapshot history", async () => {
       [accountId, workspaceId],
     );
     await postgres.query(
+      `insert into daily_metric_snapshots
+        (social_account_id, workspace_id, provider, metric_date, views, likes,
+         comments, shares, audience_gained, audience_lost, fetched_at)
+       values ($1, $2, 'instagram', current_date - 7, 40, 4, 1, 0, 3, 1, now())`,
+      [accountId, workspaceId],
+    );
+    await postgres.query(
       `insert into publication_metric_snapshots
         (projection_id, workspace_id, provider, views, likes, comments, shares,
-         fetched_at)
-       values ($1, $2, 'instagram', 100, 10, 2, 1, now())`,
+         watch_time_seconds, average_view_duration_seconds, raw_metrics, fetched_at)
+       values ($1, $2, 'instagram', 100, 10, 2, 1, 600, 8.2,
+         '{"reach":75,"saves":4,"replays":12}'::jsonb, now())`,
       [projectionId, workspaceId],
     );
 
@@ -222,7 +238,19 @@ test("analytics reads normalized PostgreSQL snapshot history", async () => {
     assert.equal(instagram.audience, 1234);
     assert.equal(instagram.audienceDelta, 4);
     assert.equal(instagram.views, 100);
+    assert.equal(instagram.reach, 75);
+    assert.equal(instagram.saves, 4);
+    assert.equal(instagram.watchMinutes, 10);
+    assert.equal(instagram.averageWatchSeconds, 8.2);
+    assert.equal(instagram.availableMetrics.includes("reach"), true);
     assert.equal(instagram.posts.length, 1);
+    assert.equal(instagram.previousPeriod.audience, 1200);
+    assert.equal(instagram.previousPeriod.views, 40);
+    assert.equal(instagram.previousPeriod.audienceDelta, 2);
+    assert.deepEqual(
+      dashboard.platforms.map((platform) => platform.provider),
+      ["instagram", "tiktok", "facebook", "threads"],
+    );
   } finally {
     await postgres.close();
   }

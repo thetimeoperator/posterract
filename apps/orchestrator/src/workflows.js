@@ -5,7 +5,6 @@ import {
   defineSignal,
   proxyActivities,
   setHandler,
-  sleep,
 } from "@temporalio/workflow";
 
 const activities = proxyActivities({
@@ -20,6 +19,7 @@ const activities = proxyActivities({
 
 export const publishNow = defineSignal("publishNow");
 export const cancelPublication = defineSignal("cancelPublication");
+export const reschedulePublication = defineSignal("reschedulePublication");
 export const refreshAnalytics = defineSignal("refreshAnalytics");
 
 export async function systemSmokeWorkflow(input = {}) {
@@ -74,9 +74,16 @@ export async function publicationWorkflow(input) {
     );
   }
 
-  const scheduledFor = new Date(transmission.scheduled_for).getTime();
+  let scheduledFor = new Date(transmission.scheduled_for).getTime();
+  setHandler(reschedulePublication, (nextScheduledFor) => {
+    if (Number.isFinite(nextScheduledFor)) scheduledFor = nextScheduledFor;
+  });
   while (!releaseEarly && !canceled && Date.now() < scheduledFor) {
-    await sleep(Math.min(scheduledFor - Date.now(), 60_000));
+    const observedSchedule = scheduledFor;
+    await condition(
+      () => releaseEarly || canceled || scheduledFor !== observedSchedule,
+      Math.min(scheduledFor - Date.now(), 60_000),
+    );
   }
 
   if (canceled) {

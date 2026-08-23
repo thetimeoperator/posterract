@@ -75,6 +75,7 @@ type EngineState = {
   renameArtifact: (id: string, fileName: string) => void;
   deleteArtifact: (id: string) => { ok: boolean; reason?: string };
   createTransmission: (input: CreateTransmissionInput) => TransmissionDTO;
+  rescheduleTransmission: (id: string, scheduledFor: number) => Promise<void>;
   cancelTransmission: (id: string) => void;
   duplicateTransmission: (id: string) => TransmissionDTO | undefined;
   retryProjection: (projectionId: string) => void;
@@ -256,6 +257,25 @@ export const useEngineStore = create<EngineState>()(
               : `“${transmission.title}” in trajectory for ${new Date(transmission.scheduledFor!).toLocaleString()}`,
         });
         return transmission;
+      },
+
+      rescheduleTransmission: async (id, scheduledFor) => {
+        const transmission = get().transmissions.find((item) => item.id === id);
+        if (!transmission || transmission.status !== "scheduled") {
+          throw new Error("Only scheduled posts can be moved");
+        }
+        set((state) => ({
+          transmissions: state.transmissions.map((item) =>
+            item.id === id
+              ? { ...item, scheduleMode: "at", scheduledFor, updatedAt: Date.now() }
+              : item,
+          ),
+        }));
+        get()._emit({
+          type: "transmission.rescheduled",
+          transmissionId: id,
+          message: `“${transmission.title}” moved to ${new Date(scheduledFor).toLocaleString()}`,
+        });
       },
 
       cancelTransmission: (id) => {

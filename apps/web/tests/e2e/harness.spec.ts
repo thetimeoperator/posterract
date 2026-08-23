@@ -24,6 +24,8 @@ test.describe("Agent harness", () => {
 
   test("creates a scoped Posterract API key and reveals it once", async ({ page }) => {
     await page.goto("/uplink");
+    await expect(page.getByRole("heading", { name: "API keys", level: 1 })).toBeVisible();
+    await expect(page.getByText(/private skill|skill IDs|run a private skill/i)).toHaveCount(0);
     await page.getByRole("button", { name: "Create API key" }).first().click();
     await page.getByLabel("Key name").fill("Codex publishing agent");
     await page.getByRole("button", { name: "Create key" }).click();
@@ -31,6 +33,10 @@ test.describe("Agent harness", () => {
     await expect(page.locator("code")).toContainText("pr_demo_");
     await page.getByRole("button", { name: "I saved the key" }).click();
     await expect(page.getByText("Codex publishing agent")).toBeVisible();
+    const card = page.getByTestId("api-key-card");
+    await expect(card.getByText("Published", { exact: true })).toBeVisible();
+    await expect(card.getByText("Created", { exact: true })).toBeVisible();
+    await expect(card.getByText("Actions", { exact: true })).toBeVisible();
     await expect(page.locator("code")).toHaveCount(0);
   });
 });

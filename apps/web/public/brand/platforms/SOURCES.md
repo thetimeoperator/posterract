@@ -12,6 +12,7 @@ Do not redraw, recolor, crop, stretch, rotate, or apply effects to these files.
 | Threads | `threads.svg` | Meta Threads Brand Resource Center (`Threads-Brand-Resource-Center.zip`) | Official current Threads logo from the May 2026 resource pack. |
 | X | `x.svg` | X Brand Toolkit (`x-logo.zip`) | Official white X logo. |
 | LinkedIn | `linkedin.png` | LinkedIn brand downloads (`in-logo.zip`) | Official `LI-In-Bug.png`, including the registered mark. |
+| Reddit | `reddit.png` | Reddit Brand System logo assets | Official current OrangeRed conversation-bubble Snoo icon, retrieved at 400×400 without modification. |
 
 Official resource pages:
 
@@ -22,3 +23,4 @@ Official resource pages:
 - https://www.meta.com/brand/resources/threads/
 - https://about.x.com/en/who-we-are/brand-toolkit
 - https://brand.linkedin.com/downloads
+- https://redditinc.com/brand

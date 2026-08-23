@@ -20,11 +20,21 @@ export type ForgeMessage = {
   skillIds?: string[];
 };
 
+export type AgentChatSummary = {
+  id: string;
+  title: string;
+  messageCount: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
 type HarnessState = {
   credentials: AgentCredentialSummary[];
   activeCredentialId?: string;
   activeSkillIds: string[];
   activePlatforms: PlatformId[];
+  chats: AgentChatSummary[];
+  activeChatId?: string;
   messages: ForgeMessage[];
   addCredential: (input: { provider: AgentProviderId; label: string; model: string; secret: string }) => AgentCredentialSummary;
   upsertCredential: (credential: AgentCredentialSummary) => void;
@@ -34,18 +44,13 @@ type HarnessState = {
   toggleSkill: (id: string) => void;
   setSkills: (ids: string[]) => void;
   togglePlatform: (platform: PlatformId) => void;
+  setChats: (chats: AgentChatSummary[]) => void;
+  startChat: (chat: AgentChatSummary) => void;
+  openChat: (chat: AgentChatSummary, messages: ForgeMessage[]) => void;
   addMessage: (message: Omit<ForgeMessage, "id" | "at">) => ForgeMessage;
-  clearMessages: () => void;
 };
 
-const initialMessages: ForgeMessage[] = [
-  {
-    id: "welcome",
-    role: "agent",
-    body: "Your content harness is online. Choose an agent connection and one or more private skills, then tell me what you want to create.",
-    at: Date.now(),
-  },
-];
+const initialMessages: ForgeMessage[] = [];
 
 export const useHarness = create<HarnessState>()(
   persist(
@@ -53,6 +58,7 @@ export const useHarness = create<HarnessState>()(
       credentials: [],
       activeSkillIds: ["hook-architect", "shortform-script"],
       activePlatforms: ["instagram", "tiktok"],
+      chats: [],
       messages: initialMessages,
       addCredential: ({ provider, label, model, secret }) => {
         const credential: AgentCredentialSummary = {
@@ -97,12 +103,39 @@ export const useHarness = create<HarnessState>()(
             ? state.activePlatforms.filter((value) => value !== platform)
             : [...state.activePlatforms, platform],
         })),
+      setChats: (chats) => set((state) => ({
+        chats,
+        activeChatId: chats.some((chat) => chat.id === state.activeChatId)
+          ? state.activeChatId
+          : chats[0]?.id,
+      })),
+      startChat: (chat) => set((state) => ({
+        chats: [chat, ...state.chats.filter((item) => item.id !== chat.id)],
+        activeChatId: chat.id,
+        messages: [],
+      })),
+      openChat: (chat, messages) => set((state) => ({
+        chats: [chat, ...state.chats.filter((item) => item.id !== chat.id)],
+        activeChatId: chat.id,
+        messages,
+      })),
       addMessage: (input) => {
         const message: ForgeMessage = { ...input, id: `msg_${crypto.randomUUID()}`, at: Date.now() };
-        set((state) => ({ messages: [...state.messages, message] }));
+        set((state) => ({
+          messages: [...state.messages, message],
+          chats: state.chats.map((chat) => chat.id === state.activeChatId
+            ? {
+                ...chat,
+                title: chat.messageCount === 0 && message.role === "user"
+                  ? message.body.slice(0, 80)
+                  : chat.title,
+                messageCount: chat.messageCount + 1,
+                updatedAt: message.at,
+              }
+            : chat),
+        }));
         return message;
       },
-      clearMessages: () => set({ messages: initialMessages }),
     }),
     {
       name: "posterract.harness",
@@ -111,6 +144,7 @@ export const useHarness = create<HarnessState>()(
         activeCredentialId: state.activeCredentialId,
         activeSkillIds: state.activeSkillIds,
         activePlatforms: state.activePlatforms,
+        activeChatId: state.activeChatId,
       }),
     },
   ),

@@ -21,7 +21,8 @@ import { Button, PlatformBrandMark, pushSignal } from "@posterract/hyperkit";
 import { PLATFORM_CAPABILITIES, PUBLISHING_PLATFORM_IDS, type PlatformId } from "@posterract/contract";
 import { LiquidSurface } from "@/components/LiquidSurface";
 import { AGENT_PROVIDERS, skillById, type AgentProviderId } from "@/harness/catalog";
-import { createAgentCredential, deleteAgentCredential, listAgentCredentials, REMOTE_HARNESS, runAgent } from "@/harness/client";
+import { createAgentCredential, deleteAgentCredential, getAgentChat, listAgentChats, listAgentCredentials, REMOTE_HARNESS, runAgent } from "@/harness/client";
+import { beginNewChat } from "@/harness/chats";
 import { usePublicSkills } from "@/harness/usePublicSkills";
 import { useHarness } from "@/state/harness";
 
@@ -33,12 +34,15 @@ function Forge() {
   const activeCredentialId = useHarness((state) => state.activeCredentialId);
   const activeSkillIds = useHarness((state) => state.activeSkillIds);
   const activePlatforms = useHarness((state) => state.activePlatforms);
+  const chats = useHarness((state) => state.chats);
+  const activeChatId = useHarness((state) => state.activeChatId);
   const messages = useHarness((state) => state.messages);
   const setActiveCredential = useHarness((state) => state.setActiveCredential);
   const toggleSkill = useHarness((state) => state.toggleSkill);
   const togglePlatform = useHarness((state) => state.togglePlatform);
   const addMessage = useHarness((state) => state.addMessage);
-  const clearMessages = useHarness((state) => state.clearMessages);
+  const setChats = useHarness((state) => state.setChats);
+  const openChat = useHarness((state) => state.openChat);
   const replaceCredentials = useHarness((state) => state.replaceCredentials);
   const removeCredential = useHarness((state) => state.removeCredential);
   const [prompt, setPrompt] = useState("");
@@ -69,6 +73,44 @@ function Forge() {
       .catch(() => pushSignal({ tone: "danger", title: "Could not load agent connections" }));
   }, [replaceCredentials]);
 
+  useEffect(() => {
+    if (!REMOTE_HARNESS) return;
+    let current = true;
+    void listAgentChats()
+      .then(async (loadedChats) => {
+        if (!current) return;
+        setChats(loadedChats);
+        const preferredId = useHarness.getState().activeChatId;
+        const preferred = loadedChats.find((chat) => chat.id === preferredId) ?? loadedChats[0];
+        if (!preferred) return;
+        const detail = await getAgentChat(preferred.id);
+        if (current) openChat(detail.chat, detail.messages);
+      })
+      .catch(() => pushSignal({ tone: "danger", title: "Could not load chat history" }));
+    return () => { current = false; };
+  }, [openChat, setChats]);
+
+  const newChat = async () => {
+    try {
+      await beginNewChat();
+      setPrompt("");
+      window.requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>("[data-forge-prompt]")?.focus());
+    } catch (error) {
+      pushSignal({ tone: "danger", title: "Could not create a new chat", detail: error instanceof Error ? error.message : "Try again." });
+    }
+  };
+
+  const selectChat = async (id: string) => {
+    if (id === activeChatId || !REMOTE_HARNESS) return;
+    try {
+      const detail = await getAgentChat(id);
+      openChat(detail.chat, detail.messages);
+      setPrompt("");
+    } catch (error) {
+      pushSignal({ tone: "danger", title: "Could not open chat", detail: error instanceof Error ? error.message : "Try again." });
+    }
+  };
+
   const submit = async () => {
     const value = prompt.trim();
     if (!value) return;
@@ -76,16 +118,21 @@ function Forge() {
       setConnectOpen(true);
       return;
     }
+    let chatId = activeChatId;
+    if (!chatId) {
+      try {
+        chatId = (await beginNewChat()).id;
+      } catch (error) {
+        pushSignal({ tone: "danger", title: "Could not create a new chat", detail: error instanceof Error ? error.message : "Try again." });
+        return;
+      }
+    }
     addMessage({ role: "user", body: value, skillIds: activeSkillIds });
     setPrompt("");
     setRunning(true);
     try {
-      const contextMessage = [
-        ...messages.slice(-8).map((message) => `${message.role === "user" ? "USER" : "ASSISTANT"}: ${message.body}`),
-        `USER: ${value}`,
-      ].join("\n\n");
       const body = REMOTE_HARNESS
-        ? (await runAgent({ credentialId: activeCredential.id, skillIds: activeSkillIds, message: contextMessage })).output.text
+        ? (await runAgent({ credentialId: activeCredential.id, chatId, skillIds: activeSkillIds, message: value })).output.text
         : await new Promise<string>((resolve) => window.setTimeout(() => resolve(
             `I built a platform-ready content direction for “${value}”. The private skill chain produced a hook, narrative structure, and ${activePlatforms.length || 1} channel adaptation${activePlatforms.length === 1 ? "" : "s"}. Review the structured draft below, then prepare or schedule the post.`,
           ), 850));
@@ -103,24 +150,18 @@ function Forge() {
     <div className="forge-grid">
       <aside className="forge-sessions harness-panel flex min-h-0 flex-col overflow-hidden">
         <div className="border-b border-[var(--glass-border)] p-3">
-          <button onClick={() => { clearMessages(); setPrompt(""); }} className="flex h-10 w-full items-center justify-center gap-2 rounded-[13px] border border-[rgba(101,255,154,0.28)] bg-neon/[0.07] font-display text-[11px] font-semibold text-neon transition-colors hover:bg-neon/[0.11]">
-            <Plus size={14} /> New session
+          <button onClick={() => void newChat()} className="flex h-10 w-full items-center justify-center gap-2 rounded-[13px] border border-[rgba(101,255,154,0.28)] bg-neon/[0.07] font-display text-[11px] font-semibold text-neon transition-colors hover:bg-neon/[0.11]">
+            <Plus size={14} /> New chat
           </button>
         </div>
         <div className="harness-scroll min-h-0 flex-1 overflow-y-auto p-2">
-          <p className="kicker px-2 pb-2 pt-1">Recent spaces</p>
-          <button className="mb-1 w-full rounded-[13px] bg-white/[0.045] px-3 py-2.5 text-left">
-            <span className="block truncate font-display text-[11.5px] font-semibold text-starlight">Current Forge session</span>
-            <span className="mt-1 flex items-center justify-between gap-2 text-[9.5px] text-starlight-faint">
-              <span className="truncate">{selectedSkills.map((skill) => skill?.name).filter(Boolean).join(" + ") || "No skills loaded"}</span><span>{Math.max(0, messages.length - 1)} turns</span>
-            </span>
-          </button>
-        </div>
-        <div className="border-t border-[var(--glass-border)] p-3">
-          <div className="flex items-center gap-2 text-[10px] text-starlight-faint">
-            <ShieldCheck size={13} className="text-neon" />
-            <span>Skill source stays server-side</span>
-          </div>
+          <p className="kicker px-2 pb-2 pt-1">Recent chats</p>
+          {chats.map((chat) => (
+            <button key={chat.id} onClick={() => void selectChat(chat.id)} className={clsx("mb-1 w-full rounded-[13px] px-3 py-2.5 text-left transition-colors", chat.id === activeChatId ? "bg-white/[0.06]" : "hover:bg-white/[0.035]")}>
+              <span className="block truncate font-display text-[11.5px] font-semibold text-starlight">{chat.title}</span>
+              <span className="mt-1 block text-[9.5px] text-starlight-faint">{chat.messageCount} message{chat.messageCount === 1 ? "" : "s"}</span>
+            </button>
+          ))}
         </div>
       </aside>
 
@@ -305,9 +346,6 @@ function Forge() {
             <ReadyRow label="Media asset" ready={false} optional />
           </div>
         </section>
-        <div className="mt-5 rounded-[14px] border border-ice/15 bg-ice/[0.035] p-3">
-          <div className="flex gap-2"><ShieldCheck size={14} className="mt-0.5 flex-none text-ice" /><p className="text-[9.5px] leading-relaxed text-starlight-faint">Your provider key is stored in the server vault. Skill source and internal tool instructions are never sent to this browser.</p></div>
-        </div>
       </aside>
 
       <AgentConnectionDialog open={connectOpen} onClose={() => setConnectOpen(false)} />
@@ -322,7 +360,7 @@ function Popover({ children, className }: { children: React.ReactNode; className
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -4, scale: 0.98 }}
       transition={{ duration: 0.16 }}
-      className={clsx("absolute top-[calc(100%+8px)] z-50 rounded-[16px] border border-[var(--glass-border)] bg-[rgba(5,11,14,0.96)] p-2 shadow-2xl backdrop-blur-2xl", className)}
+      className={clsx("popup-menu-surface absolute top-[calc(100%+8px)] z-50 rounded-[16px] p-2", className)}
     >{children}</motion.div>
   );
 }
@@ -413,7 +451,7 @@ function AgentConnectionDialog({ open, onClose }: { open: boolean; onClose: () =
     <AnimatePresence>
       {open && (
         <div className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center p-4">
-          <motion.button aria-label="Close agent connection" className="absolute inset-0 bg-black/70 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
+          <motion.button aria-label="Close agent connection" className="absolute inset-0 bg-black/70" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
           <motion.div initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.98 }} className="relative w-full max-w-2xl">
             <LiquidSurface preset="modal" className="rounded-[24px]">
               <div className="p-5 sm:p-6">
@@ -426,10 +464,10 @@ function AgentConnectionDialog({ open, onClose }: { open: boolean; onClose: () =
                   {AGENT_PROVIDERS.map((value) => <button key={value.id} onClick={() => chooseProvider(value.id)} className={clsx("rounded-[14px] border px-3 py-3 text-left transition-colors", provider === value.id ? "border-neon/40 bg-neon/[0.07]" : "border-[var(--glass-border)] hover:border-[var(--glass-border-bright)]")}><span className="provider-orb text-[9px] text-neon">{value.short}</span><span className="mt-2 block font-display text-[10.5px] font-semibold text-starlight">{value.name}</span></button>)}
                 </div>
                 <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                  <label className="block"><span className="kicker !text-[8px]">Connection name</span><input value={label} onChange={(event) => setLabel(event.target.value)} className="mt-1.5 h-10 w-full rounded-[12px] border border-[var(--glass-border)] bg-black/20 px-3 text-[12px] text-starlight focus:border-neon/40 focus:outline-none" /></label>
-                  <label className="block"><span className="kicker !text-[8px]">Default model ID</span><input list={`models-${provider}`} value={model} onChange={(event) => setModel(event.target.value)} className="mt-1.5 h-10 w-full rounded-[12px] border border-[var(--glass-border)] bg-[#071012] px-3 font-mono text-[11px] text-starlight focus:border-neon/40 focus:outline-none" /><datalist id={`models-${provider}`}>{selected.models.map((value) => <option key={value} value={value} />)}</datalist></label>
+                  <label className="block"><span className="kicker !text-[8px]">Connection name</span><input value={label} onChange={(event) => setLabel(event.target.value)} className="mt-1.5 h-10 w-full rounded-[12px] border border-white/[0.09] bg-black/20 px-3 text-[12px] text-starlight focus:border-white/[0.2] focus:outline-none" /></label>
+                  <label className="block"><span className="kicker !text-[8px]">Default model ID</span><input list={`models-${provider}`} value={model} onChange={(event) => setModel(event.target.value)} className="mt-1.5 h-10 w-full rounded-[12px] border border-white/[0.09] bg-[#071012] px-3 font-mono text-[11px] text-starlight focus:border-white/[0.2] focus:outline-none" /><datalist id={`models-${provider}`}>{selected.models.map((value) => <option key={value} value={value} />)}</datalist></label>
                 </div>
-                <label className="mt-3 block"><span className="kicker !text-[8px]">{selected.name} API key</span><input type="password" autoComplete="off" spellCheck={false} value={secret} onChange={(event) => setSecret(event.target.value)} placeholder={`${selected.keyPrefix}••••••••••••••••`} className="mt-1.5 h-11 w-full rounded-[12px] border border-[var(--glass-border)] bg-black/20 px-3 font-mono text-[12px] text-starlight focus:border-neon/40 focus:outline-none" /></label>
+                <label className="mt-3 block"><span className="kicker !text-[8px]">{selected.name} API key</span><input type="password" autoComplete="off" spellCheck={false} value={secret} onChange={(event) => setSecret(event.target.value)} placeholder={`${selected.keyPrefix}••••••••••••••••`} className="mt-1.5 h-11 w-full rounded-[12px] border border-white/[0.09] bg-black/20 px-3 font-mono text-[12px] text-starlight focus:border-white/[0.2] focus:outline-none" /></label>
                 <div className="mt-5 flex items-center gap-3"><div className="flex min-w-0 flex-1 items-center gap-2 text-[9.5px] text-starlight-faint"><ShieldCheck size={13} className="flex-none text-neon" /><span>Posterract tests the key, encrypts it server-side, and returns only ••••{secret.slice(-4).padStart(4, "•")}</span></div><Button variant="primary" disabled={testing} onClick={() => void connect()}>{testing ? "Testing…" : "Test & connect"}</Button></div>
               </div>
             </LiquidSurface>

@@ -156,12 +156,25 @@ export const reschedule = mutation({
     const workspace = await requireWorkspace(ctx);
     const t = await ctx.db.get(args.transmissionId);
     if (!t || t.workspaceId !== workspace._id) throw new Error("Not found");
-    if (t.status !== "scheduled") return;
+    if (t.status !== "scheduled") throw new Error("Only scheduled posts can be moved");
+    if (args.scheduledFor < Date.now() - 30_000) throw new Error("Choose a future date");
     if (t.scheduledFnId) await ctx.scheduler.cancel(t.scheduledFnId);
     const scheduledFnId = await ctx.scheduler.runAt(args.scheduledFor, internal.publish.dispatch, {
       transmissionId: t._id,
     });
-    await ctx.db.patch(t._id, { scheduledFor: args.scheduledFor, scheduledFnId, updatedAt: Date.now() });
+    await ctx.db.patch(t._id, {
+      scheduleMode: "at",
+      scheduledFor: args.scheduledFor,
+      scheduledFnId,
+      updatedAt: Date.now(),
+    });
+    await ctx.db.insert("events", {
+      workspaceId: workspace._id,
+      transmissionId: t._id,
+      type: "transmission.rescheduled",
+      message: `“${t.title}” moved to ${new Date(args.scheduledFor).toLocaleString()}`,
+      at: Date.now(),
+    });
   },
 });
 

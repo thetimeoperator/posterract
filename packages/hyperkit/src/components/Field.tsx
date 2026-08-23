@@ -3,7 +3,7 @@ import type { InputHTMLAttributes, TextareaHTMLAttributes, ReactNode } from "rea
 import clsx from "clsx";
 
 const WELL_CLASSES =
-  "w-full rounded-[10px] border border-[rgba(155,255,197,0.25)] bg-void-2 px-3.5 text-[13px] text-starlight placeholder:text-starlight-faint transition-all duration-200 focus:border-[rgba(101,255,154,0.6)] focus:shadow-glow-neon-sm focus:outline-none disabled:opacity-45";
+  "w-full rounded-[10px] border border-white/[0.09] bg-void-2 px-3.5 text-[13px] text-starlight placeholder:text-starlight-faint transition-[border-color,background-color] duration-150 focus:border-white/[0.2] focus:outline-none disabled:opacity-45";
 
 export type FieldShellProps = {
   label?: string;

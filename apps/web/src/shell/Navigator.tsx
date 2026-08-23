@@ -131,7 +131,7 @@ export function Navigator() {
             role="dialog"
             aria-modal="true"
             aria-label="Navigator"
-            className="glass relative w-full max-w-xl overflow-hidden rounded-[var(--radius-panel)] shadow-glow-neon-md"
+            className="glass popup-menu-surface relative w-full max-w-xl overflow-hidden rounded-[var(--radius-panel)]"
             initial={{ scale: 0.97, y: -8, opacity: 0 }}
             animate={{ scale: 1, y: 0, opacity: 1 }}
             exit={{ scale: 0.98, y: -6, opacity: 0 }}

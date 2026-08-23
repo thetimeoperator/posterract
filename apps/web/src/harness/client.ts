@@ -1,4 +1,4 @@
-import type { AgentCredentialSummary } from "@/state/harness";
+import type { AgentChatSummary, AgentCredentialSummary, ForgeMessage } from "@/state/harness";
 import type { AgentProviderId } from "./catalog";
 import type { PublicSkill } from "./catalog";
 
@@ -42,8 +42,24 @@ export function deleteAgentCredential(id: string) {
   return request<void>(`/v1/agent-credentials/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
-export function runAgent(input: { credentialId: string; skillIds: string[]; message: string }) {
-  return request<{ id: string; output: { text: string }; skillVersions: Record<string, string> }>("/v1/agent-runs", {
+export function listAgentChats() {
+  return request<{ chats: AgentChatSummary[] }>("/v1/chats").then((result) => result.chats);
+}
+
+export function createAgentChat(title?: string) {
+  return request<AgentChatSummary>("/v1/chats", {
+    method: "POST",
+    headers: { "Idempotency-Key": crypto.randomUUID() },
+    body: JSON.stringify(title ? { title } : {}),
+  });
+}
+
+export function getAgentChat(id: string) {
+  return request<{ chat: AgentChatSummary; messages: ForgeMessage[] }>(`/v1/chats/${encodeURIComponent(id)}`);
+}
+
+export function runAgent(input: { credentialId: string; chatId?: string; skillIds: string[]; message: string }) {
+  return request<{ id: string; chatId?: string; output: { text: string }; skillVersions: Record<string, string> }>("/v1/agent-runs", {
     method: "POST",
     headers: { "Idempotency-Key": crypto.randomUUID() },
     body: JSON.stringify(input),
@@ -58,6 +74,12 @@ export type WorkspaceApiKey = {
   createdAt: number;
   lastUsedAt?: number;
   expiresAt?: number;
+  stats: {
+    apiActions: number;
+    postsCreated: number;
+    postsScheduled: number;
+    postsPublished: number;
+  };
 };
 
 export async function listWorkspaceApiKeys() {

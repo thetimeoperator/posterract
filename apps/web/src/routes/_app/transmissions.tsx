@@ -28,6 +28,7 @@ const FILTERS: Array<{ value: Filter; label: string }> = [
   { value: "all", label: "All" },
   { value: "scheduled", label: "Scheduled" },
   { value: "transmitting", label: "Transmitting" },
+  { value: "awaiting_user", label: "Finish in TikTok" },
   { value: "live", label: "Live" },
   { value: "partial", label: "Partial" },
   { value: "failed", label: "Failed" },
@@ -105,6 +106,8 @@ function TransmissionRow({
       p.provider,
       p.status === "live"
         ? "live"
+        : p.status === "awaiting_user"
+          ? "pending"
         : p.status === "failed" || p.status === "needs_reauth" || p.status === "blocked"
           ? "failed"
           : p.status === "scheduled" || p.status === "pending"
@@ -124,6 +127,8 @@ function TransmissionRow({
           borderLeft: `2px solid ${
             t.status === "live"
               ? "var(--auroral)"
+              : t.status === "awaiting_user"
+                ? "var(--solar)"
               : t.status === "failed"
                 ? "var(--redshift)"
                 : t.status === "partial"

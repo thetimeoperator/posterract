@@ -151,15 +151,30 @@ export function parseCreatePost(body, now = new Date()) {
   };
 }
 
+export function parseReschedulePost(body, now = new Date()) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new RequestValidationError("invalid_request");
+  }
+  const next = schedule(body.scheduledFor, now);
+  if (next.mode !== "at") {
+    throw new RequestValidationError("invalid_scheduled_for");
+  }
+  return next.at;
+}
+
 export function transmissionStatus(statuses) {
   if (statuses.length === 0) return "failed";
   const live = statuses.filter((status) => status === "live").length;
+  const awaitingUser = statuses.filter((status) => status === "awaiting_user").length;
   const terminalFailure = statuses.filter((status) =>
     ["failed", "blocked", "needs_reauth"].includes(status),
   ).length;
   const canceled = statuses.filter((status) => status === "canceled").length;
   if (live === statuses.length) return "live";
-  if (live > 0 && live + terminalFailure + canceled === statuses.length) {
+  if (awaitingUser > 0 && live + awaitingUser === statuses.length) {
+    return "awaiting_user";
+  }
+  if (live + awaitingUser > 0 && live + awaitingUser + terminalFailure + canceled === statuses.length) {
     return "partial";
   }
   if (terminalFailure + canceled === statuses.length) return "failed";

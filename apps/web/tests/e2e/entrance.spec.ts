@@ -13,7 +13,7 @@ test.describe("Posterract interactive entrance", () => {
     await open.focus();
     await page.keyboard.press("Enter");
     await page.keyboard.press("Enter");
-    await expect(page).toHaveURL(/\/forge/);
+    await expect(page).toHaveURL(/\/continuum/);
     expect(errors).toEqual([]);
   });
 
@@ -21,7 +21,7 @@ test.describe("Posterract interactive entrance", () => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto("/enter");
     await page.getByRole("button", { name: "Open Posterract and continue to sign in" }).click();
-    await expect(page).toHaveURL(/\/forge/);
+    await expect(page).toHaveURL(/\/continuum/);
   });
 
   test("fits a mobile viewport without horizontal overflow", async ({ page }) => {

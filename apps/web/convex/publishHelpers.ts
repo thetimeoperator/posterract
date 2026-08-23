@@ -270,10 +270,18 @@ export const refreshStatus = internalMutation({
     let status: typeof t.status = "scheduled";
     if (states.length === 0) status = "draft";
     else if (states.every((s) => s === "live")) status = "live";
+    else if (
+      states.some((s) => s === "awaiting_user") &&
+      states.every((s) => s === "live" || s === "awaiting_user")
+    )
+      status = "awaiting_user";
     else if (states.every((s) => s === "failed" || s === "needs_reauth" || s === "blocked")) status = "failed";
     else if (states.some((s) => ["uploading", "publishing", "processing", "retrying"].includes(s)))
       status = "transmitting";
-    else if (states.some((s) => s === "live") && states.some((s) => ["failed", "needs_reauth"].includes(s)))
+    else if (
+      states.some((s) => s === "live" || s === "awaiting_user") &&
+      states.some((s) => ["failed", "needs_reauth", "blocked"].includes(s))
+    )
       status = "partial";
     else if (states.some((s) => s === "live")) status = "transmitting";
     if (status !== t.status) await ctx.db.patch(t._id, { status, updatedAt: Date.now() });
