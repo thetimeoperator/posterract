@@ -3,7 +3,7 @@ import { internalMutation, internalQuery, query } from "./_generated/server";
 import { getOwnedWorkspace } from "./lib";
 import { vPlatform } from "./schema";
 
-const vRangeDays = v.union(v.literal(7), v.literal(30), v.literal(90));
+const vRangeDays = v.union(v.literal("total"), v.literal(7), v.literal(30), v.literal(90));
 const ANALYTICS_PROVIDERS = [
   "instagram",
   "tiktok",
@@ -367,8 +367,11 @@ export const dashboard = query({
   handler: async (ctx, args) => {
     const workspace = await getOwnedWorkspace(ctx);
     if (!workspace) return { rangeDays: args.rangeDays, platforms: [] };
-    const cutoffTime = Date.now() - (args.rangeDays - 1) * 86400_000;
-    const cutoffDate = dateOf(cutoffTime);
+    const isTotal = args.rangeDays === "total";
+    const cutoffTime = isTotal
+      ? Number.NEGATIVE_INFINITY
+      : Date.now() - (Number(args.rangeDays) - 1) * 86400_000;
+    const cutoffDate = isTotal ? undefined : dateOf(cutoffTime);
     const portals = await ctx.db
       .query("portals")
       .withIndex("by_workspace", (q) => q.eq("workspaceId", workspace._id))
@@ -395,10 +398,15 @@ export const dashboard = query({
             .first()
         : null;
       const daily = portal
-        ? await ctx.db
-            .query("dailyMetricSnapshots")
-            .withIndex("by_portal_date", (q) => q.eq("portalId", portal._id).gte("date", cutoffDate))
-            .collect()
+        ? cutoffDate
+          ? await ctx.db
+              .query("dailyMetricSnapshots")
+              .withIndex("by_portal_date", (q) => q.eq("portalId", portal._id).gte("date", cutoffDate))
+              .collect()
+          : await ctx.db
+              .query("dailyMetricSnapshots")
+              .withIndex("by_portal_date", (q) => q.eq("portalId", portal._id))
+              .collect()
         : [];
       const metrics = await ctx.db
         .query("metricSnapshots")
@@ -455,6 +463,8 @@ export const dashboard = query({
       const hasObservedCumulativeDeltas =
         dailyTotals.views + dailyTotals.likes + dailyTotals.comments + dailyTotals.shares > 0;
       const useDailyTotals = provider === "youtube" ? daily.length > 0 : hasObservedCumulativeDeltas;
+      const periodViews = useDailyTotals ? dailyTotals.views : postTotals.views;
+      const periodLikes = useDailyTotals ? dailyTotals.likes : postTotals.likes;
       platforms.push({
         provider,
         connected: portal?.status === "connected",
@@ -466,12 +476,22 @@ export const dashboard = query({
         audienceDelta: dailyTotals.audienceDelta,
         pageViews: provider === "facebook" ? account?.totalViews : undefined,
         postViews: provider === "facebook" ? postTotals.views : undefined,
-        views: useDailyTotals ? dailyTotals.views : postTotals.views,
-        likes: useDailyTotals ? dailyTotals.likes : postTotals.likes,
-        comments: useDailyTotals ? dailyTotals.comments : postTotals.comments,
-        shares: useDailyTotals ? dailyTotals.shares : postTotals.shares,
+        views: isTotal
+          ? provider === "youtube" || provider === "threads"
+            ? account?.totalViews ?? postTotals.views
+            : postTotals.views
+          : periodViews,
+        likes: isTotal
+          ? provider === "tiktok" || provider === "threads"
+            ? account?.totalLikes ?? postTotals.likes
+            : postTotals.likes
+          : periodLikes,
+        comments: isTotal ? postTotals.comments : useDailyTotals ? dailyTotals.comments : postTotals.comments,
+        shares: isTotal ? postTotals.shares : useDailyTotals ? dailyTotals.shares : postTotals.shares,
         watchMinutes: provider === "youtube" ? dailyTotals.watchMinutes : undefined,
-        publishedPosts: providerProjections.filter((row) => row.updatedAt >= cutoffTime).length,
+        publishedPosts: isTotal
+          ? account?.publishedVideos ?? providerProjections.length
+          : providerProjections.filter((row) => row.updatedAt >= cutoffTime).length,
         lastSyncedAt: account?.fetchedAt,
         availableMetrics: AVAILABLE_METRICS[provider],
         metricNotes: METRIC_NOTES[provider],

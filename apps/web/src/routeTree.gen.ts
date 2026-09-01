@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as GateRouteImport } from './routes/gate'
 import { Route as EnterRouteImport } from './routes/enter'
@@ -19,6 +20,7 @@ import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as DevPosterractV2RouteImport } from './routes/dev/posterract-v2'
 import { Route as DevHyperkitRouteImport } from './routes/dev/hyperkit'
 import { Route as DevCoreRouteImport } from './routes/dev/core'
+import { Route as DesktopAuthorizeRouteImport } from './routes/desktop.authorize'
 import { Route as AppVaultRouteImport } from './routes/_app/vault'
 import { Route as AppUplinkRouteImport } from './routes/_app/uplink'
 import { Route as AppTransmissionsRouteImport } from './routes/_app/transmissions'
@@ -27,6 +29,7 @@ import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppPortalsRouteImport } from './routes/_app/portals'
 import { Route as AppForgeRouteImport } from './routes/_app/forge'
 import { Route as AppEchoesRouteImport } from './routes/_app/echoes'
+import { Route as AppCreateRouteImport } from './routes/_app/create'
 import { Route as AppContinuumRouteImport } from './routes/_app/continuum'
 import { Route as AppComposeRouteImport } from './routes/_app/compose'
 import { Route as OauthCallbackProviderRouteImport } from './routes/oauth.callback.$provider'
@@ -34,6 +37,11 @@ import { Route as OauthCallbackProviderRouteImport } from './routes/oauth.callba
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRoute = PrivacyRouteImport.update({
@@ -80,6 +88,11 @@ const DevCoreRoute = DevCoreRouteImport.update({
   path: '/dev/core',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DesktopAuthorizeRoute = DesktopAuthorizeRouteImport.update({
+  id: '/desktop/authorize',
+  path: '/desktop/authorize',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppVaultRoute = AppVaultRouteImport.update({
   id: '/vault',
   path: '/vault',
@@ -120,6 +133,11 @@ const AppEchoesRoute = AppEchoesRouteImport.update({
   path: '/echoes',
   getParentRoute: () => AppRoute,
 } as any)
+const AppCreateRoute = AppCreateRouteImport.update({
+  id: '/create',
+  path: '/create',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppContinuumRoute = AppContinuumRouteImport.update({
   id: '/continuum',
   path: '/continuum',
@@ -142,9 +160,11 @@ export interface FileRoutesByFullPath {
   '/enter': typeof EnterRoute
   '/gate': typeof GateRoute
   '/privacy': typeof PrivacyRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/terms': typeof TermsRoute
   '/compose': typeof AppComposeRoute
   '/continuum': typeof AppContinuumRoute
+  '/create': typeof AppCreateRoute
   '/echoes': typeof AppEchoesRoute
   '/forge': typeof AppForgeRoute
   '/portals': typeof AppPortalsRoute
@@ -153,6 +173,7 @@ export interface FileRoutesByFullPath {
   '/transmissions': typeof AppTransmissionsRoute
   '/uplink': typeof AppUplinkRoute
   '/vault': typeof AppVaultRoute
+  '/desktop/authorize': typeof DesktopAuthorizeRoute
   '/dev/core': typeof DevCoreRoute
   '/dev/hyperkit': typeof DevHyperkitRoute
   '/dev/posterract-v2': typeof DevPosterractV2Route
@@ -163,9 +184,11 @@ export interface FileRoutesByTo {
   '/enter': typeof EnterRoute
   '/gate': typeof GateRoute
   '/privacy': typeof PrivacyRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/terms': typeof TermsRoute
   '/compose': typeof AppComposeRoute
   '/continuum': typeof AppContinuumRoute
+  '/create': typeof AppCreateRoute
   '/echoes': typeof AppEchoesRoute
   '/forge': typeof AppForgeRoute
   '/portals': typeof AppPortalsRoute
@@ -174,6 +197,7 @@ export interface FileRoutesByTo {
   '/transmissions': typeof AppTransmissionsRoute
   '/uplink': typeof AppUplinkRoute
   '/vault': typeof AppVaultRoute
+  '/desktop/authorize': typeof DesktopAuthorizeRoute
   '/dev/core': typeof DevCoreRoute
   '/dev/hyperkit': typeof DevHyperkitRoute
   '/dev/posterract-v2': typeof DevPosterractV2Route
@@ -187,9 +211,11 @@ export interface FileRoutesById {
   '/enter': typeof EnterRoute
   '/gate': typeof GateRoute
   '/privacy': typeof PrivacyRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/terms': typeof TermsRoute
   '/_app/compose': typeof AppComposeRoute
   '/_app/continuum': typeof AppContinuumRoute
+  '/_app/create': typeof AppCreateRoute
   '/_app/echoes': typeof AppEchoesRoute
   '/_app/forge': typeof AppForgeRoute
   '/_app/portals': typeof AppPortalsRoute
@@ -198,6 +224,7 @@ export interface FileRoutesById {
   '/_app/transmissions': typeof AppTransmissionsRoute
   '/_app/uplink': typeof AppUplinkRoute
   '/_app/vault': typeof AppVaultRoute
+  '/desktop/authorize': typeof DesktopAuthorizeRoute
   '/dev/core': typeof DevCoreRoute
   '/dev/hyperkit': typeof DevHyperkitRoute
   '/dev/posterract-v2': typeof DevPosterractV2Route
@@ -212,9 +239,11 @@ export interface FileRouteTypes {
     | '/enter'
     | '/gate'
     | '/privacy'
+    | '/reset-password'
     | '/terms'
     | '/compose'
     | '/continuum'
+    | '/create'
     | '/echoes'
     | '/forge'
     | '/portals'
@@ -223,6 +252,7 @@ export interface FileRouteTypes {
     | '/transmissions'
     | '/uplink'
     | '/vault'
+    | '/desktop/authorize'
     | '/dev/core'
     | '/dev/hyperkit'
     | '/dev/posterract-v2'
@@ -233,9 +263,11 @@ export interface FileRouteTypes {
     | '/enter'
     | '/gate'
     | '/privacy'
+    | '/reset-password'
     | '/terms'
     | '/compose'
     | '/continuum'
+    | '/create'
     | '/echoes'
     | '/forge'
     | '/portals'
@@ -244,6 +276,7 @@ export interface FileRouteTypes {
     | '/transmissions'
     | '/uplink'
     | '/vault'
+    | '/desktop/authorize'
     | '/dev/core'
     | '/dev/hyperkit'
     | '/dev/posterract-v2'
@@ -256,9 +289,11 @@ export interface FileRouteTypes {
     | '/enter'
     | '/gate'
     | '/privacy'
+    | '/reset-password'
     | '/terms'
     | '/_app/compose'
     | '/_app/continuum'
+    | '/_app/create'
     | '/_app/echoes'
     | '/_app/forge'
     | '/_app/portals'
@@ -267,6 +302,7 @@ export interface FileRouteTypes {
     | '/_app/transmissions'
     | '/_app/uplink'
     | '/_app/vault'
+    | '/desktop/authorize'
     | '/dev/core'
     | '/dev/hyperkit'
     | '/dev/posterract-v2'
@@ -280,7 +316,9 @@ export interface RootRouteChildren {
   EnterRoute: typeof EnterRoute
   GateRoute: typeof GateRoute
   PrivacyRoute: typeof PrivacyRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
   TermsRoute: typeof TermsRoute
+  DesktopAuthorizeRoute: typeof DesktopAuthorizeRoute
   DevCoreRoute: typeof DevCoreRoute
   DevHyperkitRoute: typeof DevHyperkitRoute
   DevPosterractV2Route: typeof DevPosterractV2Route
@@ -294,6 +332,13 @@ declare module '@tanstack/react-router' {
       path: '/terms'
       fullPath: '/terms'
       preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy': {
@@ -359,6 +404,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DevCoreRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/desktop/authorize': {
+      id: '/desktop/authorize'
+      path: '/desktop/authorize'
+      fullPath: '/desktop/authorize'
+      preLoaderRoute: typeof DesktopAuthorizeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_app/vault': {
       id: '/_app/vault'
       path: '/vault'
@@ -415,6 +467,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppEchoesRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/create': {
+      id: '/_app/create'
+      path: '/create'
+      fullPath: '/create'
+      preLoaderRoute: typeof AppCreateRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/continuum': {
       id: '/_app/continuum'
       path: '/continuum'
@@ -442,6 +501,7 @@ declare module '@tanstack/react-router' {
 interface AppRouteChildren {
   AppComposeRoute: typeof AppComposeRoute
   AppContinuumRoute: typeof AppContinuumRoute
+  AppCreateRoute: typeof AppCreateRoute
   AppEchoesRoute: typeof AppEchoesRoute
   AppForgeRoute: typeof AppForgeRoute
   AppPortalsRoute: typeof AppPortalsRoute
@@ -456,6 +516,7 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppComposeRoute: AppComposeRoute,
   AppContinuumRoute: AppContinuumRoute,
+  AppCreateRoute: AppCreateRoute,
   AppEchoesRoute: AppEchoesRoute,
   AppForgeRoute: AppForgeRoute,
   AppPortalsRoute: AppPortalsRoute,
@@ -475,7 +536,9 @@ const rootRouteChildren: RootRouteChildren = {
   EnterRoute: EnterRoute,
   GateRoute: GateRoute,
   PrivacyRoute: PrivacyRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
   TermsRoute: TermsRoute,
+  DesktopAuthorizeRoute: DesktopAuthorizeRoute,
   DevCoreRoute: DevCoreRoute,
   DevHyperkitRoute: DevHyperkitRoute,
   DevPosterractV2Route: DevPosterractV2Route,

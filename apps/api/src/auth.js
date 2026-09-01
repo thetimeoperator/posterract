@@ -1,5 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { betterAuth } from "better-auth";
+import { magicLink } from "better-auth/plugins";
+import {
+  createResendAuthMailer,
+  dispatchAuthEmail,
+  resendAuthConfigured,
+} from "./email.js";
 
 function trustedOrigins() {
   return [
@@ -11,6 +17,14 @@ function trustedOrigins() {
 }
 
 export function authOptions(postgres) {
+  const googleConfigured = Boolean(
+    process.env.GOOGLE_AUTH_CLIENT_ID && process.env.GOOGLE_AUTH_CLIENT_SECRET,
+  );
+  const emailConfigured = resendAuthConfigured(process.env);
+  const mailer = emailConfigured
+    ? createResendAuthMailer({ environment: process.env })
+    : undefined;
+
   return {
     database: postgres,
     baseURL:
@@ -20,10 +34,67 @@ export function authOptions(postgres) {
     basePath: "/api/auth",
     secret: process.env.BETTER_AUTH_SECRET,
     trustedOrigins: trustedOrigins(),
+    emailVerification: mailer
+      ? {
+          sendVerificationEmail: async ({ user, url, token }) => {
+            dispatchAuthEmail(mailer.sendVerification({ user, url, token }));
+          },
+          sendOnSignUp: true,
+          sendOnSignIn: false,
+          autoSignInAfterVerification: true,
+          expiresIn: 3_600,
+        }
+      : undefined,
     emailAndPassword: {
       enabled: true,
-      requireEmailVerification: false,
+      requireEmailVerification: emailConfigured,
+      sendResetPassword: mailer
+        ? async ({ user, url, token }) => {
+            dispatchAuthEmail(mailer.sendPasswordReset({ user, url, token }));
+          }
+        : undefined,
+      resetPasswordTokenExpiresIn: 3_600,
+      revokeSessionsOnPasswordReset: true,
     },
+    session: {
+      expiresIn: 60 * 60 * 24 * 30,
+      updateAge: 60 * 60 * 24,
+    },
+    plugins: mailer
+      ? [
+          magicLink({
+            disableSignUp: true,
+            expiresIn: 60 * 15,
+            storeToken: "hashed",
+            rateLimit: { window: 60, max: 3 },
+            sendMagicLink: async ({ email, url, token }) => {
+              const existing = await postgres.query(
+                `select email, display_name
+                 from app_users
+                 where lower(email) = lower($1) and email_verified = true
+                 limit 1`,
+                [email],
+              );
+              const user = existing.rows[0];
+              if (!user) return;
+              await mailer.sendSignInLink({
+                user: { email: user.email, name: user.display_name },
+                url,
+                token,
+              });
+            },
+          }),
+        ]
+      : [],
+    socialProviders: googleConfigured
+      ? {
+          google: {
+            clientId: process.env.GOOGLE_AUTH_CLIENT_ID,
+            clientSecret: process.env.GOOGLE_AUTH_CLIENT_SECRET,
+            prompt: "select_account",
+          },
+        }
+      : {},
     advanced: {
       database: { generateId: "uuid" },
       useSecureCookies: process.env.NODE_ENV === "production",
@@ -90,12 +161,52 @@ export function authOptions(postgres) {
                   [workspaceId, provider],
                 );
               }
+              if (emailConfigured && user.emailVerified === true) {
+                await client.query(
+                  `insert into outbox_events
+                    (aggregate_type, aggregate_id, event_type, payload)
+                   values ('app_user', $1, 'auth.welcome_email_requested', '{}'::jsonb)
+                   on conflict do nothing`,
+                  [appUserId],
+                );
+              }
               await client.query("commit");
             } catch (error) {
               await client.query("rollback");
               throw error;
             } finally {
               client.release();
+            }
+          },
+        },
+        update: {
+          after: async (user) => {
+            const updated = await postgres.query(
+              `update app_users
+               set display_name = coalesce($2, display_name),
+                   email_verified = $3,
+                   image_url = coalesce($4, image_url),
+                   updated_at = now()
+               where auth_user_id = $1 or email = $5
+               returning id`,
+              [
+                user.id,
+                user.name,
+                user.emailVerified === true,
+                user.image ?? null,
+                user.email,
+              ],
+            );
+            if (emailConfigured && user.emailVerified === true) {
+              for (const appUser of updated.rows) {
+                await postgres.query(
+                  `insert into outbox_events
+                    (aggregate_type, aggregate_id, event_type, payload)
+                   values ('app_user', $1, 'auth.welcome_email_requested', '{}'::jsonb)
+                   on conflict do nothing`,
+                  [appUser.id],
+                );
+              }
             }
           },
         },

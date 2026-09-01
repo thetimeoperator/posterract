@@ -16,10 +16,51 @@ const migrationDirectory = resolve(
   "../../../deploy/posterract/postgres/init",
 );
 
+test("Google authentication is exposed only when both OAuth credentials exist", () => {
+  const previousClientId = process.env.GOOGLE_AUTH_CLIENT_ID;
+  const previousClientSecret = process.env.GOOGLE_AUTH_CLIENT_SECRET;
+  try {
+    delete process.env.GOOGLE_AUTH_CLIENT_ID;
+    delete process.env.GOOGLE_AUTH_CLIENT_SECRET;
+    assert.deepEqual(authOptions({}).socialProviders, {});
+
+    process.env.GOOGLE_AUTH_CLIENT_ID = "google-client-id";
+    process.env.GOOGLE_AUTH_CLIENT_SECRET = "google-client-secret";
+    const google = authOptions({}).socialProviders.google;
+    assert.equal(google.clientId, "google-client-id");
+    assert.equal(google.clientSecret, "google-client-secret");
+    assert.equal(google.prompt, "select_account");
+  } finally {
+    if (previousClientId === undefined) delete process.env.GOOGLE_AUTH_CLIENT_ID;
+    else process.env.GOOGLE_AUTH_CLIENT_ID = previousClientId;
+    if (previousClientSecret === undefined) delete process.env.GOOGLE_AUTH_CLIENT_SECRET;
+    else process.env.GOOGLE_AUTH_CLIENT_SECRET = previousClientSecret;
+  }
+});
+
+test("authentication remembers browsers and never verifies on sign-in", () => {
+  const previousKey = process.env.RESEND_API_KEY;
+  const previousFrom = process.env.RESEND_FROM_EMAIL;
+  try {
+    process.env.RESEND_API_KEY = "re_test_key";
+    process.env.RESEND_FROM_EMAIL = "Posterract <security@posterract.app>";
+    const options = authOptions({});
+    assert.equal(options.emailVerification?.sendOnSignIn, false);
+    assert.equal(options.session.expiresIn, 60 * 60 * 24 * 30);
+    assert.equal(options.session.updateAge, 60 * 60 * 24);
+    assert.equal(options.plugins[0]?.id, "magic-link");
+  } finally {
+    if (previousKey === undefined) delete process.env.RESEND_API_KEY;
+    else process.env.RESEND_API_KEY = previousKey;
+    if (previousFrom === undefined) delete process.env.RESEND_FROM_EMAIL;
+    else process.env.RESEND_FROM_EMAIL = previousFrom;
+  }
+});
+
 test("PostgreSQL application migrations apply cleanly and idempotently", async () => {
   const postgres = new PGlite({ extensions: { pgcrypto } });
   const migrations = await Promise.all(
-    ["001-posterract.sql", "002-postgres-cutover.sql", "003-agent-harness.sql", "004-agent-chats.sql", "005-tiktok-draft-status.sql", "006-stripe-billing.sql"].map(async (name) => ({
+    ["001-posterract.sql", "002-postgres-cutover.sql", "003-agent-harness.sql", "004-agent-chats.sql", "005-tiktok-draft-status.sql", "006-stripe-billing.sql", "007-welcome-email.sql", "008-creative-editor.sql", "009-desktop-auth.sql", "010-account-sets.sql"].map(async (name) => ({
       name,
       sql: await readFile(resolve(migrationDirectory, name), "utf8"),
     })),
@@ -56,6 +97,18 @@ test("PostgreSQL application migrations apply cleanly and idempotently", async (
       "billing_subscriptions",
       "billing_checkout_sessions",
       "stripe_webhook_events",
+      "creative_projects",
+      "creative_project_revisions",
+      "creative_project_revision_files",
+      "creative_operations",
+      "creative_project_assets",
+      "creative_project_asset_manifests",
+      "desktop_authorization_grants",
+      "desktop_devices",
+      "desktop_access_tokens",
+      "desktop_refresh_tokens",
+      "account_sets",
+      "account_set_members",
     ]) {
       assert.equal(names.has(required), true, `${required} table is missing`);
     }
@@ -66,12 +119,100 @@ test("PostgreSQL application migrations apply cleanly and idempotently", async (
     );
     assert.equal(
       accountIndexes.rows.some(
+        (row) => row.indexname === "social_accounts_workspace_provider_account_idx",
+      ),
+      true,
+    );
+    assert.equal(
+      accountIndexes.rows.some(
         (row) => row.indexname === "social_accounts_one_provider_per_workspace_idx",
+      ),
+      false,
+    );
+    const userColumns = await postgres.query(
+      `select column_name from information_schema.columns
+       where table_schema = 'public' and table_name = 'app_users'`,
+    );
+    assert.equal(
+      userColumns.rows.some(
+        (row) => row.column_name === "welcome_email_sent_at",
+      ),
+      true,
+    );
+    const outboxIndexes = await postgres.query(
+      `select indexname from pg_indexes
+       where schemaname = 'public' and tablename = 'outbox_events'`,
+    );
+    assert.equal(
+      outboxIndexes.rows.some(
+        (row) => row.indexname === "outbox_one_welcome_email_per_user_idx",
       ),
       true,
     );
   } finally {
     await postgres.close();
+  }
+});
+
+test("verified users queue exactly one welcome email", async () => {
+  const previous = {
+    resendKey: process.env.RESEND_API_KEY,
+    resendFrom: process.env.RESEND_FROM_EMAIL,
+    url: process.env.BETTER_AUTH_URL,
+  };
+  process.env.RESEND_API_KEY = "re_test_key";
+  process.env.RESEND_FROM_EMAIL = "Posterract <security@posterract.app>";
+  process.env.BETTER_AUTH_URL = "https://www.posterract.app";
+  const postgres = new PGlite({ extensions: { pgcrypto } });
+  const query = async (text, parameters = []) => {
+    const result = await postgres.query(text, parameters);
+    return {
+      ...result,
+      rowCount: result.affectedRows ?? result.rows.length,
+    };
+  };
+
+  try {
+    for (const name of [
+      "001-posterract.sql",
+      "002-postgres-cutover.sql",
+      "007-welcome-email.sql",
+    ]) {
+      await postgres.exec(await readFile(resolve(migrationDirectory, name), "utf8"));
+    }
+    const appUserId = "00000000-0000-4000-8000-000000000071";
+    const authUserId = "auth-user-welcome";
+    await query(
+      `insert into app_users (id, auth_user_id, email, email_verified)
+       values ($1, $2, 'welcome@example.test', false)`,
+      [appUserId, authUserId],
+    );
+    const hook = authOptions({ query }).databaseHooks.user.update.after;
+    const verifiedUser = {
+      id: authUserId,
+      email: "welcome@example.test",
+      name: "Welcome Creator",
+      emailVerified: true,
+      image: null,
+    };
+    await hook(verifiedUser);
+    await hook(verifiedUser);
+
+    const queued = await query(
+      `select count(*)::int as count
+       from outbox_events
+       where aggregate_id = $1 and event_type = 'auth.welcome_email_requested'`,
+      [appUserId],
+    );
+    assert.equal(queued.rows[0].count, 1);
+  } finally {
+    await postgres.close();
+    if (previous.resendKey === undefined) delete process.env.RESEND_API_KEY;
+    else process.env.RESEND_API_KEY = previous.resendKey;
+    if (previous.resendFrom === undefined) delete process.env.RESEND_FROM_EMAIL;
+    else process.env.RESEND_FROM_EMAIL = previous.resendFrom;
+    if (previous.url === undefined) delete process.env.BETTER_AUTH_URL;
+    else process.env.BETTER_AUTH_URL = previous.url;
   }
 });
 
@@ -101,7 +242,7 @@ test("PostgreSQL Better Auth creates a complete Posterract workspace", async () 
   };
 
   try {
-    for (const name of ["001-posterract.sql", "002-postgres-cutover.sql", "003-agent-harness.sql", "004-agent-chats.sql", "005-tiktok-draft-status.sql", "006-stripe-billing.sql"]) {
+    for (const name of ["001-posterract.sql", "002-postgres-cutover.sql", "003-agent-harness.sql", "004-agent-chats.sql", "005-tiktok-draft-status.sql", "006-stripe-billing.sql", "007-welcome-email.sql"]) {
       await postgres.exec(await readFile(resolve(migrationDirectory, name), "utf8"));
     }
     const migrations = await getMigrations(authOptions(pool));
@@ -157,7 +298,7 @@ test("analytics reads normalized PostgreSQL snapshot history", async () => {
   const transmissionId = "00000000-0000-4000-8000-000000000005";
   const projectionId = "00000000-0000-4000-8000-000000000006";
   try {
-    for (const name of ["001-posterract.sql", "002-postgres-cutover.sql", "003-agent-harness.sql", "004-agent-chats.sql", "005-tiktok-draft-status.sql", "006-stripe-billing.sql"]) {
+    for (const name of ["001-posterract.sql", "002-postgres-cutover.sql", "003-agent-harness.sql", "004-agent-chats.sql", "005-tiktok-draft-status.sql", "006-stripe-billing.sql", "007-welcome-email.sql"]) {
       await postgres.exec(await readFile(resolve(migrationDirectory, name), "utf8"));
     }
     await postgres.query(
@@ -200,10 +341,12 @@ test("analytics reads normalized PostgreSQL snapshot history", async () => {
     );
     await postgres.query(
       `insert into account_metric_snapshots
-        (social_account_id, workspace_id, provider, audience, fetched_at)
+        (social_account_id, workspace_id, provider, audience, total_views,
+         raw_metrics, fetched_at)
        values
-         ($1, $2, 'instagram', 1200, now() - interval '8 days'),
-         ($1, $2, 'instagram', 1234, now())`,
+         ($1, $2, 'instagram', 1200, null, '{}', now() - interval '8 days'),
+         ($1, $2, 'instagram', 1234, 123456,
+          '{"totalInteractions":4321}', now())`,
       [accountId, workspaceId],
     );
     await postgres.query(
@@ -247,6 +390,21 @@ test("analytics reads normalized PostgreSQL snapshot history", async () => {
     assert.equal(instagram.previousPeriod.audience, 1200);
     assert.equal(instagram.previousPeriod.views, 40);
     assert.equal(instagram.previousPeriod.audienceDelta, 2);
+
+    const totalDashboard = await loadAnalyticsDashboard(
+      postgres,
+      workspaceId,
+      "total",
+    );
+    const totalInstagram = totalDashboard.platforms.find(
+      (platform) => platform.provider === "instagram",
+    );
+    assert.equal(totalDashboard.rangeDays, "total");
+    assert.equal(totalInstagram.views, 123456);
+    assert.equal(totalInstagram.totalInteractions, 4321);
+    assert.equal(totalInstagram.daily.length, 2);
+    assert.equal(totalInstagram.audienceDelta, 6);
+    assert.equal(totalInstagram.previousPeriod, undefined);
     assert.deepEqual(
       dashboard.platforms.map((platform) => platform.provider),
       ["instagram", "tiktok", "facebook", "threads"],

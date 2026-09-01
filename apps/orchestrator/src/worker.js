@@ -464,7 +464,7 @@ async function applyCumulativeAnalytics(account, summary, videos) {
         account.workspace_id,
         account.provider,
         summary.audience ?? null,
-        summary.totalViews ?? null,
+        summary.totalViews ?? summary.views ?? null,
         summary.totalLikes ?? null,
         summary.publishedVideos ?? null,
         JSON.stringify(summary),
@@ -766,7 +766,12 @@ async function refreshAccountAnalytics(accountId) {
       } else if (account.provider === "tiktok") {
         const user = await tiktokGetUserStats(accessToken);
         const projectionByPostId = new Map(
-          projections.map((projection) => [projection.platform_post_id, projection.id]),
+          projections
+            // TikTok's query endpoint accepts only the numeric public video ID.
+            // Draft-upload receipt IDs (for example `v_pub_file~...`) are not
+            // public video IDs and must never prevent account totals from syncing.
+            .filter((projection) => /^\d+$/.test(projection.platform_post_id ?? ""))
+            .map((projection) => [projection.platform_post_id, projection.id]),
         );
         const postIds = [...projectionByPostId.keys()];
         for (let index = 0; index < postIds.length; index += 20) {

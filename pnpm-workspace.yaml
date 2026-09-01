@@ -1,6 +1,13 @@
 packages:
-  - "apps/web"
-  - "apps/api"
-  - "apps/orchestrator"
-  - "packages/contract"
-  - "packages/hyperkit"
+  - apps/web
+  - apps/api
+  - apps/orchestrator
+  - apps/editor-sandbox
+  - apps/desktop
+  - packages/contract
+  - packages/hyperkit
+  - packages/posterract-*
+  - packages/video-*
+
+patchedDependencies:
+  koota@0.6.6: patches/koota@0.6.6.patch

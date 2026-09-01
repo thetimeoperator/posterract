@@ -1,14 +1,18 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { PLATFORM_MARK_SOURCES } from "@posterract/hyperkit";
 import { Hero } from "@/components/ui/animated-hero";
-import { ShaderBackground } from "@/components/ui/blue-noise";
-import { authClient } from "@/lib/authClient";
+import { AnimatedPricingCard } from "@/components/ui/animated-pricing-card";
+import {
+  WelcomeAuthCard,
+  type WelcomeAuthMode,
+} from "@/components/ui/welcome-auth-card";
+import { LandingIntroWorld } from "@/marketing/LandingIntroWorld";
+import { RoadmapTerminal } from "@/marketing/RoadmapTerminal";
 import "@/styles/homepage.css";
 import "@/styles/homepage-readability.css";
 
-type AuthMode = "signin" | "signup";
-type PlatformPhase = "live" | "next";
+type PlatformPhase = "live" | "limited" | "next";
 
 type Platform = {
   id: string;
@@ -20,7 +24,7 @@ type Platform = {
 
 const PLATFORMS: Platform[] = [
   { id: "youtube", name: "YouTube", mark: PLATFORM_MARK_SOURCES.youtube, phase: "next", capability: "Integration roadmap" },
-  { id: "tiktok", name: "TikTok", mark: PLATFORM_MARK_SOURCES.tiktok, phase: "next", capability: "Integration roadmap" },
+  { id: "tiktok", name: "TikTok", mark: PLATFORM_MARK_SOURCES.tiktok, phase: "limited", capability: "Draft delivery / direct pending" },
   { id: "instagram", name: "Instagram", mark: PLATFORM_MARK_SOURCES.instagram, phase: "live", capability: "Publishing + insights" },
   { id: "facebook", name: "Facebook", mark: PLATFORM_MARK_SOURCES.facebook, phase: "live", capability: "Publishing + insights" },
   { id: "threads", name: "Threads", mark: PLATFORM_MARK_SOURCES.threads, phase: "live", capability: "Publishing + insights" },
@@ -54,13 +58,14 @@ function PlatformNetwork() {
               <div className="site-platform-mark"><img src={platform.mark} alt={`${platform.name} logo`} /></div>
             )}
             <div><h3>{platform.name}</h3><p>{platform.capability}</p></div>
-            <strong>{platform.phase === "live" ? "LIVE" : "COMING SOON"}</strong>
+            <strong>{platform.phase === "live" ? "LIVE" : platform.phase === "limited" ? "DRAFT LIVE" : "COMING SOON"}</strong>
           </article>
         ))}
       </div>
       <div className="site-platform-note">
         <p><strong>LIVE NOW</strong> Instagram / Facebook / Threads</p>
-        <p><strong>COMING SOON</strong> YouTube / TikTok / X / LinkedIn / Reddit</p>
+        <p><strong>LIMITED</strong> TikTok draft delivery</p>
+        <p><strong>ROADMAP</strong> YouTube / X / LinkedIn / Reddit</p>
       </div>
     </section>
   );
@@ -68,114 +73,104 @@ function PlatformNetwork() {
 
 export function Homepage() {
   const navigate = useNavigate();
-  const emailRef = useRef<HTMLInputElement>(null);
-  const authTitleId = useId();
+  const authDialogRef = useRef<HTMLDivElement>(null);
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
-  const [mode, setMode] = useState<AuthMode>("signin");
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState<WelcomeAuthMode>("signin");
 
   useEffect(() => {
     if (!authOpen) return;
     const previousOverflow = document.body.style.overflow;
+    restoreFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     document.body.style.overflow = "hidden";
-    const timer = window.setTimeout(() => emailRef.current?.focus(), 80);
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setAuthOpen(false);
+      if (event.key === "Escape") {
+        setAuthOpen(false);
+        return;
+      }
+      if (event.key !== "Tab" || !authDialogRef.current) return;
+      const focusable = Array.from(
+        authDialogRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), a[href], input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => {
-      window.clearTimeout(timer);
       window.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = previousOverflow;
+      restoreFocusRef.current?.focus();
     };
   }, [authOpen]);
 
-  const openAuth = (nextMode: AuthMode) => {
+  const openAuth = (nextMode: WelcomeAuthMode) => {
     setMode(nextMode);
-    setError(null);
     setAuthOpen(true);
-  };
-
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setError(null);
-    setBusy(true);
-    try {
-      const result =
-        mode === "signup"
-          ? await authClient.signUp.email({ email, password, name: name || email.split("@")[0] })
-          : await authClient.signIn.email({ email, password });
-      if (result.error) {
-        setError(result.error.message ?? "That transmission was not accepted. Check your details.");
-      } else {
-        setAuthOpen(false);
-        void navigate({ to: "/" });
-      }
-    } catch {
-      setError("The authentication relay is unreachable. Check your connection and try again.");
-    } finally {
-      setBusy(false);
-    }
   };
 
   return (
     <main className="site" id="top">
-      <a className="site-skip" href="#workflow">Skip to product overview</a>
+      <a className="site-skip" href="#pricing">Skip to pricing</a>
       <div className="site-stars" aria-hidden />
       <div className="site-grid" aria-hidden />
 
-      <section className="site-hero" aria-labelledby="site-title">
-        <div className="site-hero-background" style={{ zIndex: 0 }} aria-hidden="true">
-          <ShaderBackground className="site-aether-canvas" />
-        </div>
-        <div className="site-hero-shade" style={{ zIndex: 1 }} aria-hidden="true" />
+      <LandingIntroWorld>
+        <section className="site-hero" aria-labelledby="site-title">
+          <div className="site-hero-shade" aria-hidden="true" />
 
-        <header className="site-nav">
-          <div className="site-nav-brand">
-            <a className="site-wordmark" href="#top" aria-label="Posterract home">POSTER<span>RACT</span></a>
-            <span className="site-nav-system">PUBLISHING OS // 01</span>
+          <header className="site-nav">
+            <div className="site-nav-brand">
+              <a className="site-wordmark" href="#top" aria-label="Posterract home">POSTER<span>RACT</span></a>
+              <span className="site-nav-system">PUBLISHING OS // 01</span>
+            </div>
+            <nav aria-label="Primary navigation">
+              <a href="#platforms"><span>01</span> Network</a>
+              <a href="#roadmap"><span>02</span> Roadmap</a>
+              <a href="#pricing"><span>03</span> Pricing</a>
+              <a href="#analytics"><span>04</span> Analytics</a>
+            </nav>
+            <div className="site-nav-actions">
+              <button className="site-nav-signin" type="button" onClick={() => openAuth("signin")}>Sign in</button>
+              <button className="site-nav-cta" type="button" onClick={() => openAuth("signup")}>Launch Posterract</button>
+            </div>
+          </header>
+
+          <div className="site-hero-main">
+            <Hero onLaunch={() => openAuth("signup")} />
           </div>
-          <nav aria-label="Primary navigation">
-            <a href="#platforms"><span>01</span> Network</a>
-            <a href="#workflow"><span>02</span> Workflow</a>
-            <a href="#analytics"><span>03</span> Analytics</a>
-          </nav>
-          <div className="site-nav-actions">
-            <button className="site-nav-signin" type="button" onClick={() => openAuth("signin")}>Sign in</button>
-            <button className="site-nav-cta" type="button" onClick={() => openAuth("signup")}>Launch Posterract</button>
+
+        </section>
+
+        <PlatformNetwork />
+        <RoadmapTerminal />
+      </LandingIntroWorld>
+
+      <section className="site-pricing" id="pricing" aria-labelledby="pricing-title">
+        <div className="site-pricing-copy">
+          <p className="site-kicker">ONE PLAN // THE FULL HARNESS</p>
+          <h2 id="pricing-title">One plan. Your entire publishing command center.</h2>
+          <p>Give your agent a direct path to the tools that matter—without stacking plans, seats, or hidden feature gates.</p>
+
+          <div className="site-pricing-sequence" aria-label="Posterract plan capabilities">
+            <div><span>01</span><strong>Connect</strong><small>Social accounts + agent API</small></div>
+            <i />
+            <div><span>02</span><strong>Command</strong><small>Schedule from one calendar</small></div>
+            <i />
+            <div><span>03</span><strong>Measure</strong><small>Authorized performance signals</small></div>
           </div>
-        </header>
-
-        <div className="site-hero-main">
-          <Hero onLaunch={() => openAuth("signup")} />
         </div>
 
-        <div className="site-hero-stats" aria-label="Posterract capabilities">
-          <div><span>01</span><p>One source video</p></div>
-          <div><span>04</span><p>One launch workflow</p></div>
-          <div><span>08</span><p>Platform destinations</p></div>
-          <div><span>24/7</span><p>Publishing status</p></div>
-        </div>
-      </section>
-
-      <PlatformNetwork />
-
-      <section className="site-workflow" id="workflow" aria-labelledby="workflow-title">
-        <div className="site-section-heading">
-          <p className="site-kicker">THE WORKFLOW</p>
-          <h2 id="workflow-title">Your content stays singular.</h2>
-          <p>Every decision lives around the same artifact—from the first upload to the final performance signal.</p>
-        </div>
-        <ol className="site-workflow-list">
-          <li><span>01</span><div><h3>Compose once</h3><p>Upload the finished video, write the core message, and keep everything together.</p></div></li>
-          <li><span>02</span><div><h3>Choose the orbit</h3><p>Select connected channels and tune platform-specific publishing details.</p></div></li>
-          <li><span>03</span><div><h3>Control the moment</h3><p>Publish immediately or schedule the release across every destination.</p></div></li>
-          <li><span>04</span><div><h3>Read the signal</h3><p>Track publishing outcomes and authorized audience performance in one view.</p></div></li>
-        </ol>
+        <AnimatedPricingCard onLaunch={() => openAuth("signup")} />
       </section>
 
       <section className="site-pipeline" aria-labelledby="pipeline-title">
@@ -249,20 +244,23 @@ export function Homepage() {
 
       {authOpen && (
         <div className="site-auth" role="presentation" onMouseDown={() => setAuthOpen(false)}>
-          <div className="site-auth-panel" role="dialog" aria-modal="true" aria-labelledby={authTitleId} onMouseDown={(event) => event.stopPropagation()}>
-            <div className="site-auth-topline"><span>SECURE ACCESS // POSTERRACT</span><button type="button" onClick={() => setAuthOpen(false)}>CLOSE // ESC</button></div>
-            <div className="site-auth-heading"><p className="site-kicker">AUTHENTICATION RELAY</p><h2 id={authTitleId}>{mode === "signin" ? "Open the command center." : "Claim your command center."}</h2><p>{mode === "signin" ? "Return to your publishing system." : "Create the account that will hold your connected channels and publishing history."}</p></div>
-            <div className="site-auth-modes" role="tablist" aria-label="Authentication mode">
-              <button type="button" role="tab" aria-selected={mode === "signin"} className={mode === "signin" ? "is-active" : undefined} onClick={() => { setMode("signin"); setError(null); }}>Sign in</button>
-              <button type="button" role="tab" aria-selected={mode === "signup"} className={mode === "signup" ? "is-active" : undefined} onClick={() => { setMode("signup"); setError(null); }}>Create account</button>
-            </div>
-            <form className="site-auth-form" onSubmit={submit}>
-              {mode === "signup" && <label><span>Name</span><input type="text" autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Your name" /></label>}
-              <label><span>Email</span><input ref={emailRef} type="email" required autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></label>
-              <label><span>Password</span><input type="password" required minLength={8} autoComplete={mode === "signup" ? "new-password" : "current-password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder={mode === "signup" ? "At least 8 characters" : "Your password"} /></label>
-              {error && <p className="site-auth-error" role="alert">{error}</p>}
-              <button className="site-auth-submit" type="submit" disabled={busy}>{busy ? "Contacting relay..." : mode === "signin" ? "Enter Posterract" : "Create account"}</button>
-            </form>
+          <div
+            className="site-auth-welcome"
+            ref={authDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Welcome to Posterract"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <WelcomeAuthCard
+              initialMode={mode}
+              showClose
+              onClose={() => setAuthOpen(false)}
+              onSuccess={() => {
+                setAuthOpen(false);
+                void navigate({ to: "/" });
+              }}
+            />
           </div>
         </div>
       )}

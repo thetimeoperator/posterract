@@ -7,9 +7,10 @@ test.describe("Echoes analytics", () => {
     await expect(page.getByTestId("analytics-dashboard")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Analytics", exact: true })).toBeVisible();
     await expect(page.getByRole("radio", { name: "All" })).toBeChecked();
+    await expect(page.getByRole("radio", { name: "Total" })).toBeChecked();
     await expect(page.locator("[data-signal-metric]")).toHaveCount(6);
     await expect(page.getByTestId("signal-sparkline")).toHaveCount(6);
-    await expect(page.locator('[data-signal-metric][aria-label*="previous 30 days"]')).toHaveCount(6);
+    await expect(page.locator('[data-signal-metric][aria-label*="All available history"]')).toHaveCount(6);
 
     await page.getByRole("radio", { name: "Instagram" }).click();
     await page.getByRole("radio", { name: "7D" }).click();
@@ -29,7 +30,18 @@ test.describe("Echoes analytics", () => {
     await expect(page.locator('[data-signal-metric="shares"]')).toBeVisible();
   });
 
-  test("gives all six animated graph cards enough room in a three-by-two desktop grid", async ({ page }) => {
+  test("keeps trend graphs visible across every fixed analytics range", async ({ page }) => {
+    await page.goto("/echoes");
+
+    for (const range of ["7D", "30D", "90D"]) {
+      await page.getByRole("radio", { name: range, exact: true }).click();
+      await expect(page.getByRole("radio", { name: range, exact: true })).toBeChecked();
+      await expect(page.getByTestId("signal-sparkline")).toHaveCount(6);
+      await expect(page.getByRole("img", { name: /Daily views by platform/i })).toBeVisible();
+    }
+  });
+
+  test("keeps all six signal chambers compact and visually consistent", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto("/echoes");
     const cards = page.locator("[data-signal-metric]");
@@ -37,21 +49,18 @@ test.describe("Echoes analytics", () => {
     const boxes = await cards.evaluateAll((elements) =>
       elements.map((element) => {
         const box = element.getBoundingClientRect();
-        const frame = getComputedStyle(element, "::before");
         return {
           top: Math.round(box.top),
           width: box.width,
           height: box.height,
-          frameTop: frame.borderTopWidth,
-          frameLeft: frame.borderLeftWidth,
-          frameRight: frame.borderRightWidth,
+          borderRadius: getComputedStyle(element).borderRadius,
         };
       }),
     );
     expect(new Set(boxes.map((box) => box.top)).size).toBe(2);
     expect(boxes.every((box) => box.width >= 350)).toBe(true);
-    expect(boxes.every((box) => box.height >= 270 && box.height <= 300)).toBe(true);
-    expect(boxes.every((box) => box.frameTop === "2px" && box.frameLeft === "2px" && box.frameRight === "0px")).toBe(true);
+    expect(boxes.every((box) => box.height >= 205 && box.height <= 220)).toBe(true);
+    expect(boxes.every((box) => box.borderRadius === "17px")).toBe(true);
 
     const graphs = page.getByTestId("signal-sparkline");
     await expect(graphs).toHaveCount(6);
@@ -65,6 +74,7 @@ test.describe("Echoes analytics", () => {
           hasDashAnimation: element.querySelector("[data-signal-line]")?.hasAttribute("stroke-dasharray") ?? false,
           mainStroke: Number(element.querySelector("[data-signal-line]")?.getAttribute("stroke-width")),
           glowStroke: Number(element.querySelector(".analytics-signal-line-glow")?.getAttribute("stroke-width")),
+          pointCount: element.querySelectorAll("circle, rect").length,
           widthShare: graphBox.width / cardBox.width,
           heightShare: graphBox.height / cardBox.height,
         };
@@ -73,8 +83,9 @@ test.describe("Echoes analytics", () => {
     expect(graphGeometry.every((graph) => graph.overflow === "hidden")).toBe(true);
     expect(graphGeometry.every((graph) => graph.observedPoints >= 2)).toBe(true);
     expect(graphGeometry.some((graph) => graph.hasDashAnimation)).toBe(false);
-    expect(graphGeometry.every((graph) => graph.mainStroke <= 1.7 && graph.glowStroke <= 4.5)).toBe(true);
-    expect(graphGeometry.every((graph) => graph.widthShare >= .9 && graph.heightShare >= .5)).toBe(true);
+    expect(graphGeometry.every((graph) => graph.mainStroke <= .8 && graph.glowStroke <= 2.2)).toBe(true);
+    expect(graphGeometry.every((graph) => graph.pointCount === 0)).toBe(true);
+    expect(graphGeometry.every((graph) => graph.widthShare >= .9 && graph.heightShare >= .44 && graph.heightShare <= .5)).toBe(true);
   });
 
   test("keeps the analytics surface inside the tablet viewport", async ({ page }) => {

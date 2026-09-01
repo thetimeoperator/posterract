@@ -5,6 +5,7 @@ import { ArrowRight, Bot, Check, Copy, KeyRound, Plus, Send, Trash2, X } from "l
 import clsx from "clsx";
 import { Button, Panel, pushSignal } from "@posterract/hyperkit";
 import { LiquidSurface } from "@/components/LiquidSurface";
+import { LocalAgentConnection } from "@/components/LocalAgentConnection";
 import {
   createWorkspaceApiKey,
   listWorkspaceApiKeys,
@@ -31,6 +32,7 @@ const CURL_EXAMPLE = `curl -X POST https://api.posterract.app/v1/posts \\
     "artifactId": "MEDIA_UUID",
     "title": "Launch post",
     "caption": "The launch is live.",
+    "accountSetId": "ACCOUNT_SET_UUID",
     "platforms": ["instagram", "tiktok"],
     "scheduledFor": "2026-08-21T18:00:00Z"
   }'`;
@@ -92,14 +94,14 @@ function ApiKeysPage() {
             <span className="flex h-8 w-8 items-center justify-center rounded-[11px] border border-neon/25 bg-neon/[0.06] text-neon">
               <Bot size={16} />
             </span>
-            <p className="kicker !text-neon">Agent API</p>
+            <p className="kicker !text-neon">Agent connection</p>
           </div>
           <h1 className="mt-3 font-display text-[clamp(24px,3vw,38px)] font-semibold tracking-[-0.03em] text-starlight">
-            API keys
+            Agents & API keys
           </h1>
           <p className="mt-2 max-w-2xl text-[11.5px] leading-relaxed text-starlight-dim">
-            Create and manage secure keys for agents, automations, or your own software. Every scheduled and
-            published post stays attached to this workspace.
+            Connect a local coding agent to the desktop editor, or create cloud API keys for posting,
+            scheduling, and analytics. These are separate, secure connections.
           </p>
           <button
             type="button"
@@ -112,13 +114,19 @@ function ApiKeysPage() {
             </span>
             <span className="calendar-new-post-cta__copy">
               <span className="calendar-new-post-cta__label">Create API key</span>
-              <span className="calendar-new-post-cta__meta" aria-hidden>Connect an agent</span>
+              <span className="calendar-new-post-cta__meta" aria-hidden>Cloud publishing access</span>
             </span>
             <span className="calendar-new-post-cta__arrow" aria-hidden>
               <ArrowRight size={17} strokeWidth={1.8} />
             </span>
           </button>
         </div>
+      </div>
+
+      <LocalAgentConnection />
+
+      <div className="rounded-[14px] border border-white/[0.08] bg-black/10 px-4 py-3 text-[10px] leading-relaxed text-starlight-dim">
+        <strong className="text-starlight">Workspace API Keys</strong> control cloud posting, scheduling, and analytics. They do not control local project files or the editor canvas.
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -128,7 +136,7 @@ function ApiKeysPage() {
         <Stat label="API actions" value={totals.actions} />
       </div>
 
-      <Panel kicker="Workspace access" title="Manage API keys" brackets className="min-w-0">
+      <Panel kicker="Workspace API keys" title="Manage cloud API keys" brackets className="min-w-0">
         {keys.length === 0 ? (
           <div className="flex min-h-48 flex-col items-center justify-center text-center">
             <span className="flex h-11 w-11 items-center justify-center rounded-[15px] border border-neon/20 bg-neon/[0.05] text-neon">
@@ -189,8 +197,7 @@ function ApiKeysPage() {
 
       <Panel kicker="Posting API" title="Schedule from any agent" brackets className="min-w-0">
         <p className="text-[10.5px] leading-relaxed text-starlight-dim">
-          Upload media, choose connected platforms, and create or schedule a post with the same API key. App-created and
-          API-created posts appear together in the Calendar and Analytics.
+          Upload media, choose connected platforms, and create or schedule a post with the same API key. Fetch <code className="text-neon">GET /v1/account-sets</code>, then send its ID as <code className="text-neon">accountSetId</code> so the agent uses the exact saved accounts. App-created and API-created posts appear together in the Calendar and Analytics.
         </p>
         <pre className="telemetry mt-4 max-w-full overflow-x-auto rounded-[12px] border border-[var(--glass-border)] bg-void-1 p-4 text-[10px] leading-relaxed text-starlight-dim">
           {CURL_EXAMPLE}

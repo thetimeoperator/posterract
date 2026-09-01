@@ -7,7 +7,7 @@ export const Route = createFileRoute("/privacy")({
 
 function Privacy() {
   return (
-    <LegalPage title="Privacy Policy" updated="August 20, 2026" wide>
+    <LegalPage title="Privacy Policy" updated="August 24, 2026" wide>
       <section className="legal-verification" aria-labelledby="youtube-verification-title">
         <div className="legal-verification-heading">
           <div>
@@ -189,7 +189,9 @@ function Privacy() {
           <strong>Infrastructure providers.</strong> Our privately managed VPS and its hosting
           provider process the application and database records described below. Cloudflare
           provides private R2 object storage for uploaded media and network delivery services.
-          We use these providers as service providers needed to operate Posterract.
+          Resend processes recipient email addresses and transactional message and delivery
+          metadata when Posterract sends account-verification or password-recovery emails. We use
+          these providers as service providers needed to operate Posterract.
         </li>
         <li>
           <strong>Legal and safety requirements.</strong> We may disclose information when reasonably

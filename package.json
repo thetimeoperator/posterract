@@ -5,6 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "pnpm --filter @posterract/web dev",
+    "desktop:dev": "pnpm --filter @posterract/desktop dev",
+    "desktop:build": "pnpm --filter @posterract/desktop build",
+    "desktop:make": "pnpm --filter @posterract/desktop make",
+    "check:posterract-artifacts": "node scripts/check-posterract-artifacts.mjs",
+    "check:posterract-skill": "pnpm --filter @posterract/cli build && pnpm --filter @posterract/desktop stage:skill && node scripts/validate-posterract-skill.mjs",
     "build": "pnpm -r run build",
     "typecheck": "pnpm -r run typecheck",
     "lint": "pnpm -r run lint",
@@ -12,6 +17,9 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "fflate": "^0.8.2"
   },
   "packageManager": "pnpm@10.13.1"
 }

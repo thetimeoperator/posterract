@@ -44,6 +44,7 @@ export type CreateTransmissionInput = {
   perPlatformOptions?: Partial<
     Record<PlatformId, Record<string, string | boolean | number>>
   >;
+  accountSetId?: string;
   scheduleMode: ScheduleMode;
   scheduledFor: number;
 };

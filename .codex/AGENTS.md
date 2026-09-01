@@ -1,24 +1,22 @@
-# Posterract — Project Instructions
+# Posterract repository rules
 
-The product is **Posterract**, not Vidtryx. The enclosing local folder name `vidtryx` is legacy. The active application is in `apps/web`, the GitHub repository is `posterract`, and the product is deployed on Vercel.
+- The product is Posterract; `vidtryx` is only the legacy local folder name.
+- Production is the Docker Compose stack on the VPS. **Never deploy Posterract to Vercel.**
+- SSH: `root@100.93.122.0`
+- Live source: `/srv/posterract/source`
+- Environment: `/srv/posterract/.env`
+- Compose file: `/srv/posterract/source/deploy/posterract/compose.yaml`
+- Preserve secrets and unrelated working-tree changes. Never sync `.env*`, credentials, `.git`, `node_modules`, build output, or unrelated deleted/untracked files.
+- Do not commit or push GitHub unless the founder explicitly asks.
 
-Posterract is a short-form video publishing and scheduling platform for humans and AI agents. A user uploads one video, creates shared and platform-specific captions, chooses a time, and publishes through the cloud to Instagram, TikTok, YouTube, X, Threads, and Facebook.
+For a web-only production deploy, verify locally, dry-run the targeted sync, sync the approved web source/package files to `/srv/posterract/source`, then run on the VPS:
 
-Official social-platform API access is a critical dependency. Instagram and TikTok have real connector code that still requires production credentials, approvals, and validation. YouTube, X, Threads, and Facebook still need official API access and real connectors. Never commit API keys, OAuth secrets, access tokens, or refresh tokens.
+```bash
+cd /srv/posterract/source
+docker compose --env-file /srv/posterract/.env -f deploy/posterract/compose.yaml build web
+docker compose --env-file /srv/posterract/.env -f deploy/posterract/compose.yaml up -d --no-deps web
+docker compose --env-file /srv/posterract/.env -f deploy/posterract/compose.yaml ps web
+curl -fsS http://127.0.0.1:3000/health/ready
+```
 
-Act as the founder's senior software engineer: protect product truth, security, reliability, maintainability, and the existing Posterract visual identity; identify risks early; sequence work pragmatically; verify changes; and report limitations honestly. Do not commit, push, deploy, change Vercel/GitHub configuration, or create external side effects unless the founder explicitly asks.
-
-## Git publishing policy
-
-Posterract uses direct-to-`main` publishing. When the founder explicitly asks
-to commit, push, publish, or deploy repository changes:
-
-- Commit the requested files directly on `main` and push to `origin/main`.
-- Do not create a feature branch, pull request, or draft pull request unless the
-  founder explicitly asks for one in that request.
-- If the workspace is on another branch, reconcile the requested work onto
-  `main` before committing or pushing.
-- Never interpret "push" as "push a PR branch." In this repository, "push"
-  means push the requested commit to `origin/main`.
-- Keep unrelated working-tree changes out of the commit unless the founder
-  explicitly includes them.
+Rebuild only the affected services (`web`, `api`, or `orchestrator`) and report production health honestly.

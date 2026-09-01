@@ -44,6 +44,7 @@ export type FacebookPage = {
   name: string;
   accessToken: string;
   tasks: string[];
+  avatarUrl?: string;
 };
 
 /** App-scoped Facebook user ID used to match Meta deauthorization and
@@ -151,6 +152,7 @@ type FacebookPageResponse = {
   name?: string;
   access_token?: string;
   tasks?: string[];
+  picture?: { data?: { url?: string } };
 };
 
 function normalizeFacebookPages(pages: FacebookPageResponse[]): FacebookPage[] {
@@ -165,6 +167,7 @@ function normalizeFacebookPages(pages: FacebookPageResponse[]): FacebookPage[] {
       // explicitly verified OAuth permissions is the reliable authorization
       // boundary; filtering on task-label strings can incorrectly hide a Page.
       tasks: page.tasks ?? [],
+      avatarUrl: page.picture?.data?.url,
     }];
   });
 }
@@ -175,7 +178,7 @@ export async function facebookListPages(args: {
   clientSecret: string;
 }): Promise<FacebookPage[]> {
   const url = new URL(`${GRAPH}/${API_VERSION}/me/accounts`);
-  url.searchParams.set("fields", "id,name,access_token,tasks");
+  url.searchParams.set("fields", "id,name,access_token,tasks,picture.type(large)");
   url.searchParams.set("limit", "100");
   url.searchParams.set("access_token", args.userAccessToken);
   const response = await fetch(url);
@@ -237,7 +240,7 @@ export async function facebookListPages(args: {
   const selectedPageResults = await Promise.all(
     [...pageIds].map(async (pageId): Promise<{ page?: FacebookPageResponse; error?: string }> => {
       const pageUrl = new URL(`${GRAPH}/${API_VERSION}/${pageId}`);
-      pageUrl.searchParams.set("fields", "id,name,access_token");
+      pageUrl.searchParams.set("fields", "id,name,access_token,picture.type(large)");
       pageUrl.searchParams.set("access_token", args.userAccessToken);
       const pageResponse = await fetch(pageUrl);
       const pageBody = (await pageResponse.json()) as FacebookPageResponse & {
@@ -375,20 +378,37 @@ export async function facebookPageSummary(args: {
   pageEngagements?: number;
   profileViews?: number;
 }> {
-  const url = new URL(`${GRAPH}/${API_VERSION}/${args.pageId}`);
-  url.searchParams.set("fields", "followers_count,fan_count");
-  url.searchParams.set("access_token", args.pageAccessToken);
-  const response = await fetch(url);
-  const body = (await response.json()) as {
+  type PageSummaryBody = {
     followers_count?: number;
     fan_count?: number;
     error?: { message?: string };
   };
-  if (!response.ok) throw new Error(`Facebook Page lookup failed: ${body.error?.message ?? response.status}`);
+
+  // A Page access token resolves `/me` to the Page itself. Some New Pages
+  // Experience grants reject an explicit `/{page-id}` lookup even though the
+  // same Page token can publish and can read `/me`. Try the explicit ID first
+  // and use the token-bound Page as the standards-compatible fallback.
+  let body: PageSummaryBody | undefined;
+  let pageTarget = args.pageId;
+  let lookupError: string | undefined;
+  for (const target of [args.pageId, "me"]) {
+    const url = new URL(`${GRAPH}/${API_VERSION}/${target}`);
+    url.searchParams.set("fields", "followers_count,fan_count");
+    url.searchParams.set("access_token", args.pageAccessToken);
+    const response = await fetch(url);
+    const candidate = (await response.json()) as PageSummaryBody;
+    if (response.ok) {
+      body = candidate;
+      pageTarget = target;
+      break;
+    }
+    lookupError = candidate.error?.message ?? String(response.status);
+  }
+  if (!body) throw new Error(`Facebook Page lookup failed: ${lookupError ?? "Page unavailable"}`);
 
   const fetchMetric = async (metric: string) => {
     const insightsUrl = new URL(
-      `${GRAPH}/${API_VERSION}/${args.pageId}/insights/${metric}`,
+      `${GRAPH}/${API_VERSION}/${pageTarget}/insights/${metric}`,
     );
     insightsUrl.searchParams.set("period", "day");
     insightsUrl.searchParams.set("since", String(Math.floor(Date.now() / 1000) - 7 * 86400));

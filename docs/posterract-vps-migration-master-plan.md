@@ -1,12 +1,19 @@
 # Posterract VPS Migration Master Plan
 
-Last updated: August 13, 2026
+Last updated: August 19, 2026
+
+## August 19 deployment clarification
+
+Posterract production is served entirely by the Docker Compose stack in
+`/srv/posterract/source` on the VPS. Caddy routes the web application and API;
+Cloudflare Tunnel carries public traffic to that gateway. Vercel is retired and
+must not be used for Posterract deployments.
 
 ## August 13 production cutover update
 
 The PostgreSQL replacement is live. The production frontend uses
-`VITE_API_URL=/api`, and Vercel proxies that same-origin API path through the
-Cloudflare Tunnel to the VPS. Better Auth, product data, encrypted social
+`VITE_API_URL=/api`, and Caddy proxies that same-origin API path inside the VPS
+stack. Better Auth, product data, encrypted social
 tokens, authenticated OAuth/account management, direct R2 uploads, the
 scoped/idempotent agent API, the transactional outbox, Temporal publishing, and
 analytics ingestion now use the VPS stack. Convex is retained only as a

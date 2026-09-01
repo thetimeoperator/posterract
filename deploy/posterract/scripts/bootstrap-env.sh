@@ -59,6 +59,10 @@ umask 077
   printf 'TIKTOK_CLIENT_SECRET=\n'
   printf 'YOUTUBE_CLIENT_ID=\n'
   printf 'YOUTUBE_CLIENT_SECRET=\n'
+  printf 'GOOGLE_AUTH_CLIENT_ID=\n'
+  printf 'GOOGLE_AUTH_CLIENT_SECRET=\n'
+  printf 'RESEND_API_KEY=\n'
+  printf 'RESEND_FROM_EMAIL="Posterract <security@posterract.app>"\n'
 } >"$target_env"
 
 chmod 600 "$target_env"

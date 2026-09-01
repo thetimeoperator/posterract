@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 import type {
+  AccountSetDTO,
   AnalyticsDashboardDTO,
   AnalyticsRangeDays,
   ArtifactDTO,
@@ -12,6 +13,7 @@ import type {
   TransmissionDTO,
 } from "@posterract/contract";
 import type { CreateTransmissionInput } from "./store";
+import { cloudJson } from "@/lib/cloudRequest";
 
 const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "/api";
 
@@ -22,6 +24,7 @@ type Bootstrap = {
   projections: ProjectionDTO[];
   events: EventDTO[];
   portals: PortalDTO[];
+  accountSets: AccountSetDTO[];
   points: PointsSummaryDTO;
 };
 
@@ -33,22 +36,7 @@ type State = Bootstrap & {
 };
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    credentials: "include",
-    headers: {
-      ...(init.body ? { "Content-Type": "application/json" } : {}),
-      ...init.headers,
-    },
-  });
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => undefined)) as
-      | { error?: string }
-      | undefined;
-    throw new Error(payload?.error ?? `Posterract API failed (${response.status})`);
-  }
-  if (response.status === 204) return undefined as T;
-  return (await response.json()) as T;
+  return cloudJson<T>(API_BASE, path, init);
 }
 
 const emptyPoints: PointsSummaryDTO = {
@@ -67,6 +55,7 @@ const usePostgresStore = create<State>((set) => ({
   projections: [],
   events: [],
   portals: [],
+  accountSets: [],
   points: emptyPoints,
   analytics: {},
   refresh: async () => {
@@ -83,6 +72,10 @@ const usePostgresStore = create<State>((set) => ({
     set((state) => ({ analytics: { ...state.analytics, [rangeDays]: data } }));
   },
 }));
+
+export async function refreshPostgresEngine(): Promise<void> {
+  await usePostgresStore.getState().refresh();
+}
 
 export function useEngineBoot() {
   const refresh = usePostgresStore((state) => state.refresh);
@@ -104,6 +97,7 @@ export const useTransmissions = () => usePostgresStore((state) => state.transmis
 export const useProjections = () => usePostgresStore((state) => state.projections);
 export const useEvents = () => usePostgresStore((state) => state.events);
 export const usePortals = () => usePostgresStore((state) => state.portals);
+export const useAccountSets = () => usePostgresStore((state) => state.accountSets);
 export const usePoints = () => usePostgresStore((state) => state.points);
 
 export function useAnalyticsDashboard(
@@ -188,6 +182,7 @@ export function useEngineActions() {
             input.scheduleMode === "now"
               ? "now"
               : new Date(input.scheduledFor).toISOString(),
+          accountSetId: input.accountSetId,
         }),
       }).then(refresh);
       return {
@@ -292,8 +287,38 @@ export function useOAuth() {
       if (result.ok) await refresh();
       return result;
     },
-    disconnect: async (provider: PlatformId) => {
-      await request(`/v1/accounts/${provider}`, { method: "DELETE" });
+    disconnect: async (accountId: string) => {
+      await request(`/v1/accounts/by-id/${encodeURIComponent(accountId)}`, { method: "DELETE" });
+      await refresh();
+    },
+    refreshProfiles: async () => {
+      await request("/v1/accounts/refresh-profiles", { method: "POST" });
+      await refresh();
+    },
+  };
+}
+
+export function useAccountSetActions() {
+  const refresh = usePostgresStore((state) => state.refresh);
+  return {
+    create: async (input: { name: string; accountIds: string[] }) => {
+      const result = await request<AccountSetDTO>("/v1/account-sets", {
+        method: "POST",
+        body: JSON.stringify(input),
+      });
+      await refresh();
+      return result;
+    },
+    update: async (id: string, input: { name: string; accountIds: string[] }) => {
+      const result = await request<AccountSetDTO>(
+        `/v1/account-sets/${encodeURIComponent(id)}`,
+        { method: "PUT", body: JSON.stringify(input) },
+      );
+      await refresh();
+      return result;
+    },
+    remove: async (id: string) => {
+      await request(`/v1/account-sets/${encodeURIComponent(id)}`, { method: "DELETE" });
       await refresh();
     },
   };

@@ -1,6 +1,7 @@
 import type { AgentChatSummary, AgentCredentialSummary, ForgeMessage } from "@/state/harness";
 import type { AgentProviderId } from "./catalog";
 import type { PublicSkill } from "./catalog";
+import { cloudJson } from "@/lib/cloudRequest";
 
 const configuredBase = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "");
 const API_BASE = configuredBase ?? "/api";
@@ -8,20 +9,7 @@ const API_BASE = configuredBase ?? "/api";
 export const REMOTE_HARNESS = Boolean(configuredBase);
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    credentials: "include",
-    headers: {
-      ...(init.body ? { "Content-Type": "application/json" } : {}),
-      ...init.headers,
-    },
-  });
-  if (!response.ok) {
-    const payload = await response.json().catch(() => undefined) as { error?: string; detail?: string } | undefined;
-    throw new Error(payload?.detail ?? payload?.error ?? `Posterract request failed (${response.status})`);
-  }
-  if (response.status === 204) return undefined as T;
-  return response.json() as Promise<T>;
+  return cloudJson<T>(API_BASE, path, init);
 }
 
 export async function listPublicSkills() {

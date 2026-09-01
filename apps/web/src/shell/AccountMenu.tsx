@@ -5,14 +5,17 @@ import { ChevronDown, LogIn, LogOut, Settings, UserRound } from "lucide-react";
 import { useProfile, initials } from "@/state/profile";
 import { authClient } from "@/lib/authClient";
 import { ENGINE_MODE } from "@/engine/useEngine";
+import { useAuthState } from "@/lib/useAuthState";
+import { desktopSignOut } from "@/lib/desktopAuth";
+import { isPosterractDesktop } from "@/lib/desktop";
 
 /** Account menu — avatar dropdown, the thing every product has top-right. */
 export function AccountMenu() {
   const profile = useProfile();
   const navigate = useNavigate();
-  const session = ENGINE_MODE === "cloud" ? authClient.useSession() : null;
-  const displayName = session?.data?.user?.name || profile.displayName;
-  const subtitle = session?.data?.user?.email || `${profile.handle} · ${profile.workspaceName}`;
+  const authState = useAuthState();
+  const displayName = authState.user?.name || profile.displayName;
+  const subtitle = authState.user?.email || `${profile.handle} · ${profile.workspaceName}`;
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -69,7 +72,8 @@ export function AccountMenu() {
                   type="button"
                   onClick={async () => {
                     setOpen(false);
-                    await authClient.signOut();
+                    if (isPosterractDesktop()) await desktopSignOut();
+                    else await authClient.signOut();
                     void navigate({ to: "/gate" });
                   }}
                   className="flex w-full items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-left text-[12.5px] text-starlight-dim transition-colors hover:bg-[rgba(255,113,143,0.08)] hover:text-redshift"

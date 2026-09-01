@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("Posterract shell", () => {
-  test("Calendar is the signed-in home with the six-page MVP dock", async ({ page }) => {
+  test("Calendar is the signed-in home with the primary product dock", async ({ page }) => {
     const errors: string[] = [];
     page.on("pageerror", (err) => errors.push(err.message));
 
@@ -32,6 +32,7 @@ test.describe("Posterract shell", () => {
     await expect(page.getByRole("link", { name: "New post", exact: true }).first()).toBeVisible();
     await expect(page.getByRole("radio", { name: "Month" })).toBeChecked();
     expect(await dock.getByRole("link").evaluateAll((links) => links.map((link) => link.getAttribute("aria-label")))).toEqual([
+      "Create — Agent video editor",
       "Calendar — Publishing schedule",
       "API Keys — Agent access",
       "Analytics — Performance",
@@ -39,7 +40,7 @@ test.describe("Posterract shell", () => {
       "Assets — Media library",
       "Settings — Workspace",
     ]);
-    await expect(dock.getByRole("link", { name: /Create|Skills|History/ })).toHaveCount(0);
+    await expect(dock.getByRole("link", { name: /Skills|History/ })).toHaveCount(0);
     expect(errors).toEqual([]);
   });
 
@@ -95,12 +96,14 @@ test.describe("Posterract shell", () => {
 
     await page.goto("/");
     await expect(page.getByRole("radio", { name: "Month" })).toBeChecked();
+    await expect(page.locator("[data-calendar-day]")).toHaveCount(42);
     await page.getByRole("button", { name: dayLabel, exact: true }).click();
     await expect(page.getByRole("dialog")).toContainText("Day timeline");
     await expect(page.getByRole("radio", { name: "Month" })).toBeChecked();
     await page.getByRole("button", { name: "Close dialog" }).click();
 
     await page.getByRole("radio", { name: "Week" }).click();
+    await expect(page.locator("[data-calendar-day]")).toHaveCount(7);
     await page.getByRole("button", { name: `Open ${dayLabel}`, exact: true }).click();
     await expect(page.getByRole("dialog")).toContainText("Day timeline");
     await expect(page.getByRole("radio", { name: "Week" })).toBeChecked();

@@ -81,6 +81,24 @@ export function parseCreatePost(body, now = new Date()) {
   if (typeof body.caption !== "string") {
     throw new RequestValidationError("invalid_caption");
   }
+  const accountSetId = body.accountSetId;
+  if (accountSetId !== undefined && (typeof accountSetId !== "string" || !uuidPattern.test(accountSetId))) {
+    throw new RequestValidationError("invalid_account_set_id");
+  }
+  const accountIds = body.accountIds;
+  if (
+    accountIds !== undefined &&
+    (!Array.isArray(accountIds) ||
+      accountIds.length === 0 ||
+      accountIds.length > 6 ||
+      accountIds.some((id) => typeof id !== "string" || !uuidPattern.test(id)) ||
+      new Set(accountIds).size !== accountIds.length)
+  ) {
+    throw new RequestValidationError("invalid_account_ids");
+  }
+  if (accountSetId && accountIds) {
+    throw new RequestValidationError("ambiguous_account_target");
+  }
   if (
     !Array.isArray(body.platforms) ||
     body.platforms.length === 0 ||
@@ -147,6 +165,8 @@ export function parseCreatePost(body, now = new Date()) {
     scheduleMode: scheduled.mode,
     scheduledFor: scheduled.at,
     status: scheduled.mode === "now" ? "scheduled" : "scheduled",
+    accountSetId,
+    accountIds,
     projections,
   };
 }

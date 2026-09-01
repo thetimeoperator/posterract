@@ -77,6 +77,16 @@ test.describe("Posterract product loop", () => {
     await expect(page.getByText("YouTube and X are coming soon.")).toBeVisible();
   });
 
+  test("composer shows every supported caption variant without a title field", async ({ page }) => {
+    await page.goto("/compose");
+
+    await expect(page.getByLabel("Title (internal)")).toHaveCount(0);
+    const captionTabs = page.getByRole("tablist", { name: "Caption variants" });
+    for (const tab of ["Base", "Instagram", "TikTok", "Facebook", "Threads"]) {
+      await expect(captionTabs.getByRole("tab", { name: tab, exact: true })).toBeVisible();
+    }
+  });
+
   test("portals connect and disconnect", async ({ page }) => {
     await page.goto("/portals");
     const instagramCard = page.locator("section", { hasText: "Instagram" }).first();

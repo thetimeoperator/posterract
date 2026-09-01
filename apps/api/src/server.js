@@ -33,6 +33,10 @@ import {
   hashRequest,
 } from "./security.js";
 import { createPosterractAuth } from "./auth.js";
+import {
+  createResendAuthMailer,
+  resendAuthConfigured,
+} from "./email.js";
 import { registerOAuthRoutes } from "./oauth.js";
 import { loadAnalyticsDashboard } from "./analytics.js";
 import { registerMetaRoutes } from "./meta.js";
@@ -45,10 +49,14 @@ import {
 import { listPublicSkills } from "./skills.js";
 import { loadWorkspaceApiKeys } from "./apiKeys.js";
 import {
+  createBillingEntitlementGuard,
   createStripeBillingService,
   registerBillingRoutes,
   registerStripeWebhookRoutes,
 } from "./billing.js";
+import { registerCreativeRoutes } from "./creative.js";
+import { registerDesktopAuthRoutes } from "./desktopAuth.js";
+import { loadAccountSets, registerAccountSetRoutes } from "./accountSets.js";
 
 const env = process.env;
 const port = Number(env.PORT ?? 3001);
@@ -65,12 +73,30 @@ const allowedMimeTypes = new Map([
   ["video/mp4", ".mp4"],
   ["video/quicktime", ".mov"],
   ["video/webm", ".webm"],
+  ["image/jpeg", ".jpg"],
+  ["image/png", ".png"],
+  ["image/webp", ".webp"],
+  ["image/gif", ".gif"],
+  ["audio/mpeg", ".mp3"],
+  ["audio/wav", ".wav"],
+  ["audio/x-wav", ".wav"],
+  ["audio/ogg", ".ogg"],
+  ["audio/mp4", ".m4a"],
+  ["text/plain", ".txt"],
+  ["text/vtt", ".vtt"],
+  ["application/json", ".json"],
 ]);
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const agentApiScopes = new Set([
   "accounts:read",
   "analytics:read",
+  "creative:read",
+  "creative:write",
+  "creative-assets:read",
+  "creative-assets:write",
+  "creative-renders:read",
+  "creative-renders:write",
   "media:write",
   "points:read",
   "posts:read",
@@ -114,11 +140,15 @@ const postgres = new Pool({
   idleTimeoutMillis: 30_000,
 });
 const auth = createPosterractAuth(postgres);
+const authMailer = resendAuthConfigured(env)
+  ? createResendAuthMailer({ environment: env })
+  : undefined;
 const billing = createStripeBillingService({
   postgres,
   environment: env,
   logger: app.log,
 });
+const requireEntitledWorkspace = createBillingEntitlementGuard(billing);
 
 const redis = new Redis(env.REDIS_URL, {
   lazyConnect: true,
@@ -226,6 +256,41 @@ async function authenticate(request, reply, requiredScope) {
     return;
   }
 
+  if (token.startsWith("pd_access_")) {
+    const result = await postgres.query(
+      `select at.id as access_token_id, d.id as device_id,
+              d.user_id, d.workspace_id, wm.role
+       from desktop_access_tokens at
+       join desktop_devices d on d.id = at.device_id
+       join workspace_memberships wm
+         on wm.user_id = d.user_id and wm.workspace_id = d.workspace_id
+       where at.secret_hash = $1
+         and at.revoked_at is null
+         and at.expires_at > now()
+         and d.revoked_at is null
+       limit 1`,
+      [hashApiKey(token)],
+    );
+    const desktop = result.rows[0];
+    if (!desktop) return reply.code(401).send({ error: "unauthorized" });
+    request.authContext = {
+      kind: "desktop",
+      accessTokenId: desktop.access_token_id,
+      deviceId: desktop.device_id,
+      userId: desktop.user_id,
+      workspaceId: desktop.workspace_id,
+      role: desktop.role,
+    };
+    void postgres
+      .query("update desktop_devices set last_seen_at = now() where id = $1", [
+        desktop.device_id,
+      ])
+      .catch((error) =>
+        app.log.warn({ err: error, deviceId: desktop.device_id }, "desktop heartbeat update failed"),
+      );
+    return;
+  }
+
   if (!auth) return reply.code(401).send({ error: "unauthorized" });
   const headers = new Headers();
   for (const [name, value] of Object.entries(request.headers)) {
@@ -265,20 +330,50 @@ async function requireInternalKey(request, reply) {
   request.authContext = { kind: "internal" };
 }
 
+async function authenticateProductAccess(request, reply, requiredScope) {
+  await authenticate(request, reply, requiredScope);
+  if (reply.sent) return;
+  return requireEntitledWorkspace(request, reply);
+}
+
 async function requireMediaWrite(request, reply) {
-  return authenticate(request, reply, "media:write");
+  return authenticateProductAccess(request, reply, "media:write");
 }
 
 function requireScope(scope) {
-  return (request, reply) => authenticate(request, reply, scope);
+  return (request, reply) => authenticateProductAccess(request, reply, scope);
 }
 
 async function requireSession(request, reply) {
   await authenticate(request, reply);
   if (reply.sent) return;
-  if (request.authContext?.kind !== "session") {
+  if (!["session", "desktop"].includes(request.authContext?.kind)) {
     return reply.code(403).send({ error: "interactive_session_required" });
   }
+  return requireEntitledWorkspace(request, reply);
+}
+
+/** Browser-only session used to approve a new native desktop installation. */
+async function requireBrowserSession(request, reply) {
+  await authenticate(request, reply);
+  if (reply.sent) return;
+  if (request.authContext?.kind !== "session") {
+    return reply.code(403).send({ error: "browser_session_required" });
+  }
+}
+
+/** Interactive identity check without a billing entitlement requirement. */
+async function requireInteractiveSession(request, reply) {
+  await authenticate(request, reply);
+  if (reply.sent) return;
+  if (!["session", "desktop"].includes(request.authContext?.kind)) {
+    return reply.code(403).send({ error: "interactive_session_required" });
+  }
+}
+
+/** Billing must remain reachable before a workspace has an entitlement. */
+async function requireBillingSession(request, reply) {
+  return requireInteractiveSession(request, reply);
 }
 
 async function ensureRedis() {
@@ -450,14 +545,19 @@ async function dispatchOutbox() {
   try {
     await client.query("begin");
     const pending = await client.query(
-      `select id, aggregate_id, event_type, payload
+      `select id, aggregate_id, event_type, payload, attempts
        from outbox_events
        where processed_at is null
          and event_type in (
+           'auth.welcome_email_requested',
            'publication.requested',
            'publication.cancel_requested',
            'publication.reschedule_requested',
            'transmission.analytics_index_requested'
+         )
+         and (
+           event_type <> 'auth.welcome_email_requested'
+           or coalesce((payload->>'nextAttemptAt')::timestamptz, created_at) <= now()
          )
        order by id asc
        for update skip locked
@@ -466,7 +566,31 @@ async function dispatchOutbox() {
 
     for (const event of pending.rows) {
       try {
-        if (event.event_type === "publication.requested") {
+        if (event.event_type === "auth.welcome_email_requested") {
+          if (!authMailer) {
+            throw new Error("Resend welcome email configuration is incomplete");
+          }
+          const recipient = await client.query(
+            `select email, display_name, welcome_email_sent_at
+             from app_users
+             where id = $1
+             limit 1`,
+            [event.aggregate_id],
+          );
+          const user = recipient.rows[0];
+          if (user && !user.welcome_email_sent_at) {
+            await authMailer.sendWelcome({
+              user: { email: user.email, name: user.display_name },
+              userId: event.aggregate_id,
+            });
+            await client.query(
+              `update app_users
+               set welcome_email_sent_at = now(), updated_at = now()
+               where id = $1 and welcome_email_sent_at is null`,
+              [event.aggregate_id],
+            );
+          }
+        } else if (event.event_type === "publication.requested") {
           const workflowId =
             event.payload.workflowId ?? `publication:${event.aggregate_id}:${event.id}`;
           await temporalClient.workflow.start("publicationWorkflow", {
@@ -515,12 +639,31 @@ async function dispatchOutbox() {
           );
           continue;
         }
-        await client.query(
-          `update outbox_events
-           set attempts = attempts + 1, last_error = $2
-           where id = $1`,
-          [event.id, String(error?.message ?? error).slice(0, 1_000)],
-        );
+        if (event.event_type === "auth.welcome_email_requested") {
+          const retryDelaySeconds = Math.min(
+            3_600,
+            30 * 2 ** Number(event.attempts ?? 0),
+          );
+          await client.query(
+            `update outbox_events
+             set attempts = attempts + 1,
+                 last_error = $2,
+                 payload = jsonb_set(payload, '{nextAttemptAt}', to_jsonb($3::text), true)
+             where id = $1`,
+            [
+              event.id,
+              String(error?.message ?? error).slice(0, 1_000),
+              new Date(Date.now() + retryDelaySeconds * 1_000).toISOString(),
+            ],
+          );
+        } else {
+          await client.query(
+            `update outbox_events
+             set attempts = attempts + 1, last_error = $2
+             where id = $1`,
+            [event.id, String(error?.message ?? error).slice(0, 1_000)],
+          );
+        }
       }
     }
     await client.query("commit");
@@ -703,7 +846,29 @@ app.get("/health/ready", async (_request, reply) => {
   return reply.code(result.ok ? 200 : 503).send(result);
 });
 
-registerBillingRoutes(app, { service: billing, requireSession });
+app.get("/v1/auth/config", async () => ({
+  providers: {
+    emailPassword: Boolean(auth),
+    emailVerification: Boolean(
+      auth && env.RESEND_API_KEY && env.RESEND_FROM_EMAIL,
+    ),
+    magicLink: Boolean(
+      auth && env.RESEND_API_KEY && env.RESEND_FROM_EMAIL,
+    ),
+    google: Boolean(
+      auth && env.GOOGLE_AUTH_CLIENT_ID && env.GOOGLE_AUTH_CLIENT_SECRET,
+    ),
+  },
+}));
+
+registerDesktopAuthRoutes(app, {
+  postgres,
+  requireBrowserSession,
+  requireInteractiveSession,
+  environment: env,
+});
+
+registerBillingRoutes(app, { service: billing, requireSession: requireBillingSession });
 await registerStripeWebhookRoutes(app, { service: billing });
 
 app.route({
@@ -1242,14 +1407,24 @@ app.get(
 );
 
 registerOAuthRoutes(app, { postgres, requireScope, requiredWorkspace });
+registerAccountSetRoutes(app, { postgres, requireScope, requiredWorkspace });
 registerMetaRoutes(app, { postgres });
+registerCreativeRoutes(app, {
+  postgres,
+  requireScope,
+  requiredWorkspace,
+  r2,
+  r2Bucket: env.R2_BUCKET,
+  signedUrlTtlSeconds: Number(env.R2_SIGNED_DOWNLOAD_TTL_SECONDS ?? 3_600),
+});
 
 app.get(
   "/v1/analytics",
   { preHandler: requireScope("analytics:read") },
   async (request, reply) => {
-    const rangeDays = Number(request.query?.rangeDays ?? 30);
-    if (![7, 30, 90].includes(rangeDays)) {
+    const requestedRange = request.query?.rangeDays ?? "total";
+    const rangeDays = requestedRange === "total" ? "total" : Number(requestedRange);
+    if (rangeDays !== "total" && ![7, 30, 90].includes(rangeDays)) {
       return reply.code(400).send({ error: "invalid_analytics_range" });
     }
     return loadAnalyticsDashboard(
@@ -1378,6 +1553,7 @@ app.get(
       projectionsResult,
       eventsResult,
       accountsResult,
+      accountSets,
       pointsResult,
       statsResult,
     ] =
@@ -1408,6 +1584,7 @@ app.get(
            where workspace_id = $1 order by created_at asc`,
           [workspaceId],
         ),
+        loadAccountSets(postgres, workspaceId),
         postgres.query(
           `select *,
                   sum(amount) over () as lifetime_rp,
@@ -1528,6 +1705,7 @@ app.get(
           : undefined,
         windowUsage: row.metadata?.windowUsage,
       })),
+      accountSets,
       points: {
         lifetimeRP: Number(
           statsResult.rows[0]?.lifetime_rp ??
@@ -1682,17 +1860,58 @@ app.post(
       }
 
       const providers = input.projections.map((item) => item.provider);
-      const accounts = await client.query(
-        `select distinct on (provider) id, provider
-         from social_accounts
-         where workspace_id = $1
-           and status = 'connected'
-           and provider = any($2::text[])
-         order by provider, updated_at desc`,
-        [workspaceId, providers],
-      );
+      let accounts;
+      if (input.accountSetId) {
+        const accountSet = await client.query(
+          `select id from account_sets
+           where id = $1 and workspace_id = $2`,
+          [input.accountSetId, workspaceId],
+        );
+        if (!accountSet.rows[0]) {
+          await client.query("rollback");
+          return reply.code(404).send({ error: "account_set_not_found" });
+        }
+        accounts = await client.query(
+          `select a.id, a.provider, a.status
+           from account_set_members m
+           join social_accounts a on a.id = m.social_account_id
+           where m.account_set_id = $1 and a.workspace_id = $2
+             and a.provider = any($3::text[])`,
+          [input.accountSetId, workspaceId, providers],
+        );
+      } else if (input.accountIds) {
+        accounts = await client.query(
+          `select id, provider, status from social_accounts
+           where workspace_id = $1 and id = any($2::uuid[])`,
+          [workspaceId, input.accountIds],
+        );
+        if (accounts.rows.length !== input.accountIds.length) {
+          await client.query("rollback");
+          return reply.code(409).send({ error: "account_target_unavailable" });
+        }
+        if (accounts.rows.some((account) => !providers.includes(account.provider))) {
+          await client.query("rollback");
+          return reply.code(400).send({ error: "account_target_platform_mismatch" });
+        }
+      } else {
+        accounts = await client.query(
+          `select distinct on (provider) id, provider, status
+           from social_accounts
+           where workspace_id = $1
+             and status = 'connected'
+             and provider = any($2::text[])
+           order by provider, updated_at desc`,
+          [workspaceId, providers],
+        );
+      }
+      if (new Set(accounts.rows.map((account) => account.provider)).size !== accounts.rows.length) {
+        await client.query("rollback");
+        return reply.code(400).send({ error: "duplicate_account_provider" });
+      }
       const accountByProvider = new Map(
-        accounts.rows.map((account) => [account.provider, account.id]),
+        accounts.rows
+          .filter((account) => account.status === "connected")
+          .map((account) => [account.provider, account.id]),
       );
       const unavailable = providers.filter(
         (provider) => !accountByProvider.has(provider),
@@ -1768,7 +1987,7 @@ app.post(
           input.scheduleMode === "now"
             ? "Post accepted for immediate publishing"
             : "Post scheduled",
-          JSON.stringify({ providers, source }),
+          JSON.stringify({ providers, source, accountSetId: input.accountSetId }),
         ],
       );
       await client.query(
@@ -1813,7 +2032,10 @@ app.post(
       "post.create",
       "transmission",
       response.id,
-      { platforms: response.projections.map((item) => item.provider) },
+      {
+        platforms: response.projections.map((item) => item.provider),
+        accountSetId: input.accountSetId,
+      },
     ).catch((error) => app.log.warn({ err: error }, "API audit write failed"));
     void dispatchOutbox().catch((error) =>
       app.log.warn({ err: error }, "immediate outbox dispatch failed"),
@@ -1936,11 +2158,14 @@ app.post(
         return reply.code(409).send({ error: "post_has_no_platforms" });
       }
       const providers = originalProjections.rows.map((row) => row.provider);
+      const originalAccountIds = originalProjections.rows
+        .map((row) => row.social_account_id)
+        .filter(Boolean);
       const accounts = await client.query(
         `select id, provider from social_accounts
-         where workspace_id = $1 and provider = any($2::text[])
+         where workspace_id = $1 and id = any($2::uuid[])
            and status = 'connected'`,
-        [workspaceId, providers],
+        [workspaceId, originalAccountIds],
       );
       const accountByProvider = new Map(
         accounts.rows.map((row) => [row.provider, row.id]),
@@ -2429,6 +2654,9 @@ app.post(
       durationMs,
       width,
       height,
+      purpose = "publishing",
+      creativeProjectId,
+      creativePath,
     } = request.body ?? {};
     const workspaceId =
       request.authContext?.kind === "internal"
@@ -2448,6 +2676,12 @@ app.post(
       (durationMs !== undefined && (!Number.isFinite(durationMs) || durationMs <= 0)) ||
       (width !== undefined && (!Number.isInteger(width) || width <= 0)) ||
       (height !== undefined && (!Number.isInteger(height) || height <= 0))
+      || !["publishing", "creative"].includes(purpose)
+      || (purpose === "creative" &&
+        (typeof creativeProjectId !== "string" || !uuidPattern.test(creativeProjectId)
+          || typeof creativePath !== "string" || creativePath.length === 0 || creativePath.length > 512
+          || creativePath.startsWith("/") || creativePath.includes("\\")
+          || creativePath.split("/").some((segment) => !segment || segment === "." || segment === "..")))
     ) {
       return reply.code(400).send({ error: "invalid_upload_request" });
     }
@@ -2466,9 +2700,21 @@ app.post(
     if (workspace.rowCount === 0) {
       return reply.code(404).send({ error: "workspace_not_found" });
     }
+    if (purpose === "creative") {
+      const project = await postgres.query(
+        `select 1 from creative_projects
+         where id = $1 and workspace_id = $2 and deleted_at is null`,
+        [creativeProjectId, workspaceId],
+      );
+      if (project.rowCount === 0) {
+        return reply.code(404).send({ error: "creative_project_not_found" });
+      }
+    }
 
     const mediaId = randomUUID();
-    const key = `uploads/${workspaceId}/${mediaId}/source${extension}`;
+    const key = purpose === "creative"
+      ? `creative/${workspaceId}/${creativeProjectId}/${mediaId}/source${extension}`
+      : `uploads/${workspaceId}/${mediaId}/source${extension}`;
     const response = await r2.send(
       new CreateMultipartUploadCommand({
         Bucket: env.R2_BUCKET,
@@ -2477,6 +2723,8 @@ app.post(
         Metadata: {
           "posterract-workspace-id": workspaceId,
           "posterract-media-id": mediaId,
+          "posterract-purpose": purpose,
+          ...(purpose === "creative" ? { "posterract-project-id": creativeProjectId } : {}),
         },
       }),
     );
@@ -2493,6 +2741,9 @@ app.post(
       fileName,
       contentType,
       sizeBytes,
+      purpose,
+      creativeProjectId: purpose === "creative" ? creativeProjectId : undefined,
+      creativePath: purpose === "creative" ? creativePath : undefined,
       createdAt: new Date().toISOString(),
     };
 
@@ -2655,15 +2906,51 @@ app.post(
       return reply.code(422).send({ error: "uploaded_size_mismatch" });
     }
 
-    await postgres.query(
-      `update media_assets
-       set status = 'ready',
-           upload_completed_at = now(),
-           purge_after = now() + ($2 * interval '1 hour'),
-           updated_at = now()
-       where id = $1`,
-      [session.mediaId, unattachedMediaTtlHours],
-    );
+    const client = await postgres.connect();
+    try {
+      await client.query("begin");
+      await client.query(
+        `update media_assets
+         set status = $2,
+             upload_completed_at = now(),
+             purge_after = case when $2 = 'attached' then null else now() + ($3 * interval '1 hour') end,
+             updated_at = now()
+         where id = $1`,
+        [session.mediaId, session.purpose === "creative" ? "attached" : "ready", unattachedMediaTtlHours],
+      );
+      if (session.purpose === "creative") {
+        const prior = await client.query(
+          `select media_asset_id from creative_project_assets
+           where project_id = $1 and path = $2 for update`,
+          [session.creativeProjectId, session.creativePath],
+        );
+        await client.query(
+          `insert into creative_project_assets
+            (project_id, path, media_asset_id, size_bytes, mime_type)
+           values ($1, $2, $3, $4, $5)
+           on conflict (project_id, path) do update
+           set media_asset_id = excluded.media_asset_id,
+               size_bytes = excluded.size_bytes,
+               mime_type = excluded.mime_type,
+               modified_at = now()`,
+          [session.creativeProjectId, session.creativePath, session.mediaId, session.sizeBytes, session.contentType],
+        );
+        const replacedMediaId = prior.rows[0]?.media_asset_id;
+        if (replacedMediaId && replacedMediaId !== session.mediaId) {
+          await client.query(
+            `update media_assets set status = 'ready', purge_after = now(), updated_at = now()
+             where id = $1`,
+            [replacedMediaId],
+          );
+        }
+      }
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
     await redis.del(uploadSessionKey(uploadId));
     return {
       mediaId: session.mediaId,

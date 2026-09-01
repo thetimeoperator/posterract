@@ -8,6 +8,7 @@ import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import Fastify from "fastify";
 import Stripe from "stripe";
 import {
+  createBillingEntitlementGuard,
   createStripeBillingService,
   registerBillingRoutes,
   registerStripeWebhookRoutes,
@@ -311,7 +312,8 @@ test("subscription and invoice events produce a safe current billing state", asy
     });
     assert.equal(state.statusCode, 200);
     assert.equal(state.json().status, "active");
-    assert.equal(state.json().entitled, true);
+    assert.equal(state.json().entitled, false);
+    assert.equal(state.json().accessState, "inactive");
     assert.equal(state.json().lastPaymentStatus, "failed");
 
     assert.equal(
@@ -334,6 +336,8 @@ test("subscription and invoice events produce a safe current billing state", asy
     );
     state = await app.inject({ method: "GET", url: "/v1/billing/subscription" });
     assert.equal(state.json().lastPaymentStatus, "paid");
+    assert.equal(state.json().entitled, true);
+    assert.equal(state.json().accessState, "active");
     assert.equal(typeof state.json().lastPaymentAt, "number");
 
     const deleted = subscriptionObject({
@@ -355,6 +359,62 @@ test("subscription and invoice events produce a safe current billing state", asy
     assert.equal(state.json().status, "canceled");
     assert.equal(state.json().entitled, false);
     assert.equal(state.json().accessState, "inactive");
+  } finally {
+    await app.close();
+    await postgres.close();
+  }
+});
+
+test("product entitlement requires an active subscription without a failed payment", async () => {
+  const { postgres, pool } = await database();
+  const { client } = stripeMock();
+  const { app, service } = await testApp(pool, client);
+  const authenticateWorkspace = async (request) => {
+    request.authContext = { kind: "session", userId, workspaceId, role: "owner" };
+  };
+  app.get(
+    "/v1/protected-test",
+    {
+      preHandler: [
+        authenticateWorkspace,
+        createBillingEntitlementGuard(service),
+      ],
+    },
+    async () => ({ ok: true }),
+  );
+  try {
+    let response = await app.inject({ method: "GET", url: "/v1/protected-test" });
+    assert.equal(response.statusCode, 402);
+    assert.equal(response.json().error, "subscription_required");
+
+    await pool.query(
+      `insert into billing_subscriptions
+         (stripe_subscription_id, workspace_id, stripe_customer_id,
+          stripe_product_id, stripe_price_id, billing_interval, currency,
+          unit_amount, status, recognized_plan, last_payment_status)
+       values ('sub_gate', $1, 'cus_gate', $2, $3, 'month', 'usd', 2000,
+               'trialing', true, 'paid')`,
+      [workspaceId, environment.STRIPE_PRODUCT_ID, environment.STRIPE_MONTHLY_PRICE_ID],
+    );
+    response = await app.inject({ method: "GET", url: "/v1/protected-test" });
+    assert.equal(response.statusCode, 402);
+
+    await pool.query(
+      `update billing_subscriptions
+       set status = 'active', last_payment_status = 'failed'
+       where stripe_subscription_id = 'sub_gate'`,
+    );
+    response = await app.inject({ method: "GET", url: "/v1/protected-test" });
+    assert.equal(response.statusCode, 402);
+
+    await pool.query(
+      `update billing_subscriptions
+       set last_payment_status = 'paid'
+       where stripe_subscription_id = 'sub_gate'`,
+    );
+    response = await app.inject({ method: "GET", url: "/v1/protected-test" });
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json(), { ok: true });
   } finally {
     await app.close();
     await postgres.close();

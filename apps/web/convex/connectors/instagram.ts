@@ -32,6 +32,7 @@ export type IgToken = {
   accessToken: string;
   userId: string;
   username: string;
+  avatarUrl?: string;
   expiresAt: number;
 };
 
@@ -87,18 +88,25 @@ export async function instagramExchangeCode(args: {
 
   // 3. profile
   const profileUrl = new URL(`${GRAPH}/me`);
-  profileUrl.searchParams.set("fields", "user_id,username");
+  profileUrl.searchParams.set("fields", "user_id,username,profile_picture_url");
   profileUrl.searchParams.set("access_token", accessToken);
   const profileRes = await fetch(profileUrl);
   const profile = (await profileRes.json()) as {
     user_id?: string;
     username?: string;
+    profile_picture_url?: string;
     error?: { message?: string };
   };
   const userId = profile.user_id ?? String(shortJson.user_id ?? "");
   if (!userId) throw new Error(`Instagram profile lookup failed: ${profile.error?.message ?? "no user id"}`);
 
-  return { accessToken, userId, username: profile.username ?? "instagram", expiresAt };
+  return {
+    accessToken,
+    userId,
+    username: profile.username ?? "instagram",
+    avatarUrl: profile.profile_picture_url,
+    expiresAt,
+  };
 }
 
 /** Refresh a long-lived token (extends another 60 days). */

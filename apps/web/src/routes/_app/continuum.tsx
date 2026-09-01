@@ -35,6 +35,27 @@ function sameCalendarDay(left: number, right: number): boolean {
   );
 }
 
+function calendarDayKey(timestamp: number): string {
+  const date = new Date(timestamp);
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia(query).matches : false,
+  );
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(query);
+    const sync = () => setMatches(mediaQuery.matches);
+    sync();
+    mediaQuery.addEventListener("change", sync);
+    return () => mediaQuery.removeEventListener("change", sync);
+  }, [query]);
+
+  return matches;
+}
+
 /** Preserve the post's local time when it moves; today's fallback stays safely in the future. */
 function moveTimeToDay(original: number, day: number, now: number): number {
   const source = new Date(original);
@@ -46,6 +67,25 @@ function moveTimeToDay(original: number, day: number, now: number): number {
     source.getMilliseconds(),
   );
   return Math.max(target.getTime(), now + 30 * 60_000);
+}
+
+/** Give native drag-and-drop a crisp, branded card instead of the browser's translucent snapshot. */
+function attachPostDragPreview(event: DragEvent<HTMLElement>) {
+  const source =
+    event.currentTarget.querySelector<HTMLElement>("[data-calendar-post-surface]") ?? event.currentTarget;
+  const bounds = source.getBoundingClientRect();
+  const preview = source.cloneNode(true) as HTMLElement;
+
+  preview.classList.add("calendar-post-drag-preview");
+  preview.setAttribute("aria-hidden", "true");
+  preview.style.width = `${bounds.width}px`;
+  document.body.appendChild(preview);
+  event.dataTransfer.setDragImage(
+    preview,
+    Math.min(28, Math.max(12, bounds.width * 0.18)),
+    Math.min(24, Math.max(10, bounds.height * 0.35)),
+  );
+  window.setTimeout(() => preview.remove(), 0);
 }
 
 /**
@@ -64,6 +104,7 @@ function Continuum() {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropDay, setDropDay] = useState<number | null>(null);
   const [reschedulingId, setReschedulingId] = useState<string | null>(null);
+  const showDesktopWeek = useMediaQuery("(min-width: 768px)");
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30_000);
@@ -126,6 +167,7 @@ function Continuum() {
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("application/x-posterract-transmission", transmissionId);
     event.dataTransfer.setData("text/plain", transmissionId);
+    attachPostDragPreview(event);
     setDraggingId(transmissionId);
   };
 
@@ -224,6 +266,7 @@ function Continuum() {
             { value: "week", label: "Week" },
             { value: "month", label: "Month" },
           ]}
+          indicatorTransition={{ type: "tween", duration: 0.16, ease: [0.2, 0.8, 0.2, 1] }}
         />
         <Button size="sm" variant="secondary" aria-label="Previous" onClick={() => movePeriod(-1)}>
           <ChevronLeft size={14} />
@@ -260,7 +303,7 @@ function Continuum() {
         />
       ) : (
       <>
-      <div className="space-y-2 md:hidden" aria-label="Schedule agenda">
+      {!showDesktopWeek && <div className="space-y-2" aria-label="Schedule agenda">
         {days.map((day) => {
           const items = byDay.get(day) ?? [];
           const past = day + DAY < now;
@@ -272,9 +315,9 @@ function Continuum() {
               onDragOver={(event) => allowDayDrop(event, day)}
               onDrop={(event) => dropPostOnDay(event, day)}
               className={clsx(
-                "cursor-pointer rounded-[14px] border bg-[var(--glass-bg)] p-3 transition-[border-color,background-color,transform]",
+                "calendar-day-drop-zone cursor-pointer rounded-[14px] border bg-[var(--glass-bg)] p-3 transition-[border-color,background-color,transform]",
                 isToday ? "border-neon/40" : "border-[var(--glass-border)]",
-                dropDay === day && "scale-[1.01] !border-ice bg-ice/[0.07] shadow-glow-ice-sm",
+                dropDay === day && "calendar-day-drop-zone--active scale-[1.01] !border-ice bg-ice/[0.07] shadow-glow-ice-sm",
                 past && "opacity-65",
               )}
               onClick={(event) => {
@@ -293,14 +336,14 @@ function Continuum() {
                 {items.length === 0 ? <p className="rounded-[10px] border border-dashed border-[var(--glass-border)] px-3 py-3 text-[10px] text-starlight-faint">No posts scheduled.</p> : items.map((t) => {
                   const platforms = projections.filter((p) => p.transmissionId === t.id).map((p) => p.provider) as PlatformId[];
                   const canDrag = t.status === "scheduled" && reschedulingId !== t.id;
-                  return <div key={t.id} data-draggable-post data-transmission-id={t.id} draggable={canDrag} onDragStart={(event) => beginPostDrag(event, t.id)} onDragEnd={finishPostDrag} className={clsx(canDrag && "cursor-grab active:cursor-grabbing", draggingId === t.id && "opacity-40")}><Link draggable={false} to="/transmissions" className="flex items-center gap-2 rounded-[10px] border border-[var(--glass-border)] bg-void-2 p-2.5"><ArtifactThumb artifactId={t.artifactId} className="h-11 w-8 flex-none" hoverPreview={false} /><div className="min-w-0 flex-1"><p className="telemetry text-[9px] text-neon">{new Date(t.scheduledFor!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p><p className="truncate text-[11px] text-starlight">{t.title}</p><div className="mt-1"><PlatformRuneRow platforms={platforms} /></div></div>{canDrag && <GripVertical size={13} className="flex-none text-starlight-faint" aria-hidden />}<StatusBadge status={t.status} size="sm" /></Link></div>;
+                  return <div key={t.id} data-draggable-post data-transmission-id={t.id} draggable={canDrag} onDragStart={(event) => beginPostDrag(event, t.id)} onDragEnd={finishPostDrag} title={canDrag ? "Drag to move this scheduled post" : undefined} className={clsx("calendar-post-shell", canDrag && "calendar-post-shell--draggable", draggingId === t.id && "is-dragging", reschedulingId === t.id && "is-rescheduling")}><Link data-calendar-post-surface draggable={false} to="/transmissions" className="calendar-post-block calendar-post-block--agenda flex items-center gap-2 rounded-[10px] p-2.5"><ArtifactThumb artifactId={t.artifactId} className="h-11 w-8 flex-none" hoverPreview={false} /><div className="min-w-0 flex-1"><p className="telemetry text-[10px] text-neon">{new Date(t.scheduledFor!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p><p className="truncate text-[12px] font-medium text-starlight">{t.title}</p><div className="mt-1"><PlatformRuneRow platforms={platforms} /></div></div>{canDrag && <GripVertical size={14} className="calendar-post-grip flex-none" aria-hidden />}<StatusBadge status={t.status} size="sm" /></Link></div>;
                 })}
               </div>
             </section>
           );
         })}
-      </div>
-      <div className="hidden grid-cols-7 gap-2 md:grid">
+      </div>}
+      {showDesktopWeek && <div className="grid grid-cols-7 gap-2">
         {days.map((day) => {
           const isToday = now >= day && now < day + DAY;
           const dayFrac = isToday ? (now - day) / DAY : 0;
@@ -314,9 +357,9 @@ function Continuum() {
               onDragOver={(event) => allowDayDrop(event, day)}
               onDrop={(event) => dropPostOnDay(event, day)}
               className={clsx(
-                "relative flex min-h-[420px] cursor-pointer flex-col rounded-[var(--radius-card)] border bg-[var(--glass-bg)] p-2 transition-[border-color,background-color,transform]",
+                "calendar-day-drop-zone relative flex min-h-[420px] cursor-pointer flex-col rounded-[var(--radius-card)] border bg-[var(--glass-bg)] p-2 transition-[border-color,background-color,transform]",
                 isToday ? "border-[rgba(101,255,154,0.45)] shadow-glow-neon-sm" : "border-[var(--glass-border)]",
-                dropDay === day && "scale-[1.01] !border-ice bg-ice/[0.07] shadow-glow-ice-sm",
+                dropDay === day && "calendar-day-drop-zone--active scale-[1.01] !border-ice bg-ice/[0.07] shadow-glow-ice-sm",
                 past && "opacity-60",
               )}
               onClick={(event) => {
@@ -357,12 +400,19 @@ function Continuum() {
                       draggable={canDrag}
                       onDragStart={(event) => beginPostDrag(event, t.id)}
                       onDragEnd={finishPostDrag}
-                      className={clsx(canDrag && "cursor-grab active:cursor-grabbing", draggingId === t.id && "opacity-40")}
+                      title={canDrag ? "Drag to move this scheduled post" : undefined}
+                      className={clsx(
+                        "calendar-post-shell",
+                        canDrag && "calendar-post-shell--draggable",
+                        draggingId === t.id && "is-dragging",
+                        reschedulingId === t.id && "is-rescheduling",
+                      )}
                     >
                     <Link
+                      data-calendar-post-surface
                       draggable={false}
                       to="/transmissions"
-                      className="hk-shimmer block rounded-[10px] border border-[var(--glass-border)] bg-void-2 p-2 transition-colors hover:border-[var(--glass-border-bright)]"
+                      className="calendar-post-block calendar-post-block--week block rounded-[10px] p-2"
                     >
                       <div className="flex items-center gap-2">
                         <ArtifactThumb artifactId={t.artifactId} className="h-10 w-7 flex-none" hoverPreview={false} />
@@ -372,7 +422,7 @@ function Continuum() {
                           </p>
                           <p className="truncate text-[11px] text-starlight">{t.title}</p>
                         </div>
-                        {canDrag && <GripVertical size={12} className="flex-none text-starlight-faint" aria-hidden />}
+                        {canDrag && <GripVertical size={13} className="calendar-post-grip flex-none" aria-hidden />}
                       </div>
                       <div className="mt-1.5 flex items-center justify-between gap-1">
                         <PlatformRuneRow platforms={platforms} />
@@ -395,7 +445,7 @@ function Continuum() {
             </div>
           );
         })}
-      </div>
+      </div>}
       </>
       )}
 
@@ -572,13 +622,20 @@ function MonthView({
   const anchorDate = new Date(anchor);
   const first = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1).getTime();
   const gridStart = startOfWeek(first);
-  const cells = Array.from({ length: 42 }, (_, i) => gridStart + i * DAY);
+  const cells = useMemo(() => Array.from({ length: 42 }, (_, i) => gridStart + i * DAY), [gridStart]);
   const month = anchorDate.getMonth();
 
-  const countFor = (day: number) =>
-    transmissions.filter(
-      (t) => t.scheduledFor && t.status !== "draft" && t.scheduledFor >= day && t.scheduledFor < day + DAY,
-    );
+  const transmissionsByDay = useMemo(() => {
+    const grouped = new Map<string, Array<(typeof transmissions)[number]>>();
+    for (const transmission of transmissions) {
+      if (!transmission.scheduledFor || transmission.status === "draft") continue;
+      const key = calendarDayKey(transmission.scheduledFor);
+      const day = grouped.get(key);
+      if (day) day.push(transmission);
+      else grouped.set(key, [transmission]);
+    }
+    return grouped;
+  }, [transmissions]);
 
   return (
     <div>
@@ -591,7 +648,7 @@ function MonthView({
         {cells.map((day) => {
           const inMonth = new Date(day).getMonth() === month;
           const isToday = now >= day && now < day + DAY;
-          const items = countFor(day);
+          const items = transmissionsByDay.get(calendarDayKey(day)) ?? [];
           return (
             <div
               key={day}
@@ -605,9 +662,9 @@ function MonthView({
               onDragOver={(event) => onDragOverDay(event, day)}
               onDrop={(event) => onDropDay(event, day)}
               className={clsx(
-                "flex min-h-[92px] flex-col rounded-[10px] border p-1.5 text-left transition-[border-color,background-color,transform] hover:border-[var(--glass-border-bright)]",
+                "calendar-day-drop-zone flex min-h-[92px] flex-col rounded-[10px] border p-1.5 text-left transition-[border-color,background-color,transform] hover:border-[var(--glass-border-bright)]",
                 isToday ? "border-[rgba(101,255,154,0.45)] shadow-glow-neon-sm" : "border-[var(--glass-border)]",
-                dropDay === day && "scale-[1.015] !border-ice bg-ice/[0.08] shadow-glow-ice-sm",
+                dropDay === day && "calendar-day-drop-zone--active scale-[1.015] !border-ice bg-ice/[0.08] shadow-glow-ice-sm",
                 inMonth ? "bg-[var(--glass-bg)]" : "bg-transparent opacity-40",
               )}
               aria-label={new Date(day).toDateString()}
@@ -628,12 +685,14 @@ function MonthView({
                     onDragEnd={onDragEnd}
                     title={canDrag ? "Drag to another date" : undefined}
                     className={clsx(
-                      "flex min-w-0 items-center gap-0.5 rounded-[5px] bg-[rgba(101,255,154,0.08)] px-1 py-0.5 text-[9.5px] text-starlight-dim",
-                      canDrag && "cursor-grab active:cursor-grabbing",
-                      draggingId === t.id && "opacity-35",
+                      "calendar-post-block calendar-post-block--month flex min-w-0 items-center gap-1 rounded-[6px] px-1.5 py-1 text-[10px] text-starlight",
+                      canDrag && "calendar-post-shell--draggable",
+                      draggingId === t.id && "is-dragging",
+                      reschedulingId === t.id && "is-rescheduling",
                     )}
+                    data-calendar-post-surface
                   >
-                    {canDrag && <GripVertical size={8} className="flex-none text-neon/60" aria-hidden />}
+                    {canDrag && <GripVertical size={9} className="calendar-post-grip flex-none" aria-hidden />}
                     <span className="min-w-0 truncate">
                     <span className="telemetry text-neon">
                       {new Date(t.scheduledFor!).toLocaleTimeString([], { hour: "numeric" })}

@@ -40,6 +40,7 @@ export type TikTokToken = {
   refreshExpiresAt: number;
   openId: string;
   displayName: string;
+  avatarUrl?: string;
   scopes: string[];
 };
 
@@ -95,14 +96,18 @@ export async function tiktokExchangeCode(args: {
     }),
   );
 
-  const infoRes = await fetch(`${OPEN_API}/v2/user/info/?fields=open_id,display_name`, {
+  const infoRes = await fetch(`${OPEN_API}/v2/user/info/?fields=open_id,display_name,avatar_url`, {
     headers: { Authorization: `Bearer ${tokens.accessToken}` },
   });
   const info = (await infoRes.json()) as {
-    data?: { user?: { display_name?: string; open_id?: string } };
+    data?: { user?: { display_name?: string; open_id?: string; avatar_url?: string } };
     error?: { code?: string; message?: string };
   };
-  return { ...tokens, displayName: info.data?.user?.display_name ?? "TikTok" };
+  return {
+    ...tokens,
+    displayName: info.data?.user?.display_name ?? "TikTok",
+    avatarUrl: info.data?.user?.avatar_url,
+  };
 }
 
 /** Refresh the 24h access token. The refresh token ROTATES — persist both. */
@@ -254,8 +259,12 @@ export async function tiktokUploadVideoDraft(args: {
     // 2. Initialize a draft upload. This endpoint requires video.upload and
     // deliberately does not accept Direct Post's post_info payload.
     const single = size <= SINGLE_CHUNK_MAX;
-    const chunkSize = single ? size : CHUNK_SIZE;
-    const chunkCount = single ? 1 : Math.ceil(size / chunkSize);
+    // TikTok defines total_chunk_count as floor(video_size / chunk_size),
+    // with every trailing byte merged into the final chunk. Keep at least two
+    // chunks for videos above the 64 MB whole-upload limit; using ceil here
+    // makes TikTok reject files whose size is not an exact chunk multiple.
+    const chunkSize = single ? size : Math.min(CHUNK_SIZE, Math.floor(size / 2));
+    const chunkCount = single ? 1 : Math.floor(size / chunkSize);
     const init = await openApiPost<{ publish_id?: string; upload_url?: string }>(
       "/v2/post/publish/inbox/video/init/",
       accessToken,

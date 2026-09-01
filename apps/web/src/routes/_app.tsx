@@ -6,14 +6,28 @@ import { BottomDock } from "@/shell/BottomDock";
 import { SpaceBackdrop } from "@/shell/SpaceBackdrop";
 import { Navigator } from "@/shell/Navigator";
 import { SignalsPanel } from "@/shell/SignalsPanel";
-import { ENGINE_MODE, useEngineBoot } from "@/engine/useEngine";
+import { ENGINE_BACKEND, ENGINE_MODE, useEngineBoot } from "@/engine/useEngine";
 import { WarpingIn } from "@/shell/SystemStates";
 import { Homepage } from "@/marketing/Homepage";
 import { useAuthState } from "@/lib/useAuthState";
+import { BillingGate } from "@/billing/BillingGate";
+import { isPosterractDesktop } from "@/lib/desktop";
+import { useDesktopAuth } from "@/lib/desktopAuth";
+import { DesktopSignIn } from "@/components/DesktopSignIn";
 
 export const Route = createFileRoute("/_app")({
-  component: ENGINE_MODE === "cloud" ? GuardedAppShell : AppShell,
+  component: ENGINE_MODE === "cloud"
+    ? isPosterractDesktop()
+      ? DesktopGuardedAppShell
+      : GuardedAppShell
+    : AppShell,
 });
+
+function DesktopGuardedAppShell(): ReactElement {
+  const auth = useDesktopAuth();
+  if (auth.status !== "signed_in") return <DesktopSignIn />;
+  return ENGINE_BACKEND === "postgres" ? <BillingGate><AppShell /></BillingGate> : <AppShell />;
+}
 
 /** Cloud mode: signed-out visitors see the public homepage; the product remains protected. */
 function GuardedAppShell(): ReactElement {
@@ -24,7 +38,13 @@ function GuardedAppShell(): ReactElement {
     if (pathname === "/") return <Homepage />;
     return <Navigate to="/" />;
   }
-  return <AppShell />;
+  return ENGINE_BACKEND === "postgres" ? (
+    <BillingGate>
+      <AppShell />
+    </BillingGate>
+  ) : (
+    <AppShell />
+  );
 }
 
 /**

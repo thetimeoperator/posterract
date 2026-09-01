@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { motion } from "framer-motion";
+import { motion, type Transition } from "framer-motion";
 
 export type SegmentedOption<T extends string> = {
   value: T;
@@ -12,12 +12,14 @@ export function Segmented<T extends string>({
   value,
   onChange,
   className,
+  indicatorTransition,
   "aria-label": ariaLabel,
 }: {
   options: SegmentedOption<T>[];
   value: T;
   onChange: (value: T) => void;
   className?: string;
+  indicatorTransition?: Transition;
   "aria-label"?: string;
 }) {
   return (
@@ -49,7 +51,7 @@ export function Segmented<T extends string>({
               <motion.span
                 layoutId="hk-segment-glow"
                 className="absolute inset-0 rounded-[7px] border border-[rgba(101,255,154,0.4)] bg-[rgba(101,255,154,0.08)] shadow-glow-neon-sm"
-                transition={{ type: "spring", bounce: 0.18, duration: 0.45 }}
+                transition={indicatorTransition ?? { type: "spring", bounce: 0.18, duration: 0.45 }}
                 aria-hidden
               />
             )}

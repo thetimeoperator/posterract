@@ -5,7 +5,6 @@ import clsx from "clsx";
 import {
   Button,
   FieldShell,
-  Input,
   Modal,
   Panel,
   PlatformChip,
@@ -23,6 +22,7 @@ import {
   computePreflight,
   renderTemplate,
   useArtifacts,
+  useAccountSets,
   useEngineActions,
   usePortals,
 } from "@/engine/useEngine";
@@ -43,10 +43,10 @@ function Composer() {
   const search = Route.useSearch();
   const artifacts = useArtifacts();
   const portals = usePortals();
+  const accountSets = useAccountSets();
   const { createTransmission } = useEngineActions();
 
   const [artifactId, setArtifactId] = useState<string | undefined>(search.artifact);
-  const [title, setTitle] = useState("");
   const [baseCaption, setBaseCaption] = useState(() => {
     const prepared = window.sessionStorage.getItem("posterract.forgeDraft") ?? "";
     window.sessionStorage.removeItem("posterract.forgeDraft");
@@ -56,6 +56,7 @@ function Composer() {
   const [hashtags, setHashtags] = useState<string[]>([]);
   const [tagDraft, setTagDraft] = useState("");
   const [platforms, setPlatforms] = useState<PlatformId[]>(["instagram", "tiktok"]);
+  const [accountSetId, setAccountSetId] = useState("");
   const [captionTab, setCaptionTab] = useState<"base" | PlatformId>("base");
   const [mode, setMode] = useState<"now" | "at">(search.at ? "at" : "now");
   const [whenLocal, setWhenLocal] = useState(() => toDatetimeLocal(search.at ?? Date.now() + 3600_000));
@@ -66,7 +67,9 @@ function Composer() {
   const artifact = artifacts.find((a) => a.id === artifactId);
   const previewUrl = artifactUrl(artifactId);
 
-  const resolvedTitle = title || artifact?.fileName.replace(/\.[a-z0-9]+$/i, "") || "Untitled";
+  // Titles stay internal until YouTube publishing is introduced. The backend
+  // still needs one to identify the post, so derive it from the uploaded file.
+  const resolvedTitle = artifact?.fileName.replace(/\.[a-z0-9]+$/i, "") || "Untitled";
   const captionFor = (p: PlatformId) => {
     const v = overrides[p];
     const raw = v === undefined || v === "" ? baseCaption : v;
@@ -75,7 +78,13 @@ function Composer() {
   const fullCaptionFor = (p: PlatformId) =>
     [captionFor(p), hashtags.map((h) => `#${h}`).join(" ")].filter(Boolean).join("\n\n");
 
-  const portalStatus = (p: PlatformId) => portals.find((x) => x.provider === p)?.status;
+  const selectedAccountSet = accountSets.find((set) => set.id === accountSetId);
+  const portalStatus = (p: PlatformId) =>
+    selectedAccountSet
+      ? selectedAccountSet.accounts.find((account) => account.provider === p)?.status
+      : portals.some((account) => account.provider === p && account.status === "connected")
+        ? "connected"
+        : portals.find((account) => account.provider === p)?.status;
 
   const preflight = useMemo(() => {
       const checks = computePreflight({
@@ -87,7 +96,7 @@ function Composer() {
       return checks;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [artifact, platforms, baseCaption, overrides, hashtags, portals, title, resolvedTitle],
+    [artifact, platforms, baseCaption, overrides, hashtags, portals, resolvedTitle],
   );
   const failing = preflight.filter((c) => c.status === "fail");
   const canLaunch = failing.length === 0 && !!artifact && platforms.length > 0;
@@ -109,7 +118,7 @@ function Composer() {
       return;
     }
     const t = createTransmission({
-      title: title || artifact.fileName.replace(/\.[a-z0-9]+$/i, ""),
+      title: resolvedTitle,
       baseCaption,
       hashtags,
       artifactId: artifact.id,
@@ -118,6 +127,7 @@ function Composer() {
         platforms.map((p) => [p, fullCaptionFor(p)]),
       ) as Partial<Record<PlatformId, string>>,
       perPlatformOptions: undefined,
+      accountSetId: accountSetId || undefined,
       scheduleMode: mode,
       scheduledFor,
     });
@@ -134,7 +144,7 @@ function Composer() {
 
   const captionTabs = [
     { value: "base" as const, label: "Base" },
-    ...platforms.map((p) => ({
+    ...PUBLISHING_PLATFORM_IDS.map((p) => ({
       value: p,
       label: PLATFORM_CAPABILITIES[p].label,
       alert: fullCaptionFor(p).length > PLATFORM_CAPABILITIES[p].captionMaxChars,
@@ -212,14 +222,14 @@ function Composer() {
       {/* ── Center: the Message ── */}
       <Panel kicker="The message" title="Caption" brackets>
         <div className="space-y-4">
-          <Input
-            label="Title (internal)"
-            placeholder="What is this transmission called?"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
           <div>
-            <Tabs aria-label="Caption variants" value={captionTab} onChange={setCaptionTab} tabs={captionTabs} />
+            <Tabs
+              aria-label="Caption variants"
+              value={captionTab}
+              onChange={setCaptionTab}
+              tabs={captionTabs}
+              className="overflow-x-auto"
+            />
             <div className="pt-3">
               {captionTab === "base" ? (
                 <Textarea
@@ -287,6 +297,29 @@ function Composer() {
       {/* ── Right: targets + trajectory + pre-flight ── */}
       <div className="flex flex-col gap-4">
         <Panel kicker="Projection targets" title="Platforms" brackets>
+          {accountSets.length > 0 && (
+            <label className="mb-3 block">
+              <span className="kicker mb-1.5 block !text-[8px]">Account set</span>
+              <select
+                value={accountSetId}
+                onChange={(event) => {
+                  const nextId = event.target.value;
+                  setAccountSetId(nextId);
+                  const next = accountSets.find((set) => set.id === nextId);
+                  if (next) {
+                    setPlatforms(next.accounts.map((account) => account.provider).filter((provider) => (PUBLISHING_PLATFORM_IDS as readonly string[]).includes(provider)));
+                  }
+                }}
+                className="h-10 w-full rounded-[10px] border border-white/[0.09] bg-void-2 px-3 text-[12px] text-starlight outline-none focus:border-neon/30"
+              >
+                <option value="">Automatic account selection</option>
+                {accountSets.map((set) => <option key={set.id} value={set.id}>{set.name} · {set.accounts.length} networks</option>)}
+              </select>
+              <span className="mt-1.5 block text-[9.5px] text-starlight-faint">
+                {selectedAccountSet ? `Posting through the exact accounts saved in ${selectedAccountSet.name}.` : "Uses the most recently connected account on each selected platform."}
+              </span>
+            </label>
+          )}
           <div className="grid grid-cols-2 gap-1.5" role="group" aria-label="Target platforms">
             {PUBLISHING_PLATFORM_IDS.map((p) => (
               <PlatformChip

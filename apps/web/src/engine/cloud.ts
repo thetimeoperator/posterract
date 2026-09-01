@@ -6,6 +6,7 @@ import { useEffect } from "react";
 import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import { create } from "zustand";
 import type {
+  AccountSetDTO,
   ArtifactDTO,
   AnalyticsRangeDays,
   EventDTO,
@@ -141,6 +142,10 @@ export function usePortals(): PortalDTO[] {
   }));
 }
 
+export function useAccountSets(): AccountSetDTO[] {
+  return [];
+}
+
 export function usePoints(): PointsSummaryDTO | undefined {
   const data = useWsQuery((args) => useQuery(api.points.getMyPoints, args));
   if (!data) return undefined;
@@ -258,7 +263,6 @@ export function useOAuth() {
   const start = useMutation(api.oauth.start);
   const complete = useAction(api.oauth.complete);
   const selectFacebookPage = useAction(api.oauth.selectFacebookPage);
-  const disconnect = useAction(api.oauth.disconnect);
   return {
     supported: OAUTH_SUPPORTED,
     start: (provider: PlatformId) => start({ provider }),
@@ -266,6 +270,15 @@ export function useOAuth() {
       complete({ provider, code, state }),
     selectFacebookPage: (state: string, pageId: string) =>
       selectFacebookPage({ state, pageId }),
-    disconnect: (provider: PlatformId) => disconnect({ provider }),
+    disconnect: async (_accountId: string) => undefined,
+    refreshProfiles: async () => undefined,
+  };
+}
+
+export function useAccountSetActions() {
+  return {
+    create: async (_input: { name: string; accountIds: string[] }) => { throw new Error("Account sets require the PostgreSQL engine"); },
+    update: async (_id: string, _input: { name: string; accountIds: string[] }) => { throw new Error("Account sets require the PostgreSQL engine"); },
+    remove: async (_id: string) => undefined,
   };
 }

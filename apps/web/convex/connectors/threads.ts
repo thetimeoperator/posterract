@@ -28,6 +28,7 @@ type ThreadsToken = {
   accessToken: string;
   userId: string;
   username: string;
+  avatarUrl?: string;
   expiresAt: number;
   scopes: string[];
 };
@@ -76,12 +77,13 @@ export async function threadsExchangeCode(args: {
   }
 
   const profileUrl = new URL(`${GRAPH}/${API_VERSION}/me`);
-  profileUrl.searchParams.set("fields", "id,username");
+  profileUrl.searchParams.set("fields", "id,username,threads_profile_picture_url");
   profileUrl.searchParams.set("access_token", long.access_token);
   const profileResponse = await fetch(profileUrl);
   const profile = (await profileResponse.json()) as {
     id?: string;
     username?: string;
+    threads_profile_picture_url?: string;
     error?: { message?: string };
   };
   const userId = profile.id ?? String(short.user_id ?? "");
@@ -93,6 +95,7 @@ export async function threadsExchangeCode(args: {
     accessToken: long.access_token,
     userId,
     username: profile.username ?? "threads",
+    avatarUrl: profile.threads_profile_picture_url,
     expiresAt: Date.now() + (long.expires_in ?? 60 * 86400) * 1000,
     scopes: THREADS_SCOPES,
   };

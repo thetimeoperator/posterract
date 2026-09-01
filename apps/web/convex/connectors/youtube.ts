@@ -23,7 +23,11 @@ type GoogleTokenResponse = {
 type YouTubeChannelResponse = {
   items?: Array<{
     id: string;
-    snippet?: { title?: string; customUrl?: string };
+    snippet?: {
+      title?: string;
+      customUrl?: string;
+      thumbnails?: Record<string, { url?: string }>;
+    };
     statistics?: {
       viewCount?: string;
       subscriberCount?: string;
@@ -88,6 +92,7 @@ export async function youtubeExchangeCode(args: {
     channelId: channel.id,
     channelTitle: channel.title,
     handle: channel.handle,
+    avatarUrl: channel.avatarUrl,
   };
 }
 
@@ -138,6 +143,10 @@ export async function youtubeGetMyChannel(accessToken: string) {
     id: channel.id,
     title: channel.snippet?.title || "YouTube channel",
     handle: channel.snippet?.customUrl,
+    avatarUrl:
+      channel.snippet?.thumbnails?.high?.url ??
+      channel.snippet?.thumbnails?.medium?.url ??
+      channel.snippet?.thumbnails?.default?.url,
     statistics: {
       views: Number(channel.statistics?.viewCount ?? 0),
       subscribers: channel.statistics?.hiddenSubscriberCount

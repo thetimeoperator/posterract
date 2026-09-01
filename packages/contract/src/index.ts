@@ -152,6 +152,16 @@ export type PortalDTO = {
   windowUsage?: { used: number; cap: number; windowHours: number };
 };
 
+/** A reusable publishing target with at most one connected account per platform. */
+export type AccountSetDTO = {
+  id: string;
+  workspaceId: string;
+  name: string;
+  accounts: PortalDTO[];
+  createdAt: number;
+  updatedAt: number;
+};
+
 export type EventDTO = {
   id: string;
   workspaceId: string;
@@ -336,7 +346,8 @@ export const METRICS_WINDOW_DAYS = 14;
 // that every signal is available on every network.
 // ---------------------------------------------------------------------------
 
-export type AnalyticsRangeDays = 7 | 30 | 90;
+/** A fixed reporting window, or every metric currently available for the account. */
+export type AnalyticsRangeDays = "total" | 7 | 30 | 90;
 
 export type AnalyticsDailyPointDTO = {
   date: string;
@@ -522,7 +533,7 @@ export type BillingConfigDTO = {
 
 export type BillingSubscriptionDTO = {
   status: string;
-  accessState: "active" | "grace" | "inactive";
+  accessState: "active" | "inactive";
   entitled: boolean;
   plan: {
     unitAmount: number;

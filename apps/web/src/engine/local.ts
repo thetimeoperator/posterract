@@ -7,7 +7,7 @@ import { useEffect, useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { artifactUrls, useEngineStore } from "./store";
 import { startSimulator } from "./simulator";
-import type { AnalyticsDashboardDTO, AnalyticsRangeDays, PlatformId } from "@posterract/contract";
+import type { AccountSetDTO, AnalyticsDashboardDTO, AnalyticsRangeDays, PlatformId } from "@posterract/contract";
 
 export function useEngineBoot() {
   const hydrate = useEngineStore((s) => s.hydrate);
@@ -27,6 +27,7 @@ export const useTransmissions = () => useEngineStore((s) => s.transmissions);
 export const useProjections = () => useEngineStore((s) => s.projections);
 export const useEvents = () => useEngineStore((s) => s.events);
 export const usePortals = () => useEngineStore((s) => s.portals);
+export const useAccountSets = (): AccountSetDTO[] => [];
 export const usePoints = () => {
   // Select stable refs; derive the summary in a memo (a fresh object from the
   // selector itself would loop the zustand equality check forever).
@@ -46,14 +47,15 @@ export const usePoints = () => {
 type DemoAnalyticsProvider = "instagram" | "tiktok" | "facebook" | "threads";
 
 const demoDaily = (provider: DemoAnalyticsProvider, rangeDays: AnalyticsRangeDays) => {
+  const historyDays = rangeDays === "total" ? 365 : rangeDays;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  return Array.from({ length: rangeDays }, (_, index) => {
-    const date = new Date(today.getTime() - (rangeDays - index - 1) * 86400_000);
+  return Array.from({ length: historyDays }, (_, index) => {
+    const date = new Date(today.getTime() - (historyDays - index - 1) * 86400_000);
     const offsets = { instagram: 0.4, tiktok: 0.9, facebook: 1.2, threads: 2.1 };
     const baselines = { instagram: 980, tiktok: 1480, facebook: 720, threads: 540 };
     const wave = Math.sin(index * 0.72 + offsets[provider]);
-    const lift = index / Math.max(1, rangeDays - 1);
+    const lift = index / Math.max(1, historyDays - 1);
     const views = Math.max(0, Math.round(baselines[provider] + wave * 280 + lift * 690));
     return {
       date: date.toISOString().slice(0, 10),
@@ -155,7 +157,7 @@ export function useAnalyticsDashboard(rangeDays: AnalyticsRangeDays): AnalyticsD
         comments: totals.comments,
         shares: totals.shares,
         watchMinutes: provider === "instagram" ? totals.watchMinutes : undefined,
-        publishedPosts: rangeDays === 7 ? 4 : rangeDays === 30 ? 17 : 48,
+        publishedPosts: rangeDays === "total" ? 184 : rangeDays === 7 ? 4 : rangeDays === 30 ? 17 : 48,
         lastSyncedAt: Date.now() - 11 * 60_000,
         availableMetrics: providerMetrics[provider],
         metricNotes: provider === "tiktok"
@@ -167,7 +169,7 @@ export function useAnalyticsDashboard(rangeDays: AnalyticsRangeDays): AnalyticsD
               : ["Advanced Reel metrics depend on media type and Meta availability."],
         daily,
         posts,
-        previousPeriod: {
+        previousPeriod: rangeDays === "total" ? undefined : {
           audience: audience - totals.audienceDelta,
           audienceDelta: Math.round(totals.audienceDelta * 0.72),
           views: Math.round(totals.views * 0.84),
@@ -215,6 +217,15 @@ export function useOAuth() {
     start: async () => ({ url: "" }),
     complete: async () => ({ ok: false as const, error: "Demo mode" }),
     selectFacebookPage: async () => ({ ok: false as const, error: "Demo mode" }),
-    disconnect: async () => {},
+    disconnect: async (_accountId: string) => {},
+    refreshProfiles: async () => {},
+  };
+}
+
+export function useAccountSetActions() {
+  return {
+    create: async (_input: { name: string; accountIds: string[] }) => { throw new Error("Account sets require the PostgreSQL engine"); },
+    update: async (_id: string, _input: { name: string; accountIds: string[] }) => { throw new Error("Account sets require the PostgreSQL engine"); },
+    remove: async (_id: string) => undefined,
   };
 }

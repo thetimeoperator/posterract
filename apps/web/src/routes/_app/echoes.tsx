@@ -56,6 +56,7 @@ const FILTERS: Array<{ value: PlatformFilter; label: string }> = [
 ];
 
 const RANGES: Array<{ value: `${AnalyticsRangeDays}`; label: string }> = [
+  { value: "total", label: "Total" },
   { value: "7", label: "7D" },
   { value: "30", label: "30D" },
   { value: "90", label: "90D" },
@@ -89,50 +90,72 @@ const ANALYTICS_STYLES = `
     position: relative;
     isolation: isolate;
     min-width: 0;
-    min-height: 270px;
+    min-height: 205px;
     overflow: hidden;
-    border: 1px solid rgba(226, 255, 238, .055);
+    border: 1px solid transparent;
     border-radius: 17px;
     background:
-      radial-gradient(ellipse at 50% 108%, rgba(var(--signal-a), .065), transparent 58%),
-      linear-gradient(155deg, rgba(8, 13, 14, .96), rgba(2, 5, 7, .985));
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.025), 0 16px 38px rgba(0,0,0,.24);
+      radial-gradient(circle at 5% 0%, rgba(var(--signal-a), .14), transparent 36%) padding-box,
+      radial-gradient(ellipse at 50% 112%, rgba(var(--signal-a), .11), transparent 60%) padding-box,
+      linear-gradient(155deg, rgba(8, 13, 14, .96), rgba(2, 5, 7, .985)) padding-box,
+      conic-gradient(
+        from 215deg,
+        rgba(var(--signal-b), .76),
+        rgba(var(--signal-a), .94) 19%,
+        rgba(235,255,245,.18) 38%,
+        rgba(var(--signal-b), .12) 56%,
+        rgba(var(--signal-a), .38) 78%,
+        rgba(var(--signal-b), .7)
+      ) border-box;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.045),
+      inset 0 0 24px rgba(var(--signal-a), .025),
+      0 14px 32px rgba(0,0,0,.22),
+      0 0 18px rgba(var(--signal-a), .035);
     transition: transform 180ms ease, box-shadow 180ms ease;
   }
   .analytics-signal-tile::before {
     content: "";
     position: absolute;
     z-index: 2;
-    inset: -1px;
+    top: 0;
+    left: -36%;
+    width: 48%;
+    height: 1px;
     pointer-events: none;
-    border-top: 2px solid rgba(var(--signal-a), .92);
-    border-left: 2px solid rgba(var(--signal-b), .76);
-    border-radius: inherit;
-    filter: drop-shadow(0 0 7px rgba(var(--signal-a), .2));
-    animation: analytics-signal-frame 4.8s ease-in-out infinite alternate;
+    border-radius: 999px;
+    background: linear-gradient(90deg, transparent, rgba(var(--signal-a), .72), rgba(255,255,255,.94), rgba(var(--signal-b), .5), transparent);
+    filter: drop-shadow(0 0 7px rgba(var(--signal-a), .32));
+    animation: analytics-signal-frame 5.8s ease-in-out infinite;
     animation-delay: calc(var(--signal-i) * -.55s);
   }
   .analytics-signal-tile::after {
     content: "";
     position: absolute;
-    z-index: -1;
+    z-index: 0;
     inset: 0;
     pointer-events: none;
-    background: radial-gradient(circle at 0 0, rgba(var(--signal-a), .13), transparent 36%);
+    background:
+      radial-gradient(circle at 0 0, rgba(var(--signal-a), .13), transparent 36%),
+      linear-gradient(115deg, rgba(var(--signal-a), .025), transparent 45%, rgba(var(--signal-b), .02));
   }
   .analytics-signal-tile:hover {
     transform: translateY(-2px);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.035), 0 20px 44px rgba(0,0,0,.3), 0 0 28px rgba(var(--signal-a), .045);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.035), 0 18px 38px rgba(0,0,0,.28), 0 0 22px rgba(var(--signal-a), .04);
+  }
+  .analytics-signal-value {
+    color: rgb(var(--signal-a));
+    text-shadow: 0 0 16px rgba(var(--signal-a), .16);
   }
   .analytics-signal-graph {
-    filter: drop-shadow(0 0 6px rgba(var(--signal-a), .12));
+    filter: drop-shadow(0 0 2px rgba(var(--signal-a), .22));
   }
   .analytics-signal-line-glow {
-    opacity: .14;
-    filter: blur(1.1px);
+    opacity: .12;
+    filter: blur(.65px);
   }
   .analytics-signal-line:not(.analytics-signal-line-glow) {
-    filter: drop-shadow(0 0 2px rgba(var(--signal-a), .9)) drop-shadow(0 0 5px rgba(var(--signal-a), .34));
+    filter: drop-shadow(0 0 1.5px rgba(var(--signal-a), .82)) drop-shadow(0 0 4px rgba(var(--signal-a), .22));
   }
   .analytics-signal-line {
     animation: analytics-line-arrive 520ms cubic-bezier(.22,.7,.2,1) both;
@@ -179,8 +202,9 @@ const ANALYTICS_STYLES = `
     letter-spacing: -.012em;
   }
   @keyframes analytics-signal-frame {
-    from { opacity: .6; filter: drop-shadow(0 0 5px rgba(var(--signal-a), .13)); }
-    to { opacity: 1; filter: drop-shadow(0 0 10px rgba(var(--signal-a), .3)); }
+    0%, 18% { opacity: 0; transform: translateX(0); }
+    42% { opacity: .95; }
+    72%, 100% { opacity: 0; transform: translateX(285%); }
   }
   @keyframes analytics-line-arrive {
     from { opacity: 0; transform: translateY(3px); }
@@ -199,9 +223,11 @@ const ANALYTICS_STYLES = `
 
 function Analytics() {
   const [platform, setPlatform] = useState<PlatformFilter>("all");
-  const [rangeValue, setRangeValue] = useState<`${AnalyticsRangeDays}`>("30");
+  const [rangeValue, setRangeValue] = useState<`${AnalyticsRangeDays}`>("total");
   const [chartMetric, setChartMetric] = useState<ChartMetric>("views");
-  const rangeDays = Number(rangeValue) as AnalyticsRangeDays;
+  const rangeDays: AnalyticsRangeDays = rangeValue === "total"
+    ? "total"
+    : Number(rangeValue) as AnalyticsRangeDays;
   const dashboard = useAnalyticsDashboard(rangeDays);
   const transmissions = useTransmissions();
   const projections = useProjections();
@@ -250,7 +276,21 @@ function Analytics() {
     };
   }, [projections, transmissions]);
 
-  const anyConnected = (dashboard?.platforms ?? []).some(
+  // Do not render real-looking zeroes while the selected range is still
+  // loading. That previously made connected accounts appear disconnected
+  // during the initial Total request (and after a transient failed request).
+  if (!dashboard) {
+    return (
+      <Panel className="min-h-[60vh]">
+        <EmptyState
+          title="Loading account analytics"
+          detail="Retrieving connected accounts and their available totals."
+        />
+      </Panel>
+    );
+  }
+
+  const anyConnected = dashboard.platforms.some(
     (row) =>
       (ANALYTICS_PLATFORM_IDS as readonly string[]).includes(row.provider) && row.connected,
   );
@@ -334,7 +374,7 @@ function Analytics() {
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(300px,.75fr)]">
         <Panel
           kicker="Performance over time"
-          title={`${chartLabel(chartMetric)} · last ${rangeDays} days`}
+          title={`${chartLabel(chartMetric)} · ${rangeDescription(rangeDays)}`}
           actions={
             <MiniTabs options={CHART_METRICS} value={chartMetric} onChange={setChartMetric} />
           }
@@ -475,7 +515,7 @@ function MetricCard({
 }: {
   tone: number;
   metric: SignalMetricModel;
-  rangeDays: number;
+  rangeDays: AnalyticsRangeDays;
 }) {
   const colors = SIGNAL_TONES[tone % SIGNAL_TONES.length];
   const style = {
@@ -484,35 +524,37 @@ function MetricCard({
     "--signal-i": tone,
   } as SignalStyle;
   const comparison = comparisonPercent(metric.value, metric.previous);
-  const comparisonLabel = comparison === undefined
-    ? "Baseline"
-    : `${comparison >= 0 ? "+" : ""}${comparison.toFixed(Math.abs(comparison) >= 10 ? 0 : 1)}%`;
+  const comparisonLabel = rangeDays === "total"
+    ? "All time"
+    : comparison === undefined
+      ? "Baseline"
+      : `${comparison >= 0 ? "+" : ""}${comparison.toFixed(Math.abs(comparison) >= 10 ? 0 : 1)}%`;
   return (
     <article
       className="analytics-signal-tile"
       style={style}
       data-signal-metric={metric.id}
-      aria-label={`${metric.label}: ${formatSignalValue(metric.id, metric.value)}. ${comparisonLabel} compared with the previous ${rangeDays} days.`}
+      aria-label={rangeDays === "total"
+        ? `${metric.label}: ${formatSignalValue(metric.id, metric.value)}. All available history.`
+        : `${metric.label}: ${formatSignalValue(metric.id, metric.value)}. ${comparisonLabel} compared with the previous ${rangeDays} days.`}
     >
-      <div className="relative flex h-full min-h-[270px] flex-col px-[18px] pb-4 pt-[17px]">
-        <div className="flex items-center justify-between gap-4">
+      <div className="relative z-[1] flex h-full min-h-[205px] flex-col px-[16px] pb-[13px] pt-[15px]">
+        <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-center gap-2.5">
-            <span className="h-2.5 w-2.5 flex-none rounded-full bg-[rgb(var(--signal-a))] shadow-[0_0_12px_rgba(var(--signal-a),.5)]" />
-            <p className="truncate font-display text-[15px] font-semibold tracking-[-0.015em] text-starlight">{metric.label}</p>
+            <span className="h-2 w-2 flex-none rounded-full bg-[rgb(var(--signal-a))] shadow-[0_0_10px_rgba(var(--signal-a),.45)]" />
+            <p className="truncate font-display text-[14px] font-semibold tracking-[-0.015em] text-starlight">{metric.label}</p>
           </div>
-          <div className={`flex flex-none items-center gap-1.5 ${comparison === undefined ? "text-starlight-faint" : comparison >= 0 ? "text-neon" : "text-redshift"}`}>
-            {comparison !== undefined && <ArrowUpRight size={12} strokeWidth={2.5} className={comparison < 0 ? "rotate-90" : ""} />}
-            <p className="telemetry text-[11.5px] font-medium">{comparisonLabel}</p>
+          <div className="flex-none text-right">
+            <p className="analytics-signal-value telemetry text-[32px] font-medium leading-none tracking-[-0.055em]">
+              {formatSignalValue(metric.id, metric.value)}
+            </p>
+            <div className={`mt-1.5 flex items-center justify-end gap-1.5 ${comparison === undefined ? "text-starlight-faint" : comparison >= 0 ? "text-neon" : "text-redshift"}`}>
+              {comparison !== undefined && <ArrowUpRight size={12} strokeWidth={2.5} className={comparison < 0 ? "rotate-90" : ""} />}
+              <p className="telemetry text-[11.5px] font-medium">{comparisonLabel}</p>
+            </div>
           </div>
         </div>
-
         <MetricSparkline metric={metric} tone={tone} />
-
-        <div className="mt-auto pt-2">
-          <p className="telemetry text-[36px] font-medium leading-none tracking-[-0.05em] text-starlight">
-            {formatSignalValue(metric.id, metric.value)}
-          </p>
-        </div>
       </div>
     </article>
   );
@@ -520,9 +562,9 @@ function MetricCard({
 
 function MetricSparkline({ metric, tone }: { metric: SignalMetricModel; tone: number }) {
   const width = 480;
-  const height = 154;
+  const height = 98;
   const insetX = -2;
-  const insetY = 7;
+  const insetY = 6;
   const values = metric.series;
   const observedValues = values.filter((value): value is number => value !== null);
   const rawMinimum = observedValues.length ? Math.min(...observedValues) : 0;
@@ -543,7 +585,7 @@ function MetricSparkline({ metric, tone }: { metric: SignalMetricModel; tone: nu
   const last = points.at(-1);
   const area = first && last ? `${line} L ${last.x} ${height + 2} L ${first.x} ${height + 2} Z` : "";
   return (
-    <div className="relative mt-1 h-[154px] overflow-hidden" aria-hidden>
+    <div className="relative mt-auto h-[98px] overflow-hidden" aria-hidden>
         {hasHistory ? (
         <svg
           data-testid="signal-sparkline"
@@ -554,9 +596,9 @@ function MetricSparkline({ metric, tone }: { metric: SignalMetricModel; tone: nu
         >
           <defs>
             <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stopColor={`rgb(${SIGNAL_TONES[tone % SIGNAL_TONES.length].primary})`} stopOpacity=".68" />
-              <stop offset=".58" stopColor={`rgb(${SIGNAL_TONES[tone % SIGNAL_TONES.length].primary})`} stopOpacity=".24" />
-              <stop offset="1" stopColor={`rgb(${SIGNAL_TONES[tone % SIGNAL_TONES.length].secondary})`} stopOpacity=".015" />
+              <stop offset="0" stopColor={`rgb(${SIGNAL_TONES[tone % SIGNAL_TONES.length].primary})`} stopOpacity=".34" />
+              <stop offset=".6" stopColor={`rgb(${SIGNAL_TONES[tone % SIGNAL_TONES.length].primary})`} stopOpacity=".1" />
+              <stop offset="1" stopColor={`rgb(${SIGNAL_TONES[tone % SIGNAL_TONES.length].secondary})`} stopOpacity=".005" />
             </linearGradient>
           </defs>
           <path className="analytics-signal-area" d={area} fill={`url(#${gradientId})`} stroke="none" />
@@ -565,7 +607,7 @@ function MetricSparkline({ metric, tone }: { metric: SignalMetricModel; tone: nu
             d={line}
             fill="none"
             stroke={`rgb(${SIGNAL_TONES[tone % SIGNAL_TONES.length].primary})`}
-            strokeWidth="4.5"
+            strokeWidth="2.2"
             strokeLinecap="round"
             strokeLinejoin="round"
             vectorEffect="non-scaling-stroke"
@@ -576,7 +618,7 @@ function MetricSparkline({ metric, tone }: { metric: SignalMetricModel; tone: nu
             d={line}
             fill="none"
             stroke={`rgb(${SIGNAL_TONES[tone % SIGNAL_TONES.length].primary})`}
-            strokeWidth="1.65"
+            strokeWidth=".8"
             strokeLinecap="round"
             strokeLinejoin="round"
             vectorEffect="non-scaling-stroke"
@@ -592,11 +634,11 @@ function MetricSparkline({ metric, tone }: { metric: SignalMetricModel; tone: nu
   );
 }
 
-function SignalChart({ platforms, rangeDays, metric }: { platforms: PlatformAnalyticsDTO[]; rangeDays: number; metric: ChartMetric }) {
+function SignalChart({ platforms, rangeDays, metric }: { platforms: PlatformAnalyticsDTO[]; rangeDays: AnalyticsRangeDays; metric: ChartMetric }) {
   const width = 820;
   const height = 270;
   const padding = { left: 45, right: 15, top: 16, bottom: 31 };
-  const dates = dateRange(rangeDays);
+  const dates = analyticsDates(platforms, rangeDays);
   const series = platforms.map((platform) => {
     const map = new Map(platform.daily.map((row) => [row.date, dailyMetric(row, metric)]));
     const values = dates.map((date) => map.get(date) ?? 0);
@@ -661,7 +703,9 @@ function SignalChart({ platforms, rangeDays, metric }: { platforms: PlatformAnal
         );
       })}
       {dates.map((date, index) => {
-        const stride = rangeDays <= 7 ? 1 : rangeDays <= 30 ? 5 : 15;
+        const stride = rangeDays === "total"
+          ? Math.max(1, Math.ceil(dates.length / 6))
+          : rangeDays <= 7 ? 1 : rangeDays <= 30 ? 5 : 15;
         if (index % stride !== 0 && index !== dates.length - 1) return null;
         return (
           <text key={date} x={x(index)} y={height - 8} textAnchor="middle" fontSize="9.5" fill="var(--starlight-faint)" fontFamily="var(--font-mono)">
@@ -720,10 +764,11 @@ function PlatformContribution({ platforms, totalViews }: { platforms: PlatformAn
   );
 }
 
-function PlatformIntelligence({ platform, rangeDays }: { platform: PlatformAnalyticsDTO; rangeDays: number }) {
+function PlatformIntelligence({ platform, rangeDays }: { platform: PlatformAnalyticsDTO; rangeDays: AnalyticsRangeDays }) {
   const caps = PLATFORM_CAPABILITIES[platform.provider];
   const stats = platformStats(platform);
-  const interactions = platform.likes + platform.comments + platform.shares + (platform.saves ?? 0);
+  const interactions = platform.totalInteractions ??
+    platform.likes + platform.comments + platform.shares + (platform.saves ?? 0);
   const style = {
     "--platform-accent": caps.accent,
     "--platform-secondary": caps.accentSecondary,
@@ -748,7 +793,7 @@ function PlatformIntelligence({ platform, rangeDays }: { platform: PlatformAnaly
 
         <div className="analytics-platform-summary mt-4 flex items-center justify-between gap-3 rounded-[13px] px-3.5 py-3">
           <div>
-            <p className="font-display text-[10.5px] font-semibold uppercase tracking-[.13em] text-starlight-faint">{rangeDays}-day views</p>
+            <p className="font-display text-[10.5px] font-semibold uppercase tracking-[.13em] text-starlight-faint">{rangeDays === "total" ? "Total views" : `${rangeDays}-day views`}</p>
             <p className="telemetry mt-1.5 text-[27px] leading-none text-starlight">{compact(platform.views)}</p>
           </div>
           <div className="text-right">
@@ -961,10 +1006,10 @@ function buildSignalMetrics(
     scope: id === "audience"
       ? "Current account total"
       : id === "engagementRate"
-        ? `${rangeDays}-day rate`
+        ? rangeDays === "total" ? "All-history rate" : `${rangeDays}-day rate`
         : id === "growth"
-          ? `${rangeDays}-day net change`
-          : `${rangeDays}-day activity`,
+          ? rangeDays === "total" ? "All recorded growth" : `${rangeDays}-day net change`
+          : rangeDays === "total" ? "All available activity" : `${rangeDays}-day activity`,
   }));
 }
 
@@ -973,11 +1018,10 @@ function signalSeries(
   metric: SignalMetric,
   rangeDays: AnalyticsRangeDays,
 ): Array<number | null> {
-  const dates = dateRange(rangeDays);
+  const dates = analyticsDates(platforms, rangeDays);
   if (metric === "audience") {
     const audiencePlatforms = platforms.filter((platform) => platform.audience !== undefined);
-    if (!audiencePlatforms.length || audiencePlatforms.some((platform) =>
-      !platform.daily.some((row) => dates.includes(row.date)))) {
+    if (!audiencePlatforms.length) {
       return dates.map(() => null);
     }
     const platformSeries = audiencePlatforms.map((platform) => {
@@ -987,10 +1031,10 @@ function signalSeries(
       const reconstructed: Array<number | null> = Array.from({ length: dates.length }, () => null);
       let audience = platform.audience!;
       for (let index = dates.length - 1; index >= 0; index -= 1) {
-        const dailyChange = netByDate.get(dates[index]);
-        if (dailyChange === undefined) continue;
         reconstructed[index] = audience;
-        audience -= dailyChange;
+        // A missing provider/day means no recorded change, not that the
+        // complete cross-platform series should disappear.
+        audience -= netByDate.get(dates[index]) ?? 0;
       }
       return reconstructed;
     });
@@ -1009,7 +1053,10 @@ function signalSeries(
     const rows = rowsByPlatform
       .map((rowsByDate) => rowsByDate.get(date))
       .filter((row): row is PlatformAnalyticsDTO["daily"][number] => row !== undefined);
-    if (rows.length !== rowsByPlatform.length) return null;
+    // Providers begin recording history on different dates. Aggregate every
+    // row that exists for this day; do not erase valid histories merely
+    // because another connected provider has not recorded that day yet.
+    if (!rows.length) return null;
     const views = rows.reduce((sum, row) => sum + row.views, 0);
     const interactions = rows.reduce(
       (sum, row) => sum + row.likes + row.comments + row.shares + (row.saves ?? 0),
@@ -1106,6 +1153,9 @@ function summarize(platforms: PlatformAnalyticsDTO[]) {
       likes: total.likes + row.likes,
       comments: total.comments + row.comments,
       shares: total.shares + row.shares,
+      interactions: total.interactions + (
+        row.totalInteractions ?? row.likes + row.comments + row.shares + (row.saves ?? 0)
+      ),
       saves: total.saves + (row.saves ?? 0),
       savesKnown: total.savesKnown || row.saves !== undefined,
       reach: total.reach + (row.reach ?? 0),
@@ -1122,6 +1172,7 @@ function summarize(platforms: PlatformAnalyticsDTO[]) {
       likes: 0,
       comments: 0,
       shares: 0,
+      interactions: 0,
       saves: 0,
       savesKnown: false,
       reach: 0,
@@ -1131,11 +1182,9 @@ function summarize(platforms: PlatformAnalyticsDTO[]) {
       publishedPosts: 0,
     },
   );
-  const interactions = result.likes + result.comments + result.shares + result.saves;
   return {
     ...result,
-    interactions,
-    engagementRate: result.views ? (interactions / result.views) * 100 : 0,
+    engagementRate: result.views ? (result.interactions / result.views) * 100 : 0,
     viewsPerPost: result.publishedPosts ? result.views / result.publishedPosts : 0,
     audienceLabel: platforms.length === 1 ? platforms[0].audienceLabel : "Total followers",
     reach: result.reachKnown ? result.reach : undefined,
@@ -1167,6 +1216,18 @@ function dateRange(days: number) {
   return Array.from({ length: days }, (_, index) =>
     new Date(todayUtc - (days - index - 1) * 86_400_000).toISOString().slice(0, 10),
   );
+}
+
+function analyticsDates(platforms: PlatformAnalyticsDTO[], range: AnalyticsRangeDays) {
+  if (range !== "total") return dateRange(range);
+  const observed = new Set(
+    platforms.flatMap((platform) => platform.daily.map((row) => row.date)),
+  );
+  return observed.size ? [...observed].sort() : dateRange(1);
+}
+
+function rangeDescription(range: AnalyticsRangeDays) {
+  return range === "total" ? "all available history" : `last ${range} days`;
 }
 
 function compact(value: number) {

@@ -27,11 +27,13 @@ export const useTransmissions = impl.useTransmissions;
 export const useProjections = impl.useProjections;
 export const useEvents = impl.useEvents;
 export const usePortals = impl.usePortals;
+export const useAccountSets = impl.useAccountSets;
 export const usePoints = impl.usePoints;
 export const useAnalyticsDashboard = impl.useAnalyticsDashboard;
 export const useEngineActions = impl.useEngineActions;
 export const artifactUrl = impl.artifactUrl;
 export const useOAuth = impl.useOAuth;
+export const useAccountSetActions = impl.useAccountSetActions;
 export const OAUTH_SUPPORTED = impl.OAUTH_SUPPORTED;
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 import { Uppy } from "@uppy/core";
 import AwsS3, { type AwsS3Part } from "@uppy/aws-s3";
+import { cloudJson } from "./cloudRequest";
 
 export type R2MultipartUploadResult = {
   mediaId: string;
@@ -14,6 +15,11 @@ type UploadOptions = {
   apiBaseUrl?: string;
   meta?: { durationMs?: number; width?: number; height?: number };
   onProgress?: (fraction: number) => void;
+};
+
+type CreativeUploadOptions = UploadOptions & {
+  projectId: string;
+  path: string;
 };
 
 type MultipartSession = {
@@ -37,25 +43,13 @@ async function apiRequest<T>(
   path: string,
   init: RequestInit,
 ): Promise<T> {
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+  return cloudJson<T>(apiBaseUrl, path, {
     ...init,
-    credentials: "include",
     headers: {
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-      ...(init.body ? { "Content-Type": "application/json" } : {}),
       ...init.headers,
     },
   });
-
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => undefined)) as
-      | { error?: string }
-      | undefined;
-    throw new Error(payload?.error ?? `Upload API failed (${response.status})`);
-  }
-
-  if (response.status === 204) return undefined as T;
-  return (await response.json()) as T;
 }
 
 /**
@@ -63,14 +57,21 @@ async function apiRequest<T>(
  * creates the multipart session and signs each part; video bytes never pass
  * through the VPS.
  */
-export async function uploadVideoToR2({
+async function uploadFileToR2({
   file,
   accessToken,
   workspaceId,
   apiBaseUrl = "/api",
   meta,
   onProgress,
-}: UploadOptions): Promise<R2MultipartUploadResult> {
+  purpose,
+  creativeProjectId,
+  creativePath,
+}: UploadOptions & {
+  purpose: "publishing" | "creative";
+  creativeProjectId?: string;
+  creativePath?: string;
+}): Promise<R2MultipartUploadResult> {
   let completedUpload: R2MultipartUploadResult | undefined;
   const uppy = new Uppy<Record<string, never>, UploadBody>({
     autoProceed: false,
@@ -78,7 +79,9 @@ export async function uploadVideoToR2({
     restrictions: {
       maxNumberOfFiles: 1,
       maxFileSize: 5_000_000_000,
-      allowedFileTypes: ["video/mp4", "video/quicktime", "video/webm"],
+      ...(purpose === "publishing"
+        ? { allowedFileTypes: ["video/mp4", "video/quicktime", "video/webm"] }
+        : {}),
     },
   });
 
@@ -101,6 +104,9 @@ export async function uploadVideoToR2({
             durationMs: meta?.durationMs,
             width: meta?.width,
             height: meta?.height,
+            purpose,
+            creativeProjectId,
+            creativePath,
           }),
         },
       ),
@@ -183,4 +189,22 @@ export async function uploadVideoToR2({
   } finally {
     uppy.destroy();
   }
+}
+
+export function uploadVideoToR2(options: UploadOptions): Promise<R2MultipartUploadResult> {
+  return uploadFileToR2({ ...options, purpose: "publishing" });
+}
+
+/** Uploads editor media directly to R2 and attaches its logical project path. */
+export function uploadCreativeAssetToR2({
+  projectId,
+  path,
+  ...options
+}: CreativeUploadOptions): Promise<R2MultipartUploadResult> {
+  return uploadFileToR2({
+    ...options,
+    purpose: "creative",
+    creativeProjectId: projectId,
+    creativePath: path,
+  });
 }

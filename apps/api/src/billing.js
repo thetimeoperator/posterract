@@ -10,8 +10,6 @@ const ACTIVE_SUBSCRIPTION_STATUSES = new Set([
   "unpaid",
   "paused",
 ]);
-const ENTITLED_SUBSCRIPTION_STATUSES = new Set(["active", "trialing"]);
-const GRACE_SUBSCRIPTION_STATUSES = new Set(["past_due", "unpaid"]);
 const HANDLED_EVENT_TYPES = new Set([
   "checkout.session.completed",
   "checkout.session.expired",
@@ -29,6 +27,31 @@ export class BillingError extends Error {
     this.statusCode = statusCode;
     this.code = code;
   }
+}
+
+/** Fail closed for every product route while leaving auth and billing reachable. */
+export function createBillingEntitlementGuard(service) {
+  if (!service?.loadSubscription) {
+    throw new Error("A Stripe billing service is required for entitlement checks");
+  }
+  return async function requireBillingEntitlement(request, reply) {
+    if (request.authContext?.kind === "internal") return;
+    try {
+      const subscription = await service.loadSubscription(
+        request.authContext?.workspaceId,
+      );
+      if (!subscription.entitled) {
+        return reply.code(402).send({
+          error: "subscription_required",
+          status: subscription.status,
+          accessState: subscription.accessState,
+        });
+      }
+    } catch (error) {
+      request.log.error({ err: error }, "Subscription entitlement check failed");
+      return reply.code(503).send({ error: "billing_status_unavailable" });
+    }
+  };
 }
 
 function configuredValue(environment, name) {
@@ -110,16 +133,16 @@ function publicSubscription(row) {
     };
   }
   const periodEnd = dateMillis(row.current_period_end);
+  // Posterract is paid-only: trials and failed-payment grace periods do not
+  // unlock product access. Stripe's active status is the entitlement source.
   const entitled =
-    Boolean(row.recognized_plan) && ENTITLED_SUBSCRIPTION_STATUSES.has(row.status);
-  const inGrace =
     Boolean(row.recognized_plan) &&
-    GRACE_SUBSCRIPTION_STATUSES.has(row.status) &&
-    Boolean(periodEnd && periodEnd > Date.now());
+    row.status === "active" &&
+    row.last_payment_status !== "failed";
   return {
     status: row.status,
-    accessState: entitled ? "active" : inGrace ? "grace" : "inactive",
-    entitled: entitled || inGrace,
+    accessState: entitled ? "active" : "inactive",
+    entitled,
     plan: row.recognized_plan
       ? {
           interval: row.billing_interval,

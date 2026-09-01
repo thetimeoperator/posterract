@@ -163,10 +163,13 @@ function summarizePeriod({ daily, posts, audience, publishedPosts }) {
 }
 
 export async function loadAnalyticsDashboard(postgres, workspaceId, rangeDays) {
-  const cutoff = new Date(Date.now() - (rangeDays - 1) * 86_400_000);
-  const cutoffDate = cutoff.toISOString().slice(0, 10);
-  const previousCutoff = new Date(Date.now() - (rangeDays * 2 - 1) * 86_400_000);
-  const previousCutoffDate = previousCutoff.toISOString().slice(0, 10);
+  const isTotal = rangeDays === "total";
+  const cutoffDate = isTotal
+    ? null
+    : new Date(Date.now() - (rangeDays - 1) * 86_400_000).toISOString().slice(0, 10);
+  const previousCutoffDate = isTotal
+    ? null
+    : new Date(Date.now() - (rangeDays * 2 - 1) * 86_400_000).toISOString().slice(0, 10);
   const [accountsResult, dailyResult, postsResult] = await Promise.all([
     postgres.query(
       `select a.*,
@@ -183,7 +186,9 @@ export async function loadAnalyticsDashboard(postgres, workspaceId, rangeDays) {
        ) m on true
        left join lateral (
          select audience from account_metric_snapshots
-         where social_account_id = a.id and fetched_at < $2::date
+         where social_account_id = a.id
+           and $2::date is not null
+           and fetched_at < $2::date
          order by fetched_at desc, id desc
          limit 1
        ) pm on true
@@ -194,7 +199,8 @@ export async function loadAnalyticsDashboard(postgres, workspaceId, rangeDays) {
       `select social_account_id, provider, metric_date, views, likes, comments,
               shares, watch_minutes, audience_gained, audience_lost, raw_metrics
        from daily_metric_snapshots
-       where workspace_id = $1 and metric_date >= $2::date
+       where workspace_id = $1
+         and ($2::date is null or metric_date >= $2::date)
        order by metric_date asc`,
       [workspaceId, previousCutoffDate],
     ),
@@ -236,8 +242,8 @@ export async function loadAnalyticsDashboard(postgres, workspaceId, rangeDays) {
   for (const row of postsResult.rows) {
     const publishedAt = row.published_at ?? row.scheduled_for ?? row.updated_at;
     const publishedDate = new Date(publishedAt).toISOString().slice(0, 10);
-    const isCurrent = publishedDate >= cutoffDate;
-    const isPrevious = publishedDate >= previousCutoffDate && publishedDate < cutoffDate;
+    const isCurrent = isTotal || publishedDate >= cutoffDate;
+    const isPrevious = !isTotal && publishedDate >= previousCutoffDate && publishedDate < cutoffDate;
     if (isCurrent) {
       liveCountByProvider.set(row.provider, (liveCountByProvider.get(row.provider) ?? 0) + 1);
     } else if (isPrevious) {
@@ -285,30 +291,57 @@ export async function loadAnalyticsDashboard(postgres, workspaceId, rangeDays) {
     const missingScopes = REQUIRED_SCOPES[provider].filter((scope) => !scopes.has(scope));
     const dailyRows = account ? dailyByAccount.get(account.id) ?? [] : [];
     const daily = dailyRows
-      .filter((row) => metricDate(row) >= cutoffDate)
+      .filter((row) => isTotal || metricDate(row) >= cutoffDate)
       .map(publicDailyPoint);
     const previousDaily = dailyRows
-      .filter((row) => metricDate(row) >= previousCutoffDate && metricDate(row) < cutoffDate)
+      .filter((row) => !isTotal && metricDate(row) >= previousCutoffDate && metricDate(row) < cutoffDate)
       .map(publicDailyPoint);
     const posts = (postsByProvider.get(provider) ?? []).sort((left, right) => right.views - left.views);
     const previousPosts = (previousPostsByProvider.get(provider) ?? []).sort(
       (left, right) => right.views - left.views,
     );
     const connected = account?.status === "connected";
-    const currentPeriod = summarizePeriod({
+    const period = summarizePeriod({
       daily,
       posts,
       audience: optionalNumber(account?.audience),
       publishedPosts: liveCountByProvider.get(provider) ?? 0,
     });
+    const allPostTotals = summarizePeriod({
+      daily: [],
+      posts,
+      audience: optionalNumber(account?.audience),
+      publishedPosts: liveCountByProvider.get(provider) ?? 0,
+    });
+    const totalViews = optionalNumber(account?.total_views) ?? metric(
+      accountRaw,
+      "totalViews",
+      "views",
+    );
+    const totalLikes = optionalNumber(account?.total_likes) ?? metric(
+      accountRaw,
+      "totalLikes",
+      "likes",
+    );
+    const currentPeriod = isTotal
+      ? {
+          ...allPostTotals,
+          audienceDelta: period.audienceDelta,
+          views: totalViews ?? allPostTotals.views,
+          likes: totalLikes ?? allPostTotals.likes,
+          publishedPosts: optionalNumber(account?.published_videos) ?? allPostTotals.publishedPosts,
+        }
+      : period;
     const previousPeriod = summarizePeriod({
       daily: previousDaily,
       posts: previousPosts,
       audience: optionalNumber(account?.previous_audience),
       publishedPosts: previousLiveCountByProvider.get(provider) ?? 0,
     });
-    const totalInteractions =
-      currentPeriod.likes + currentPeriod.comments + currentPeriod.shares;
+    const totalInteractions = isTotal
+      ? metric(accountRaw, "totalInteractions", "pageEngagements") ??
+        currentPeriod.likes + currentPeriod.comments + currentPeriod.shares
+      : currentPeriod.likes + currentPeriod.comments + currentPeriod.shares;
 
     return {
       provider,
@@ -347,7 +380,7 @@ export async function loadAnalyticsDashboard(postgres, workspaceId, rangeDays) {
       metricNotes: PLATFORM_NOTES[provider],
       daily,
       posts: posts.slice(0, 24),
-      previousPeriod,
+      previousPeriod: isTotal ? undefined : previousPeriod,
     };
   });
 

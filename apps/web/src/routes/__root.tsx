@@ -1,4 +1,5 @@
-import { Outlet, createRootRoute } from "@tanstack/react-router";
+import { Outlet, createRootRoute, useNavigate, useRouterState } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { HullBreach, WarpingIn } from "@/shell/SystemStates";
 
 export const Route = createRootRoute({
@@ -9,6 +10,27 @@ export const Route = createRootRoute({
 });
 
 function RootLayout() {
+  const navigate = useNavigate();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+
+  useEffect(() => {
+    if (!window.desktop) return;
+    return window.desktop.on("cli:request", (payload) => {
+      const editorFrame = document.querySelector<HTMLIFrameElement>('iframe[title="Posterract Create editor"]');
+      const editorReady = editorFrame?.contentDocument?.readyState === "complete";
+      if (pathname === "/create" && editorReady) {
+        editorFrame.contentWindow?.postMessage(
+          { type: "posterract-cli-request", payload },
+          "*",
+        );
+        return;
+      }
+      window.__posterractPendingCliRequests ??= [];
+      window.__posterractPendingCliRequests.push(payload);
+      if (pathname !== "/create") void navigate({ to: "/create" });
+    });
+  }, [navigate, pathname]);
+
   return (
     <div className="relative min-h-full">
       <Outlet />
