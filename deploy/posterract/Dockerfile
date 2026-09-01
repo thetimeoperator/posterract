@@ -2,24 +2,27 @@ FROM node:24-bookworm-slim AS workspace
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
+ENV ELECTRON_SKIP_BINARY_DOWNLOAD=1
 RUN corepack enable
 
 WORKDIR /workspace
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY patches ./patches
 COPY apps/web/package.json apps/web/package.json
 COPY apps/editor-sandbox/package.json apps/editor-sandbox/package.json
 COPY apps/api/package.json apps/api/package.json
 COPY apps/orchestrator/package.json apps/orchestrator/package.json
+COPY apps/desktop/package.json apps/desktop/package.json
 COPY packages/contract/package.json packages/contract/package.json
 COPY packages/hyperkit/package.json packages/hyperkit/package.json
-COPY packages/diffusion-assets/package.json packages/diffusion-assets/package.json
-COPY packages/diffusion-cli/package.json packages/diffusion-cli/package.json
-COPY packages/diffusion-encoder/package.json packages/diffusion-encoder/package.json
-COPY packages/diffusion-jsx/package.json packages/diffusion-jsx/package.json
-COPY packages/diffusion-koota-solid/package.json packages/diffusion-koota-solid/package.json
-COPY packages/diffusion-reconciler/package.json packages/diffusion-reconciler/package.json
-COPY packages/diffusion-runtime/package.json packages/diffusion-runtime/package.json
+COPY packages/posterract-cli/package.json packages/posterract-cli/package.json
+COPY packages/posterract-composition/package.json packages/posterract-composition/package.json
+COPY packages/posterract-koota-solid/package.json packages/posterract-koota-solid/package.json
+COPY packages/posterract-video-assets/package.json packages/posterract-video-assets/package.json
+COPY packages/posterract-video-encoder/package.json packages/posterract-video-encoder/package.json
+COPY packages/posterract-video-reconciler/package.json packages/posterract-video-reconciler/package.json
+COPY packages/posterract-video-runtime/package.json packages/posterract-video-runtime/package.json
 COPY packages/video-compiler/package.json packages/video-compiler/package.json
 
 RUN pnpm install --frozen-lockfile
