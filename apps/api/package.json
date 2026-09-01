@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "start": "node --import tsx src/server.js",
+    "start": "node --env-file-if-exists=.env --import tsx src/server.js",
     "db:migrate": "node scripts/migrate.mjs",
     "db:migrate:all": "node scripts/migrate-all.mjs",
     "auth:migrate": "node scripts/migrate-auth.mjs",
