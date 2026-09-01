@@ -657,13 +657,34 @@ export function createStripeBillingService({
     return customer.id;
   }
 
-  async function createCheckout({ workspaceId, userId, role, interval, key }) {
+  async function createCheckout({
+    workspaceId,
+    userId,
+    role,
+    interval,
+    plan,
+    key,
+  }) {
     requireConfigured();
     if (role !== "owner" && role !== "admin") {
       throw new BillingError(403, "billing_admin_required");
     }
     if (interval !== "monthly" && interval !== "yearly") {
       throw new BillingError(400, "invalid_billing_interval");
+    }
+    const tier =
+      typeof plan === "string" && Object.hasOwn(CREDIT_PLANS, plan)
+        ? CREDIT_PLANS[plan]
+        : undefined;
+    if (plan !== undefined && plan !== null) {
+      if (!tier) throw new BillingError(400, "invalid_plan");
+      if (!config.creditPrices[tier.id]) {
+        throw new BillingError(400, "billing_plan_not_configured");
+      }
+      // Tier prices are monthly-only — there is no yearly tier price to sell.
+      if (interval === "yearly") {
+        throw new BillingError(400, "invalid_billing_interval");
+      }
     }
     await verifyCatalog();
     const active = await postgres.query(
@@ -678,19 +699,30 @@ export function createStripeBillingService({
     }
 
     const actorKey = `billing:user:${userId}`;
-    const payload = { operation: "checkout", workspaceId, interval };
+    // The tier is part of the request identity: picking a different plan with
+    // a reused key is a conflict, never a replay of the previous choice.
+    const payload = {
+      operation: "checkout",
+      workspaceId,
+      interval,
+      plan: plan ?? null,
+    };
     const claim = await claimIdempotency(postgres, actorKey, key, payload);
     if (claim.replay) return { ...claim.replay, replayed: true };
 
     const customerId = await ensureCustomer(workspaceId, userId);
-    const priceId =
-      interval === "yearly" ? config.yearlyPriceId : config.monthlyPriceId;
+    const priceId = tier
+      ? config.creditPrices[tier.id]
+      : interval === "yearly"
+        ? config.yearlyPriceId
+        : config.monthlyPriceId;
     const billingInterval = interval === "yearly" ? "year" : "month";
     const metadata = {
       workspace_id: workspaceId,
       user_id: userId,
       billing_interval: billingInterval,
       price_id: priceId,
+      plan_tier: tier ? tier.id : null,
     };
     const session = await stripe.checkout.sessions.create(
       {
@@ -817,6 +849,14 @@ export function createStripeBillingService({
       creditPlans:
         creditPlanEntries.length > 0
           ? Object.fromEntries(creditPlanEntries)
+          : undefined,
+      // Tier catalog for the three-tier checkout interface. Same prices as
+      // creditPlans, nested per interval because tier prices are monthly-only.
+      tiers:
+        creditPlanEntries.length > 0
+          ? Object.fromEntries(
+              creditPlanEntries.map(([id, plan]) => [id, { monthly: plan }]),
+            )
           : undefined,
     };
   }
@@ -969,6 +1009,7 @@ export function registerBillingRoutes(app, { service, requireSession }) {
           userId: request.authContext.userId,
           role: request.authContext.role,
           interval: request.body?.interval,
+          plan: request.body?.plan,
           key: requireIdempotencyKey(request),
         });
         return reply.code(result.replayed ? 200 : 201).send(result);

@@ -39,6 +39,14 @@ const environment = {
   STRIPE_YEARLY_PRICE_ID: "price_yearly",
   SITE_URL: "https://posterract.app",
 };
+// The three-tier credit catalog. Kept apart from `environment` so the suite
+// covers both a tiered deployment and one that never configured tier prices.
+const tierEnvironment = {
+  ...environment,
+  STRIPE_PRICE_CREATOR: "price_creator",
+  STRIPE_PRICE_STUDIO: "price_studio",
+  STRIPE_PRICE_AGENCY: "price_agency",
+};
 
 function pgPool(postgres) {
   const query = async (text, parameters = []) => {
@@ -137,11 +145,11 @@ function stripeMock() {
   return { client, calls, signatures };
 }
 
-async function testApp(pool, stripe) {
+async function testApp(pool, stripe, serviceEnvironment = environment) {
   const app = Fastify({ logger: false });
   const service = createStripeBillingService({
     postgres: pool,
-    environment,
+    environment: serviceEnvironment,
     stripeClient: stripe,
   });
   const requireSession = async (request) => {
@@ -505,6 +513,187 @@ test("Checkout validates the live catalog and prevents duplicate subscriptions",
     assert.equal(duplicate.json().error, "subscription_already_exists");
   } finally {
     await app.close();
+    await postgres.close();
+  }
+});
+
+test("billing config advertises tiers only when tier prices are configured", async () => {
+  const { postgres, pool } = await database();
+  const { client } = stripeMock();
+  const { app: tiered } = await testApp(pool, client, tierEnvironment);
+  const { app: untiered } = await testApp(pool, client);
+  try {
+    const withTiers = await tiered.inject({
+      method: "GET",
+      url: "/v1/billing/config",
+    });
+    assert.equal(withTiers.statusCode, 200);
+    assert.deepEqual(withTiers.json().tiers, {
+      creator: {
+        monthly: {
+          priceId: "price_creator",
+          amount: 2_000,
+          currency: "usd",
+          interval: "month",
+          credits: 150,
+        },
+      },
+      studio: {
+        monthly: {
+          priceId: "price_studio",
+          amount: 5_000,
+          currency: "usd",
+          interval: "month",
+          credits: 2_250,
+        },
+      },
+      agency: {
+        monthly: {
+          priceId: "price_agency",
+          amount: 10_000,
+          currency: "usd",
+          interval: "month",
+          credits: 5_250,
+        },
+      },
+    });
+    // The flat credit catalog stays exactly as it was.
+    assert.deepEqual(withTiers.json().creditPlans.studio, {
+      priceId: "price_studio",
+      amount: 5_000,
+      currency: "usd",
+      interval: "month",
+      credits: 2_250,
+    });
+    assert.equal(withTiers.json().plans.monthly.priceId, "price_monthly");
+
+    const withoutTiers = await untiered.inject({
+      method: "GET",
+      url: "/v1/billing/config",
+    });
+    assert.equal(withoutTiers.statusCode, 200);
+    assert.equal(withoutTiers.json().configured, true);
+    assert.equal(withoutTiers.json().tiers, undefined);
+    assert.equal(withoutTiers.json().creditPlans, undefined);
+  } finally {
+    await tiered.close();
+    await untiered.close();
+    await postgres.close();
+  }
+});
+
+test("Checkout buys the selected tier price and never replays another tier", async () => {
+  const { postgres, pool } = await database();
+  const { client, calls } = stripeMock();
+  const { app } = await testApp(pool, client, tierEnvironment);
+  try {
+    const studio = await app.inject({
+      method: "POST",
+      url: "/v1/billing/checkout",
+      headers: { "idempotency-key": "checkout-studio-0001" },
+      payload: { interval: "monthly", plan: "studio" },
+    });
+    assert.equal(studio.statusCode, 201);
+    assert.equal(studio.json().sessionId, "cs_live_posterract");
+    assert.equal(calls.checkouts.length, 1);
+    assert.equal(calls.checkouts[0][0].line_items[0].price, "price_studio");
+    assert.equal(calls.checkouts[0][0].metadata.plan_tier, "studio");
+    assert.equal(
+      calls.checkouts[0][0].subscription_data.metadata.plan_tier,
+      "studio",
+    );
+    assert.equal(calls.checkouts[0][0].metadata.billing_interval, "month");
+
+    const sessions = await pool.query(
+      "select stripe_price_id, billing_interval from billing_checkout_sessions",
+    );
+    assert.equal(sessions.rows.length, 1);
+    assert.equal(sessions.rows[0].stripe_price_id, "price_studio");
+    assert.equal(sessions.rows[0].billing_interval, "month");
+
+    // Same key, no tier: a different request identity, so never a replay.
+    const planless = await app.inject({
+      method: "POST",
+      url: "/v1/billing/checkout",
+      headers: { "idempotency-key": "checkout-studio-0001" },
+      payload: { interval: "monthly" },
+    });
+    assert.equal(planless.statusCode, 409);
+    assert.equal(planless.json().error, "idempotency_key_reused");
+    assert.equal(calls.checkouts.length, 1);
+
+    // Same key and same tier still replays the original session.
+    const replay = await app.inject({
+      method: "POST",
+      url: "/v1/billing/checkout",
+      headers: { "idempotency-key": "checkout-studio-0001" },
+      payload: { interval: "monthly", plan: "studio" },
+    });
+    assert.equal(replay.statusCode, 200);
+    assert.equal(replay.json().replayed, true);
+    assert.equal(calls.checkouts.length, 1);
+
+    // A fresh key without a tier keeps buying the legacy monthly price.
+    const legacy = await app.inject({
+      method: "POST",
+      url: "/v1/billing/checkout",
+      headers: { "idempotency-key": "checkout-monthly-0002" },
+      payload: { interval: "monthly" },
+    });
+    assert.equal(legacy.statusCode, 201);
+    assert.equal(calls.checkouts.length, 2);
+    assert.equal(
+      calls.checkouts[1][0].line_items[0].price,
+      environment.STRIPE_MONTHLY_PRICE_ID,
+    );
+    assert.equal(calls.checkouts[1][0].metadata.plan_tier, null);
+  } finally {
+    await app.close();
+    await postgres.close();
+  }
+});
+
+test("Tier checkout rejects yearly intervals, unknown plans, and unconfigured tiers", async () => {
+  const { postgres, pool } = await database();
+  const { client, calls } = stripeMock();
+  const { app } = await testApp(pool, client, tierEnvironment);
+  const { app: untiered } = await testApp(pool, client);
+  try {
+    const yearly = await app.inject({
+      method: "POST",
+      url: "/v1/billing/checkout",
+      headers: { "idempotency-key": "checkout-tier-yearly-0001" },
+      payload: { interval: "yearly", plan: "studio" },
+    });
+    assert.equal(yearly.statusCode, 400);
+    assert.equal(yearly.json().error, "invalid_billing_interval");
+
+    const bogus = await app.inject({
+      method: "POST",
+      url: "/v1/billing/checkout",
+      headers: { "idempotency-key": "checkout-tier-bogus-0001" },
+      payload: { interval: "monthly", plan: "bogus" },
+    });
+    assert.equal(bogus.statusCode, 400);
+    assert.equal(bogus.json().error, "invalid_plan");
+
+    const unconfigured = await untiered.inject({
+      method: "POST",
+      url: "/v1/billing/checkout",
+      headers: { "idempotency-key": "checkout-tier-missing-0001" },
+      payload: { interval: "monthly", plan: "studio" },
+    });
+    assert.equal(unconfigured.statusCode, 400);
+    assert.equal(unconfigured.json().error, "billing_plan_not_configured");
+
+    // Rejected tier requests never reach Stripe or claim an idempotency key.
+    assert.equal(calls.checkouts.length, 0);
+    assert.equal(calls.customers.length, 0);
+    const claimed = await pool.query("select * from api_idempotency_keys");
+    assert.equal(claimed.rows.length, 0);
+  } finally {
+    await app.close();
+    await untiered.close();
     await postgres.close();
   }
 });
