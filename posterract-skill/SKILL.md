@@ -5,7 +5,7 @@ description: Build, inspect, validate, capture, and export local Posterract TSX 
 
 # Posterract
 
-Work from the local project folder. Treat `src/index.tsx` as canonical and the active project's `.posterract/docs` as authoritative for the installed SDK version.
+Work from the local project folder. Treat the project entry module as canonical — `index.tsx` at the project root (`src/index.tsx` in legacy projects; `posterract_read_source` with the default `"auto"` path resolves it) — and the active project's `.posterract/docs` as authoritative for the installed SDK version.
 
 ## Required workflow
 

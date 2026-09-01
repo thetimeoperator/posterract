@@ -604,6 +604,28 @@ export async function compileProject(dir: string): Promise<CompileResult> {
   return result.ok ? { ok: true, code: result.code } : { ok: false, error: diagnosticMessage(result.diagnostics) };
 }
 
+/**
+ * Compiles the project exactly as `compileProject` would — the stable-ID
+ * stamping pass included — but entirely in memory: nothing is written to
+ * disk and the mounted canvas is untouched. This is the read-only path
+ * behind the `validate` endpoint (the `posterract_validate` MCP tool is
+ * annotated `readOnlyHint`); the editor's own loads keep `compileProject`,
+ * which persists freshly minted IDs so element identity survives reloads.
+ */
+export async function validateProject(dir: string): Promise<CompileResult> {
+  const project = await getProject(dir);
+  if (!project) return { ok: false, error: "Project entry file is missing" };
+  const files = await sourceFiles(project.dir);
+  // `stampProject` updates the virtual `files` map in place (see the
+  // writer's `save()`), so the compile below sees the stamped sources.
+  await stampProject({ files });
+  const result = await compileVirtualProject(
+    Object.entries(files).map(([path, content]) => ({ path, content })),
+    project.entry,
+  );
+  return result.ok ? { ok: true, code: result.code } : { ok: false, error: diagnosticMessage(result.diagnostics) };
+}
+
 export async function writeProject(dir: string, edits: SourceEdit[]): Promise<WriteResult> {
   const projectDir = await requireProjectDir(dir);
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -679,11 +701,25 @@ function revision(content: string | Uint8Array): string {
   return createHash("sha256").update(content).digest("hex");
 }
 
+/**
+ * Reads a project source file. `path` "auto" resolves the project's actual
+ * entry file through the same `ENTRY_FILES` resolution the rest of the app
+ * uses (migrated projects can keep the entry at the project root, not under
+ * `src/`); the result reports the resolved path. The revision is exactly
+ * sha256 of the on-disk bytes — the one revision namespace shared with
+ * `context.sourceRevision`, which goes through this same function.
+ */
 export async function readProjectSource(dir: string, path: string): Promise<{ path: string; content: string; revisionId: string }> {
-  const absolute = await requireProjectPath(dir, path);
+  let relativePath = path;
+  if (path === "auto") {
+    const entry = await entryFor(await requireProjectDir(dir));
+    if (!entry) throw new Error("Project entry file is missing");
+    relativePath = entry;
+  }
+  const absolute = await requireProjectPath(dir, relativePath);
   if (!SOURCE_FILE.test(absolute)) throw new Error("Only project source files may be opened in the source editor");
-  const content = await readFile(absolute, "utf8");
-  return { path, content, revisionId: revision(content) };
+  const bytes = await readFile(absolute);
+  return { path: relativePath, content: bytes.toString("utf8"), revisionId: revision(bytes) };
 }
 
 export async function writeProjectSource(request: SourceWriteRequest): Promise<{
@@ -695,7 +731,9 @@ export async function writeProjectSource(request: SourceWriteRequest): Promise<{
     throw new Error("Source file is too large");
   }
   const absolute = await requireProjectPath(request.dir, request.path);
-  const current = await readFile(absolute, "utf8");
+  // Compare in the same namespace `readProjectSource` hands out: sha256 of
+  // the raw on-disk bytes.
+  const current = await readFile(absolute);
   if (revision(current) !== request.expectedRevisionId) {
     throw new Error("This source changed on disk. Reload it before saving your edit.");
   }

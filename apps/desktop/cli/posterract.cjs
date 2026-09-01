@@ -4518,6 +4518,7 @@ var import_node_os2 = require("node:os");
 var import_node_path2 = require("node:path");
 var POLL_MS = 35;
 var ACTIVE_PROJECT_POINTER_VERSION = 1;
+var HEARTBEAT_STALE_MS = 45e3;
 function sleep2(ms) {
   return new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
 }
@@ -4600,6 +4601,11 @@ function readLocalControlSession(projectDir) {
   if (value.expiresAt <= Date.now()) {
     throw new Error("The Posterract project session expired. Reopen the project in Desktop.");
   }
+  if (typeof value.heartbeatAt === "number" && Date.now() - value.heartbeatAt > HEARTBEAT_STALE_MS) {
+    throw new Error(
+      "Posterract Desktop is not responding: its project session heartbeat is stale. Start Posterract Desktop and open this project, then retry."
+    );
+  }
   if (!value.rendererAvailable) {
     throw new Error("The Posterract canvas renderer is not available yet.");
   }
@@ -4630,8 +4636,14 @@ async function requestProjectControl(projectDir, request, timeoutMs, activity) {
   (0, import_node_fs.renameSync)(temporary, requestPath);
   try {
     while (Date.now() <= deadline) {
-      if ((0, import_node_fs.existsSync)(responsePath)) {
-        const response = readJson(responsePath);
+      let raw = null;
+      try {
+        raw = (0, import_node_fs.readFileSync)(responsePath, "utf8");
+      } catch (error2) {
+        if (error2.code !== "ENOENT") throw error2;
+      }
+      if (raw !== null) {
+        const response = JSON.parse(raw);
         if (response.protocolVersion !== LOCAL_CONTROL_PROTOCOL_VERSION || response.id !== id) {
           throw new Error("Posterract Desktop returned an invalid local-control response.");
         }
@@ -26862,6 +26874,9 @@ function toError(value) {
 // src/mcp.ts
 var DEFAULT_TIMEOUT_MS2 = 6e4;
 var RENDER_TIMEOUT_MS = 6e5;
+var STATUS_TIMEOUT_MS = 1e4;
+var OPEN_PROJECT_HINT = "Open a project in Posterract Desktop, then retry.";
+var START_DESKTOP_HINT = "Start Posterract Desktop and open this project, then retry. If this MCP server was registered while your agent client was already running, restart your agent client so it picks up the new MCP server.";
 function record2(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value : { result: value };
 }
@@ -26871,8 +26886,11 @@ function jsonResult(value) {
     structuredContent: record2(value)
   };
 }
+function errorText(error2) {
+  return error2 instanceof Error ? error2.message : String(error2);
+}
 function errorResult(error2) {
-  const message = error2 instanceof Error ? error2.message : String(error2);
+  const message = errorText(error2);
   return {
     isError: true,
     content: [{ type: "text", text: message }],
@@ -26932,17 +26950,61 @@ async function servePosterractMcp(explicitProjectDir) {
     );
     server.registerTool("posterract_connection_status", {
       title: "Posterract connection status",
-      description: "Verify the project-local Desktop bridge and report renderer, project, and compiler context.",
+      description: 'Verify the project-local Desktop bridge and report renderer, project, and compiler context. `connected` is true only when Desktop answered a live round-trip with a project mounted; otherwise `state` ("desktop_unreachable" | "no_project_mounted") and `hint` say what to do.',
       inputSchema: object({}),
       annotations: { readOnlyHint: true }
     }, safely(async () => {
-      const activeProjectDir = projectDir();
-      const session = readLocalControlSession(activeProjectDir);
-      const [health, context2] = await Promise.all([
-        call("connection_status", "health"),
-        call("connection_status", "context", { tree: false })
-      ]);
-      return jsonResult({ connected: true, projectDir: activeProjectDir, desktopVersion: session.desktopVersion, health, context: context2 });
+      let activeProjectDir;
+      try {
+        activeProjectDir = projectDir();
+      } catch (error2) {
+        return jsonResult({
+          connected: false,
+          state: "no_project_mounted",
+          hint: OPEN_PROJECT_HINT,
+          detail: errorText(error2)
+        });
+      }
+      let desktopVersion;
+      try {
+        desktopVersion = readLocalControlSession(activeProjectDir).desktopVersion;
+      } catch (error2) {
+        return jsonResult({
+          connected: false,
+          state: "desktop_unreachable",
+          projectDir: activeProjectDir,
+          hint: START_DESKTOP_HINT,
+          detail: errorText(error2)
+        });
+      }
+      try {
+        const [health, context2] = await Promise.all([
+          call("connection_status", "health", void 0, STATUS_TIMEOUT_MS),
+          call("connection_status", "context", { tree: false }, STATUS_TIMEOUT_MS)
+        ]);
+        const mounted = context2 !== null && typeof context2 === "object" && typeof context2.projectDir === "string";
+        if (!mounted) {
+          return jsonResult({
+            connected: false,
+            state: "no_project_mounted",
+            projectDir: activeProjectDir,
+            desktopVersion,
+            hint: OPEN_PROJECT_HINT,
+            health,
+            context: context2
+          });
+        }
+        return jsonResult({ connected: true, state: "connected", projectDir: activeProjectDir, desktopVersion, health, context: context2 });
+      } catch (error2) {
+        return jsonResult({
+          connected: false,
+          state: "desktop_unreachable",
+          projectDir: activeProjectDir,
+          desktopVersion,
+          hint: START_DESKTOP_HINT,
+          detail: errorText(error2)
+        });
+      }
     }));
     server.registerTool("posterract_get_context", {
       title: "Get Posterract project context",
@@ -26952,8 +27014,8 @@ async function servePosterractMcp(explicitProjectDir) {
     }, safelyWith(async ({ tree }) => jsonResult(await call("get_context", "context", { tree }))));
     server.registerTool("posterract_read_source", {
       title: "Read composition source",
-      description: "Read a local Posterract TSX source file and its conflict-safe revision ID.",
-      inputSchema: object({ path: string2().min(1).default("src/index.tsx") }),
+      description: `Read a local Posterract TSX source file and its conflict-safe revision ID. The default path "auto" resolves to the project's actual entry file (src/index.tsx, index.tsx, ...), which some migrated projects keep at the project root; the result reports the resolved path.`,
+      inputSchema: object({ path: string2().min(1).default("auto") }),
       annotations: { readOnlyHint: true }
     }, safelyWith(async ({ path }) => jsonResult(await call("read_source", "source.read", { path }))));
     server.registerTool("posterract_write_source", {
@@ -26968,7 +27030,7 @@ async function servePosterractMcp(explicitProjectDir) {
     }, safelyWith(async (input) => jsonResult(await call("write_source", "source.write", input))));
     server.registerTool("posterract_validate", {
       title: "Validate composition",
-      description: "Compile, evaluate, and candidate-mount the project while preserving the last valid canvas on failure.",
+      description: "Compile and evaluate the project's composition sources in memory and report diagnostics. Genuinely read-only: stable-ID stamping runs on an in-memory copy, nothing is written to disk, and the live canvas is untouched.",
       inputSchema: object({}),
       annotations: { readOnlyHint: true }
     }, safely(async () => jsonResult(await call("validate", "validate"))));

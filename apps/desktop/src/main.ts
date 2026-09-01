@@ -56,6 +56,7 @@ import {
   statEntry,
   unwatchAll,
   unwatchProject,
+  validateProject,
   watchProject,
   writeConfig,
   writeManifest,
@@ -614,6 +615,9 @@ function registerHandlers(): void {
   handle(MAIN_CHANNELS.PROJECTS_DUPLICATE, ({ dir }: { dir: string }) => duplicateProject(dir));
   handle(MAIN_CHANNELS.PROJECTS_DELETE, ({ dir }: { dir: string }) => deleteProject(dir));
   handle(MAIN_CHANNELS.PROJECTS_COMPILE, ({ dir }: { dir: string }) => compileProject(dir));
+  // Read-only sibling of PROJECTS_COMPILE for the agent bridge's `validate`:
+  // same compile (stamping included), but in memory — never writes to disk.
+  handle(MAIN_CHANNELS.PROJECTS_VALIDATE, ({ dir }: { dir: string }) => validateProject(dir));
   handle(MAIN_CHANNELS.PROJECTS_WRITE, ({ dir, edits }: { dir: string; edits: Parameters<typeof writeProject>[1] }) =>
     writeProject(dir, edits),
   );

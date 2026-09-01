@@ -9,6 +9,7 @@
     "desktop:build": "pnpm --filter @posterract/desktop build",
     "desktop:make": "pnpm --filter @posterract/desktop make",
     "check:posterract-artifacts": "node scripts/check-posterract-artifacts.mjs",
+    "probe:bridge": "node scripts/probe-bridge.mjs",
     "check:posterract-skill": "pnpm --filter @posterract/cli build && pnpm --filter @posterract/desktop stage:skill && node scripts/validate-posterract-skill.mjs",
     "build": "pnpm -r run build",
     "typecheck": "pnpm -r run typecheck",

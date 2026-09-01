@@ -12,3 +12,29 @@ export const app = {
   getAppPath: () => process.cwd(),
   getVersion: () => "0.0.0-test",
 };
+
+/** Value stand-in so `import { BrowserWindow }` links; tests fake instances structurally. */
+export class BrowserWindow {}
+
+type IpcListener = (event: unknown, payload: unknown) => void;
+const ipcListeners = new Map<string, Set<IpcListener>>();
+
+/** Minimal ipcMain: enough for modules that register/remove channel listeners. */
+export const ipcMain = {
+  on(channel: string, listener: IpcListener): void {
+    let listeners = ipcListeners.get(channel);
+    if (!listeners) {
+      listeners = new Set();
+      ipcListeners.set(channel, listeners);
+    }
+    listeners.add(listener);
+  },
+  removeListener(channel: string, listener: IpcListener): void {
+    ipcListeners.get(channel)?.delete(listener);
+  },
+};
+
+/** Test hook: deliver a renderer message to whatever main registered. */
+export function emitIpcMainEvent(channel: string, event: unknown, payload: unknown): void {
+  for (const listener of ipcListeners.get(channel) ?? []) listener(event, payload);
+}

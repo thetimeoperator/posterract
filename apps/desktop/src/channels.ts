@@ -49,6 +49,7 @@ export const MAIN_CHANNELS = {
   PROJECTS_DUPLICATE: "projects:duplicate",
   PROJECTS_DELETE: "projects:delete",
   PROJECTS_COMPILE: "projects:compile",
+  PROJECTS_VALIDATE: "projects:validate",
   PROJECTS_WRITE: "projects:write",
   PROJECTS_WATCH: "projects:watch",
   PROJECTS_UNWATCH: "projects:unwatch",

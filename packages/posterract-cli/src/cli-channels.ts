@@ -84,6 +84,14 @@ export type LocalControlSession = {
   capability: string;
   createdAt: number;
   expiresAt: number;
+  /**
+   * Refreshed every few seconds while Desktop is alive. Optional because
+   * sessions published by older Desktop builds do not carry it; when present,
+   * a stale value means Desktop crashed or was killed without cleaning up,
+   * and callers must treat the session as unreachable instead of trusting
+   * `expiresAt` (which spans a day).
+   */
+  heartbeatAt?: number;
   rendererAvailable: boolean;
 };
 

@@ -34,7 +34,7 @@ export function createAssetResolver(session: Accessor<EditorSession | null>): Re
     if (world) return getLibrary(world).resolve(path);
     assert(
       isAbsoluteSource(path) || isUrlSource(path),
-      `Could not resolve "${path}": with no project open only absolute paths and URLs resolve — run \`posterract open <dir>\` to use library paths.`,
+      `Could not resolve "${path}": with no project mounted only absolute paths and URLs resolve — open a project in Posterract Desktop to use library paths.`,
     );
     return new AssetLibrary(createProjectFS("")).resolve(path);
   };

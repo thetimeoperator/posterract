@@ -18,7 +18,6 @@ import { MAIN_CHANNELS } from "@desktop/main-channels";
 import { createRouterCaller } from '@/lib/cli-rpc';
 import { openProjectFolder } from '@/projects';
 import { projectRoute } from '@/hooks/use-project-route';
-import { compileProject } from "@/projects";
 import { readProjectSource, writeProjectSource } from "@/projects/host";
 import { assert } from "@/utils/common";
 import { useEngineContext } from "@/engine";
@@ -132,6 +131,17 @@ type AppRouterDeps = {
   navigate: (path: string) => void;
 };
 
+/**
+ * Desktop main's read-only sibling of PROJECTS_COMPILE: the same compile,
+ * stable-ID stamping included, but entirely in memory — it never writes to
+ * disk. `posterract_validate` is annotated `readOnlyHint`, so the mutating
+ * PROJECTS_COMPILE (which persists freshly minted IDs) must not back it.
+ * The channel is registered in apps/desktop/src/main.ts; the shared bridge
+ * channel map predates it, hence the assertion onto the compile channel's
+ * slot, whose request/response shapes it matches exactly.
+ */
+const PROJECTS_VALIDATE = "projects:validate" as unknown as typeof MAIN_CHANNELS.PROJECTS_COMPILE;
+
 async function waitForEditorSession(dir: string, timeoutMs = 30_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -169,7 +179,7 @@ function createAppRouter({ navigate }: AppRouterDeps) {
     context: q(handleContextGet(editorSession)),
     validate: q0(async () => {
       const { project } = requireEditorSession();
-      const result = await compileProject(project.dir());
+      const result = await mainBridge.call(PROJECTS_VALIDATE, { dir: project.dir() });
       return result.ok
         ? { ok: true, diagnostics: [] }
         : { ok: false, diagnostics: [{ message: result.error }] };

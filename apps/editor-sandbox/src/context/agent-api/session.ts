@@ -37,6 +37,8 @@ export const setEditorSession = setSession;
 /** The session, or the failure a CLI caller can act on. */
 export function requireEditorSession(): EditorSession {
   const current = session();
-  assert(current, "No project open — run `posterract open <dir>` first.");
+  // This message travels to MCP agents through the project mailbox; the
+  // recovery it names must be the Desktop flow, not a CLI command.
+  assert(current, "No project is mounted in Posterract Desktop. Open a project in the Desktop app, then retry.");
   return current;
 }

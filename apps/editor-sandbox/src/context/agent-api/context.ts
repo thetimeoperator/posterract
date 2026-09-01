@@ -155,8 +155,15 @@ export function handleContextGet(session: Accessor<EditorSession | null>) {
       currentTime: active ? (active.get(Computed)?.localTime ?? 0) / frameRate : null,
       frameRate,
       activeSceneId: active ? sourceId(active) : null,
+      // Exactly sha256 of the entry file's on-disk bytes: the same value
+      // `source.read` reports as `revisionId` (both go through the desktop's
+      // `readProjectSource`), so agents get one revision namespace that only
+      // changes when the file changes.
       sourceRevision,
-      compileState: "ready" as const,
+      // The compile pipeline lives in the editor page's load closures (see
+      // pages/editor.tsx) and exposes no state this handler can read cheaply.
+      // "unknown" is honest; do not report "ready" without evidence.
+      compileState: "unknown" as const,
       // What text can be drawn with right now: registered in the world, not
       // merely named in the source. The editor default is always among them.
       fontFamilies: [...new Set(["Inter", ...(world.get(Fonts)?.list ?? []).map((f) => f.family)])],

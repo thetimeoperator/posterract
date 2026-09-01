@@ -19,6 +19,13 @@ import {
 
 const POLL_MS = 35;
 const ACTIVE_PROJECT_POINTER_VERSION = 1;
+/**
+ * Desktop rewrites session.json every ~15s while it is alive. Three missed
+ * beats means the process is gone (crash, force quit) even though the session
+ * file itself survives for a day; treat that as unreachable up front instead
+ * of writing a request nobody will ever answer.
+ */
+const HEARTBEAT_STALE_MS = 45_000;
 
 type ActiveProjectPointer = {
   version: typeof ACTIVE_PROJECT_POINTER_VERSION;
@@ -149,6 +156,11 @@ export function readLocalControlSession(projectDir: string): LocalControlSession
   if (value.expiresAt <= Date.now()) {
     throw new Error("The Posterract project session expired. Reopen the project in Desktop.");
   }
+  if (typeof value.heartbeatAt === "number" && Date.now() - value.heartbeatAt > HEARTBEAT_STALE_MS) {
+    throw new Error(
+      "Posterract Desktop is not responding: its project session heartbeat is stale. Start Posterract Desktop and open this project, then retry.",
+    );
+  }
   if (!value.rendererAvailable) {
     throw new Error("The Posterract canvas renderer is not available yet.");
   }
@@ -185,8 +197,17 @@ export async function requestProjectControl(
 
   try {
     while (Date.now() <= deadline) {
-      if (existsSync(responsePath)) {
-        const response = readJson<LocalControlResponse>(responsePath);
+      // Read directly instead of exists-then-read: the response can be
+      // created or removed between the two calls, and a vanished file must
+      // mean "keep polling", never a crashed request.
+      let raw: string | null = null;
+      try {
+        raw = readFileSync(responsePath, "utf8");
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+      if (raw !== null) {
+        const response = JSON.parse(raw) as LocalControlResponse;
         if (response.protocolVersion !== LOCAL_CONTROL_PROTOCOL_VERSION || response.id !== id) {
           throw new Error("Posterract Desktop returned an invalid local-control response.");
         }

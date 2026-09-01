@@ -21,7 +21,17 @@ import { relayCliRequest } from "./cli-server.ts";
 const MAX_REQUEST_BYTES = 1_048_576;
 const MAX_TIMEOUT_MS = 600_000;
 const SESSION_LIFETIME_MS = 24 * 60 * 60_000;
-const SESSION_REFRESH_MS = 60 * 60_000;
+/**
+ * The session file doubles as a liveness beacon: `heartbeatAt` is rewritten
+ * this often, and the CLI preflight treats a beat older than ~45s as a dead
+ * Desktop. The rewrite is one small atomic rename, so 15s is cheap.
+ */
+const SESSION_REFRESH_MS = 15_000;
+/** fs.watch fallback: a dropped FSEvent costs one rescan interval, not a request timeout. */
+const MAILBOX_RESCAN_MS = 2_000;
+/** Consumed-request memory is only hygiene — request ids are UUIDs and never return. */
+const COMPLETED_TTL_MS = 60_000;
+const COMPLETED_MAX = 512;
 
 type ActiveMailbox = {
   projectId: string;
@@ -31,9 +41,19 @@ type ActiveMailbox = {
   responsesDir: string;
   instanceId: string;
   capability: string;
+  createdAt: number;
   watcher: FSWatcher;
   refreshTimer: ReturnType<typeof setInterval>;
+  rescanTimer: ReturnType<typeof setInterval>;
   processing: Set<string>;
+  /**
+   * Request filenames already consumed (answered, or expired), by completion
+   * time. Deleting a consumed request re-fires the requests/ watcher with the
+   * same filename after `processing` has released it; this set is what keeps
+   * that echo — and a stale readdir from a concurrent scan — from processing
+   * the request a second time.
+   */
+  completed: Map<string, number>;
 };
 
 let active: ActiveMailbox | null = null;
@@ -59,8 +79,9 @@ async function publishSession(mailbox: ActiveMailbox): Promise<void> {
     projectDir: mailbox.projectDir,
     instanceId: mailbox.instanceId,
     capability: mailbox.capability,
-    createdAt: now,
+    createdAt: mailbox.createdAt,
     expiresAt: now + SESSION_LIFETIME_MS,
+    heartbeatAt: now,
     rendererAvailable: Boolean(getWindow?.() && !getWindow?.()?.isDestroyed()),
   };
   await writeAtomic(join(mailbox.runtimeDir, LOCAL_CONTROL_RUNTIME.session), session);
@@ -70,14 +91,40 @@ function validRequestName(name: string): boolean {
   return /^[0-9a-f-]{36}\.json$/i.test(name);
 }
 
+function rememberCompleted(mailbox: ActiveMailbox, name: string): void {
+  const now = Date.now();
+  // Delete-then-set keeps the map in completion order, so pruning from the
+  // front stays correct even for a (theoretical) repeated name.
+  mailbox.completed.delete(name);
+  mailbox.completed.set(name, now);
+  for (const [key, at] of mailbox.completed) {
+    if (mailbox.completed.size <= COMPLETED_MAX && now - at <= COMPLETED_TTL_MS) break;
+    mailbox.completed.delete(key);
+  }
+}
+
 async function processRequest(mailbox: ActiveMailbox, name: string): Promise<void> {
-  if (!validRequestName(name) || mailbox.processing.has(name)) return;
+  if (!validRequestName(name) || mailbox.processing.has(name) || mailbox.completed.has(name)) return;
   mailbox.processing.add(name);
   const requestPath = join(mailbox.requestsDir, name);
   const responsePath = join(mailbox.responsesDir, name);
+  let consumed = true;
   let request: LocalControlRequest | null = null;
   try {
-    const bytes = await readFile(requestPath);
+    let bytes: Buffer;
+    try {
+      bytes = await readFile(requestPath);
+    } catch (error) {
+      // A missing request file was already consumed: usually the fs.watch
+      // echo of this mailbox's own `rm`, or a caller that gave up and cleaned
+      // up after itself. There is nobody to answer — and writing an ENOENT
+      // error here would overwrite (or duplicate) the real response.
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        consumed = false;
+        return;
+      }
+      throw error;
+    }
     if (bytes.byteLength > MAX_REQUEST_BYTES) throw new Error("Local-control request is too large");
     request = JSON.parse(bytes.toString("utf8")) as LocalControlRequest;
     if (
@@ -94,7 +141,10 @@ async function processRequest(mailbox: ActiveMailbox, name: string): Promise<voi
     }
     const now = Date.now();
     if (!Number.isFinite(request.deadline) || request.deadline <= now) {
-      throw new Error("The local-control request expired before Desktop received it");
+      // The caller stops polling — and deletes its response file — at the
+      // deadline, so an "expired" answer written now could never be consumed
+      // and would sit in responses/ forever. Consume the request silently.
+      return;
     }
     const timeoutMs = Math.max(1_000, Math.min(MAX_TIMEOUT_MS, request.deadline - now));
     if (!getWindow) throw new Error("Posterract Desktop local control is unavailable");
@@ -132,8 +182,14 @@ async function processRequest(mailbox: ActiveMailbox, name: string): Promise<voi
     };
     await writeAtomic(responsePath, response).catch(() => undefined);
   } finally {
-    mailbox.processing.delete(name);
+    // Consume the request while it is still covered: mark it completed before
+    // the `rm`, and hold the `processing` guard until the `rm` has resolved.
+    // The deletion re-fires the requests/ watcher with this same filename;
+    // whichever of the two guards that late echo hits, it is ignored instead
+    // of re-processing a request whose file is gone.
+    if (consumed) rememberCompleted(mailbox, name);
     await rm(requestPath, { force: true }).catch(() => undefined);
+    mailbox.processing.delete(name);
   }
 }
 
@@ -148,6 +204,7 @@ async function closeActive(): Promise<void> {
   active = null;
   previous.watcher.close();
   clearInterval(previous.refreshTimer);
+  clearInterval(previous.rescanTimer);
   await rm(previous.runtimeDir, { recursive: true, force: true }).catch(() => undefined);
 }
 
@@ -180,15 +237,21 @@ export async function setProjectControlMailbox(project: { id: string; dir: strin
     responsesDir,
     instanceId: randomUUID(),
     capability: randomBytes(32).toString("hex"),
+    createdAt: Date.now(),
     watcher: null as unknown as FSWatcher,
     refreshTimer: null as unknown as ReturnType<typeof setInterval>,
+    rescanTimer: null as unknown as ReturnType<typeof setInterval>,
     processing: new Set<string>(),
+    completed: new Map<string, number>(),
   } satisfies ActiveMailbox;
   mailbox.watcher = watch(requestsDir, (_event, name) => {
     if (typeof name === "string") void processRequest(mailbox, name);
     else void scan(mailbox);
   });
-  mailbox.refreshTimer = setInterval(() => void publishSession(mailbox), SESSION_REFRESH_MS);
+  mailbox.refreshTimer = setInterval(() => void publishSession(mailbox).catch(() => undefined), SESSION_REFRESH_MS);
+  // FSEvents can drop or coalesce watch events; the periodic rescan bounds
+  // the damage to one interval instead of the caller's full request timeout.
+  mailbox.rescanTimer = setInterval(() => void scan(mailbox), MAILBOX_RESCAN_MS);
   active = mailbox;
   await publishSession(mailbox);
   await scan(mailbox);

@@ -1,6 +1,6 @@
 # Module contract
 
-`src/index.tsx` must default-export a component and use `/** @jsxImportSource @posterract/composition */`.
+The project entry module — `index.tsx` at the project root (legacy projects may still use `src/index.tsx`) — must default-export a component and use `/** @jsxImportSource @posterract/composition */`.
 
 The desktop stamps missing stable `id` values, compiles the module, evaluates it in an isolated project environment, mounts a complete candidate document, and only then replaces the last valid document. Project code cannot import Electron, Node internals, desktop authentication, or social credentials.
 
