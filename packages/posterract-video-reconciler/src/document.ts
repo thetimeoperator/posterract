@@ -185,6 +185,7 @@ const TRACK_PROPERTIES: Record<string, PropertyPath> = {
 	offset: 'stop.offset',
 	blur: 'blur',
 	value: 'effect.value',
+	progress: 'diagram.progress',
 };
 
 /**

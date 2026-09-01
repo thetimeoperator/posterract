@@ -11,7 +11,7 @@ import {
 	Computed, Cache, Animation, KeyframeTrack, Keyframe, Chars,
 	UniformScale, Position, Offset, Rotation, Scale, Skew, Size, Opacity,
 	Color, Blur, Volume, Effect, StrokeStyle, CornerRadius, MixedCornerRadius,
-	ColorStop,
+	ColorStop, Diagram,
 } from '../traits';
 import { AnimationType, AnimationPhase } from '../constants';
 import { revealChars, revealWords, scrambleChars } from '../utils/text-motion';
@@ -55,6 +55,9 @@ export function resetAnimatedValues(world: World, entity: Entity | null, ignore?
 	computed.cornerRadiusBottomRight[eid] = read(MixedCornerRadius, 'bottomRight', 0);
 	computed.cornerRadiusBottomLeft[eid] = read(MixedCornerRadius, 'bottomLeft', 0);
 	computed.stopOffset[eid] = read(ColorStop, 'offset', 0);
+	// A reveal is a ratio: an authored value outside 0..1 means the same as
+	// its nearest end, here as well as at the edge of a keyframe track.
+	computed.progress[eid] = clamp01(read(Diagram, 'progress', 1));
 	computed.chars[eid] = read(Chars, 'value', '');
 
 	if (entity.has(UniformScale) && ignore !== UniformScale) {
@@ -238,7 +241,11 @@ export function motionSystem(world: World): void {
 			const keyframes = cache.keyframes[tid] ?? [];
 			const result = sampleTrack(world, keyframes, localFrame, property);
 			if (result === null || target == null) continue;
-			worldProps[property].computed[target.id()] = result;
+			// A reveal is a ratio, so a track that overshoots (a spring, a
+			// keyframe authored past the end) still reads as fully drawn.
+			worldProps[property].computed[target.id()] = property === 'diagram.progress'
+				? clamp01(result)
+				: result;
 			// A 'scale' track is the uniform scale whether or not the node also
 			// authors the prop, so it scales both axes like UniformScale does.
 			if (property === 'scale' && target === entity) uniformScale = true;
@@ -353,6 +360,10 @@ export function getPropertyPaths(world: World) {
 		'stop.offset': {
 			computed: computed.stopOffset,
 			authored: store(world, ColorStop).offset,
+		},
+		'diagram.progress': {
+			computed: computed.progress,
+			authored: store(world, Diagram).progress,
 		},
 		'chars': {
 			computed: computed.chars,

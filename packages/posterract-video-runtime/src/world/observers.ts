@@ -9,12 +9,13 @@ import {
 	Delay, Trim, PlaybackRate, SourceFrameRate, Keyframe, ItemIndex,
 	Position, Offset, Rotation, Scale, UniformScale, Skew, Anchor, Flip,
 	Opacity, Color, Blur, Volume, Effect, CornerRadius, MixedCornerRadius,
-	ColorStop, StrokeStyle, Size, Computed, Active, Stage, IsMask,
+	ColorStop, StrokeStyle, Size, Computed, Active, Stage, IsMask, Diagram,
 	ImageDecoderHandle, VideoDecoderHandle,
 	AudioDecoderHandle, CaptionDecoderHandle, WaveformHandle,
 	ShaderHostHandle, AudioBusHandle,
 } from '../traits';
 import { getParentEntity } from '../queries/hierarchy';
+import { clamp } from '../math/common';
 import { evictFromCaches, rebuildCaches, refileMask } from '../actions/cache';
 import { syncStagePlayback } from '../actions/playback';
 import { disposeDecoders, disconnectAudioBus } from '../media/dispose';
@@ -266,6 +267,12 @@ export function observeWorld(world: World): () => void {
 
 	mirror(StrokeStyle, (entity) => {
 		store(world, Computed).strokeWidth[entity.id()] = entity.get(StrokeStyle)!.width;
+	});
+
+	// Only the reveal is mirrored: the rest of a diagram's fields are read off
+	// the trait as authored, and `progress` alone is keyframeable.
+	mirror(Diagram, (entity) => {
+		store(world, Computed).progress[entity.id()] = clamp(entity.get(Diagram)!.progress, 0, 1);
 	});
 
 	// Size flows into Computed via propagation (descendants owning a Size

@@ -13,7 +13,16 @@ Use them when the user asks for an explanation, process map, system diagram, mat
 - `<diagramPlot>` — explicit numeric points mapped through a domain and range.
 - `<diagramCallout>` — labeled panel with an optional pointer.
 
-All diagram elements accept normal composition geometry and timing props including `x`, `y`, `width`, `height`, `rotation`, `opacity`, `start`, `end`, `name`, and `id`. They can contain animations and keyframe tracks for the standard animatable properties.
+All diagram elements accept normal composition geometry and timing props including `x`, `y`, `width`, `height`, `rotation`, `opacity`, `start`, `end`, `name`, and `id`. They can contain animations and keyframe tracks for the standard animatable properties, plus `progress` — their own 0–1 draw-on reveal:
+
+```tsx
+<diagramArrow id="data-to-model" x={400} y={325} width={220} height={0} route="straight">
+  <keyframeTrack property="progress">
+    <keyframe time={0} value={0} />
+    <keyframe time={0.8} value={1} easing="easeOut" />
+  </keyframeTrack>
+</diagramArrow>
+```
 
 ## Example
 
@@ -39,7 +48,7 @@ All diagram elements accept normal composition geometry and timing props includi
 5. Prefer a consistent node size, stroke width, type scale, and palette.
 6. Avoid crossing connectors. Use `route="elbow"` or `route="curve"` when it improves legibility.
 7. Use groups for semantic sections and sequences for timed chapters.
-8. Use normal keyframes or animations for entrances. `progress` provides a 0–1 reveal for arrows and plots when driven reactively.
+8. Use normal keyframes or animations for entrances. `progress` is a 0–1 draw-on reveal for arrows and plots: keyframe it (`<keyframeTrack property="progress">`) or drive it reactively. Values outside 0–1 are clamped.
 9. Run `posterract validate`, `posterract check <scene-id>`, and capture representative timestamps.
 10. Inspect the captures and correct overlaps, clipping, weak contrast, illegible labels, and ambiguous arrows before claiming completion.
 

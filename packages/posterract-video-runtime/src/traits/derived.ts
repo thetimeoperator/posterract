@@ -33,6 +33,9 @@ export const Computed = trait({
 	cornerRadiusBottomRight: 0,
 	cornerRadiusBottomLeft: 0,
 	stopOffset: 0,
+	// A diagram's draw-on reveal, 0..1. 1 (fully drawn) for everything else,
+	// which is the Diagram trait's own default.
+	progress: 1,
 	width: 0,
 	height: 0,
 	chars: undefined as string | undefined,

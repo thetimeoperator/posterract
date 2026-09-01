@@ -3,11 +3,13 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 import { Show, createMemo } from "solid-js";
-import { useTrait } from "@posterract/koota-solid";
-import { Color, Diagram, DiagramKindType, colorToHex } from "@posterract/video-runtime";
-import { useEditor } from "@/engine/hooks";
+import { useTrait, useWorld } from "@posterract/koota-solid";
+import { Color, Computed, Diagram, DiagramKindType, colorToHex } from "@posterract/video-runtime";
+import { useDerived, useEditor } from "@/engine/hooks";
+import { syncKeyframe } from "@/engine/keyframes";
 import { PanelSection } from "@/components/ui/panel-section";
 import { ControlRow } from "@/components/ui/control-group";
+import { Keyframe } from "@/components/ui/keyframe";
 import { ControlledTextField, TextField, TextFieldInput } from "@/components/ui/text-field";
 
 import type { Entity } from "koota";
@@ -38,14 +40,28 @@ const KIND_LABELS: Record<DiagramKindType, string> = {
 };
 
 export function DiagramSettings(props: DiagramSettingsProps) {
+  const world = useWorld();
   const editor = useEditor();
   const entity = () => props.selection[0]!;
   const diagram = useTrait(entity, Diagram);
   const fill = useTrait(entity, Color);
   const kind = createMemo(() => diagram()?.kind ?? DiagramKindType.NODE);
 
+  // The reveal is keyframeable, so the shown value is the resolved one the
+  // motion system writes rather than the authored prop. Computed is written
+  // without change events, hence useDerived.
+  const progress = useDerived(() => entity().get(Computed)?.progress ?? 1);
+
   const writeString = (name: string) => (event: Event & { currentTarget: HTMLInputElement | HTMLSelectElement }) => {
     editor.editProperty(entity(), name, event.currentTarget.value);
+  };
+
+  // The field clamps to 0–1 before this runs. The keyframe sync follows the
+  // prop write: with a track running, the motion system would otherwise put
+  // the sampled value back on the next tick.
+  const handleProgressChange = (value: number) => {
+    editor.editProperty(entity(), "progress", value);
+    syncKeyframe(world, editor, entity(), "progress", value);
   };
 
   return (
@@ -91,7 +107,17 @@ export function DiagramSettings(props: DiagramSettingsProps) {
       <ControlRow label="Line width"><ControlledTextField value={diagram()?.strokeWidth ?? 4} min={0.5} max={40} step={0.5} sliderEnabled onNumber={(value) => editor.editProperty(entity(), "strokeWidth", value)} /></ControlRow>
       <ControlRow label="Text"><DiagramTextInput value={colorToHex(diagram()?.textColor ?? 0xF4FFF8)} onChange={writeString("textColor")} /></ControlRow>
       <ControlRow label="Type size"><ControlledTextField value={diagram()?.fontSize ?? 34} min={8} max={220} step={1} sliderEnabled onNumber={(value) => editor.editProperty(entity(), "fontSize", value)} /></ControlRow>
-      <ControlRow label="Reveal"><ControlledTextField value={diagram()?.progress ?? 1} min={0} max={1} step={0.01} sliderEnabled onNumber={(value) => editor.editProperty(entity(), "progress", value)} /></ControlRow>
+      <ControlRow label="Reveal">
+        <ControlledTextField
+          value={Math.round(progress() * 100) / 100}
+          min={0}
+          max={1}
+          step={0.01}
+          sliderEnabled
+          onNumber={handleProgressChange}
+          keyframe={<Keyframe target={entity()} property="progress" />}
+        />
+      </ControlRow>
     </PanelSection>
   );
 }

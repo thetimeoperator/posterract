@@ -176,6 +176,7 @@ const PROPERTY_NAMES: Partial<Record<PropertyPath, string>> = {
   'mixedVertexRadius.bottomLeft': 'Radius BL',
   'stop.offset': 'Offset',
   'effect.value': 'Value',
+  'diagram.progress': 'Reveal',
   'chars': 'Text',
 };
 

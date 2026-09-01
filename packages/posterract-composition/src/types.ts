@@ -104,7 +104,14 @@ export type AnimatableProperty =
   | "color"
   | "offset"
   | "blur"
-  | "value";
+  | "value"
+  /**
+   * A diagram element's draw-on reveal, 0–1 and clamped to it. Only diagram
+   * elements have it: `<diagramArrow>` draws its path (and its head) up to
+   * the value, `<diagramPlot>` draws that fraction of its points. A track
+   * from 0 to 1 is the native DrawSVG-style line reveal.
+   */
+  | "progress";
 
 /** Transition styles — the editor's transition inspector options. */
 export type TransitionType =
@@ -557,7 +564,11 @@ type DiagramVisualProps = CommonProps & {
   fontFamily?: string;
   /** Built-in label font weight. */
   fontWeight?: number | "normal" | "bold";
-  /** 0–1 reveal amount used for agent-authored draw-on animation. */
+  /**
+   * 0–1 reveal amount used for agent-authored draw-on animation, clamped to
+   * that range. Animatable: a `<keyframeTrack property="progress">` child
+   * drives it over time and takes precedence over this prop while it runs.
+   */
   progress?: number;
   /** Effects, animations, keyframes, paints, strokes, and other supported children. */
   children?: SolidJSX.Element;

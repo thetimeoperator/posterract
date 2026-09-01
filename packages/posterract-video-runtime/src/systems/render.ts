@@ -811,7 +811,10 @@ function renderDiagram(world: World, entity: Entity): void {
 	const width = computed.width[entity.id()]!;
 	const height = computed.height[entity.id()]!;
 	const d = entity.get(Diagram)!;
-	const progress = Math.max(0, Math.min(1, d.progress));
+	// The resolved reveal, not the authored one: a `progress` keyframe track
+	// writes it here, and the motion system falls back to the prop when no
+	// track is running (see resetAnimatedValues).
+	const progress = Math.max(0, Math.min(1, computed.progress[entity.id()] ?? d.progress));
 	const stroke = colorToHex(d.strokeColor);
 
 	if (d.kind === DiagramKindType.NODE || d.kind === DiagramKindType.CALLOUT) {
