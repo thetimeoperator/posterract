@@ -359,6 +359,16 @@ body {
 .posterract-code-toggle > span { color: var(--posterract-neon); }
 .posterract-code-toggle kbd { margin-left: auto; color: rgba(220, 255, 231, 0.38); font-size: 9px; }
 
+/* The Generate entry wears the same brand chrome as the agent toggle; the
+   trailing spark stands in for the shortcut hint. */
+.posterract-generate-toggle svg { color: rgba(220, 255, 231, 0.38); }
+.posterract-generate-toggle:hover:not(:disabled) svg,
+.posterract-generate-toggle.is-active svg { color: var(--posterract-neon); }
+.posterract-generate-toggle.is-active {
+  border-color: rgba(101, 255, 154, 0.48);
+  color: var(--posterract-neon);
+}
+
 /* macOS desktop: the BrowserWindow uses native vibrancy, so the page keeps a
    transparent background and the sidebars go translucent to let the blur show. */
 [data-platform="darwin"],

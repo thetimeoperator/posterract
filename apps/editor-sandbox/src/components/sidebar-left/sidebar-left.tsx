@@ -13,13 +13,15 @@ import { ProjectMenu } from "./project-menu";
 import { useProject } from "@/context/project";
 import { cx } from "@/lib/cva";
 import { PosterractCodePanel } from "@/components/posterract-code-panel";
+import { GenerateLauncher } from "@/components/genai";
 
 export function SidebarLeft() {
   return (
     <div class="flex flex-col h-full overflow-hidden">
       <ElectronHeader />
       <ProjectHeader />
-      <div class="posterract-agent-slot">
+      <div class="posterract-agent-slot flex flex-col gap-2">
+        <GenerateLauncher />
         <PosterractCodePanel />
       </div>
       <Assets />

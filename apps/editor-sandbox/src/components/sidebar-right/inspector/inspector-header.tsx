@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { CreditsChip } from "@/components/genai";
 import { useWorld } from "@posterract/koota-solid";
 import { useCameraScale, zoomBy, zoomTo, zoomToFit } from "@/engine";
 
@@ -28,14 +29,16 @@ export function InspectorHeader() {
       <span class="text-[12px] font-450 text-foreground">
         Editor
       </span>
+      {/* Status readouts, right-aligned together: AI credits, then zoom. */}
+      <div class="ml-auto flex items-center gap-2 relative z-30" style="-webkit-app-region: no-drag;">
+        <CreditsChip />
       <DropdownMenu placement="bottom-end">
         <DropdownMenuTrigger<typeof Button>
           as={(triggerProps) => (
             <Button
               {...triggerProps}
               variant="link"
-              class="ml-auto flex items-center gap-0 text-muted-foreground px-0 relative z-30"
-              style="-webkit-app-region: no-drag;"
+              class="flex items-center gap-0 text-muted-foreground px-0"
             >
               <span>{zoomLabel()}</span>
               <Icon name="chevron-down" class="size-6 shrink-0" />
@@ -69,6 +72,7 @@ export function InspectorHeader() {
           </DropdownMenuContent>
         </DropdownMenuPortal>
       </DropdownMenu>
+      </div>
     </div>
   );
 }

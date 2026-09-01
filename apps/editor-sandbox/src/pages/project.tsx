@@ -5,6 +5,7 @@
 import { Show, createEffect, createMemo, createResource } from 'solid-js';
 import { Navigate, useNavigate } from '@solidjs/router';
 import { EditorPage } from './editor';
+import { AiProvider } from "@/context/ai";
 import { LayoutProvider } from "@/context/layout";
 import { EditorApiProvider } from '@/context/agent-api';
 import { ExportProvider } from '@/context/export';
@@ -57,9 +58,11 @@ export function ProjectPage() {
               <EditorApiProvider>
                 <TimelineProvider>
                   <ExportProvider>
-                    <LayoutProvider>
-                      <EditorPage />
-                    </LayoutProvider>
+                    <AiProvider>
+                      <LayoutProvider>
+                        <EditorPage />
+                      </LayoutProvider>
+                    </AiProvider>
                   </ExportProvider>
                 </TimelineProvider>
               </EditorApiProvider>
