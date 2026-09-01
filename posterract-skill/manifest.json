@@ -1,0 +1,13 @@
+{
+  "name": "posterract",
+  "version": "0.2.0",
+  "entry": "SKILL.md",
+  "description": "Agent workflow for local Posterract composition projects through the official Posterract MCP server.",
+  "compatibility": {
+    "desktop": ">=0.1.0 <0.2.0",
+    "cli": ">=0.203.0 <0.204.0",
+    "sdk": ">=0.201.0 <0.202.0",
+    "protocol": 2,
+    "localControlProtocol": 1
+  }
+}

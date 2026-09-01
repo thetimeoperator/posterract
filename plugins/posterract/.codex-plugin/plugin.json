@@ -1,0 +1,25 @@
+{
+  "name": "posterract",
+  "version": "0.203.0",
+  "description": "Edit the active Posterract video project through its local canvas, timeline, source, media, validation, capture, and export tools.",
+  "author": {
+    "name": "Posterract"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Posterract",
+    "shortDescription": "Control the active Posterract canvas from Codex.",
+    "longDescription": "Posterract connects Codex to the video project currently open in Posterract Desktop. It can inspect and edit source-backed canvas elements, control the timeline, validate compositions, inspect media, capture frames, and export locally.",
+    "developerName": "Posterract",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Video composition editing",
+      "Live canvas and timeline control",
+      "Media inspection and frame capture",
+      "Local video export"
+    ],
+    "brandColor": "#65FF9A",
+    "defaultPrompt": "Use the Posterract tools to inspect the active project before editing. Validate meaningful changes and inspect captures before claiming the visual result is correct."
+  },
+  "mcpServers": "./.mcp.json"
+}

@@ -1,0 +1,13 @@
+{
+  "name": "posterract-diagram-demo",
+  "projectId": "posterract-diagram-demo",
+  "displayName": "Agent Diagram Demo",
+  "private": true,
+  "type": "module",
+  "main": "src/index.tsx",
+  "posterract": {
+    "schemaVersion": 1,
+    "entry": "src/index.tsx",
+    "sdkVersion": "0.201.0"
+  }
+}

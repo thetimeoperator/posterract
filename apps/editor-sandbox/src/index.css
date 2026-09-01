@@ -1,0 +1,467 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is([data-kb-theme="dark"] *));
+
+@font-face {
+  font-family: 'Inter';
+  src: url('./assets/fonts/Inter-VariableFont_opsz,wght.ttf') format('truetype');
+  font-weight: 100 900;
+  font-stretch: normal;
+  font-style: normal;
+  font-optical-sizing: auto;
+}
+
+@font-face {
+  font-family: 'Inter';
+  src: url('./assets/fonts/Inter-Italic-VariableFont_opsz,wght.ttf') format('truetype');
+  font-weight: 100 900;
+  font-stretch: normal;
+  font-style: italic;
+  font-optical-sizing: auto;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('./assets/fonts/JetBrainsMono-VariableFont.ttf') format('truetype');
+  font-weight: 100 900;
+  font-stretch: normal;
+  font-style: normal;
+  font-feature-settings: 'zero' 1;
+}
+
+@theme inline {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --font-weight-strong: 450;
+  --radius-xs: calc(var(--radius) - 4px);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: 12px;
+  --radius-xxl: 16px;
+  --text-xxs: 10px;
+  --text-xs: 11px;
+  --text-lg: 18px;
+  --color-canvas: var(--canvas);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary-hover: var(--secondary-hover);
+  --color-secondary-pressing: var(--secondary-pressing);
+  --color-tertiary: var(--tertiary);
+  --color-tertiary-foreground: var(--tertiary-foreground);
+  --color-tertiary-hover: var(--tertiary-hover);
+  --color-tertiary-pressing: var(--tertiary-pressing);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-disabled-foreground: var(--disabled-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-pressing: var(--primary-pressing);
+  --color-destructive: var(--destructive);
+  --color-destructive-hover: var(--destructive-hover);
+  --color-destructive-pressing: var(--destructive-pressing);
+  --color-destructive-accent: var(--destructive-accent);
+  --color-destructive-accent-foreground: var(--destructive-accent-foreground);
+  --color-success-accent: var(--success-accent);
+  --color-success-accent-foreground: var(--success-accent-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-surface: var(--surface);
+  --color-surface-foreground: var(--surface-foreground);
+  --color-code: var(--code);
+  --color-code-foreground: var(--code-foreground);
+  --color-code-highlight: var(--code-highlight);
+  --color-code-number: var(--code-number);
+  --color-selection: var(--selection);
+  --color-selection-foreground: var(--selection-foreground);
+  --color-inset: var(--inset);
+  --color-overlay: var(--overlay);
+  --color-overlay-soft: var(--overlay-soft);
+  --color-overlay-strong: var(--overlay-strong);
+  --color-meter-green: var(--meter-green);
+  --color-meter-yellow: var(--meter-yellow);
+  --color-meter-red: var(--meter-red);
+  --color-meter-clip: var(--meter-clip);
+
+  /** Timeline colors */
+  --color-audio-background: hsla(168, 67%, 17%, 1);
+  --color-audio-primary: hsla(162, 66%, 29%, 1);
+  --color-caption-background: #5F254A;
+  --color-caption-accent: rgba(207, 63, 149, 0.24);
+}
+
+:root {
+  --radius: 6px;
+
+  --text-xs: 10px;
+  --text-sm: 11px;
+  --text-base: 11px;
+  --text-lg: 12px;
+  --text-xl: 14px;
+  --text-2xl: 16px;
+  --text-3xl: 18px;
+  --text-4xl: 20px;
+  --text-5xl: 24px;
+  --text-6xl: 32px;
+
+  --canvas: hsla(0, 0%, 91%, 1);
+  --background: hsla(0, 0%, 100%, 1);
+  --sidebar: hsla(0, 0%, 97%, 1);
+  --foreground: hsla(240, 5%, 9%, 1);
+  --card: hsla(0, 0%, 100%, 1);
+  --card-foreground: hsla(240, 5%, 9%, 1);
+  --popover: hsla(0, 0%, 95%, 1);
+  --popover-foreground: hsla(240, 5%, 9%, 1);
+  --primary: hsla(207, 100%, 50%, 1);
+  --primary-foreground: hsla(0, 0%, 95%, 1);
+  --primary-hover: hsla(207, 98%, 40%, 1);
+  --primary-pressing: hsla(207, 99%, 35%, 1);
+  --secondary: hsla(0, 0%, 95%, 1);
+  --secondary-foreground: hsla(207, 100%, 90%, 1);
+  --secondary-hover: hsla(0, 0%, 88%, 1);
+  --secondary-pressing: hsla(0, 0%, 40%, 1);
+  --tertiary: hsla(207, 100%, 50%, 1);
+  --tertiary-foreground: hsla(207, 100%, 90%, 1);
+  --tertiary-hover: hsla(207, 80%, 40%, 1);
+  --tertiary-pressing: hsla(207, 80%, 35%, 1);
+  --muted: hsla(0, 0%, 91%, 1);
+  --muted-foreground: hsla(0, 0%, 45%, 1);
+  --disabled-foreground: hsla(0, 0%, 40%, 1);
+  --accent: hsla(0, 0%, 95%, 1);
+  --accent-foreground: hsla(0, 0%, 45%, 1);
+  --destructive: hsla(0, 79%, 54%, 1);
+  --destructive-foreground: hsla(0, 0%, 100%, 1);
+  --destructive-hover: hsla(0, 60%, 40%, 1);
+  --destructive-pressing: hsla(0, 53%, 27%, 1);
+  --destructive-accent: hsla(0, 79%, 54%, 0.24);
+  --destructive-accent-foreground: hsla(0, 78%, 95%, 1);
+  --success-accent: hsla(162, 66%, 29%, 0.24);
+  --success-accent-foreground: hsla(162, 84%, 89%, 1);
+  --border: hsla(0, 0%, 91%, 1);
+  --border-strong: hsla(0, 0%, 100%, 0.06);
+  --border-input: hsla(0, 0%, 88%, 1);
+  --border-darker: hsla(0, 0%, 95%, 1);
+  --input: hsla(0, 0%, 95%, 1);
+  --ring: hsla(207, 100%, 50%, 1);
+  --canvas: hsla(0, 0%, 91%, 1);
+  --overlay: hsla(0, 0%, 4%, 0.8);
+  --overlay-soft: hsla(0, 0%, 4%, 0.4);
+  --overlay-strong: hsla(0, 0%, 4%, 0.93);
+  --selection: hsla(207, 100%, 50%, 1);
+  --selection-foreground: hsla(207, 100%, 90%, 1);
+  --selection-muted-foreground: hsla(0, 0%, 45%, 1);
+  --inset: hsla(0, 0%, 85%, 1);
+  --meter-green: hsla(125, 85%, 57%, 1);
+  --meter-yellow: hsla(46, 90%, 62%, 1);
+  --meter-red: hsla(1, 90%, 62%, 1);
+  --meter-clip: hsla(60, 100%, 50%, 1);
+}
+
+[data-kb-theme="dark"] {
+  --canvas: hsla(0, 0%, 9%, 1);
+  --background: hsla(0, 0%, 7%, 1);
+  --sidebar: var(--background);
+  --foreground: hsla(0, 0%, 95%, 1);
+  --card: hsla(0, 0%, 7%, 1);
+  --card-foreground: hsla(0, 0%, 95%, 1);
+  --popover: hsla(0, 0%, 9%, 1);
+  --popover-foreground: hsla(0, 0%, 95%, 1);
+  --primary: hsla(207, 100%, 50%, 1);
+  --primary-foreground: hsla(0, 0%, 95%, 1);
+  --primary-hover: hsla(207, 98%, 29%, 1);
+  --primary-pressing: hsla(207, 99%, 22%, 1);
+  --secondary: hsla(0, 0%, 100%, 0.06);
+  --secondary-foreground: hsla(0, 0%, 95%, 1);
+  --secondary-hover: hsla(0, 0%, 100%, 0.09);
+  --secondary-pressing: hsla(0, 0%, 40%, 1);
+  --tertiary: hsla(207, 99%, 22%, 1);
+  --tertiary-foreground: hsla(207, 100%, 90%, 1);
+  --tertiary-hover: hsla(207, 80%, 17%, 1);
+  --tertiary-pressing: hsla(207, 80%, 14%, 1);
+  --muted: hsla(0, 0%, 100%, 0.09);
+  --muted-foreground: hsla(0, 0%, 95%, 0.64);
+  --disabled-foreground: hsla(0, 0%, 40%, 1);
+  --accent: hsla(0, 0%, 100%, 0.06);
+  --accent-foreground: hsla(0, 0%, 95%, 0.64);
+  --destructive: hsla(0, 79%, 54%, 1);
+  --destructive-foreground: hsla(0, 0%, 100%, 1);
+  --destructive-hover: hsla(0, 60%, 40%, 1);
+  --destructive-pressing: hsla(0, 53%, 27%, 1);
+  --destructive-accent: hsla(0, 79%, 54%, 0.24);
+  --destructive-accent-foreground: hsla(0, 78%, 95%, 1);
+  --success-accent: hsla(162, 66%, 29%, 0.24);
+  --success-accent-foreground: hsla(162, 84%, 89%, 1);
+  --border: hsla(0, 0%, 100%, 0.03);
+  --border-strong: hsla(0, 0%, 100%, 0.06);
+  --border-input: hsla(0, 0%, 100%, 0.09);
+  --border-darker: hsla(0, 0%, 7%, 1);
+  --input: hsla(0, 0%, 100%, 0.06);
+  --ring: hsla(207, 100%, 50%, 1);
+  --canvas: hsla(0, 0%, 9%, 1);
+  --overlay: hsla(0, 0%, 4%, 0.8);
+  --overlay-soft: hsla(0, 0%, 4%, 0.4);
+  --overlay-strong: hsla(0, 0%, 4%, 0.95);
+  --selection: hsla(207, 99%, 22%, 1);
+  --selection-foreground: hsla(207, 100%, 90%, 1);
+  --selection-muted-foreground: hsla(0, 0%, 100%, 0.06);
+  --inset: hsla(0, 0%, 100%, 0.09);
+  --meter-green: hsla(125, 85%, 57%, 1);
+  --meter-yellow: hsla(46, 90%, 62%, 1);
+  --meter-red: hsla(1, 90%, 62%, 1);
+  --meter-clip: hsla(60, 100%, 50%, 1);
+}
+
+/* Posterract fork: retain Posterract's editor mechanics while replacing
+   the upstream product chrome and color system. */
+:root {
+  --posterract-neon: #65ff9a;
+}
+
+[data-kb-theme="dark"] {
+  --background: rgba(5, 8, 6, 0.72);
+  --sidebar: rgba(4, 7, 5, 0.66);
+  --canvas: rgba(5, 9, 6, 0.7);
+  --card: rgba(5, 10, 7, 0.76);
+  --popover: rgba(6, 15, 9, 0.94);
+  --foreground: #effff4;
+  --primary: var(--posterract-neon);
+  --primary-foreground: #031008;
+  --primary-hover: #92ffb6;
+  --primary-pressing: #36d972;
+  --tertiary: #123b24;
+  --tertiary-foreground: #caffda;
+  --tertiary-hover: #18522f;
+  --tertiary-pressing: #0f321f;
+  --muted-foreground: rgba(220, 255, 231, 0.66);
+  --accent: rgba(101, 255, 154, 0.08);
+  --accent-foreground: rgba(232, 255, 239, 0.8);
+  --border: rgba(101, 255, 154, 0.06);
+  --border-strong: rgba(139, 255, 179, 0.13);
+  --border-input: rgba(139, 255, 179, 0.15);
+  --input: rgba(101, 255, 154, 0.07);
+  --ring: var(--posterract-neon);
+  --selection: #1e9e50;
+  --selection-foreground: #effff4;
+  --inset: rgba(101, 255, 154, 0.08);
+  --overlay-soft: rgba(2, 7, 5, 0.52);
+  --overlay-strong: rgba(2, 7, 5, 0.96);
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 12px;
+}
+
+body {
+  background:
+    radial-gradient(ellipse 115% 62% at 50% 116%, rgba(42, 154, 74, 0.32), rgba(20, 79, 40, 0.15) 44%, transparent 74%),
+    linear-gradient(180deg, #111412 0%, #0b0e0d 43%, #08100b 70%, #0a1d10 100%);
+}
+
+.posterract-editor-shell {
+  background:
+    radial-gradient(ellipse 115% 62% at 50% 116%, rgba(42, 154, 74, 0.32), rgba(20, 79, 40, 0.15) 44%, transparent 74%),
+    linear-gradient(180deg, #111412 0%, #0b0e0d 43%, #08100b 70%, #0a1d10 100%);
+}
+
+/* The native Diffusion window lets the environment color breathe through its
+   chrome. The web editor recreates that treatment with translucent surfaces. */
+.posterract-editor-shell .bg-sidebar { background-color: rgba(4, 7, 5, 0.66); }
+.posterract-editor-shell .bg-background { background-color: rgba(5, 8, 6, 0.72); }
+.posterract-editor-shell .bg-card { background-color: rgba(5, 10, 7, 0.76); }
+
+.posterract-canvas-workspace {
+  isolation: isolate;
+  background: transparent;
+}
+
+.posterract-sandbox-loading {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
+  background: radial-gradient(circle at 50% 45%, rgba(101, 255, 154, 0.08), transparent 34%), #030705;
+  color: #effff4;
+  font-family: Inter, sans-serif;
+}
+
+.posterract-sandbox-loading > span {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--posterract-neon);
+  box-shadow: 0 0 22px rgba(101, 255, 154, 0.8);
+}
+
+.posterract-sandbox-loading strong {
+  margin-top: 10px;
+  font-size: 13px;
+  letter-spacing: 0.18em;
+}
+
+.posterract-sandbox-loading p {
+  color: rgba(220, 255, 231, 0.54);
+  font-size: 12px;
+}
+
+.posterract-agent-slot {
+  flex: 0 0 auto;
+  padding: 0 10px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.posterract-code-toggle {
+  display: flex;
+  width: 100%;
+  height: 32px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(101, 255, 154, 0.24);
+  border-radius: 7px;
+  background: rgba(3, 10, 7, 0.94);
+  padding: 0 11px;
+  color: rgba(230, 255, 238, 0.76);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+
+.posterract-code-toggle:hover:not(:disabled) {
+  border-color: rgba(101, 255, 154, 0.48);
+  color: var(--posterract-neon);
+}
+
+.posterract-code-toggle:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.posterract-code-toggle.is-active {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3), 0 0 22px rgba(101, 255, 154, 0.12);
+}
+
+.posterract-code-toggle > span { color: var(--posterract-neon); }
+.posterract-code-toggle kbd { margin-left: auto; color: rgba(220, 255, 231, 0.38); font-size: 9px; }
+
+/* macOS desktop: the BrowserWindow uses native vibrancy, so the page keeps a
+   transparent background and the sidebars go translucent to let the blur show. */
+[data-platform="darwin"],
+[data-platform="darwin"] body {
+  background: transparent;
+}
+
+[data-platform="darwin"]:not([data-fullscreen="true"]) {
+  --sidebar: hsla(0, 0%, 0%, 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50 select-none;
+
+    /* Hide scrollbars (keep scroll behavior) until we add custom styling. */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+
+    /* disables things like pull-to-refresh and overscroll effects */
+    /* overscroll-behavior: none; */
+  }
+
+  *::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+
+  ::selection {
+    background-color: var(--color-selection);
+    color: var(--color-selection-foreground);
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  button {
+    @apply cursor-default;
+  }
+}
+
+@layer utilities {
+  .focus-ring:focus-visible,
+  .focus-ring[data-dragging='true'] {
+    border-color: var(--ring);
+    box-shadow: inset 0 0 0 1px var(--ring);
+    outline: none;
+    transition:
+      box-shadow 0.2s,
+      outline 0.2s,
+      border 0.2s;
+  }
+}
+
+@media (max-width: 719px), (max-height: 479px) {
+  .screen-too-small {
+    display: flex;
+  }
+}
+
+/**
+ * The soundboard is as tall as the timeline the user drags, not as tall as the
+ * viewport, so its scale thins itself out against its own box. Both columns are
+ * laid out with justify-between, so hiding an element re-spreads the rest —
+ * dropping a label and its major tick together keeps the two lined up.
+ *
+ * Heights below are the soundboard's content box; the meters themselves sit
+ * 32px shorter than that (row gap + the layer picker underneath).
+ */
+.soundboard {
+  container: soundboard / size;
+}
+
+/* Halve the minor ticks — the labels still have room at this height. */
+@container soundboard (max-height: 188px) {
+  .soundboard-tick:nth-child(even) {
+    display: none;
+  }
+}
+
+/**
+ * Halve the scale itself. Majors sit at 4n+1 of the 21 ticks, so keeping
+ * 6n+1 plus the last one leaves major-minor-major-minor-major: three majors for
+ * the three surviving labels, still with a minor between each pair.
+ */
+@container soundboard (max-height: 167px) {
+  .soundboard-tick {
+    display: none;
+  }
+
+  .soundboard-tick:nth-child(6n + 1),
+  .soundboard-tick:nth-last-child(2) {
+    display: block;
+  }
+
+  .soundboard-scale > span:nth-child(even) {
+    display: none;
+  }
+}

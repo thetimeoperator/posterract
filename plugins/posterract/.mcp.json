@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "posterract": {
+      "command": "posterract",
+      "args": ["mcp", "serve"]
+    }
+  }
+}

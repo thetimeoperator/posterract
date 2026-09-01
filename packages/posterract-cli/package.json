@@ -1,0 +1,35 @@
+{
+  "name": "@posterract/cli",
+  "private": true,
+  "version": "0.203.0",
+  "license": "MPL-2.0",
+  "bin": {
+    "posterract": "./dist/index.cjs"
+  },
+  "exports": {
+    "./protocol": "./src/protocol.ts",
+    "./channels": "./src/cli-channels.ts",
+    "./project-control": "./src/project-control.ts"
+  },
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --format=cjs --external:bufferutil --external:utf-8-validate --outfile=dist/index.cjs && chmod +x dist/index.cjs",
+    "check": "tsc --noEmit",
+    "test": "esbuild src/project-control.test.ts --bundle --platform=node --format=cjs --outfile=.tmp/project-control.test.cjs && node --test .tmp/project-control.test.cjs",
+    "symlink:remove": "rm -f /opt/homebrew/bin/posterract",
+    "symlink:create": "npm run build && ln -sf \"$PWD/dist/index.cjs\" /opt/homebrew/bin/posterract"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.0.0",
+    "@posterract/composition": "workspace:*",
+    "@trpc/client": "^11.18.0",
+    "@trpc/server": "^11.18.0",
+    "commander": "^14.0.3",
+    "fflate": "^0.8.2",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "esbuild": "^0.28.1",
+    "typescript": "~5.9.3"
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "name": "@posterract/desktop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Agent-native local video editing with Posterract cloud publishing.",
+  "author": "Posterract",
+  "type": "module",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "stage:sdk": "pnpm --filter @posterract/composition build && node scripts/stage-sdk.mjs",
+    "stage:cli": "pnpm --filter @posterract/cli build && node scripts/stage-cli.mjs",
+    "stage:skill": "node scripts/stage-skill.mjs",
+    "build:main": "esbuild src/main.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist/application.cjs && esbuild src/bootstrap.ts --bundle --platform=node --format=cjs --external:electron --external:./application.cjs --outfile=dist/main.cjs && node scripts/copy-esbuild-binary.mjs",
+    "build:preload": "esbuild src/preload.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist/preload.cjs",
+    "build:renderer:web": "VITE_DESKTOP=true VITE_API_URL=/api pnpm --filter @posterract/web exec vite build --mode desktop --outDir ../desktop/renderer/web --emptyOutDir",
+    "build:renderer:editor": "pnpm --filter @posterract/editor-sandbox exec vite build --mode desktop --base=/editor-sandbox/ --outDir ../desktop/renderer/editor-sandbox --emptyOutDir",
+    "build:renderer": "pnpm run build:renderer:web && pnpm run build:renderer:editor",
+    "build": "pnpm run typecheck && pnpm run stage:sdk && pnpm run stage:cli && pnpm run stage:skill && pnpm run build:main && pnpm run build:preload && pnpm run build:renderer",
+    "dev": "pnpm run build && electron-forge start",
+    "package": "pnpm run build && electron-forge package",
+    "prepare:dmg": "node scripts/prepare-dmg-native.mjs",
+    "make": "pnpm run build && pnpm run prepare:dmg && electron-forge make",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:migration": "esbuild src/legacy-migration.test.ts --bundle --platform=node --format=cjs --external:esbuild --outfile=.tmp/legacy-migration.test.cjs && node --test .tmp/legacy-migration.test.cjs",
+    "test:revisions": "esbuild src/revisions.test.ts --bundle --platform=node --format=esm --alias:electron=./src/testing/electron-stub.ts --outfile=.tmp/revisions.test.mjs && POSTERRACT_TEST_USER_DATA=\"$(mktemp -d)\" node --test .tmp/revisions.test.mjs",
+    "test:agent-connection": "esbuild src/local-agent-state.test.ts --bundle --platform=node --format=cjs --outfile=.tmp/local-agent-state.test.cjs && esbuild src/mcp-client-config.test.ts --bundle --platform=node --format=cjs --outfile=.tmp/mcp-client-config.test.cjs && node --test .tmp/local-agent-state.test.cjs .tmp/mcp-client-config.test.cjs"
+  },
+  "dependencies": {
+    "@posterract/cli": "workspace:*",
+    "@posterract/contract": "workspace:*",
+    "@posterract/video-compiler": "workspace:*",
+    "nanoid": "^6.0.1",
+    "yaml": "^2.9.0"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "^7.11.1",
+    "@electron-forge/maker-deb": "7.11.2",
+    "@electron-forge/maker-dmg": "^7.11.1",
+    "@electron-forge/maker-squirrel": "7.11.2",
+    "@electron-forge/maker-zip": "^7.11.1",
+    "@electron-forge/shared-types": "^7.11.1",
+    "@reforged/maker-appimage": "5.3.1",
+    "@types/node": "^24.10.1",
+    "electron": "^43.1.1",
+    "esbuild": "^0.28.1",
+    "fflate": "^0.8.2",
+    "node-gyp": "^13.0.2",
+    "typescript": "~5.9.3"
+  }
+}

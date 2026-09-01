@@ -17,3 +17,8 @@ output/
 tmp/
 next_steps.md
 onboarding.md
+
+# Desktop build artifacts
+apps/desktop/out/
+apps/desktop/renderer/
+apps/desktop/.tmp/

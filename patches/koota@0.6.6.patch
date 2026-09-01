@@ -1,0 +1,100 @@
+diff --git a/dist/chunk-ZWIGMIL4.js b/dist/chunk-ZWIGMIL4.js
+index feb90a85391fc5c3708a46041893e9dda4c8ff47..30e26e3836339aa6f59f444d8a3ca8d8c2c0306d 100644
+--- a/dist/chunk-ZWIGMIL4.js
++++ b/dist/chunk-ZWIGMIL4.js	
+@@ -176,6 +176,8 @@ function checkQuery(world, query, entity) {
+   const ctx = world[$internal];
+   const eid = entity & ENTITY_ID_MASK;
+   if (query.traitInstances.all.length === 0) return false;
++  let hasOrTraits = false;
++  let anyOrTraitMatched = false;
+   for (let i = 0; i < generations.length; i++) {
+     const generationId = generations[i];
+     const bitmask = staticBitmasks[i];
+@@ -187,8 +189,12 @@ function checkQuery(world, query, entity) {
+     if (!forbidden && !required && !or) return false;
+     if (forbidden && (entityMask & forbidden) !== 0) return false;
+     if (required && (entityMask & required) !== required) return false;
+-    if (or !== 0 && (entityMask & or) === 0) return false;
++    if (or !== 0) {
++      hasOrTraits = true;
++      if ((entityMask & or) !== 0) anyOrTraitMatched = true;
++    }
+   }
++  if (hasOrTraits && !anyOrTraitMatched) return false;
+   return true;
+ }
+ 
+@@ -222,6 +228,8 @@ function checkQueryTracking(world, query, entity, eventType, eventGenerationId,
+   const generationsLen = generations.length;
+   const trackingGroupsLen = trackingGroups.length;
+   if (traitInstancesAll.length === 0) return false;
++  let hasStaticOrTraits = false;
++  let anyStaticOrTraitMatched = false;
+   for (let i = 0; i < generationsLen; i++) {
+     const generationId = generations[i];
+     const bitmask = staticBitmasks[i];
+@@ -233,8 +241,12 @@ function checkQueryTracking(world, query, entity, eventType, eventGenerationId,
+     const entityMask = genMasks ? genMasks[eid] | 0 : 0;
+     if (forbidden && (entityMask & forbidden) !== 0) return false;
+     if (required && (entityMask & required) !== required) return false;
+-    if (or !== 0 && (entityMask & or) === 0) return false;
++    if (or !== 0) {
++      hasStaticOrTraits = true;
++      if ((entityMask & or) !== 0) anyStaticOrTraitMatched = true;
++    }
+   }
++  if (hasStaticOrTraits && !anyStaticOrTraitMatched) return false;
+   let hasOrGroup = false;
+   let anyOrMatched = false;
+   for (let i = 0; i < trackingGroupsLen; i++) {
+diff --git a/dist/index.cjs b/dist/index.cjs
+index efa87da67fac554c98a6717b5670ad565ab615ba..4d3b14b24b9965e5e97ec30ec2c1721ea79bdd11 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs	
+@@ -222,6 +222,8 @@ function checkQuery(world, query, entity) {
+   const ctx = world[$internal];
+   const eid = entity & ENTITY_ID_MASK;
+   if (query.traitInstances.all.length === 0) return false;
++  let hasOrTraits = false;
++  let anyOrTraitMatched = false;
+   for (let i = 0; i < generations.length; i++) {
+     const generationId = generations[i];
+     const bitmask = staticBitmasks[i];
+@@ -233,8 +235,12 @@ function checkQuery(world, query, entity) {
+     if (!forbidden && !required && !or) return false;
+     if (forbidden && (entityMask & forbidden) !== 0) return false;
+     if (required && (entityMask & required) !== required) return false;
+-    if (or !== 0 && (entityMask & or) === 0) return false;
++    if (or !== 0) {
++      hasOrTraits = true;
++      if ((entityMask & or) !== 0) anyOrTraitMatched = true;
++    }
+   }
++  if (hasOrTraits && !anyOrTraitMatched) return false;
+   return true;
+ }
+ 
+@@ -654,6 +660,8 @@ function checkQueryTracking(world, query, entity, eventType, eventGenerationId,
+   const generationsLen = generations.length;
+   const trackingGroupsLen = trackingGroups.length;
+   if (traitInstancesAll.length === 0) return false;
++  let hasStaticOrTraits = false;
++  let anyStaticOrTraitMatched = false;
+   for (let i = 0; i < generationsLen; i++) {
+     const generationId = generations[i];
+     const bitmask = staticBitmasks[i];
+@@ -665,8 +673,12 @@ function checkQueryTracking(world, query, entity, eventType, eventGenerationId,
+     const entityMask = genMasks ? genMasks[eid] | 0 : 0;
+     if (forbidden && (entityMask & forbidden) !== 0) return false;
+     if (required && (entityMask & required) !== required) return false;
+-    if (or !== 0 && (entityMask & or) === 0) return false;
++    if (or !== 0) {
++      hasStaticOrTraits = true;
++      if ((entityMask & or) !== 0) anyStaticOrTraitMatched = true;
++    }
+   }
++  if (hasStaticOrTraits && !anyStaticOrTraitMatched) return false;
+   let hasOrGroup = false;
+   let anyOrMatched = false;
+   for (let i = 0; i < trackingGroupsLen; i++) {

@@ -1,0 +1,20 @@
+{
+  "name": "posterract-bundled",
+  "interface": {
+    "displayName": "Posterract"
+  },
+  "plugins": [
+    {
+      "name": "posterract",
+      "source": {
+        "source": "local",
+        "path": "./plugins/posterract"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
