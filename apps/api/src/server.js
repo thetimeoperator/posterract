@@ -57,6 +57,7 @@ import {
 import { registerCreativeRoutes } from "./creative.js";
 import { registerDesktopAuthRoutes } from "./desktopAuth.js";
 import { loadAccountSets, registerAccountSetRoutes } from "./accountSets.js";
+import { registerAiRoutes } from "./ai/routes.js";
 
 const env = process.env;
 const port = Number(env.PORT ?? 3001);
@@ -90,6 +91,8 @@ const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const agentApiScopes = new Set([
   "accounts:read",
+  "ai:read",
+  "ai:write",
   "analytics:read",
   "creative:read",
   "creative:write",
@@ -914,6 +917,12 @@ app.get("/v1/openapi.json", async () => ({
     "/v1/analytics": { get: { summary: "Read approved TikTok, Instagram, Facebook, and Threads analytics" } },
     "/v1/points": { get: { summary: "Read the workspace Resonance Points balance" } },
     "/v1/points/ledger": { get: { summary: "Read the immutable points ledger" } },
+    "/v1/credits": { get: { summary: "Read the workspace AI credit balance and plan" } },
+    "/v1/credits/ledger": { get: { summary: "Read the immutable AI credit ledger" } },
+    "/v1/ai/generate": { post: { summary: "Quote or execute an AI image, video, or voice generation" } },
+    "/v1/ai/generations": { get: { summary: "List recent AI generations, newest first" } },
+    "/v1/ai/generations/{id}": { get: { summary: "Read one AI generation and its output" } },
+    "/v1/ai/transcribe": { post: { summary: "Transcribe audio into word-timed segments" } },
     "/v1/accounts": { get: { summary: "List connected social accounts" } },
     "/v1/uploads/multipart": { post: { summary: "Start a direct R2 multipart upload" } },
     "/v1/posts": { post: { summary: "Publish now or schedule a post" } },
@@ -1416,6 +1425,14 @@ registerCreativeRoutes(app, {
   r2,
   r2Bucket: env.R2_BUCKET,
   signedUrlTtlSeconds: Number(env.R2_SIGNED_DOWNLOAD_TTL_SECONDS ?? 3_600),
+});
+registerAiRoutes(app, {
+  postgres,
+  requireScope,
+  requiredWorkspace,
+  r2,
+  r2Bucket: env.R2_BUCKET,
+  logger: app.log,
 });
 
 app.get(

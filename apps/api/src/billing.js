@@ -1,8 +1,25 @@
 import { createHash } from "node:crypto";
 import Stripe from "stripe";
+import {
+  clearWorkspacePlan,
+  grantPlanCycle,
+  setWorkspacePlan,
+} from "./credits.js";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * AI credit subscription plans. Each plan maps one Stripe monthly price
+ * (configured through STRIPE_PRICE_CREATOR / STRIPE_PRICE_STUDIO /
+ * STRIPE_PRICE_AGENCY) to the credits granted every paid cycle. Balances
+ * reset to the allotment on each cycle — no rollover at launch.
+ */
+export const CREDIT_PLANS = Object.freeze({
+  creator: Object.freeze({ id: "creator", monthlyAmount: 2_000, credits: 150 }),
+  studio: Object.freeze({ id: "studio", monthlyAmount: 5_000, credits: 2_250 }),
+  agency: Object.freeze({ id: "agency", monthlyAmount: 10_000, credits: 5_250 }),
+});
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set([
   "active",
   "trialing",
@@ -170,6 +187,11 @@ function configuration(environment) {
     productId: configuredValue(environment, "STRIPE_PRODUCT_ID"),
     monthlyPriceId: configuredValue(environment, "STRIPE_MONTHLY_PRICE_ID"),
     yearlyPriceId: configuredValue(environment, "STRIPE_YEARLY_PRICE_ID"),
+    creditPrices: {
+      creator: configuredValue(environment, "STRIPE_PRICE_CREATOR"),
+      studio: configuredValue(environment, "STRIPE_PRICE_STUDIO"),
+      agency: configuredValue(environment, "STRIPE_PRICE_AGENCY"),
+    },
     siteUrl: safeSiteUrl(
       configuredValue(environment, "SITE_URL") ??
         configuredValue(environment, "PUBLIC_WEB_URL"),
@@ -188,6 +210,52 @@ function configuration(environment) {
     errors.push("STRIPE_YEARLY_PRICE_ID");
   }
   return { ...config, errors, configured: errors.length === 0 };
+}
+
+function creditPlanForPrice(config, priceId) {
+  if (typeof priceId !== "string" || priceId.length === 0) return undefined;
+  return Object.values(CREDIT_PLANS).find(
+    (plan) => config.creditPrices[plan.id] === priceId,
+  );
+}
+
+function cycleDate(value) {
+  return new Date(value).toISOString().slice(0, 10);
+}
+
+function invoiceCreditPlan(config, invoice) {
+  for (const line of invoice?.lines?.data ?? []) {
+    const priceId =
+      stripeId(line?.price) ?? line?.pricing?.price_details?.price;
+    const plan = creditPlanForPrice(config, priceId);
+    if (plan) {
+      return {
+        plan,
+        periodStart: unixDate(line?.period?.start),
+        periodEnd: unixDate(line?.period?.end),
+      };
+    }
+  }
+  return undefined;
+}
+
+async function subscriptionCreditPlan(client, config, subscriptionId) {
+  if (!subscriptionId) return undefined;
+  const result = await client.query(
+    `select stripe_price_id, current_period_start, current_period_end
+     from billing_subscriptions
+     where stripe_subscription_id = $1
+     limit 1`,
+    [subscriptionId],
+  );
+  const row = result.rows[0];
+  const plan = creditPlanForPrice(config, row?.stripe_price_id);
+  if (!plan) return undefined;
+  return {
+    plan,
+    periodStart: row.current_period_start,
+    periodEnd: row.current_period_end,
+  };
 }
 
 async function workspaceExists(client, workspaceId) {
@@ -261,9 +329,11 @@ async function upsertSubscription(client, workspaceId, subscription, config) {
   const productId = stripeId(price?.product);
   const period = subscriptionPeriod(subscription);
   const interval = price?.recurring?.interval;
+  const creditPlan = creditPlanForPrice(config, priceId);
   const recognizedPlan =
-    productId === config.productId &&
-    (priceId === config.monthlyPriceId || priceId === config.yearlyPriceId);
+    (productId === config.productId &&
+      (priceId === config.monthlyPriceId || priceId === config.yearlyPriceId)) ||
+    Boolean(creditPlan);
   await upsertCustomer(client, workspaceId, customerId);
   await client.query(
     `insert into billing_subscriptions
@@ -315,6 +385,16 @@ async function upsertSubscription(client, workspaceId, subscription, config) {
       Boolean(subscription.livemode),
     ],
   );
+  if (creditPlan) {
+    // Credit plans: keep the stored plan in sync with the subscription.
+    // Downgrade/cancel clears the plan but leaves the balance untouched
+    // until the cycle ends; grants happen only on paid invoices.
+    if (ACTIVE_SUBSCRIPTION_STATUSES.has(subscription.status)) {
+      await setWorkspacePlan(client, workspaceId, creditPlan.id);
+    } else {
+      await clearWorkspacePlan(client, workspaceId);
+    }
+  }
 }
 
 async function applyCheckoutEvent(client, workspaceId, session, config) {
@@ -370,7 +450,7 @@ async function applyCheckoutEvent(client, workspaceId, session, config) {
   return true;
 }
 
-async function applyInvoiceEvent(client, workspaceId, invoice, paymentStatus) {
+async function applyInvoiceEvent(client, workspaceId, invoice, paymentStatus, config) {
   const subscriptionId = subscriptionIdFromInvoice(invoice);
   const customerId = stripeId(invoice.customer);
   await upsertCustomer(client, workspaceId, customerId);
@@ -417,6 +497,26 @@ async function applyInvoiceEvent(client, workspaceId, invoice, paymentStatus) {
        )`,
       [workspaceId, invoice.id, paymentStatus, paidAt, customerId],
     );
+  }
+
+  if (paymentStatus === "paid") {
+    // A paid subscription invoice for a credit plan starts a fresh cycle:
+    // the plan is set and the balance RESETS to the allotment (no rollover).
+    const resolved =
+      invoiceCreditPlan(config, invoice) ??
+      (await subscriptionCreditPlan(client, config, subscriptionId));
+    if (resolved) {
+      const cycleStartedAt = resolved.periodStart ?? paidAt ?? new Date();
+      const cycleResetsAt = resolved.periodEnd ?? null;
+      await grantPlanCycle(client, {
+        workspaceId,
+        plan: resolved.plan.id,
+        allotment: resolved.plan.credits,
+        cycleStartedAt,
+        cycleResetsAt,
+        note: `Granted ${resolved.plan.credits} ${resolved.plan.id} credits for cycle ${cycleDate(cycleStartedAt)}${cycleResetsAt ? ` to ${cycleDate(cycleResetsAt)}` : ""}`,
+      });
+    }
   }
 }
 
@@ -682,6 +782,18 @@ export function createStripeBillingService({
   }
 
   function publicConfig() {
+    const creditPlanEntries = Object.values(CREDIT_PLANS)
+      .filter((plan) => config.creditPrices[plan.id])
+      .map((plan) => [
+        plan.id,
+        {
+          priceId: config.creditPrices[plan.id],
+          amount: plan.monthlyAmount,
+          currency: "usd",
+          interval: "month",
+          credits: plan.credits,
+        },
+      ]);
     return {
       configured: config.configured,
       publishableKey: config.configured ? config.publishableKey : undefined,
@@ -702,6 +814,10 @@ export function createStripeBillingService({
             },
           }
         : undefined,
+      creditPlans:
+        creditPlanEntries.length > 0
+          ? Object.fromEntries(creditPlanEntries)
+          : undefined,
     };
   }
 
@@ -783,10 +899,10 @@ export function createStripeBillingService({
         ) {
           applied = await applyCheckoutEvent(client, workspaceId, object, config);
         } else if (event.type === "invoice.paid") {
-          await applyInvoiceEvent(client, workspaceId, object, "paid");
+          await applyInvoiceEvent(client, workspaceId, object, "paid", config);
           applied = true;
         } else if (event.type === "invoice.payment_failed") {
-          await applyInvoiceEvent(client, workspaceId, object, "failed");
+          await applyInvoiceEvent(client, workspaceId, object, "failed", config);
           applied = true;
         }
       }

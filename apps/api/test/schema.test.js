@@ -60,7 +60,7 @@ test("authentication remembers browsers and never verifies on sign-in", () => {
 test("PostgreSQL application migrations apply cleanly and idempotently", async () => {
   const postgres = new PGlite({ extensions: { pgcrypto } });
   const migrations = await Promise.all(
-    ["001-posterract.sql", "002-postgres-cutover.sql", "003-agent-harness.sql", "004-agent-chats.sql", "005-tiktok-draft-status.sql", "006-stripe-billing.sql", "007-welcome-email.sql", "008-creative-editor.sql", "009-desktop-auth.sql", "010-account-sets.sql"].map(async (name) => ({
+    ["001-posterract.sql", "002-postgres-cutover.sql", "003-agent-harness.sql", "004-agent-chats.sql", "005-tiktok-draft-status.sql", "006-stripe-billing.sql", "007-welcome-email.sql", "008-creative-editor.sql", "009-desktop-auth.sql", "010-account-sets.sql", "011-ai-credits.sql"].map(async (name) => ({
       name,
       sql: await readFile(resolve(migrationDirectory, name), "utf8"),
     })),
@@ -109,6 +109,9 @@ test("PostgreSQL application migrations apply cleanly and idempotently", async (
       "desktop_refresh_tokens",
       "account_sets",
       "account_set_members",
+      "workspace_credits",
+      "credit_ledger",
+      "ai_generations",
     ]) {
       assert.equal(names.has(required), true, `${required} table is missing`);
     }
