@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { create } from "zustand";
 import type {
   AccountSetDTO,
@@ -14,6 +14,8 @@ import type {
 } from "@posterract/contract";
 import type { CreateTransmissionInput } from "./store";
 import { cloudJson } from "@/lib/cloudRequest";
+import { AiRequestError, fetchCredits } from "@/lib/ai";
+import { UNAVAILABLE_CREDITS, type CreditsState, type CreditsSummary } from "@/billing/plans";
 
 const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "/api";
 
@@ -31,8 +33,11 @@ type Bootstrap = {
 type State = Bootstrap & {
   loaded: boolean;
   analytics: Partial<Record<AnalyticsRangeDays, AnalyticsDashboardDTO>>;
+  credits: CreditsSummary | null;
+  creditsLoading: boolean;
   refresh: () => Promise<void>;
   loadAnalytics: (rangeDays: AnalyticsRangeDays) => Promise<void>;
+  loadCredits: () => Promise<void>;
 };
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -47,7 +52,14 @@ const emptyPoints: PointsSummaryDTO = {
   recent: [],
 };
 
-const usePostgresStore = create<State>((set) => ({
+/**
+ * The credits endpoint ships in parallel with this interface. When the API
+ * answers 404/405/501 the feature is treated as "not live yet": automatic
+ * re-fetches stop and every credits surface degrades to its unavailable state.
+ */
+let creditsUnsupported = false;
+
+const usePostgresStore = create<State>((set, get) => ({
   loaded: false,
   workspaceId: "",
   artifacts: [],
@@ -58,18 +70,41 @@ const usePostgresStore = create<State>((set) => ({
   accountSets: [],
   points: emptyPoints,
   analytics: {},
+  credits: null,
+  creditsLoading: true,
   refresh: async () => {
     const data = await request<Bootstrap>("/v1/bootstrap");
     for (const artifact of data.artifacts) {
       if (artifact.publicUrl) artifactUrls.set(artifact.id, artifact.publicUrl);
     }
     set({ ...data, loaded: true });
+    // Credits ride along after every bootstrap-backed refresh, off the
+    // critical path — a failure never blocks the workspace itself.
+    if (!creditsUnsupported) {
+      void get()
+        .loadCredits()
+        .catch(() => undefined);
+    }
   },
   loadAnalytics: async (rangeDays) => {
     const data = await request<AnalyticsDashboardDTO>(
       `/v1/analytics?rangeDays=${rangeDays}`,
     );
     set((state) => ({ analytics: { ...state.analytics, [rangeDays]: data } }));
+  },
+  loadCredits: async () => {
+    try {
+      const credits = await fetchCredits();
+      creditsUnsupported = false;
+      set({ credits, creditsLoading: false });
+    } catch (error) {
+      if (error instanceof AiRequestError && [404, 405, 501].includes(error.status)) {
+        creditsUnsupported = true;
+      } else {
+        console.warn("Posterract credits refresh failed", error);
+      }
+      set({ credits: null, creditsLoading: false });
+    }
   },
 }));
 
@@ -90,6 +125,23 @@ export function useEngineBoot() {
       active = false;
     };
   }, [refresh]);
+}
+
+/** Re-fetch the credit balance (e.g. after a generation settles). */
+export async function refreshCredits(): Promise<void> {
+  await usePostgresStore.getState().loadCredits();
+}
+
+export function useCredits(): CreditsState {
+  const credits = usePostgresStore((state) => state.credits);
+  const loading = usePostgresStore((state) => state.creditsLoading);
+  return useMemo(
+    () =>
+      credits
+        ? { ...credits, loading: false, available: true }
+        : { ...UNAVAILABLE_CREDITS, loading },
+    [credits, loading],
+  );
 }
 
 export const useArtifacts = () => usePostgresStore((state) => state.artifacts);

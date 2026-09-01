@@ -9,6 +9,8 @@ import {
 } from "@/creative/bridge";
 import { desktopRequest, isPosterractDesktop } from "@/lib/desktop";
 import { refreshPostgresEngine } from "@/engine/postgres";
+import { refreshCredits } from "@/engine/useEngine";
+import { handleAiBridgeRequest, serializeAiBridgeError } from "@/lib/ai";
 
 type LocalExport = {
   path: string;
@@ -73,6 +75,35 @@ function CreateEditorHost() {
         (event.data.path === "/continuum" || event.data.path === "/uplink")
       ) {
         void navigate({ to: event.data.path });
+        return;
+      }
+      if (event.data?.type === "posterract-ai-request") {
+        // AI generation bridge: the editor asks, the host talks to the API
+        // with the workspace's own authenticated transport (cookies in the
+        // browser, the Electron main process on Desktop). The editor iframe
+        // never holds credentials.
+        const { id, action, payload } = event.data as {
+          id?: unknown;
+          action?: unknown;
+          payload?: unknown;
+        };
+        if (typeof id !== "string" || !id) return;
+        const respond = (body: { ok: boolean; data?: unknown; error?: unknown }) => {
+          iframe.current?.contentWindow?.postMessage(
+            { type: "posterract-ai-response", id, ...body },
+            "*",
+          );
+        };
+        void handleAiBridgeRequest(action, payload)
+          .then((data) => {
+            respond({ ok: true, data });
+            // Executed generations and transcriptions move credits — keep the
+            // header pill honest without blocking the editor's response.
+            if (action === "execute" || action === "transcribe") {
+              void refreshCredits().catch(() => undefined);
+            }
+          })
+          .catch((cause) => respond({ ok: false, error: serializeAiBridgeError(cause) }));
         return;
       }
       if (event.data?.type === "posterract-export-complete" && isPosterractDesktop()) {

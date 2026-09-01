@@ -19,6 +19,7 @@ import type {
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import type { CreateTransmissionInput } from "./store";
+import { UNAVAILABLE_CREDITS, type CreditsState } from "@/billing/plans";
 
 /** Workspace context (single workspace until auth lands). */
 type WorkspaceState = { workspaceId: string | null; setWorkspaceId: (id: string) => void };
@@ -26,6 +27,10 @@ export const useWorkspace = create<WorkspaceState>((set) => ({
   workspaceId: null,
   setWorkspaceId: (workspaceId) => set({ workspaceId }),
 }));
+
+/** AI credits are a PostgreSQL-engine feature; the Convex engine reports them unavailable. */
+export const useCredits = (): CreditsState => UNAVAILABLE_CREDITS;
+export async function refreshCredits(): Promise<void> {}
 
 
 

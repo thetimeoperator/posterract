@@ -1,34 +1,29 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import clsx from "clsx";
-import type {
-  BillingCheckoutDTO,
-  BillingConfigDTO,
-  BillingSubscriptionDTO,
-} from "@posterract/contract";
-import { authClient, posterractApiUrl } from "@/lib/authClient";
+import type { BillingSubscriptionDTO } from "@posterract/contract";
+import { authClient } from "@/lib/authClient";
 import { SpaceBackdrop } from "@/shell/SpaceBackdrop";
-import { cloudJson } from "@/lib/cloudRequest";
 import { desktopSignOut } from "@/lib/desktopAuth";
 import { isPosterractDesktop, openExternalUrl } from "@/lib/desktop";
 import { useAuthState } from "@/lib/useAuthState";
+import {
+  billingRequest,
+  createBillingCheckout,
+  createBillingPortal,
+  fetchBillingConfig,
+} from "./api";
+import {
+  PLAN_TIERS,
+  formatCredits,
+  readTierCatalog,
+  type ExtendedBillingConfig,
+  type PlanTierId,
+} from "./plans";
 
 type BillingCycle = "monthly" | "yearly";
 type GateStatus = "checking" | "ready" | "error";
 
 const MANAGEABLE_STATUSES = new Set(["past_due", "unpaid", "paused", "trialing"]);
-
-async function billingRequest<T>(
-  path: string,
-  init: RequestInit = {},
-  signal?: AbortSignal,
-): Promise<T> {
-  if (!posterractApiUrl) throw new Error("Billing is unavailable in this environment.");
-  return cloudJson<T>(posterractApiUrl, path, {
-    ...init,
-    signal,
-    cache: "no-store",
-  });
-}
 
 function price(amount: number): string {
   return new Intl.NumberFormat("en-US", {
@@ -41,9 +36,10 @@ function price(amount: number): string {
 export function BillingGate({ children }: { children: ReactNode }) {
   const authState = useAuthState();
   const [status, setStatus] = useState<GateStatus>("checking");
-  const [config, setConfig] = useState<BillingConfigDTO | null>(null);
+  const [config, setConfig] = useState<ExtendedBillingConfig | null>(null);
   const [subscription, setSubscription] = useState<BillingSubscriptionDTO | null>(null);
   const [cycle, setCycle] = useState<BillingCycle>("monthly");
+  const [tier, setTier] = useState<PlanTierId>("studio");
   const [busy, setBusy] = useState<"checkout" | "portal" | "signout" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
@@ -66,11 +62,7 @@ export function BillingGate({ children }: { children: ReactNode }) {
       setStatus("checking");
       setError(null);
       try {
-        const nextConfig = await billingRequest<BillingConfigDTO>(
-          "/v1/billing/config",
-          {},
-          controller.signal,
-        );
+        const nextConfig = await fetchBillingConfig(controller.signal);
         if (!nextConfig.configured || !nextConfig.plans) {
           throw new Error("Secure checkout is not configured yet.");
         }
@@ -138,8 +130,24 @@ export function BillingGate({ children }: { children: ReactNode }) {
 
   if (status === "ready" && subscription?.entitled) return children;
 
+  // Tier catalog advertised by the API. When present, the gate sells the
+  // three-tier lineup; otherwise it keeps the original single-plan flow.
+  const tierCatalog = readTierCatalog(config);
+  const tiered = PLAN_TIERS.some((planTier) => tierCatalog[planTier.id]);
+  const activeTier: PlanTierId | undefined = tierCatalog[tier]
+    ? tier
+    : PLAN_TIERS.find((planTier) => tierCatalog[planTier.id])?.id;
+  const tierPlans = activeTier ? tierCatalog[activeTier] : undefined;
+  const cycleOptions = tiered ? tierPlans : config?.plans;
   const plans = config?.plans;
-  const selectedPlan = plans?.[cycle];
+  const selectedPlan = tiered ? tierPlans?.[cycle] : plans?.[cycle];
+  const activeTierInfo = activeTier
+    ? PLAN_TIERS.find((planTier) => planTier.id === activeTier)
+    : undefined;
+  const yearlySavings =
+    cycleOptions?.monthly && cycleOptions.yearly
+      ? cycleOptions.monthly.amount * 12 - cycleOptions.yearly.amount
+      : undefined;
   const needsPortal = MANAGEABLE_STATUSES.has(subscription?.status ?? "");
   const cancelled = returnState === "cancelled";
   const userEmail = authState.user?.email;
@@ -148,11 +156,9 @@ export function BillingGate({ children }: { children: ReactNode }) {
     setBusy("checkout");
     setError(null);
     try {
-      const checkout = await billingRequest<BillingCheckoutDTO>("/v1/billing/checkout", {
-        method: "POST",
-        headers: { "Idempotency-Key": `checkout-${crypto.randomUUID()}` },
-        body: JSON.stringify({ interval: cycle }),
-      });
+      const checkout = await createBillingCheckout(
+        tiered && activeTier ? { interval: cycle, plan: activeTier } : { interval: cycle },
+      );
       await openExternalUrl(checkout.url);
       setBusy(null);
     } catch (cause) {
@@ -165,11 +171,7 @@ export function BillingGate({ children }: { children: ReactNode }) {
     setBusy("portal");
     setError(null);
     try {
-      const portal = await billingRequest<{ url: string }>("/v1/billing/portal", {
-        method: "POST",
-        headers: { "Idempotency-Key": `portal-${crypto.randomUUID()}` },
-        body: JSON.stringify({}),
-      });
+      const portal = await createBillingPortal();
       await openExternalUrl(portal.url);
       setBusy(null);
     } catch (cause) {
@@ -261,12 +263,18 @@ export function BillingGate({ children }: { children: ReactNode }) {
               <>
                 <div className="grid gap-7 md:grid-cols-[1.12fr_0.88fr] md:gap-8">
                   <div className="py-1">
-                    <p className="text-[9px] font-semibold tracking-[0.18em] text-neon">POSTERRACT PRO</p>
+                    <p className="text-[9px] font-semibold tracking-[0.18em] text-neon">
+                      {tiered ? "POSTERRACT PLANS" : "POSTERRACT PRO"}
+                    </p>
                     <h1 id="billing-gate-title" className="mt-2 max-w-md font-display text-[clamp(29px,4vw,39px)] font-semibold leading-[1.04] tracking-[-0.04em] text-starlight">
-                      Everything currently shipping, in one plan.
+                      {tiered
+                        ? "Pick a tier. AI credits land monthly."
+                        : "Everything currently shipping, in one plan."}
                     </h1>
                     <p className="mt-3 max-w-md text-[11.5px] leading-relaxed text-starlight-dim">
-                      Schedule, publish, analyze, and automate from the same workspace. No feature tiers or setup fee.
+                      {tiered
+                        ? "Every tier carries the full publishing workspace. Credits fuel AI generation and stop cleanly at zero — no surprise charges."
+                        : "Schedule, publish, analyze, and automate from the same workspace. No feature tiers or setup fee."}
                     </p>
 
                     <div className="mt-6 border-t border-white/[0.07] pt-5">
@@ -279,6 +287,9 @@ export function BillingGate({ children }: { children: ReactNode }) {
                           "Private video storage & media library",
                           "Authorized performance analytics",
                           "Scoped API keys for agent workflows",
+                          ...(tiered
+                            ? ["Monthly AI credits — generation stops at zero", "Local exports; the cloud only schedules"]
+                            : []),
                         ].map((feature) => (
                           <li key={feature} className="flex items-start gap-2">
                             <span className="mt-[5px] h-1.5 w-1.5 flex-none rounded-full bg-neon shadow-glow-neon-sm" aria-hidden />
@@ -295,11 +306,63 @@ export function BillingGate({ children }: { children: ReactNode }) {
                   <div className="relative flex min-h-[340px] flex-col">
                     {!needsPortal && selectedPlan ? (
                       <>
-                        <p className="font-display text-[15px] font-semibold text-starlight">Choose billing</p>
-                        {plans && (
+                        <p className="font-display text-[15px] font-semibold text-starlight">
+                          {tiered ? "Choose your tier" : "Choose billing"}
+                        </p>
+                        {tiered && (
+                          <div className="mt-4 grid gap-1.5" role="radiogroup" aria-label="Plan tier">
+                            {PLAN_TIERS.map((planTier) => {
+                              const advertised = tierCatalog[planTier.id];
+                              const selected = activeTier === planTier.id;
+                              const monthlyAmount = advertised?.monthly?.amount;
+                              return (
+                                <button
+                                  key={planTier.id}
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={selected}
+                                  disabled={!advertised}
+                                  onClick={() => {
+                                    setTier(planTier.id);
+                                    if (!advertised?.yearly) setCycle("monthly");
+                                  }}
+                                  className={clsx(
+                                    "flex items-center justify-between gap-3 rounded-[11px] border px-3.5 py-2.5 text-left transition-colors",
+                                    selected
+                                      ? "border-neon/40 bg-neon/[0.08]"
+                                      : "border-white/[0.08] hover:border-white/[0.18]",
+                                    !advertised && "cursor-not-allowed opacity-45",
+                                  )}
+                                >
+                                  <span className="min-w-0">
+                                    <span className={clsx("block font-display text-[12px] font-semibold", selected ? "text-neon" : "text-starlight")}>
+                                      {planTier.name}
+                                      {planTier.highlight && (
+                                        <span className="ml-2 rounded-full border border-neon/30 bg-neon/[0.08] px-1.5 py-px align-middle text-[7px] font-semibold tracking-[0.1em] text-neon">
+                                          POPULAR
+                                        </span>
+                                      )}
+                                    </span>
+                                    <span className="block text-[9px] text-starlight-faint">
+                                      {advertised
+                                        ? `${formatCredits(planTier.credits)} AI credits / month`
+                                        : "Not available yet"}
+                                    </span>
+                                  </span>
+                                  <span className="flex-none font-display text-[13px] font-semibold text-starlight">
+                                    {typeof monthlyAmount === "number" ? price(monthlyAmount) : "—"}
+                                    <small className="ml-0.5 text-[9px] font-normal text-starlight-faint">/mo</small>
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                        {cycleOptions?.monthly && cycleOptions.yearly && (
                           <div className="mt-4 grid grid-cols-2 rounded-[12px] border border-white/[0.08] bg-black/20 p-1" role="radiogroup" aria-label="Billing cycle">
                             {(["monthly", "yearly"] as const).map((option) => {
-                              const plan = plans[option];
+                              const plan = cycleOptions[option];
+                              if (!plan) return null;
                               const selected = cycle === option;
                               const label = option === "monthly" ? "Monthly" : "Yearly";
                               return (
@@ -326,8 +389,17 @@ export function BillingGate({ children }: { children: ReactNode }) {
                           <small className="ml-1 text-[11px] font-normal tracking-normal text-starlight-faint">/{selectedPlan.interval}</small>
                         </p>
                         <p className="mt-2 text-[10px] text-starlight-dim">
-                          {cycle === "yearly" ? "Save $40 compared with monthly billing." : "Billed monthly. Switch or cancel anytime."}
+                          {tiered && activeTierInfo
+                            ? `${formatCredits(activeTierInfo.credits)} AI credits included every month. Generation stops at zero.`
+                            : cycle === "yearly"
+                              ? "Save $40 compared with monthly billing."
+                              : "Billed monthly. Switch or cancel anytime."}
                         </p>
+                        {tiered && cycle === "yearly" && typeof yearlySavings === "number" && yearlySavings > 0 && (
+                          <p className="mt-1 text-[10px] text-starlight-dim">
+                            Save {price(yearlySavings)} compared with monthly billing.
+                          </p>
+                        )}
                         <div className="mt-5 grid grid-cols-2 gap-2 border-y border-white/[0.07] py-3 text-[9px] text-starlight-faint">
                           <span>No setup fee</span>
                           <span className="text-right">Cancel anytime</span>

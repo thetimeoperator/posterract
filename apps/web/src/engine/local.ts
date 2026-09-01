@@ -8,6 +8,7 @@ import { useShallow } from "zustand/react/shallow";
 import { artifactUrls, useEngineStore } from "./store";
 import { startSimulator } from "./simulator";
 import type { AccountSetDTO, AnalyticsDashboardDTO, AnalyticsRangeDays, PlatformId } from "@posterract/contract";
+import { UNAVAILABLE_CREDITS, type CreditsState } from "@/billing/plans";
 
 export function useEngineBoot() {
   const hydrate = useEngineStore((s) => s.hydrate);
@@ -44,6 +45,14 @@ export const usePoints = () => {
     [stats, points],
   );
 };
+/**
+ * Demo mode has no billing account, so AI credits report as unavailable —
+ * the header pill and billing panel show their graceful states instead of
+ * pretending a balance exists. Static value: nothing loads, nothing crashes.
+ */
+export const useCredits = (): CreditsState => UNAVAILABLE_CREDITS;
+export async function refreshCredits(): Promise<void> {}
+
 type DemoAnalyticsProvider = "instagram" | "tiktok" | "facebook" | "threads";
 
 const demoDaily = (provider: DemoAnalyticsProvider, rangeDays: AnalyticsRangeDays) => {
