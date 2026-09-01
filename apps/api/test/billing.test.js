@@ -698,6 +698,85 @@ test("Tier checkout rejects yearly intervals, unknown plans, and unconfigured ti
   }
 });
 
+test("tier checkout sessions complete while unknown prices stay ignored", async () => {
+  const { postgres, pool } = await database();
+  const { client, signatures } = stripeMock();
+  const { app } = await testApp(pool, client, tierEnvironment);
+  function checkoutSession(id, priceId, subscriptionId) {
+    return {
+      id,
+      object: "checkout.session",
+      mode: "subscription",
+      status: "complete",
+      payment_status: "paid",
+      customer: "cus_posterract",
+      subscription: subscriptionId,
+      client_reference_id: workspaceId,
+      amount_total: 5_000,
+      currency: "usd",
+      expires_at: 1_800_100_000,
+      metadata: {
+        workspace_id: workspaceId,
+        user_id: userId,
+        billing_interval: "month",
+        price_id: priceId,
+      },
+    };
+  }
+  async function send(event) {
+    const payload = eventPayload(event);
+    return app.inject({
+      method: "POST",
+      url: "/v1/webhooks/stripe",
+      headers: signedHeaders(signatures, payload),
+      payload,
+    });
+  }
+  try {
+    const studio = await send({
+      id: "evt_checkout_studio",
+      type: "checkout.session.completed",
+      data: {
+        object: checkoutSession("cs_live_studio", "price_studio", "sub_studio"),
+      },
+    });
+    assert.equal(studio.statusCode, 200);
+    assert.deepEqual(studio.json(), { received: true, processed: true });
+    const completed = await pool.query(
+      `select stripe_price_id, stripe_subscription_id, status, completed_at
+       from billing_checkout_sessions
+       where stripe_checkout_session_id = 'cs_live_studio'`,
+    );
+    assert.equal(completed.rows[0].stripe_price_id, "price_studio");
+    assert.equal(completed.rows[0].stripe_subscription_id, "sub_studio");
+    assert.equal(completed.rows[0].status, "complete");
+    assert.notEqual(completed.rows[0].completed_at, null);
+
+    // A price this deployment never sells is still an ignored session.
+    const unknown = await send({
+      id: "evt_checkout_unknown",
+      type: "checkout.session.completed",
+      data: {
+        object: checkoutSession("cs_live_unknown", "price_other", "sub_other"),
+      },
+    });
+    assert.equal(unknown.statusCode, 200);
+    assert.deepEqual(unknown.json(), { received: true, processed: false });
+    const ignored = await pool.query(
+      `select processing_status from stripe_webhook_events
+       where stripe_event_id = 'evt_checkout_unknown'`,
+    );
+    assert.equal(ignored.rows[0].processing_status, "ignored");
+    const sessions = await pool.query(
+      "select stripe_checkout_session_id from billing_checkout_sessions",
+    );
+    assert.equal(sessions.rows.length, 1);
+  } finally {
+    await app.close();
+    await postgres.close();
+  }
+});
+
 test("billing stays bootable when secrets are absent and webhook reports readiness", async () => {
   const { postgres, pool } = await database();
   const app = Fastify({ logger: false });

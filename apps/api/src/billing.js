@@ -402,9 +402,16 @@ async function applyCheckoutEvent(client, workspaceId, session, config) {
   const subscriptionId = stripeId(session.subscription);
   const interval = session.metadata?.billing_interval;
   const priceId = session.metadata?.price_id;
+  // Tier checkouts carry a credit-plan price, legacy ones the monthly or
+  // yearly price. Any other price belongs to a session this deployment never
+  // created, so it stays ignored.
+  const recognizedPrice =
+    priceId === config.monthlyPriceId ||
+    priceId === config.yearlyPriceId ||
+    Boolean(creditPlanForPrice(config, priceId));
   if (
     session.mode !== "subscription" ||
-    (priceId !== config.monthlyPriceId && priceId !== config.yearlyPriceId) ||
+    !recognizedPrice ||
     (interval !== "month" && interval !== "year")
   ) {
     return false;
