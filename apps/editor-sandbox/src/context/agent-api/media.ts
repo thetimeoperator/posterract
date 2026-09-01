@@ -12,7 +12,17 @@ import { createProjectFS } from '@/projects/fs';
 import { ElectronWritableFileHandle } from '@/lib/electron-file-writable';
 import { MAIN_CHANNELS } from '@desktop/main-channels';
 import { mainBridge } from '@/lib/ipc';
+import {
+  AI_TRANSCRIBE_MAX_BYTES,
+  AI_TRANSCRIBE_MAX_SECONDS,
+  AI_TRANSCRIBE_NO_HOST_MESSAGE,
+  AI_TRANSCRIBE_TIMEOUT_MS,
+  AiBridgeError,
+  aiRequest,
+  hasAiHost,
+} from '@/lib/ai-bridge';
 
+import type { AiTranscriptionResult } from '@/lib/ai-bridge';
 import type { Accessor } from 'solid-js';
 import type { Asset } from '@posterract/video-assets';
 import type { EditorSession } from './session';
@@ -303,6 +313,101 @@ export function handleMediaWaveform(resolve: ResolveAsset) {
     const base64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
     return { base64, ...rest };
   };
+}
+
+/**
+ * `media.transcribe`: the one agent-facing endpoint that leaves the machine.
+ * Everything else here reads local bytes; this one hands them to the app shell,
+ * which is where the workspace's credentials and credit balance live. The
+ * editor holds neither, so with no shell above it (standalone dev server, plain
+ * browser tab) the only honest answer is to say so.
+ */
+export type MediaTranscribeRequest = { path: string; durationSec?: number };
+export type MediaTranscribeResult = AiTranscriptionResult;
+
+export function handleMediaTranscribe(resolve: ResolveAsset) {
+  return async (req: MediaTranscribeRequest): Promise<MediaTranscribeResult> => {
+    const asset = await resolve(req.path);
+    assert(
+      asset.type === 'VIDEO' || asset.type === 'AUDIO',
+      `Asset ${asset.id} is ${asset.type}; transcription needs a video or audio file.`,
+    );
+
+    const file = await getAssetFile(asset);
+    assert(
+      file.size <= AI_TRANSCRIBE_MAX_BYTES,
+      `${assetName(asset)} is ${(file.size / 1_048_576).toFixed(1)} MB and transcription accepts at most ` +
+        `${AI_TRANSCRIBE_MAX_BYTES / 1_048_576} MB. Extract a shorter span or an audio-only file first ` +
+        `(posterract media extract --audio-only) and transcribe that instead.`,
+    );
+
+    // The library already probed this asset when it resolved it, so its
+    // duration is normally right there; fall back to decoding the container
+    // only when it is missing (a transient path that probed as 0).
+    const declared = req.durationSec ?? asset.duration;
+    const seconds = Number.isFinite(declared) && declared > 0 ? declared : await probeDuration(file);
+    assert(
+      Number.isFinite(seconds) && seconds > 0,
+      `Could not work out how long ${assetName(asset)} is; pass durationSec explicitly.`,
+    );
+    assert(
+      seconds <= AI_TRANSCRIBE_MAX_SECONDS,
+      `${assetName(asset)} runs ${Math.round(seconds)}s; transcription accepts at most ` +
+        `${AI_TRANSCRIBE_MAX_SECONDS}s. Extract a shorter span and transcribe that instead.`,
+    );
+    // Whole seconds, as the endpoint's validator requires; it prices by
+    // started minute, so rounding up never under-charges the account.
+    const durationSec = Math.max(1, Math.ceil(seconds));
+
+    if (!hasAiHost()) throw new Error(AI_TRANSCRIBE_NO_HOST_MESSAGE);
+
+    try {
+      return await aiRequest<MediaTranscribeResult>(
+        'transcribe',
+        {
+          fileName: assetName(asset),
+          mimeType: asset.mimeType || file.type || 'application/octet-stream',
+          durationSec,
+          bytes: await file.arrayBuffer(),
+        },
+        AI_TRANSCRIBE_TIMEOUT_MS,
+      );
+    } catch (error) {
+      throw transcribeFailure(error);
+    }
+  };
+}
+
+/** The wire failure as something an agent can act on, never a raw bridge object. */
+function transcribeFailure(error: unknown): Error {
+  if (!(error instanceof AiBridgeError)) {
+    return error instanceof Error ? error : new Error(String(error));
+  }
+  if (error.timedOut) {
+    return new Error(
+      `The Posterract app did not answer within ${Math.round(AI_TRANSCRIBE_TIMEOUT_MS / 60_000)} minutes. ` +
+        'Check that the app is signed in, or transcribe a shorter span.',
+    );
+  }
+  if (error.insufficientCredits) {
+    return new Error(
+      error.needed !== undefined && error.balance !== undefined
+        ? `Not enough AI credits: this transcription costs ${error.needed} cr and the workspace has ${error.balance} cr.`
+        : 'Not enough AI credits to transcribe this media.',
+    );
+  }
+  return new Error(error.message);
+}
+
+async function probeDuration(blob: Blob): Promise<number> {
+  const input = new Input({ formats: ALL_FORMATS, source: new BlobSource(blob) });
+  try {
+    return await input.computeDuration();
+  } catch {
+    return 0;
+  } finally {
+    input.dispose();
+  }
 }
 
 async function canvasToPngBase64(canvas: HTMLCanvasElement | OffscreenCanvas): Promise<string> {

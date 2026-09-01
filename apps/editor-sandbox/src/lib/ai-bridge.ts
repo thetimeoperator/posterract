@@ -63,6 +63,56 @@ export interface AiStatusResult {
 	error?: string;
 }
 
+/** One spoken word, timed in seconds from the start of the media. */
+export interface AiTranscriptWord {
+	text: string;
+	start: number;
+	end: number;
+}
+
+export interface AiTranscriptSegment {
+	text: string;
+	words: AiTranscriptWord[];
+}
+
+/** What `transcribe` answers, verbatim from POST /v1/ai/transcribe. */
+export interface AiTranscriptionResult {
+	segments: AiTranscriptSegment[];
+	creditsSettled: number;
+}
+
+/**
+ * What `transcribe` asks for. The bytes ride the postMessage boundary as an
+ * ArrayBuffer (structured clone copies it), and the shell turns them into the
+ * endpoint's multipart upload — the editor never holds the credentials that
+ * upload needs.
+ */
+export interface AiTranscribeRequest {
+	fileName: string;
+	mimeType: string;
+	/** Whole seconds of media; the server prices 1 credit per started minute. */
+	durationSec: number;
+	bytes: ArrayBuffer;
+}
+
+/** The endpoint's ceiling on one inline upload. */
+export const AI_TRANSCRIBE_MAX_BYTES = 25 * 1024 * 1024;
+
+/** The endpoint's ceiling on billable duration: four hours. */
+export const AI_TRANSCRIBE_MAX_SECONDS = 14_400;
+
+/**
+ * Transcription is an upload plus a provider round trip, so it gets a
+ * render-class budget rather than the bridge's 30s default. It stays inside
+ * the MCP tool's own 600s timeout so the agent sees this message, not a
+ * severed mailbox.
+ */
+export const AI_TRANSCRIBE_TIMEOUT_MS = 540_000;
+
+/** What every transcription entry point says when there is no shell to ask. */
+export const AI_TRANSCRIBE_NO_HOST_MESSAGE =
+	'Transcription needs the Posterract app shell and a signed-in workspace.';
+
 /**
  * What the editor asks to generate. The same payload goes to `quote` and to
  * `execute`; the host is the authority on price and validity.

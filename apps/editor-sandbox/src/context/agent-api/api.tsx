@@ -9,7 +9,7 @@ import { useProject } from '@/context/project';
 import { t, q, q0, m, m0 } from "@/lib/cli-rpc";
 import { editorSession, requireEditorSession, setEditorSession } from "./session";
 import { handleContextGet } from "./context";
-import { createAssetResolver, handleMediaProbe, handleMediaExtract, handleMediaFrame, handleMediaFilmstrip, handleMediaWaveform } from "./media";
+import { createAssetResolver, handleMediaProbe, handleMediaExtract, handleMediaFrame, handleMediaFilmstrip, handleMediaTranscribe, handleMediaWaveform } from "./media";
 import { handleCapture } from "./capture";
 import { handleCheck } from "./check";
 import { handleLogs } from "./logs";
@@ -222,6 +222,9 @@ function createAppRouter({ navigate }: AppRouterDeps) {
       filmstrip: q(handleMediaFilmstrip(resolveAsset)),
       waveform: q(handleMediaWaveform(resolveAsset)),
       extract: q(handleMediaExtract(resolveAsset)),
+      // The only media endpoint that leaves the machine: it uploads through
+      // the app shell's authenticated bridge and spends AI credits.
+      transcribe: q(handleMediaTranscribe(resolveAsset)),
     }),
   });
 }

@@ -35,6 +35,7 @@ These tools use the same source-backed document editor as the visual UI. For new
 - `posterract_capture`: return render-equivalent frames or contact sheets as MCP images.
 - `posterract_screenshot`: return the complete live editor UI as an MCP image.
 - `posterract_media_probe`, `posterract_media_grab`, `posterract_media_filmstrip`, and `posterract_media_waveform`: inspect local source media without upload.
+- `posterract_media_transcribe`: transcribe the speech in a project video or audio asset into segments with word-level timestamps. Unlike the other media tools it uploads the file (25 MB ceiling) through the signed-in Posterract Desktop workspace and spends AI credits — 1 per started minute. For a larger file, cut a span or an audio-only file with `media extract` first.
 
 ## Export boundary
 

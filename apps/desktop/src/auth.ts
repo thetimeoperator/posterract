@@ -36,7 +36,9 @@ type CloudRequest = {
   path: string;
   method?: string;
   headers?: Record<string, string>;
-  body?: string;
+  // Binary bodies (multipart transcription uploads) arrive as Uint8Array over
+  // the structured-clone IPC boundary; Node's fetch accepts ArrayBufferView.
+  body?: string | Uint8Array;
 };
 
 type CloudResponse = {
@@ -298,11 +300,20 @@ export class DesktopAuthManager {
       if (SAFE_HEADERS.has(name.toLowerCase())) headers.set(name, value);
     }
     headers.set("authorization", `Bearer ${await this.access()}`);
+    // AI generation/transcription legitimately runs for minutes; the server
+    // allows up to 600s on /v1/ai/* while everything else keeps the tight cap.
+    const timeoutMs = request.path.startsWith("/v1/ai/") ? 600_000 : 60_000;
+    const body =
+      method === "GET" || request.body === undefined
+        ? undefined
+        : typeof request.body === "string"
+          ? request.body
+          : new Uint8Array(request.body);
     const response = await fetch(`${apiBase()}${request.path}`, {
       method,
       headers,
-      body: method === "GET" ? undefined : request.body,
-      signal: AbortSignal.timeout(60_000),
+      body,
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (response.status === 401 && retry) {
       await this.refresh();

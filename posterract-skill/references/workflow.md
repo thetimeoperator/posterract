@@ -12,6 +12,8 @@ Use `posterract_media_probe`, `posterract_media_filmstrip`, `posterract_media_wa
 
 Inspect the resulting images. Use `media extract` only to create a small local segment for the connected agent's own transcription or listening capabilities.
 
+For speech, `posterract_media_transcribe` returns word-level timestamps for a project asset. It uploads through the signed-in workspace and spends AI credits (1 per started minute), so ask the user before transcribing, and extract an audio-only file first when the media is over 25 MB.
+
 ## Edit incrementally
 
 - One `<stage>` owns the project workspace.

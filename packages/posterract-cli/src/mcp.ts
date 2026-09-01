@@ -397,6 +397,22 @@ export async function servePosterractMcp(explicitProjectDir?: string): Promise<v
       annotations: { readOnlyHint: true },
     }, safelyWith(async (input: Record<string, unknown>) => imageResult(await call("media_waveform", "media.waveform", input, RENDER_TIMEOUT_MS))));
 
+    server.registerTool("posterract_media_transcribe", {
+      title: "Transcribe media",
+      description:
+        "Transcribe the speech in a project video or audio asset through the connected Posterract account. " +
+        "Returns segments with word-level timestamps in seconds, ready to drive captions or an edit. " +
+        "Unlike the other media tools this one uploads the file and spends AI credits (1 credit per started minute), " +
+        "so it needs Posterract Desktop with a signed-in workspace. Files must be 25 MB or smaller: " +
+        "for anything larger, extract a shorter span or an audio-only file first and transcribe that.",
+      inputSchema: z.object({
+        path: z.string().min(1),
+        durationSec: z.number().positive().optional(),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    }, safelyWith(async (input: { path: string; durationSec?: number }) =>
+      jsonResult(await call("media_transcribe", "media.transcribe", input, RENDER_TIMEOUT_MS))));
+
     server.registerTool("posterract_export", {
       title: "Export local video",
       description: "Export one video to an explicit local path. This never uploads, posts, or schedules.",
