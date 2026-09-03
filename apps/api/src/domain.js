@@ -1,3 +1,5 @@
+import { PLATFORM_CAPABILITIES } from "@posterract/contract/capabilities";
+
 export const PLATFORM_IDS = [
   "instagram",
   "tiktok",
@@ -15,12 +17,16 @@ export const PUBLISHING_PLATFORM_IDS = [
 ];
 
 const platformSet = new Set(PUBLISHING_PLATFORM_IDS);
-const captionLimits = {
-  instagram: 2_200,
-  tiktok: 2_200,
-  facebook: 63_206,
-  threads: 500,
-};
+/**
+ * Caption limits come from the shared platform contract, not a second copy.
+ *
+ * These were duplicated here and in `packages/contract/src/capabilities.ts`,
+ * which is exactly the arrangement where one gets updated and the other does
+ * not — and the one that would drift is the one the server enforces.
+ */
+const captionLimits = Object.fromEntries(
+  PUBLISHING_PLATFORM_IDS.map((id) => [id, PLATFORM_CAPABILITIES[id].captionMaxChars]),
+);
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 

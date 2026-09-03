@@ -16,7 +16,7 @@ import { Computed, getActiveEntity, getNextName, Root, Source, store } from '@po
 import { getDocumentEditor } from '@/engine/editor';
 import { AUDIO_SIZE } from '@/engine/insert-asset';
 
-import type { AiGenerationKind, AiGenerationOutput } from '@/lib/ai-bridge';
+import type { AiGenerationKind, AiLocalOutput } from '@/lib/ai-bridge';
 import type { Entity, World } from 'koota';
 
 const NAMES: Record<AiGenerationKind, string> = {
@@ -30,8 +30,10 @@ const NAMES: Record<AiGenerationKind, string> = {
  * returns the entity — or null when there is nothing to insert into (no
  * project mounted, no source to write under) or no URL to point at.
  */
-export function insertGeneration(world: World, kind: AiGenerationKind, output: AiGenerationOutput): Entity | null {
-	const src = output.url;
+export function insertGeneration(world: World, kind: AiGenerationKind, output: AiLocalOutput): Entity | null {
+	// A project-relative path — the asset library resolves it like any other
+	// media the user dropped into the project.
+	const src = output.path;
 	if (!src) return null;
 
 	const parent = getActiveEntity(world) ?? world.get(Root)!;
@@ -42,11 +44,9 @@ export function insertGeneration(world: World, kind: AiGenerationKind, output: A
 	const start = store(world, Computed).localTimeInSeconds[parent.id()] ?? 0;
 	const timing = start > 0 ? { start } : {};
 
-	const size = kind === 'voice'
-		? { ...AUDIO_SIZE }
-		: output.width && output.height
-			? { width: Math.round(output.width), height: Math.round(output.height) }
-			: undefined;
+	// Local generations report no pixel dimensions up front; the element
+	// takes its intrinsic size once the asset loads.
+	const size = kind === 'voice' ? { ...AUDIO_SIZE } : undefined;
 	const position = size ? centered(world, parent, size) : {};
 
 	const [entity] = editor.insertElement(parent, () => {

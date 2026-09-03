@@ -72,7 +72,11 @@ type EngineState = {
   stats: StatsState;
 
   hydrate: () => Promise<void>;
-  addArtifact: (file: File, meta: { durationMs?: number; width?: number; height?: number }) => Promise<ArtifactDTO>;
+  addArtifact: (
+    file: File,
+    meta: { durationMs?: number; width?: number; height?: number },
+    onProgress?: (fraction: number) => void,
+  ) => Promise<ArtifactDTO>;
   renameArtifact: (id: string, fileName: string) => void;
   deleteArtifact: (id: string) => { ok: boolean; reason?: string };
   createTransmission: (input: CreateTransmissionInput) => TransmissionDTO;

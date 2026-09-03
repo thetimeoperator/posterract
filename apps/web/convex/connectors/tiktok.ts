@@ -29,6 +29,10 @@ export function tiktokAuthUrl(args: { clientKey: string; redirectUri: string; st
     response_type: "code",
     redirect_uri: args.redirectUri,
     state: args.state,
+    // TikTok otherwise skips its authorization screen when the browser still
+    // has a valid TikTok session and this app was approved previously. Always
+    // show consent so users can verify or change the account being connected.
+    disable_auto_auth: "1",
   });
   return `https://www.tiktok.com/v2/auth/authorize/?${p.toString()}`;
 }
@@ -123,6 +127,32 @@ export async function tiktokRefreshToken(args: {
       grant_type: "refresh_token",
       refresh_token: args.refreshToken,
     }),
+  );
+}
+
+/** Revoke the user's TikTok grant before discarding Posterract's token copy. */
+export async function tiktokRevokeToken(args: {
+  clientKey: string;
+  clientSecret: string;
+  accessToken: string;
+}): Promise<void> {
+  const response = await fetch(`${OPEN_API}/v2/oauth/revoke/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_key: args.clientKey,
+      client_secret: args.clientSecret,
+      token: args.accessToken,
+    }),
+  });
+  if (response.ok) return;
+
+  const body = (await response.json().catch(() => ({}))) as {
+    error?: string;
+    error_description?: string;
+  };
+  throw new Error(
+    `TikTok revoke failed: ${body.error_description ?? body.error ?? response.status}`,
   );
 }
 

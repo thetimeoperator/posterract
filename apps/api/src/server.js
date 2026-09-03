@@ -54,10 +54,12 @@ import {
   registerBillingRoutes,
   registerStripeWebhookRoutes,
 } from "./billing.js";
-import { registerCreativeRoutes } from "./creative.js";
+// The cloud-editor module (creative.js) is retired: the editor lives on the
+// user's machine and only calls the publishing APIs here. Its routes pulled
+// the whole editor package graph into this server's runtime, which does not
+// belong on the VPS.
 import { registerDesktopAuthRoutes } from "./desktopAuth.js";
 import { loadAccountSets, registerAccountSetRoutes } from "./accountSets.js";
-import { registerAiRoutes } from "./ai/routes.js";
 
 const env = process.env;
 const port = Number(env.PORT ?? 3001);
@@ -87,12 +89,21 @@ const allowedMimeTypes = new Map([
   ["text/vtt", ".vtt"],
   ["application/json", ".json"],
 ]);
+/**
+ * One provenance value, or null.
+ *
+ * Provenance is a record, never a gate: it is written by the desktop app and
+ * absent from every other client, so anything unusable is dropped rather than
+ * failing the upload a creator is waiting on.
+ */
+function provenanceField(value) {
+  return typeof value === "string" && value.length > 0 && value.length <= 256 ? value : null;
+}
+
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const agentApiScopes = new Set([
   "accounts:read",
-  "ai:read",
-  "ai:write",
   "analytics:read",
   "creative:read",
   "creative:write",
@@ -917,12 +928,6 @@ app.get("/v1/openapi.json", async () => ({
     "/v1/analytics": { get: { summary: "Read approved TikTok, Instagram, Facebook, and Threads analytics" } },
     "/v1/points": { get: { summary: "Read the workspace Resonance Points balance" } },
     "/v1/points/ledger": { get: { summary: "Read the immutable points ledger" } },
-    "/v1/credits": { get: { summary: "Read the workspace AI credit balance and plan" } },
-    "/v1/credits/ledger": { get: { summary: "Read the immutable AI credit ledger" } },
-    "/v1/ai/generate": { post: { summary: "Quote or execute an AI image, video, or voice generation" } },
-    "/v1/ai/generations": { get: { summary: "List recent AI generations, newest first" } },
-    "/v1/ai/generations/{id}": { get: { summary: "Read one AI generation and its output" } },
-    "/v1/ai/transcribe": { post: { summary: "Transcribe audio into word-timed segments" } },
     "/v1/accounts": { get: { summary: "List connected social accounts" } },
     "/v1/uploads/multipart": { post: { summary: "Start a direct R2 multipart upload" } },
     "/v1/posts": { post: { summary: "Publish now or schedule a post" } },
@@ -1418,22 +1423,6 @@ app.get(
 registerOAuthRoutes(app, { postgres, requireScope, requiredWorkspace });
 registerAccountSetRoutes(app, { postgres, requireScope, requiredWorkspace });
 registerMetaRoutes(app, { postgres });
-registerCreativeRoutes(app, {
-  postgres,
-  requireScope,
-  requiredWorkspace,
-  r2,
-  r2Bucket: env.R2_BUCKET,
-  signedUrlTtlSeconds: Number(env.R2_SIGNED_DOWNLOAD_TTL_SECONDS ?? 3_600),
-});
-registerAiRoutes(app, {
-  postgres,
-  requireScope,
-  requiredWorkspace,
-  r2,
-  r2Bucket: env.R2_BUCKET,
-  logger: app.log,
-});
 
 app.get(
   "/v1/analytics",
@@ -1871,7 +1860,13 @@ app.post(
          for update`,
         [input.artifactId, workspaceId],
       );
-      if (!media.rows[0] || !["ready", "attached"].includes(media.rows[0].status)) {
+      // An uploaded asset is reusable. A previous or concurrent transmission
+      // may have moved it to scheduled/publishing, but the immutable R2 object
+      // is still valid for another set of projections.
+      if (
+        !media.rows[0] ||
+        !["ready", "attached", "scheduled", "publishing"].includes(media.rows[0].status)
+      ) {
         await client.query("rollback");
         return reply.code(409).send({ error: "media_not_ready" });
       }
@@ -2674,6 +2669,9 @@ app.post(
       purpose = "publishing",
       creativeProjectId,
       creativePath,
+      projectId,
+      sceneId,
+      sourceRevision,
     } = request.body ?? {};
     const workspaceId =
       request.authContext?.kind === "internal"
@@ -2768,8 +2766,8 @@ app.post(
       await postgres.query(
         `insert into media_assets
           (id, workspace_id, original_filename, r2_key, mime_type, size_bytes,
-           duration_ms, width, height, status)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'uploading')`,
+           duration_ms, width, height, status, project_id, scene_id, source_revision)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'uploading', $10, $11, $12)`,
         [
           mediaId,
           workspaceId,
@@ -2780,6 +2778,12 @@ app.post(
           durationMs ?? null,
           width ?? null,
           height ?? null,
+          // Where the render came from, when the uploader knows. Optional and
+          // free-form: a client that is not the desktop app has no provenance
+          // to give, and a bad value must never block a publish.
+          provenanceField(projectId),
+          provenanceField(sceneId),
+          provenanceField(sourceRevision),
         ],
       );
       await redis.set(

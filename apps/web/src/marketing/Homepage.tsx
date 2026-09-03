@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { PLATFORM_MARK_SOURCES } from "@posterract/hyperkit";
 import { Hero } from "@/components/ui/animated-hero";
-import { PricingTierDeck } from "@/components/ui/pricing-tier-deck";
+import { AnimatedPricingCard } from "@/components/ui/animated-pricing-card";
 import {
   WelcomeAuthCard,
   type WelcomeAuthMode,
@@ -157,9 +157,9 @@ export function Homepage() {
 
       <section className="site-pricing" id="pricing" aria-labelledby="pricing-title">
         <div className="site-pricing-copy">
-          <p className="site-kicker">THREE TIERS // AI CREDITS INCLUDED</p>
-          <h2 id="pricing-title">Every tier is the full command center. Credits set the fuel.</h2>
-          <p>Publishing, scheduling, and analytics come with every plan. AI credits refill monthly and power image, video, and voice generation—when they hit zero, generation simply stops. No overages, no surprise charges.</p>
+          <p className="site-kicker">ONE PLAN // THE FULL HARNESS</p>
+          <h2 id="pricing-title">One plan. Your entire publishing command center.</h2>
+          <p>Scheduling, publishing, analytics, and the editor come in the one plan. AI generation runs on your own provider keys—you pay the providers directly, and we never mark up a single generation.</p>
 
           <div className="site-pricing-sequence" aria-label="Posterract plan capabilities">
             <div><span>01</span><strong>Connect</strong><small>Social accounts + agent API</small></div>
@@ -170,13 +170,7 @@ export function Homepage() {
           </div>
         </div>
 
-        <PricingTierDeck onLaunch={() => openAuth("signup")} />
-
-        <div className="site-pricing-honesty" aria-label="How Posterract billing works">
-          <p><strong>CREDITS INCLUDED</strong> Every tier refills its full allotment each month.</p>
-          <p><strong>HARD STOP AT ZERO</strong> Generation pauses instead of billing overages.</p>
-          <p><strong>LOCAL EXPORTS</strong> Your exports stay on your computer—the cloud is only for scheduling.</p>
-        </div>
+        <AnimatedPricingCard onLaunch={() => openAuth("signup")} />
       </section>
 
       <section className="site-pipeline" aria-labelledby="pipeline-title">

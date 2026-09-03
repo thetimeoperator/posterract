@@ -19,7 +19,6 @@ import type {
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import type { CreateTransmissionInput } from "./store";
-import { UNAVAILABLE_CREDITS, type CreditsState } from "@/billing/plans";
 
 /** Workspace context (single workspace until auth lands). */
 type WorkspaceState = { workspaceId: string | null; setWorkspaceId: (id: string) => void };
@@ -27,10 +26,6 @@ export const useWorkspace = create<WorkspaceState>((set) => ({
   workspaceId: null,
   setWorkspaceId: (workspaceId) => set({ workspaceId }),
 }));
-
-/** AI credits are a PostgreSQL-engine feature; the Convex engine reports them unavailable. */
-export const useCredits = (): CreditsState => UNAVAILABLE_CREDITS;
-export async function refreshCredits(): Promise<void> {}
 
 
 
@@ -184,7 +179,9 @@ export function useEngineActions() {
     addArtifact: async (
       file: File,
       meta: { durationMs?: number; width?: number; height?: number },
+      onProgress?: (fraction: number) => void,
     ): Promise<ArtifactDTO> => {
+      onProgress?.(0);
       const uploadUrl = await generateUploadUrl();
       const res = await fetch(uploadUrl, {
         method: "POST",
@@ -202,6 +199,7 @@ export function useEngineActions() {
         width: meta.width,
         height: meta.height,
       });
+      onProgress?.(1);
       return {
         id: artifactId as string,
         workspaceId: useWorkspace.getState().workspaceId ?? "",

@@ -24,6 +24,7 @@ import {
   tiktokAuthUrl,
   tiktokExchangeCode,
   tiktokRefreshToken,
+  tiktokRevokeToken,
 } from "../../web/convex/connectors/tiktok.ts";
 import {
   YOUTUBE_SCOPES,
@@ -586,6 +587,13 @@ async function disconnectConnection(database, request, workspaceId, accountId) {
     if (account.provider === "youtube" && (refreshToken || accessToken)) {
       await youtubeRevokeToken(refreshToken || accessToken);
     }
+    if (account.provider === "tiktok" && accessToken) {
+      await tiktokRevokeToken({
+        clientKey: requiredEnvironment("TIKTOK_CLIENT_KEY"),
+        clientSecret: requiredEnvironment("TIKTOK_CLIENT_SECRET"),
+        accessToken,
+      });
+    }
     if (account.provider === "facebook" && refreshToken) {
       const siblings = await database.query(
         `select count(*)::int as count
@@ -682,9 +690,15 @@ export function registerOAuthRoutes(app, { postgres, requireScope, requiredWorks
       );
       await postgres.query(
         `insert into oauth_states
-          (state_hash, workspace_id, provider, redirect_uri, expires_at)
-         values ($1, $2, $3, $4, now() + interval '15 minutes')`,
-        [hashState(state), workspaceId, provider, redirectUri(provider)],
+          (state_hash, workspace_id, provider, redirect_uri, payload_ciphertext, expires_at)
+         values ($1, $2, $3, $4, $5, now() + interval '15 minutes')`,
+        [
+          hashState(state),
+          workspaceId,
+          provider,
+          redirectUri(provider),
+          encryptSecret(request.authContext?.kind === "desktop" ? "desktop" : "web"),
+        ],
       );
       return { url };
     },
@@ -692,7 +706,6 @@ export function registerOAuthRoutes(app, { postgres, requireScope, requiredWorks
 
   app.post(
     "/v1/oauth/:provider/complete",
-    { preHandler: requireScope("accounts:write") },
     async (request, reply) => {
       const { provider } = request.params;
       const { code, state } = request.body ?? {};
@@ -705,14 +718,13 @@ export function registerOAuthRoutes(app, { postgres, requireScope, requiredWorks
       ) {
         return reply.code(400).send({ error: "invalid_oauth_callback" });
       }
-      const workspaceId = requiredWorkspace(request);
       const claimed = await postgres.query(
         `update oauth_states
          set consumed_at = now()
-         where state_hash = $1 and workspace_id = $2 and provider = $3
+         where state_hash = $1 and provider = $2
            and consumed_at is null and expires_at > now()
-         returning state_hash`,
-        [hashState(state), workspaceId, provider],
+         returning workspace_id, payload_ciphertext`,
+        [hashState(state), provider],
       );
       if (!claimed.rows[0]) {
         return {
@@ -720,11 +732,16 @@ export function registerOAuthRoutes(app, { postgres, requireScope, requiredWorks
           error: "This connection link expired — try again.",
         };
       }
+      const workspaceId = claimed.rows[0].workspace_id;
+      const returnTo =
+        decryptSecret(claimed.rows[0].payload_ciphertext) === "desktop"
+          ? "desktop"
+          : "web";
 
       try {
         const connection = await exchange(provider, code);
         if (connection.facebookSelection) {
-          const pending = connection.facebookSelection;
+          const pending = { ...connection.facebookSelection, returnTo };
           await postgres.query(
             `insert into pending_facebook_connections
               (state_hash, workspace_id, payload_ciphertext, expires_at)
@@ -738,6 +755,7 @@ export function registerOAuthRoutes(app, { postgres, requireScope, requiredWorks
           );
           return {
             ok: true,
+            returnTo,
             selectionRequired: true,
             pages: pending.pages.map((page) => ({ id: page.id, name: page.name })),
           };
@@ -747,11 +765,12 @@ export function registerOAuthRoutes(app, { postgres, requireScope, requiredWorks
         await postgres.query("delete from oauth_states where state_hash = $1", [
           hashState(state),
         ]);
-        return { ok: true, handle: connection.handle };
+        return { ok: true, handle: connection.handle, returnTo };
       } catch (error) {
         request.log.warn({ err: error, provider }, "OAuth completion failed");
         return {
           ok: false,
+          returnTo,
           error: error instanceof Error ? error.message : "Connection failed",
         };
       }
@@ -760,18 +779,16 @@ export function registerOAuthRoutes(app, { postgres, requireScope, requiredWorks
 
   app.post(
     "/v1/oauth/facebook/select-page",
-    { preHandler: requireScope("accounts:write") },
     async (request) => {
       const { state, pageId } = request.body ?? {};
       if (typeof state !== "string" || typeof pageId !== "string") {
         return { ok: false, error: "Invalid Facebook Page selection." };
       }
-      const workspaceId = requiredWorkspace(request);
       const pendingResult = await postgres.query(
-        `select payload_ciphertext
+        `select workspace_id, payload_ciphertext
          from pending_facebook_connections
-         where state_hash = $1 and workspace_id = $2 and expires_at > now()`,
-        [hashState(state), workspaceId],
+         where state_hash = $1 and expires_at > now()`,
+        [hashState(state)],
       );
       if (!pendingResult.rows[0]) {
         return {
@@ -782,6 +799,7 @@ export function registerOAuthRoutes(app, { postgres, requireScope, requiredWorks
       const pending = JSON.parse(
         decryptSecret(pendingResult.rows[0].payload_ciphertext),
       );
+      const workspaceId = pendingResult.rows[0].workspace_id;
       const page = pending.pages.find((candidate) => candidate.id === pageId);
       if (!page) {
         return { ok: false, error: "That Page is not available to this connection." };
@@ -806,7 +824,11 @@ export function registerOAuthRoutes(app, { postgres, requireScope, requiredWorks
       await postgres.query("delete from oauth_states where state_hash = $1", [
         hashState(state),
       ]);
-      return { ok: true, handle: page.name };
+      return {
+        ok: true,
+        handle: page.name,
+        returnTo: pending.returnTo === "desktop" ? "desktop" : "web",
+      };
     },
   );
 

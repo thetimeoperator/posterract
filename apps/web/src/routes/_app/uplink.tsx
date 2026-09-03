@@ -22,8 +22,6 @@ const SCOPES = [
   ["posts:read", "Read history and status"],
   ["posts:write", "Create and schedule posts"],
   ["analytics:read", "Read approved analytics"],
-  ["ai:read", "Read credits and generation status"],
-  ["ai:write", "Run AI generations (spends credits)"],
 ] as const;
 
 const CURL_EXAMPLE = `curl -X POST https://api.posterract.app/v1/posts \\

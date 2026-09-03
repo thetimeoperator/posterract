@@ -32,15 +32,26 @@ export function VideoDropzone({
         pushSignal({ tone: "danger", title: "Unsupported format", detail: "Use MP4, MOV, or WebM video." });
         return;
       }
-      setProgress(0.12);
-      const meta = await probeVideo(file);
-      setProgress(0.55);
-      const artifact = await addArtifact(file, meta);
-      setProgress(1);
-      setTimeout(() => {
+      try {
+        setProgress(0.02);
+        const meta = await probeVideo(file);
+        setProgress(0.05);
+        const artifact = await addArtifact(file, meta, (fraction) => {
+          setProgress(0.05 + Math.max(0, Math.min(1, fraction)) * 0.95);
+        });
+        setProgress(1);
+        setTimeout(() => {
+          setProgress(null);
+          onReady(artifact);
+        }, 350);
+      } catch (cause) {
         setProgress(null);
-        onReady(artifact);
-      }, 350);
+        pushSignal({
+          tone: "danger",
+          title: "Video upload failed",
+          detail: cause instanceof Error ? cause.message : "Posterract could not upload this video.",
+        });
+      }
     },
     [addArtifact, onReady],
   );

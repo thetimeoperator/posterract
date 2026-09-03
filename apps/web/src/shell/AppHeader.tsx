@@ -3,7 +3,6 @@ import { Bell, Command } from "lucide-react";
 import { MiniTesseract } from "@posterract/hyperkit";
 import { useUI } from "@/state/ui";
 import { AccountMenu } from "./AccountMenu";
-import { CreditsPill } from "./CreditsPill";
 import { navItemForPath } from "./nav";
 
 /** Brand and account controls stay above the workspace, separate from navigation. */
@@ -44,7 +43,6 @@ export function AppHeader() {
         </Link>
 
         <div className="pointer-events-auto flex flex-none items-center gap-1.5">
-          <CreditsPill />
           <button
             type="button"
             onClick={() => setNavigatorOpen(true)}

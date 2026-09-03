@@ -109,6 +109,8 @@ test("PostgreSQL application migrations apply cleanly and idempotently", async (
       "desktop_refresh_tokens",
       "account_sets",
       "account_set_members",
+      // Retired with the credit system (migration 011); already applied in
+      // production, so the tables stay and sit harmlessly unused.
       "workspace_credits",
       "credit_ledger",
       "ai_generations",

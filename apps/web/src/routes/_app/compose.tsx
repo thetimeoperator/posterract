@@ -63,6 +63,7 @@ function Composer() {
   const [vaultOpen, setVaultOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [safeZones, setSafeZones] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const artifact = artifacts.find((a) => a.id === artifactId);
   const previewUrl = artifactUrl(artifactId);
@@ -110,36 +111,54 @@ function Composer() {
     setTagDraft("");
   };
 
-  const launch = () => {
-    if (!artifact) return;
+  const launch = async () => {
+    if (!artifact || submitting) return;
     const scheduledFor = mode === "now" ? Date.now() : new Date(whenLocal).getTime();
     if (mode === "at" && scheduledFor <= Date.now()) {
       pushSignal({ tone: "warning", title: "Time is in the past", detail: "Pick a future time, or switch to Now." });
       return;
     }
-    const t = createTransmission({
-      title: resolvedTitle,
-      baseCaption,
-      hashtags,
-      artifactId: artifact.id,
-      platforms,
-      perPlatformCaptions: Object.fromEntries(
-        platforms.map((p) => [p, fullCaptionFor(p)]),
-      ) as Partial<Record<PlatformId, string>>,
-      perPlatformOptions: undefined,
-      accountSetId: accountSetId || undefined,
-      scheduleMode: mode,
-      scheduledFor,
-    });
-    pushSignal({
-      tone: "success",
-      title: mode === "now" ? "Transmission initiated" : "Transmission in trajectory",
-      detail:
-        mode === "now"
-          ? `Publishing “${t.title}” to ${platforms.length} platform${platforms.length > 1 ? "s" : ""} now.`
-          : `“${t.title}” will publish ${new Date(scheduledFor).toLocaleString()}.`,
-    });
-    void navigate({ to: "/transmissions" });
+    setSubmitting(true);
+    const tiktokCaption = platforms.includes("tiktok") ? fullCaptionFor("tiktok") : "";
+    const copyPromise = mode === "now" && tiktokCaption && navigator.clipboard
+      ? navigator.clipboard.writeText(tiktokCaption).then(() => true).catch(() => false)
+      : Promise.resolve(false);
+    try {
+      const t = await createTransmission({
+        title: resolvedTitle,
+        baseCaption,
+        hashtags,
+        artifactId: artifact.id,
+        platforms,
+        perPlatformCaptions: Object.fromEntries(
+          platforms.map((p) => [p, fullCaptionFor(p)]),
+        ) as Partial<Record<PlatformId, string>>,
+        perPlatformOptions: undefined,
+        accountSetId: accountSetId || undefined,
+        scheduleMode: mode,
+        scheduledFor,
+      });
+      const copiedTikTokCaption = await copyPromise;
+      pushSignal({
+        tone: "success",
+        title: mode === "now" ? "Transmission initiated" : "Transmission in trajectory",
+        detail:
+          mode === "now"
+            ? copiedTikTokCaption
+              ? `Publishing “${t.title}” now. TikTok caption copied—paste it into the delivered draft.`
+              : `Publishing “${t.title}” to ${platforms.length} platform${platforms.length > 1 ? "s" : ""} now.`
+            : `“${t.title}” will publish ${new Date(scheduledFor).toLocaleString()}.`,
+      });
+      void navigate({ to: "/transmissions" });
+    } catch (error) {
+      pushSignal({
+        tone: "danger",
+        title: "Post was not submitted",
+        detail: error instanceof Error ? error.message.replaceAll("_", " ") : "Posterract could not create the transmission.",
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const captionTabs = [
@@ -392,11 +411,11 @@ function Composer() {
           variant="primary"
           size="lg"
           icon={<Send size={15} />}
-          disabled={!canLaunch}
-          onClick={() => (mode === "now" && platforms.length >= 3 ? setConfirmOpen(true) : launch())}
+          disabled={!canLaunch || submitting}
+          onClick={() => (mode === "now" && platforms.length >= 3 ? setConfirmOpen(true) : void launch())}
           className="w-full"
         >
-          {mode === "now" ? "Initiate Transmission" : "Lock Trajectory"}
+          {submitting ? "Submitting…" : mode === "now" ? "Initiate Transmission" : "Lock Trajectory"}
         </Button>
         {!canLaunch && failing.length > 0 && (
           <p className="text-center text-[11px] text-starlight-faint">
@@ -437,9 +456,10 @@ function Composer() {
             </Button>
             <Button
               variant="primary"
+              disabled={submitting}
               onClick={() => {
                 setConfirmOpen(false);
-                launch();
+                void launch();
               }}
             >
               Engage

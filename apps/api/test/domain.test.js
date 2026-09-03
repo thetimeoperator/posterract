@@ -103,3 +103,29 @@ test("master status distinguishes partial and total failure", () => {
   assert.equal(transmissionStatus(["failed", "needs_reauth"]), "failed");
   assert.equal(transmissionStatus(["live", "processing"]), "transmitting");
 });
+
+/**
+ * The server is the last line of defence on a caption, so its limits have to be
+ * the same ones the editor previewed against. They used to be a second copy in
+ * `domain.js`; this keeps them honest if the contract moves.
+ */
+test("caption limits come from the shared platform contract", async () => {
+  const { PLATFORM_CAPABILITIES } = await import("@posterract/contract/capabilities");
+  const { PUBLISHING_PLATFORM_IDS } = await import("../src/domain.js");
+
+  for (const provider of PUBLISHING_PLATFORM_IDS) {
+    const maximum = PLATFORM_CAPABILITIES[provider].captionMaxChars;
+    assert.throws(
+      () =>
+        parseCreatePost({
+          artifactId,
+          caption: "x".repeat(maximum + 1),
+          platforms: [provider],
+          accountIds: ["7f1b0d2c-6b0e-4a1c-9c3b-2f0b5e7a1d44"],
+        }),
+      (error) =>
+        error instanceof RequestValidationError && error.code === "caption_too_long",
+      `${provider} should refuse a caption over ${maximum} characters`,
+    );
+  }
+});

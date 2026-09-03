@@ -6,6 +6,7 @@ import { useOAuth } from "@/engine/useEngine";
 
 type CallbackSearch = { code?: string; state?: string; error?: string; error_description?: string };
 type FacebookPageChoice = { id: string; name: string };
+type OAuthReturnTarget = "desktop" | "web";
 
 export const Route = createFileRoute("/oauth/callback/$provider")({
   component: OAuthCallback,
@@ -31,13 +32,31 @@ function OAuthCallback() {
   const [message, setMessage] = useState("Completing connection…");
   const [pages, setPages] = useState<FacebookPageChoice[]>([]);
   const [selectingPageId, setSelectingPageId] = useState<string>();
+  const [returnToDesktop, setReturnToDesktop] = useState(false);
   const ran = useRef(false);
+
+  const openDesktop = (status: "success" | "error" = "success") => {
+    window.location.assign(
+      `posterract://oauth-complete?provider=${encodeURIComponent(provider)}&status=${status}`,
+    );
+  };
 
   useEffect(() => {
     if (ran.current) return;
     ran.current = true;
 
-    const finish = (tone: "success" | "danger", title: string, detail?: string) => {
+    const finish = (
+      tone: "success" | "danger",
+      title: string,
+      detail?: string,
+      returnTo: OAuthReturnTarget = "web",
+    ) => {
+      setMessage(detail ? `${title}: ${detail}` : title);
+      if (returnTo === "desktop") {
+        setReturnToDesktop(true);
+        if (tone === "success") window.setTimeout(() => openDesktop("success"), 250);
+        return;
+      }
       pushSignal({ tone, title, detail });
       void navigate({ to: "/portals" });
     };
@@ -57,6 +76,7 @@ function OAuthCallback() {
         ok: boolean;
         handle?: string;
         error?: string;
+        returnTo?: OAuthReturnTarget;
         selectionRequired?: boolean;
         pages?: FacebookPageChoice[];
       }) => {
@@ -67,9 +87,14 @@ function OAuthCallback() {
         }
         if (res.ok) {
           setMessage("Connected. Returning…");
-          finish("success", "Account connected", res.handle ? `${res.handle} is linked.` : undefined);
+          finish(
+            "success",
+            "Account connected",
+            res.handle ? `${res.handle} is linked.` : undefined,
+            res.returnTo,
+          );
         } else {
-          finish("danger", "Connection failed", res.error);
+          finish("danger", "Connection failed", res.error, res.returnTo);
         }
       })
       .catch(() => finish("danger", "Connection failed", "Something went wrong completing the connection."));
@@ -97,6 +122,13 @@ function OAuthCallback() {
         title: "Facebook Page connected",
         detail: `${page.name} is linked.`,
       });
+      const returnTarget = "returnTo" in result ? result.returnTo : undefined;
+      if (returnTarget === "desktop") {
+        setMessage(`${page.name} is connected. Returning to Posterract…`);
+        setReturnToDesktop(true);
+        window.setTimeout(() => openDesktop("success"), 250);
+        return;
+      }
       await navigate({ to: "/portals" });
     } catch {
       setSelectingPageId(undefined);
@@ -137,6 +169,11 @@ function OAuthCallback() {
             Posterract stores access for the selected Page only. It does not publish to your personal profile.
           </p>
         </Panel>
+      )}
+      {returnToDesktop && (
+        <Button variant="secondary" onClick={() => openDesktop("success")}>
+          Open Posterract
+        </Button>
       )}
     </main>
   );

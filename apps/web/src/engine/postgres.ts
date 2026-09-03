@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import { create } from "zustand";
 import type {
   AccountSetDTO,
@@ -14,8 +14,7 @@ import type {
 } from "@posterract/contract";
 import type { CreateTransmissionInput } from "./store";
 import { cloudJson } from "@/lib/cloudRequest";
-import { AiRequestError, fetchCredits } from "@/lib/ai";
-import { UNAVAILABLE_CREDITS, type CreditsState, type CreditsSummary } from "@/billing/plans";
+import { desktopRequest, isPosterractDesktop } from "@/lib/desktop";
 
 const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "/api";
 
@@ -33,11 +32,8 @@ type Bootstrap = {
 type State = Bootstrap & {
   loaded: boolean;
   analytics: Partial<Record<AnalyticsRangeDays, AnalyticsDashboardDTO>>;
-  credits: CreditsSummary | null;
-  creditsLoading: boolean;
   refresh: () => Promise<void>;
   loadAnalytics: (rangeDays: AnalyticsRangeDays) => Promise<void>;
-  loadCredits: () => Promise<void>;
 };
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -52,14 +48,7 @@ const emptyPoints: PointsSummaryDTO = {
   recent: [],
 };
 
-/**
- * The credits endpoint ships in parallel with this interface. When the API
- * answers 404/405/501 the feature is treated as "not live yet": automatic
- * re-fetches stop and every credits surface degrades to its unavailable state.
- */
-let creditsUnsupported = false;
-
-const usePostgresStore = create<State>((set, get) => ({
+const usePostgresStore = create<State>((set) => ({
   loaded: false,
   workspaceId: "",
   artifacts: [],
@@ -70,41 +59,18 @@ const usePostgresStore = create<State>((set, get) => ({
   accountSets: [],
   points: emptyPoints,
   analytics: {},
-  credits: null,
-  creditsLoading: true,
   refresh: async () => {
     const data = await request<Bootstrap>("/v1/bootstrap");
     for (const artifact of data.artifacts) {
       if (artifact.publicUrl) artifactUrls.set(artifact.id, artifact.publicUrl);
     }
     set({ ...data, loaded: true });
-    // Credits ride along after every bootstrap-backed refresh, off the
-    // critical path — a failure never blocks the workspace itself.
-    if (!creditsUnsupported) {
-      void get()
-        .loadCredits()
-        .catch(() => undefined);
-    }
   },
   loadAnalytics: async (rangeDays) => {
     const data = await request<AnalyticsDashboardDTO>(
       `/v1/analytics?rangeDays=${rangeDays}`,
     );
     set((state) => ({ analytics: { ...state.analytics, [rangeDays]: data } }));
-  },
-  loadCredits: async () => {
-    try {
-      const credits = await fetchCredits();
-      creditsUnsupported = false;
-      set({ credits, creditsLoading: false });
-    } catch (error) {
-      if (error instanceof AiRequestError && [404, 405, 501].includes(error.status)) {
-        creditsUnsupported = true;
-      } else {
-        console.warn("Posterract credits refresh failed", error);
-      }
-      set({ credits: null, creditsLoading: false });
-    }
   },
 }));
 
@@ -121,27 +87,12 @@ export function useEngineBoot() {
         if (active) console.error("PostgreSQL engine refresh failed", error);
       });
     run();
+    window.addEventListener("focus", run);
     return () => {
       active = false;
+      window.removeEventListener("focus", run);
     };
   }, [refresh]);
-}
-
-/** Re-fetch the credit balance (e.g. after a generation settles). */
-export async function refreshCredits(): Promise<void> {
-  await usePostgresStore.getState().loadCredits();
-}
-
-export function useCredits(): CreditsState {
-  const credits = usePostgresStore((state) => state.credits);
-  const loading = usePostgresStore((state) => state.creditsLoading);
-  return useMemo(
-    () =>
-      credits
-        ? { ...credits, loading: false, available: true }
-        : { ...UNAVAILABLE_CREDITS, loading },
-    [credits, loading],
-  );
 }
 
 export const useArtifacts = () => usePostgresStore((state) => state.artifacts);
@@ -177,14 +128,45 @@ export function useEngineActions() {
     addArtifact: async (
       file: File,
       meta: { durationMs?: number; width?: number; height?: number },
+      onProgress?: (fraction: number) => void,
     ) => {
-      const { uploadVideoToR2 } = await import("@/lib/r2MultipartUpload");
-      const result = await uploadVideoToR2({
-        file,
-        workspaceId,
-        apiBaseUrl: API_BASE,
-        meta,
-      });
+      let result: { mediaId: string };
+      if (isPosterractDesktop()) {
+        const path = window.desktop?.getPathForFile(file);
+        if (!path) throw new Error("Posterract could not access the selected video");
+        const stopProgress = window.desktop?.on("main:event", (payload) => {
+          const event = payload as { channel?: string; data?: { path?: string; progress?: number } };
+          const progress = event.data?.progress;
+          if (
+            event.channel === "cloud:upload-progress"
+            && event.data?.path === path
+            && typeof progress === "number"
+            && Number.isFinite(progress)
+          ) {
+            onProgress?.(progress);
+          }
+        });
+        try {
+          result = await desktopRequest<{ mediaId: string }>("cloud:upload-file", {
+            path,
+            contentType: file.type,
+            durationMs: meta.durationMs,
+            width: meta.width,
+            height: meta.height,
+          });
+        } finally {
+          stopProgress?.();
+        }
+      } else {
+        const { uploadVideoToR2 } = await import("@/lib/r2MultipartUpload");
+        result = await uploadVideoToR2({
+          file,
+          workspaceId,
+          apiBaseUrl: API_BASE,
+          meta,
+          onProgress,
+        });
+      }
       await refresh();
       const artifact = usePostgresStore
         .getState()
@@ -210,9 +192,9 @@ export function useEngineActions() {
         };
       }
     },
-    createTransmission: (input: CreateTransmissionInput) => {
+    createTransmission: async (input: CreateTransmissionInput) => {
       const idempotencyKey = crypto.randomUUID();
-      void request<{ id: string }>("/v1/posts", {
+      const result = await request<{ id: string }>("/v1/posts", {
         method: "POST",
         headers: { "Idempotency-Key": idempotencyKey },
         body: JSON.stringify({
@@ -236,9 +218,10 @@ export function useEngineActions() {
               : new Date(input.scheduledFor).toISOString(),
           accountSetId: input.accountSetId,
         }),
-      }).then(refresh);
+      });
+      await refresh();
       return {
-        id: `pending-${idempotencyKey}`,
+        id: result.id,
         workspaceId,
         title: input.title || "Untitled post",
         baseCaption: input.baseCaption,
@@ -322,21 +305,33 @@ export function useOAuth() {
         ok: boolean;
         handle?: string;
         error?: string;
+        returnTo?: "desktop" | "web";
         selectionRequired?: boolean;
         pages?: Array<{ id: string; name: string }>;
       }>(`/v1/oauth/${provider}/complete`, {
         method: "POST",
         body: JSON.stringify({ code, state }),
       });
-      if (result.ok && !result.selectionRequired) await refresh();
+      // Desktop OAuth completes in the system browser, which intentionally
+      // does not hold the desktop app's native access token. The connection
+      // is already saved by the API; let the callback reopen the desktop app
+      // instead of issuing an unauthenticated browser bootstrap request.
+      if (result.ok && !result.selectionRequired && result.returnTo !== "desktop") {
+        await refresh();
+      }
       return result;
     },
     selectFacebookPage: async (state: string, pageId: string) => {
-      const result = await request<{ ok: boolean; handle?: string; error?: string }>(
+      const result = await request<{
+        ok: boolean;
+        handle?: string;
+        error?: string;
+        returnTo?: "desktop" | "web";
+      }>(
         "/v1/oauth/facebook/select-page",
         { method: "POST", body: JSON.stringify({ state, pageId }) },
       );
-      if (result.ok) await refresh();
+      if (result.ok && result.returnTo !== "desktop") await refresh();
       return result;
     },
     disconnect: async (accountId: string) => {
