@@ -16,6 +16,8 @@ import {
   ID_ATTR,
   LOOP_ATTR,
   SOURCE_ATTR,
+  COMPONENT_ATTR,
+  LIVE_ATTR,
   formatSource,
   isCompositionTag,
   isLoopTag,
@@ -38,7 +40,7 @@ const COMPOSITION_COMPONENTS = new Map<string, string>(
 // These composition names also exist in SVG. An SVG fragment is DOM content
 // only while it has an SVG container in the same JSX tree; elsewhere the tag
 // keeps its composition meaning.
-const AMBIGUOUS_SVG_TAGS: ReadonlySet<string> = new Set(["rect", "text", "image"]);
+const AMBIGUOUS_SVG_TAGS: ReadonlySet<string> = new Set(["rect", "text", "image", "path", "ellipse", "polygon"]);
 const SVG_CONTAINERS: ReadonlySet<string> = new Set([
   "svg", "g", "defs", "symbol", "marker", "mask", "clipPath", "pattern",
   "filter", "linearGradient", "radialGradient", "textPath", "tspan", "switch",
@@ -354,6 +356,112 @@ const jsxTagName = (element: t.JSXElement): string | undefined => {
  * An element in the body of a `<For>`/`<Index>` is also stamped with the
  * location of that loop (see LOOP_ATTR).
  */
+/**
+ * The name of the project's own component this element was written inside, or
+ * null when it was written directly in the composition.
+ *
+ * The default export is the composition itself, not a component: everything
+ * is inside it, so naming it would put every element in one group. Anything
+ * else with a capitalised name is a component the author wrote, and is the
+ * name worth showing.
+ */
+function enclosingComponentName(path: NodePath<t.JSXElement>): string | null {
+  const fn = path.getFunctionParent();
+  if (!fn) return null;
+
+  // `export default function Composition() {}` — and its `const X = () => {}`
+  // / `export default X` forms — are the composition, not a component.
+  if (fn.parentPath?.isExportDefaultDeclaration()) return null;
+
+  let name: string | null = null;
+  if (fn.isFunctionDeclaration() && fn.node.id) {
+    name = fn.node.id.name;
+  } else if (fn.parentPath?.isVariableDeclarator()) {
+    const id = fn.parentPath.node.id;
+    if (id.type === "Identifier") name = id.name;
+  }
+
+  if (name === null || !/^[A-Z]/.test(name)) return null;
+
+  // A `const X = () => …` that is itself the default export.
+  const declaration = fn.parentPath?.isVariableDeclarator() ? fn.parentPath.parentPath : null;
+  if (declaration?.isVariableDeclaration()) {
+    const program = declaration.parentPath;
+    if (program?.isProgram()) {
+      const exported = program.node.body.some(
+        (statement) =>
+          statement.type === "ExportDefaultDeclaration" &&
+          statement.declaration.type === "Identifier" &&
+          statement.declaration.name === name,
+      );
+      if (exported) return null;
+    }
+  }
+
+  return name;
+}
+
+/**
+ * Whether an expression reads something that can change — an identifier, a
+ * member access, a call — rather than being a value written as arithmetic.
+ *
+ * `40 + 20` is a literal with extra steps and should not be reported as
+ * motion; `progress() * 200` and `props.x` are exactly what should be.
+ */
+function readsSomething(node: t.Expression | t.JSXEmptyExpression): boolean {
+  let found = false;
+  const walk = (current: t.Node | null | undefined): void => {
+    if (!current || found) return;
+    switch (current.type) {
+      case "Identifier":
+      case "CallExpression":
+      case "MemberExpression":
+      case "OptionalCallExpression":
+      case "OptionalMemberExpression":
+        found = true;
+        return;
+      case "UnaryExpression":
+        walk(current.argument);
+        return;
+      case "BinaryExpression":
+        walk(current.left as t.Node);
+        walk(current.right);
+        return;
+      case "ConditionalExpression":
+        walk(current.test);
+        walk(current.consequent);
+        walk(current.alternate);
+        return;
+      case "TemplateLiteral":
+        for (const expression of current.expressions) walk(expression);
+        return;
+      default:
+        return;
+    }
+  };
+  walk(node);
+  return found;
+}
+
+/**
+ * The props on this element written as code rather than as literals.
+ *
+ * `children` and the compile step's own stamps are excluded: neither is a
+ * property of the element that anything could show or bake.
+ */
+function livePropNames(path: NodePath<t.JSXElement>, types: typeof import("@babel/core").types): string[] {
+  const names: string[] = [];
+  for (const attribute of path.node.openingElement.attributes) {
+    if (!types.isJSXAttribute(attribute) || !types.isJSXIdentifier(attribute.name)) continue;
+    const name = attribute.name.name;
+    if (name === "children" || name.startsWith("__")) continue;
+    const value = attribute.value;
+    if (!value || !types.isJSXExpressionContainer(value)) continue;
+    if (readsSomething(value.expression)) names.push(name);
+  }
+  return names;
+}
+
 export function sourcePlugin({ types }: BabelApi, { file }: { file: string }): PluginObj {
   return {
     name: "jsx-source-location",
@@ -416,6 +524,20 @@ export function sourcePlugin({ types }: BabelApi, { file }: { file: string }): P
                   types.jsxIdentifier(LOOP_ATTR),
                   types.stringLiteral(formatSource(file, loopPosition)),
                 ),
+              );
+            }
+
+            const live = livePropNames(path, types);
+            if (live.length) {
+              opening.attributes.push(
+                types.jsxAttribute(types.jsxIdentifier(LIVE_ATTR), types.stringLiteral(live.join(","))),
+              );
+            }
+
+            const component = enclosingComponentName(path);
+            if (component !== null) {
+              opening.attributes.push(
+                types.jsxAttribute(types.jsxIdentifier(COMPONENT_ATTR), types.stringLiteral(component)),
               );
             }
           },

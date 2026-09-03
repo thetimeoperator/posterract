@@ -9,3 +9,4 @@ export * from './stroke';
 export * from './text-motion';
 export * from './time';
 export * from './transition';
+export * from './vector';

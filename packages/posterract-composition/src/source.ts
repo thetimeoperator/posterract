@@ -45,6 +45,37 @@ export const SOURCE_ATTR = "__source";
  */
 export const LOOP_ATTR = "__loop";
 
+/**
+ * Attribute the compile step stamps onto composition elements written inside
+ * one of the project's own components, carrying that component's name.
+ *
+ * A component compiles away — `<Panel>` becomes the rects and texts it
+ * returns — so without this the timeline shows the pieces and never the thing
+ * the author actually wrote. The stamp is what lets those pieces be gathered
+ * back under the name they were written as.
+ *
+ * It names the component's *definition*, not the call: the elements are
+ * created inside the body, which is the same body for every use of it. So
+ * adjacent siblings from two uses of the same component read as one group.
+ * Editing is unaffected — each element still writes to its own source.
+ */
+export const COMPONENT_ATTR = "__component";
+
+/**
+ * Attribute the compile step stamps onto composition elements whose props are
+ * written as code rather than as literals, listing those prop names.
+ *
+ * `x={40}` is a value the timeline can show and the inspector can edit.
+ * `x={progress() * 200}` is motion that exists only while the composition
+ * runs: nothing on the timeline represents it, so the clip looks static while
+ * the canvas plainly is not. The stamp is what lets the editor say "this moves,
+ * and the source is where it moves" — and offer to bake it into keyframes.
+ *
+ * Only props whose expression reads something (an identifier, a call) are
+ * listed; `x={40 + 20}` is a literal that happens to be written as arithmetic.
+ */
+export const LIVE_ATTR = "__live";
+
 /** The Solid control-flow components whose children render once per item. */
 export const LOOP_TAGS: readonly string[] = ["For", "Index"];
 
@@ -119,6 +150,14 @@ export const COMPOSITION_TAGS = [
   "animation",
   "keyframeTrack",
   "keyframe",
+  "marker",
+  "cue",
+  "duck",
+  "path",
+  "ellipse",
+  "polygon",
+  "lottie",
+  "lottieSlot",
   "htmlPaint",
   "html",
   "shaderPaint",

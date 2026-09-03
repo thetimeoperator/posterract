@@ -29,6 +29,16 @@ export interface CaptionDecoder {
 	readonly type: CaptionType;
 	groups: WordGroup[];
 	ready: boolean;
+	/**
+	 * Resolves once the transcript is loaded and the groups are built.
+	 *
+	 * A decoder reads its transcript asynchronously, so its first frames have
+	 * no lines to draw. In the preview that is one blank frame nobody sees; in
+	 * an offline render, which samples each frame exactly once, it is captions
+	 * missing from the start of the video. The playback system hands this to
+	 * the frame barrier so the encoder waits for it.
+	 */
+	readonly whenReady: Promise<void>;
 	styled: boolean;
 	applyStyles(world: World, entity: Entity): boolean;
 	reposition(world: World, entity: Entity): boolean;

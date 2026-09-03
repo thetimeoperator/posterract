@@ -3,7 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 import {
-	Scene, Group, Sequential, Audio, AdjustmentLayer, Caption, Diagram, Geometry, IsMask,
+	Scene, Group, Sequential, Audio, AdjustmentLayer, Caption, Diagram, Geometry, IsMask, Lottie,
 	Paint, Cache, Stage,
 } from '../traits';
 import { GeometryType, PaintType } from '../constants';
@@ -54,13 +54,26 @@ export function isDiagram(entity: Entity): boolean {
 	return entity.has(Diagram);
 }
 
+export function isLottie(entity: Entity): boolean {
+	return entity.has(Lottie);
+}
+
+/** A free vector figure — `<path>`, `<ellipse>` or `<polygon>`. */
+export function isVector(entity: Entity): boolean {
+	const value = entity.get(Geometry)?.value;
+	return value === GeometryType.PATH || value === GeometryType.ELLIPSE || value === GeometryType.POLYGON;
+}
+
 /** A vanilla rect — not a container (group/scene/sequence) or audio clip.
  *  (Captions live on TEXT geometry, so they're naturally excluded.) */
 export function isShape(entity: Entity): boolean {
 	return (entity.get(Geometry)?.value === GeometryType.RECT || entity.has(Diagram))
 		&& !entity.has(Group)
 		&& !entity.has(Scene)
-		&& !entity.has(Audio);
+		&& !entity.has(Audio)
+		// A Lottie draws its own contents into its box; it is not a rectangle
+		// with a fill, and the shape inspector has nothing true to say about it.
+		&& !entity.has(Lottie);
 }
 
 export function isMask(entity: Entity): boolean {

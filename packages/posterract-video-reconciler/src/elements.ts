@@ -37,6 +37,13 @@ import type {
   HtmlProps,
   ImageProps,
   KeyframeProps,
+  CueProps,
+  LottieProps,
+  LottieSlotProps,
+  PathProps,
+  EllipseProps,
+  PolygonProps,
+  MarkerProps,
   KeyframeTrackProps,
   MediaPaintProps,
   RectProps,
@@ -121,6 +128,13 @@ export const Effect = hostElement<EffectProps>("Effect");
 export const Animation = hostElement<AnimationProps>("Animation");
 export const KeyframeTrack = hostElement<KeyframeTrackProps>("KeyframeTrack");
 export const Keyframe = hostElement<KeyframeProps>("Keyframe");
+export const Marker = hostElement<MarkerProps>("Marker");
+export const Cue = hostElement<CueProps>("Cue");
+export const Path = hostElement<PathProps>("Path");
+export const Ellipse = hostElement<EllipseProps>("Ellipse");
+export const Polygon = hostElement<PolygonProps>("Polygon");
+export const Lottie = hostElement<LottieProps>("Lottie");
+export const LottieSlot = hostElement<LottieSlotProps>("LottieSlot");
 export const HtmlPaint = hostElement<HtmlPaintProps>("HtmlPaint");
 export const Html = hostElement<HtmlProps>("Html");
 export const ShaderPaint = hostElement<ShaderPaintProps>("ShaderPaint");

@@ -7,7 +7,7 @@
 import { store } from '../world/store';
 import {
 	COMPOSITE_OPERATIONS, PaintType, FontStyle,
-	TextAlign, TextBaseline, TextCase,
+	TextAlign, TextBaseline, TextCase, TextDecorationType,
 } from '../constants';
 import {
 	Size, Hidden, Paint, Color, Blur, Offset, Opacity, BlendMode,
@@ -397,10 +397,14 @@ function renderTokens(ctx: Ctx, world: World, entity: Entity): void {
 			const w = computed.width[eid]!;
 			const h = computed.height[eid]!;
 
+			const decoration = getTextDecoration(world, entity, word.ranges);
+			const size = getFontSize(world, entity, word.ranges);
+
 			if (intrinsicFill !== null) {
 				ctx.globalAlpha = savedAlpha;
 				ctx.fillStyle = intrinsicFill;
 				ctx.fillText(word.chars, word.x, word.y);
+				drawDecoration(ctx, word.chars, word.x, word.y, decoration, size);
 			}
 
 			for (const fill of fills) {
@@ -425,6 +429,7 @@ function renderTokens(ctx: Ctx, world: World, entity: Entity): void {
 					ctx.fillStyle = colorToHex(colorStore.value[fid] ?? 0x000000);
 				}
 				ctx.fillText(word.chars, word.x, word.y);
+				drawDecoration(ctx, word.chars, word.x, word.y, decoration, size);
 				ctx.globalCompositeOperation = savedCO;
 			}
 		}
@@ -664,6 +669,69 @@ function getFontWeight(world: World, entity: Entity, ranges: Entity[]) {
 	}
 
 	return value;
+}
+
+/**
+ * The decoration a run carries, as a bitmask.
+ *
+ * Resolved like every other text style: the element's own, overridden by each
+ * `<textRange>` that covers this run.
+ */
+function getTextDecoration(world: World, entity: Entity, ranges: Entity[]): number {
+	const textStyle = store(world, TextStyle);
+	let value = textStyle.textDecoration[entity.id()] ?? TextDecorationType.NONE;
+
+	for (const range of ranges) {
+		const rangeValue = textStyle.textDecoration[range.id()];
+		if (rangeValue !== undefined) {
+			value = rangeValue;
+		}
+	}
+
+	return value;
+}
+
+/**
+ * Draw the rules a run's decoration asks for, in whatever the glyphs were
+ * just painted with.
+ *
+ * Drawn per fill rather than once, so an underline under gradient text is the
+ * same gradient — a rule in a different colour from the word above it reads as
+ * a mistake.
+ *
+ * Finding where to put them takes two measurements. Canvas reports a font's
+ * ascent from the current `textBaseline` anchor, not from the alphabetic
+ * baseline, so measuring once under a `top` baseline gives an ascent of about
+ * zero and puts both rules through the tops of the letters. Measuring the same
+ * run under `alphabetic` as well gives the distance between the two anchors,
+ * and with it the real baseline — which is the only line either rule can be
+ * positioned from, whatever baseline mode the element uses.
+ */
+function drawDecoration(ctx: Ctx, chars: string, x: number, y: number, decoration: number, size: number): void {
+	if (decoration === TextDecorationType.NONE) return;
+
+	const anchored = ctx.measureText(chars);
+	if (anchored.width <= 0) return;
+
+	const savedBaseline = ctx.textBaseline;
+	ctx.textBaseline = 'alphabetic';
+	const alphabetic = ctx.measureText(chars);
+	ctx.textBaseline = savedBaseline;
+
+	// Both metrics measure to the same top of the font box, from different
+	// anchors, so their difference is the gap between the anchors.
+	const baseline = y + (alphabetic.fontBoundingBoxAscent - anchored.fontBoundingBoxAscent);
+	const thickness = Math.max(1, size / 14);
+	// The ink of this particular run, so a strike crosses the letters that are
+	// actually there rather than a hypothetical full-height line.
+	const ink = alphabetic.actualBoundingBoxAscent || alphabetic.fontBoundingBoxAscent || size * 0.7;
+
+	if (decoration & TextDecorationType.UNDERLINE) {
+		ctx.fillRect(x, baseline + thickness * 2, anchored.width, thickness);
+	}
+	if (decoration & TextDecorationType.LINE_THROUGH) {
+		ctx.fillRect(x, baseline - ink * 0.45 - thickness / 2, anchored.width, thickness);
+	}
 }
 
 function getFontStyle(world: World, entity: Entity, ranges: Entity[]) {

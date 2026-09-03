@@ -985,15 +985,27 @@ class SourceWriter {
       if (!before || elementOf(before).getParent() !== elementOf(parent)) return false;
     }
 
+    // An id the caller asked for is the element's name, not a prop to set
+    // afterwards: writing it as an attribute would rename the element out from
+    // under the very lookup the remaining props are found by, and the insert
+    // would be silently lost. Taken only when it is free — a duplicate id
+    // makes two elements unaddressable, so the generated one wins instead.
+    const { [ID_ATTR]: requested, ...props } = edit.props;
+    const wanted = typeof requested === "string" && /^[A-Za-z][\w-]*$/.test(requested)
+      ? requested
+      : undefined;
+    const id = wanted && !findTag(sourceFile, wanted) ? wanted : nextId();
+
     // Placed bare and named, then given its props the way any element is:
     // one attribute at a time, re-found by name after each (editing one
     // attribute forgets its siblings).
-    const id = nextId();
     const opening = `<${edit.tag} ${ID_ATTR}="${id}"`;
     const child = edit.text === undefined ? `${opening} />` : `${opening}>${jsxText(edit.text)}</${edit.tag}>`;
     insertChild(sourceFile, parent, child, before);
-    for (const [name, value] of Object.entries(edit.props)) {
-      setProp(findTag(sourceFile, id)!, name, value);
+    for (const [name, value] of Object.entries(props)) {
+      const tag = findTag(sourceFile, id);
+      if (!tag) return false;
+      setProp(tag, name, value);
       if (isSerializedAssetRef(value)) ensureGenerateImport(sourceFile);
     }
     ids[edit.source] = formatSource(file, id);

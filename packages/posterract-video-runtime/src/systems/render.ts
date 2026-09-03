@@ -17,7 +17,7 @@ import {
 } from '../constants';
 import {
 	ChildOf, Hidden, Culled, Interactive, IsMask,
-	ClipsContent, Diagram, Geometry, Group, Paint, Color, Caption, ScaleMode, Shader,
+	ClipsContent, Diagram, Geometry, Group, Lottie, LottieHandle, LottieSlot, Paint, Color, Caption, ScaleMode, Shader,
 	BlendMode, Effect, Transition, MixedCornerRadius,
 	LocalTransform, WorldTransform, Computed, Cache,
 	Host,
@@ -33,6 +33,8 @@ import { applyStrokeStyle } from '../utils/stroke';
 import { renderText } from '../utils/text';
 import { getTransitionWindow } from '../utils/transition';
 import { getIntrinsicPaint } from '../utils/time';
+import { flattenPath, trimPath, type SubPath } from '../utils/vector';
+import { isVectorGeometry, vectorCommands, vectorSubPaths } from '../queries/vector';
 import { createLinearGradient, createRadialGradient } from './gradients';
 import {
 	resolveImageDecoder, resolveVideoDecoder,
@@ -665,12 +667,144 @@ function renderShapeNode(world: World, entity: Entity): void {
 	renderStrokes(world, entity);
 }
 
+/**
+ * Draw a vector figure — `<path>`, `<ellipse>` or `<polygon>` — into the
+ * current path, then paint it like any other shape.
+ *
+ * Untrimmed figures are laid down as true curves, which is both crisper and
+ * cheaper than a polyline. A trimmed one is drawn from the flattened form
+ * instead, because a fraction of a curve is only knowable once it has a
+ * length. Both come from the same commands, so the two agree where they meet
+ * (`trim` 0–1 draws the whole figure and takes the curve path).
+ */
+function renderVectorNode(world: World, entity: Entity): void {
+	drawVectorPath(world, entity);
+	renderShadows(world, entity);
+	renderIntrinsicFill(world, entity);
+	renderFills(world, entity);
+	renderGenerating(world, entity);
+	renderStrokes(world, entity);
+}
+
+export function drawVectorPath(world: World, entity: Entity): void {
+	const ctx = getCtx(world);
+	const computed = store(world, Computed);
+	const eid = entity.id();
+	const start = computed.trimStart[eid] ?? 0;
+	const end = computed.trimEnd[eid] ?? 1;
+	const offset = computed.trimOffset[eid] ?? 0;
+
+	ctx.beginPath();
+
+	// A trimmed figure is drawn from its flattened form: a fraction of a curve
+	// is only knowable once the curve has a length.
+	if (start > 0 || end < 1 || offset !== 0) {
+		for (const subpath of trimPath(vectorSubPaths(world, entity), start, end, offset)) {
+			drawSubPath(ctx, subpath);
+		}
+		return;
+	}
+
+	let penX = 0;
+	let penY = 0;
+	for (const command of vectorCommands(world, entity)) {
+		const v = command.values;
+		switch (command.type) {
+			case 'M':
+				ctx.moveTo(v[0]!, v[1]!);
+				[penX, penY] = [v[0]!, v[1]!];
+				break;
+			case 'L':
+				ctx.lineTo(v[0]!, v[1]!);
+				[penX, penY] = [v[0]!, v[1]!];
+				break;
+			case 'C':
+				ctx.bezierCurveTo(v[0]!, v[1]!, v[2]!, v[3]!, v[4]!, v[5]!);
+				[penX, penY] = [v[4]!, v[5]!];
+				break;
+			case 'Q':
+				ctx.quadraticCurveTo(v[0]!, v[1]!, v[2]!, v[3]!);
+				[penX, penY] = [v[2]!, v[3]!];
+				break;
+			case 'A': {
+				// Canvas has no elliptical-arc-to, so this one command is
+				// flattened on its own; the rest of the figure stays curved.
+				const [flattened] = flattenPath([{ type: 'M', values: [penX, penY] }, command]);
+				const points = flattened?.points ?? [];
+				for (let i = 2; i < points.length; i += 2) ctx.lineTo(points[i]!, points[i + 1]!);
+				[penX, penY] = [v[5]!, v[6]!];
+				break;
+			}
+			case 'Z':
+				ctx.closePath();
+				break;
+		}
+	}
+}
+
+function drawSubPath(ctx: Ctx2D, subpath: SubPath): void {
+	const { points } = subpath;
+	if (points.length < 4) return;
+	ctx.moveTo(points[0]!, points[1]!);
+	for (let i = 2; i < points.length; i += 2) ctx.lineTo(points[i]!, points[i + 1]!);
+	if (subpath.closed) ctx.closePath();
+}
+
 function renderTextNode(world: World, entity: Entity): void {
 	renderText(world, entity);
 }
 
 function renderCaptionNode(world: World, entity: Entity): void {
 	resolveCaptionDecoder(world, entity)?.draw(world, entity);
+}
+
+/**
+ * Draw a Lottie animation at the node's own local time.
+ *
+ * The player is seeked rather than played, so this is a pure function of
+ * composition time — the same frame in preview and in export. A player that
+ * has not finished loading draws nothing this frame; the export path waits on
+ * its `ready` promise through `FramePromises`, so an export never captures the
+ * blank.
+ */
+function renderLottieNode(world: World, entity: Entity): void {
+	const player = entity.get(LottieHandle);
+	if (!player) return;
+
+	const eid = entity.id();
+	const computed = store(world, Computed);
+	const settings = entity.get(Lottie)!;
+	// `Computed.localTimeInSeconds` is written for the composition root only;
+	// per-node local time lives in `Computed.localTime`, in frames (see
+	// `updateVisibility` in systems/playback.ts). Reading the seconds field
+	// here pinned every clip to frame 0.
+	const fps = world.get(FrameRate)?.value ?? 30;
+	const seconds = ((computed.localTime[eid] ?? 0) / fps) * (settings.speed || 1);
+
+	// Slots are pushed before the seek so the frame that comes back already
+	// carries them. A keyframed slot reads its value from `Computed`, which
+	// the motion system has filled for this frame; an un-keyframed one reads
+	// the same channel, seeded from what the source authored.
+	const slots = store(world, LottieSlot);
+	for (const slot of world.query(LottieSlot, ChildOf(entity))) {
+		const sid = slot.id();
+		player.applySlot({
+			name: slots.name[sid] ?? '',
+			value: computed.value[sid] ?? 0,
+			text: slots.text[sid] ?? '',
+			isColor: slots.isColor[sid] ?? false,
+		});
+	}
+
+	const frame = player.drawAt(seconds, settings.loop);
+
+	if (!frame) return;
+
+	const ctx = getCtx(world);
+	if (!ctx) return;
+	const width = computed.width[eid] || player.width;
+	const height = computed.height[eid] || player.height;
+	ctx.drawImage(frame, 0, 0, width, height);
 }
 
 type DiagramPoint = readonly [number, number];
@@ -1089,7 +1223,13 @@ export function renderNode(world: World, entity: Entity): void {
 			worldTransform.e[mask.id()]!,
 			worldTransform.f[mask.id()]!,
 		);
-		drawRectPath(world, mask);
+		// A mask clips by its own shape: a `<path mask>` is how a figure that
+		// is not a rectangle gets to be one.
+		if (isVectorGeometry(store(world, Geometry).value[mask.id()])) {
+			drawVectorPath(world, mask);
+		} else {
+			drawRectPath(world, mask);
+		}
 		ctx.restore();
 		ctx.clip();
 	}
@@ -1109,7 +1249,9 @@ export function renderNode(world: World, entity: Entity): void {
 	}
 
 
-	if (entity.has(Caption)) {
+	if (entity.has(Lottie)) {
+		renderLottieNode(world, entity);
+	} else if (entity.has(Caption)) {
 		renderCaptionNode(world, entity);
 	} else if (entity.has(Diagram)) {
 		renderDiagram(world, entity);
@@ -1117,6 +1259,8 @@ export function renderNode(world: World, entity: Entity): void {
 		renderTextNode(world, entity);
 	} else if (store(world, Geometry).value[eid] === GeometryType.RECT) {
 		renderShapeNode(world, entity);
+	} else if (isVectorGeometry(store(world, Geometry).value[eid])) {
+		renderVectorNode(world, entity);
 	}
 
 	// Clip and render children

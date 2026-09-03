@@ -35,6 +35,13 @@ export const PlaybackRate = trait({ value: 1 });
 // Explicit playback/export window on a scene.
 export const Workarea = trait({ start: 0, end: 0 });
 
+/**
+ * A named point on a scene's timeline. Markers render nothing and affect no
+ * output; they are the edit's own annotations, kept in the source so they
+ * survive a reload and are visible to an agent reading the file.
+ */
+export const Marker = trait({ time: 0, name: '', color: '' });
+
 // Playback state of an entity.
 export const Playback = trait({
 	playing: false,
@@ -58,3 +65,12 @@ export const ClipHeight = trait({ value: 0 });
 
 // Tag: this clip's keyframe rows are expanded below the clip body (persisted).
 export const Expanded = trait();
+
+/**
+ * `after="<id>"` — this element's span begins where another's ends.
+ *
+ * `gap` is the authored `start` alongside it, in frames: the distance after
+ * the target rather than after the scene. Resolved each frame into the same
+ * `Delay` an authored start produces (see `resolveRelativeTiming`).
+ */
+export const After = trait({ id: '', gap: 0 });

@@ -62,10 +62,23 @@ export enum ConstraintType {
   SCALE,
 }
 
+/**
+ * Rules drawn along a run of text. Combinable, because underlined struck-out
+ * text is a real thing people write.
+ */
+export enum TextDecorationType {
+  NONE = 0,
+  UNDERLINE = 1,
+  LINE_THROUGH = 2,
+}
+
 export enum GeometryType {
   RECT,
   TEXT,
   DIAGRAM,
+  PATH,
+  ELLIPSE,
+  POLYGON,
 }
 
 export enum DiagramKindType {
@@ -169,6 +182,14 @@ export enum CaptionType {
   PAPER,
   GUINEA,
   STARK,
+  // Described presets (see media/caption/styled.ts). Appended, never
+  // reordered: the numbers are what a project's compiled bundle holds.
+  POP,
+  KARAOKE,
+  TYPEWRITER,
+  BANNER,
+  PUNCH,
+  MARQUEE,
 }
 
 export enum CaptionAlign {

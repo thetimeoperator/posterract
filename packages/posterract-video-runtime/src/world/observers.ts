@@ -8,10 +8,10 @@ import {
 	ChildOf, Culled, Sequential, Group, Scene, Audio, Paint, AssetId,
 	Delay, Trim, PlaybackRate, SourceFrameRate, Keyframe, ItemIndex,
 	Position, Offset, Rotation, Scale, UniformScale, Skew, Anchor, Flip,
-	Opacity, Color, Blur, Volume, Effect, CornerRadius, MixedCornerRadius,
+	Opacity, Color, Blur, Volume, Effect, LottieSlot, Path, PathTrim, CornerRadius, MixedCornerRadius,
 	ColorStop, StrokeStyle, Size, Computed, Active, Stage, IsMask, Diagram,
 	ImageDecoderHandle, VideoDecoderHandle,
-	AudioDecoderHandle, CaptionDecoderHandle, WaveformHandle,
+	AudioDecoderHandle, CaptionDecoderHandle, LottieHandle, WaveformHandle,
 	ShaderHostHandle, AudioBusHandle,
 } from '../traits';
 import { getParentEntity } from '../queries/hierarchy';
@@ -73,6 +73,9 @@ export function observeWorld(world: World): () => void {
 	subs.push(world.onRemove(VideoDecoderHandle, (e) => e.get(VideoDecoderHandle)?.dispose()));
 	subs.push(world.onRemove(AudioDecoderHandle, (e) => e.get(AudioDecoderHandle)?.reset()));
 	subs.push(world.onRemove(CaptionDecoderHandle, (e) => e.get(CaptionDecoderHandle)?.dispose()));
+	// A Lottie player holds a Skia surface and an animation; both are native
+	// allocations that outlive the entity unless they are released here.
+	subs.push(world.onRemove(LottieHandle, (e) => e.get(LottieHandle)?.dispose()));
 	subs.push(world.onRemove(WaveformHandle, (e) => e.get(WaveformHandle)?.dispose()));
 	subs.push(world.onRemove(ShaderHostHandle, (e) => e.get(ShaderHostHandle)?.dispose()));
 	subs.push(world.onRemove(AudioBusHandle, (e) => e.get(AudioBusHandle)?.disconnect()));
@@ -246,6 +249,25 @@ export function observeWorld(world: World): () => void {
 
 	mirror(Effect, (entity) => {
 		store(world, Computed).value[entity.id()] = entity.get(Effect)!.value;
+	});
+
+	// A Lottie slot shares that channel: its scalar (or packed colour) is the
+	// thing a track over it interpolates, so it has to reach Computed the same
+	// way an effect's value does.
+	mirror(LottieSlot, (entity) => {
+		store(world, Computed).value[entity.id()] = entity.get(LottieSlot)!.value;
+	});
+
+	mirror(PathTrim, (entity) => {
+		const computed = store(world, Computed);
+		const { start, end, offset } = entity.get(PathTrim)!;
+		computed.trimStart[entity.id()] = start;
+		computed.trimEnd[entity.id()] = end;
+		computed.trimOffset[entity.id()] = offset;
+	});
+
+	mirror(Path, (entity) => {
+		store(world, Computed).morph[entity.id()] = entity.get(Path)!.morph;
 	});
 
 	mirror(CornerRadius, (entity) => {

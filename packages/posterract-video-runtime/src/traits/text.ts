@@ -27,6 +27,8 @@ export const TextStyle = trait({
 	textBaseline: undefined as TextBaseline | undefined,
 	textCase: undefined as TextCase | undefined,
 	letterSpacing: undefined as number | undefined, // extra spacing between characters (px)
+	// A bitmask of TextDecorationType, so underline and strike combine.
+	textDecoration: undefined as number | undefined,
 });
 
 // Character range a TextStyle override applies to; end null = to the end.

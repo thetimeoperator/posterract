@@ -13,6 +13,27 @@ import type { AssetRef } from '@posterract/composition';
 export const Geometry = trait({ value: GeometryType.RECT as GeometryType });
 
 /**
+ * A free vector figure, in SVG path syntax.
+ *
+ * `morphTo` is a second figure to blend toward; `morph` is how far, 0–1, and
+ * is keyframeable. Blending only happens between paths whose command
+ * sequences agree — see `morphPath` — because any other correspondence would
+ * be a guess, and a guessed one folds the shape through itself.
+ */
+export const Path = trait({ d: '', morphTo: '', morph: 0 });
+
+/** A closed figure through a list of points, as `points="x,y x,y …"`. */
+export const Polygon = trait({ points: '' });
+
+/**
+ * Trim Paths, the way After Effects means it: which fraction of a figure is
+ * drawn. `end` animated from 0 to 1 is a line drawing itself. `offset` rotates
+ * the window, so it can chase around a closed shape rather than stopping at
+ * the seam. All three are keyframeable.
+ */
+export const PathTrim = trait({ start: 0, end: 1, offset: 0 });
+
+/**
  * First-class diagram geometry. All values are authored and source-backed;
  * arrays are kept as JSON because Koota's SoA traits store scalar fields.
  */
@@ -84,6 +105,13 @@ export const Stroke = trait();
 
 export const Hidden = trait();
 
+/**
+ * A layer the user has locked: it still renders and still exports, but the
+ * editor refuses to move, trim or delete it. Persisted as a `locked` prop, so
+ * the protection travels with the project rather than living in a session.
+ */
+export const Locked = trait();
+
 export const ClipsContent = trait();
 
 // Tag for entities whose content is still being generated.
@@ -100,6 +128,26 @@ export const Key = trait({ value: '' });
 // source that produced the entity. Deliberately not serialized: a copy of an
 // entity is not the element it was copied from.
 export const Source = trait({ value: '' });
+
+/**
+ * The project's own component an element was written inside.
+ *
+ * A component compiles away, so without this the timeline shows a `<Panel>`'s
+ * rects and texts and never the panel. Carrying the name lets those pieces be
+ * shown under it — see `COMPONENT_ATTR` for what the name can and cannot say.
+ */
+export const Component = trait({ name: '' });
+
+/**
+ * The props this element gets from code rather than from literals, comma
+ * separated.
+ *
+ * Motion written as `x={progress() * 200}` has nothing on the timeline: the
+ * clip looks static while the canvas plainly is not. Carrying the names is
+ * what lets the editor show a row saying so — and offer to bake it into
+ * keyframes that can then be edited.
+ */
+export const Live = trait({ props: '' });
 
 // On entities a `<For>`/`<Index>` body produced: the source of that loop (see
 // LOOP_ATTR in @posterract/composition). Every iteration shares one Source, so
@@ -174,6 +222,16 @@ export const SourceError = trait({ value: '', generated: false });
 // Sibling order under a ChildOf parent.
 export const ItemIndex = trait({ value: 0 });
 
+/**
+ * A group's stagger: how far apart, in frames, its children's motion starts.
+ *
+ * The nth child reads the clock `n × value` frames behind its siblings, so
+ * one animation authored once arrives as a cascade. Nothing is written per
+ * child — the offset is applied when motion is sampled — so the source stays
+ * one element and the timeline stays one row per child.
+ */
+export const Stagger = trait({ value: 0 });
+
 // On a mount's root entity: the compiled module (a SCRIPT asset) that a world
 // re-executes to rebuild this mount's reactive graph and runtime hosts.
 export const MountScript = trait({ mountId: '', scriptAssetId: '' });
@@ -191,3 +249,12 @@ export const Caption = trait({
 	colors: () => [] as number[],
 	verticalAlign: undefined as CaptionAlign | undefined, // unset = the preset's default
 });
+
+/**
+ * One caption line authored in the document, as a `<cue>` child of a
+ * `<captions>`. Cues are the editable form of captions: their text and timing
+ * live in the source, so they can be changed, versioned, and read by an agent
+ * without the transcript file that produced them. A `<captions>` holding cues
+ * ignores its `src`.
+ */
+export const Cue = trait({ start: 0, end: 0, text: '' });

@@ -8,10 +8,12 @@ import { store } from '../world/store';
 import {
 	ChildOf, Geometry, Group, Hidden, IsMask, Sequential, AdjustmentLayer,
 	Culled, Flip, Anchor, Computed, Cache, LocalTransform, WorldTransform,
-	WorldBounds, RenderSurface,
+	WorldBounds, RenderSurface, Size,
 	Root,
 } from '../traits';
 import { getParentNode } from '../queries/hierarchy';
+import { isVectorGeometry, vectorSubPaths } from '../queries/vector';
+import { boundsOf } from '../utils/vector';
 import { getViewMatrix } from '../queries/camera';
 
 import {
@@ -237,6 +239,37 @@ export function computeGroupBounds(world: World, entity: Entity): void {
 	}
 }
 
+/**
+ * A vector figure's box, when the source did not state one.
+ *
+ * `<rect>` gets its box from `width`/`height`; a `<path>` more often gets it
+ * from its own coordinates, the way an SVG's bounding box works. So a vector
+ * node with no authored size takes the box its geometry occupies — which is
+ * what makes selection, masks, `clip` and hit-testing behave on it — and one
+ * with an authored size keeps it, so a figure can be given a box on purpose.
+ *
+ * `origin` carries the offset, exactly as it does for a group whose children
+ * start left of zero: the drawing keeps its own coordinates.
+ */
+export function computeVectorBounds(world: World, entity: Entity): void {
+	if (!isVectorGeometry(store(world, Geometry).value[entity.id()])) return;
+	if (entity.has(Size)) return;
+
+	const computed = store(world, Computed);
+	const eid = entity.id();
+	const bounds = boundsOf(vectorSubPaths(world, entity));
+	if (!bounds) {
+		computed.width[eid] = 0;
+		computed.height[eid] = 0;
+		return;
+	}
+
+	computed.width[eid] = bounds.width;
+	computed.height[eid] = bounds.height;
+	computed.originX[eid] = bounds.x;
+	computed.originY[eid] = bounds.y;
+}
+
 function adjustLayers(world: World, adjust: Entity): void {
 	const computed = store(world, Computed);
 	const localStore = store(world, LocalTransform);
@@ -302,6 +335,7 @@ function adjustLayers(world: World, adjust: Entity): void {
  */
 export function transformSystem(world: World): void {
 	const walk = (entity: Entity, parentEntity: Entity | null) => {
+		computeVectorBounds(world, entity);
 		computeGroupBounds(world, entity);
 		computeLocalMatrix(world, entity);
 		computeWorldTransform(world, entity, parentEntity);

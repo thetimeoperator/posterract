@@ -4,6 +4,10 @@
     "noEmit": false,
     "declaration": true,
     "rootDir": "src",
-    "outDir": "dist"
-  }
+    "outDir": "dist",
+    "allowImportingTsExtensions": false
+  },
+  "exclude": [
+    "src/**/*.test.ts"
+  ]
 }

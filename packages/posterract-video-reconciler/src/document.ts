@@ -3,8 +3,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 
-import { Active, AdjustmentLayer, Animation, AnimationPhase, AnimationType, appendChild, AssetId, Audio, Background, bindAsset, BlendMode, BlendModeType, Blur, Caption, CaptionAlign, CAPTION_PRESET_FILLS, CAPTION_PRESET_STYLES, CaptionType, Chars, ClipHeight, ClipsContent, Computed, CornerRadius, createEntity, DEFAULT_BACKGROUND, Color, ColorStop, Delay, Diagram, DiagramKindType, Effect, EffectType, Expanded, FontStyle, FramePromises, FrameRate, Generating, GenerationRequest, getActiveEntity, Loop, LoadRequest, Geometry, GeometryType, getEntityTree, getParentEntity, getParentNode, Hidden, Host, IsMask, isText, ItemIndex, KeepAspectRatio, Keyframe, KeyframeTrack, MixedCornerRadius, Muted, Name, Offset, Opacity, Paint, PaintType, parseColor, PendingSource, PendingSync, Playback, PlaybackRate, Position, removeChild, RenderSurface, resizeEntity, Scale, ScaleMode, ScaleModeType, secondsToFrames, getAsset, getEntityChildren, Group, Sequential, Shader, Size, Stage, Root, Rotation, Scene, Selected, Shadow, Source, SourceError, SourceFrameRate, SourceModifiers, hasModifier, setCameraMatrix, Stroke, StrokeCap, StrokeJoin, StrokeStyle, SyncRequest, TextAlign, TextBaseline, TextCase, TextRange, TextStyle, TranscriptionRequest, Transition, TransitionType, Trim, UniformScale, Volume, Workarea } from '@posterract/video-runtime';
-import { LOOP_ATTR, parseTime, SOURCE_ATTR } from '@posterract/composition';
+import { Active, AdjustmentLayer, Animation, AnimationPhase, AnimationType, appendChild, AssetId, Audio, Background, bindAsset, BlendMode, BlendModeType, Blur, Caption, CaptionAlign, CAPTION_PRESET_FILLS, CAPTION_PRESET_STYLES, CaptionType, Chars, ClipHeight, ClipsContent, Computed, CornerRadius, createEntity, DEFAULT_BACKGROUND, Color, ColorStop, Delay, Diagram, DiagramKindType, Effect, EffectType, Expanded, FontStyle, FramePromises, FrameRate, Generating, GenerationRequest, getActiveEntity, Loop, LoadRequest, Geometry, GeometryType, getEntityTree, getParentEntity, getParentNode, Component, Cue, Hidden, Host, Live, Locked, Lottie, LottieSlot, Path, PathTrim, Polygon, After, Stagger, Duck, Marker, IsMask, isText, ItemIndex, KeepAspectRatio, Keyframe, KeyframeTrack, MixedCornerRadius, Muted, Name, Offset, Opacity, Paint, PaintType, parseColor, PendingSource, PendingSync, Playback, PlaybackRate, Position, removeChild, RenderSurface, resizeEntity, Scale, ScaleMode, ScaleModeType, secondsToFrames, getAsset, getEntityChildren, Group, Sequential, Shader, Size, Stage, Root, Rotation, Scene, Selected, Shadow, Source, SourceError, SourceFrameRate, SourceModifiers, hasModifier, setCameraMatrix, Stroke, StrokeCap, StrokeJoin, StrokeStyle, SyncRequest, TextAlign, TextBaseline, TextCase, TextDecorationType, TextRange, TextStyle, TranscriptionRequest, Transition, TransitionType, Trim, UniformScale, Volume, Workarea } from '@posterract/video-runtime';
+import { COMPONENT_ATTR, LIVE_ATTR, LOOP_ATTR, parseTime, SOURCE_ATTR } from '@posterract/composition';
 import { createSignal } from 'solid-js';
 import { SVGElements } from 'solid-js/web';
 import { IsExcluded } from 'koota';
@@ -16,7 +16,7 @@ import type { Entity, World } from 'koota';
 import type { ProjectDocument, ProjectTick } from './host';
 
 /** Props that address or wire an element rather than describe it. */
-const UNAUTHORED_PROPS: ReadonlySet<string> = new Set([SOURCE_ATTR, LOOP_ATTR, 'children', 'ref']);
+const UNAUTHORED_PROPS: ReadonlySet<string> = new Set([SOURCE_ATTR, LOOP_ATTR, COMPONENT_ATTR, LIVE_ATTR, 'children', 'ref']);
 
 /**
  * How long a single `hold` may keep an offline frame waiting. A project's
@@ -51,7 +51,10 @@ export function authoredElement(entity: Entity): AuthoredElement | undefined {
 	const node = entity.get(Host);
 	if (!node || !node.native || node.tag === '') return undefined;
 
-	const text = isText(entity) ? entity.get(Chars)?.value : undefined;
+	// Text elements and cues both spell their content between their tags, so
+	// both carry it into the edit that writes them; anything else has no text
+	// of its own and a `Chars` left over from a tag change would be a lie.
+	const text = isText(entity) || entity.has(Cue) ? entity.get(Chars)?.value : undefined;
 	return { tag: node.tag, props: { ...node.props }, ...(text ? { text } : {}) };
 }
 
@@ -101,9 +104,18 @@ function textParts(node: SceneNode): (SceneNode & { readonly element: Text })[] 
  */
 function syncChars(node: SceneNode): void {
 	const { entity } = node;
-	if (!entity.isAlive() || !isText(entity)) return;
+	if (!entity.isAlive()) return;
+	// A cue's text nodes are the caption line itself. It keeps them on its own
+	// trait — it is not a text element and has no glyphs of its own to lay out
+	// — but `Chars` is also how the editor reads an element's text back when
+	// it writes it to source, so a cue carries both or its line is lost on the
+	// way to the file.
+	if (!isText(entity) && !entity.has(Cue)) return;
+
+	const value = textParts(node).map((part) => part.element.data).join('');
+	if (entity.has(Cue)) entity.set(Cue, { text: value });
 	entity.add(Chars);
-	entity.set(Chars, { value: textParts(node).map((part) => part.element.data).join('') });
+	entity.set(Chars, { value });
 }
 
 /**
@@ -186,6 +198,10 @@ const TRACK_PROPERTIES: Record<string, PropertyPath> = {
 	blur: 'blur',
 	value: 'effect.value',
 	progress: 'diagram.progress',
+	morph: 'path.morph',
+	trimStart: 'trim.start',
+	trimEnd: 'trim.end',
+	trimOffset: 'trim.offset',
 };
 
 /**
@@ -196,6 +212,9 @@ const TRACK_PROPERTIES: Record<string, PropertyPath> = {
 export function trackPropertyPath(holder: Entity | null, property: string): PropertyPath | undefined {
 	const path = TRACK_PROPERTIES[property];
 	if (path === 'width' && holder?.has(Stroke)) return 'stroke.width';
+	// `value` is the generic numeric channel; which trait it is authored from
+	// depends on the holder, and a Lottie slot is not an effect.
+	if (path === 'effect.value' && holder?.has(LottieSlot)) return 'slot.value';
 	return path;
 }
 
@@ -206,6 +225,7 @@ export function trackPropertyPath(holder: Entity | null, property: string): Prop
 const TRACK_PROPERTY_NAMES = {
 	...Object.fromEntries(Object.entries(TRACK_PROPERTIES).map(([property, path]) => [path, property])),
 	'stroke.width': 'width',
+	'slot.value': 'value',
 } as Partial<Record<PropertyPath, AnimatableProperty>>;
 
 /**
@@ -262,6 +282,12 @@ export const CAPTION_PRESETS: Record<string, CaptionType> = {
 	paper: CaptionType.PAPER,
 	guinea: CaptionType.GUINEA,
 	stark: CaptionType.STARK,
+	pop: CaptionType.POP,
+	karaoke: CaptionType.KARAOKE,
+	typewriter: CaptionType.TYPEWRITER,
+	banner: CaptionType.BANNER,
+	punch: CaptionType.PUNCH,
+	marquee: CaptionType.MARQUEE,
 };
 
 export const CAPTION_ALIGNS: Record<string, CaptionAlign> = {
@@ -303,6 +329,13 @@ const FONT_STYLES: Record<string, FontStyle> = {
 	normal: FontStyle.NORMAL,
 	italic: FontStyle.ITALIC,
 	oblique: FontStyle.OBLIQUE,
+};
+
+/** Decoration names as the bits the trait stores; unknown names contribute nothing. */
+const TEXT_DECORATIONS: Record<string, number> = {
+	none: TextDecorationType.NONE,
+	underline: TextDecorationType.UNDERLINE,
+	lineThrough: TextDecorationType.LINE_THROUGH,
 };
 
 const TEXT_ALIGNS: Record<string, TextAlign> = {
@@ -352,6 +385,11 @@ const CAPTION_OVERRIDE_PROPS = [
  * or 1: `false` is how an editor unsets a prop (the writer spells it as the
  * attribute's absence), and a number prop has no true.
  */
+/** A 0–1 fraction, clamped: the props that mean "how much of it" take one. */
+function ratio(value: number): number {
+	return Math.min(1, Math.max(0, value));
+}
+
 function toNumber(value: unknown) {
 	if (value === undefined || value === null || typeof value === 'boolean') {
 		return undefined;
@@ -709,6 +747,55 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 				entity.set(Keyframe, { easing: '' });
 				break;
 			}
+			case 'marker': {
+				entity = createEntity(this.world);
+				entity.add(Marker);
+				break;
+			}
+			case 'cue': {
+				entity = createEntity(this.world);
+				entity.add(Cue);
+				break;
+			}
+			case 'duck': {
+				entity = createEntity(this.world);
+				entity.add(Duck);
+				break;
+			}
+			case 'path': {
+				entity = createEntity(this.world);
+				entity.add(Geometry);
+				entity.set(Geometry, { value: GeometryType.PATH });
+				entity.add(Path);
+				break;
+			}
+			case 'ellipse': {
+				entity = createEntity(this.world);
+				entity.add(Geometry);
+				entity.set(Geometry, { value: GeometryType.ELLIPSE });
+				break;
+			}
+			case 'polygon': {
+				entity = createEntity(this.world);
+				entity.add(Geometry);
+				entity.set(Geometry, { value: GeometryType.POLYGON });
+				entity.add(Polygon);
+				break;
+			}
+			case 'lottie': {
+				entity = createEntity(this.world);
+				// Geometry so it is a clip on the timeline and takes part in
+				// layout, transforms and hit-testing like any other visual.
+				entity.add(Geometry);
+				entity.set(Geometry, { value: GeometryType.RECT });
+				entity.add(Lottie);
+				break;
+			}
+			case 'lottieSlot': {
+				entity = createEntity(this.world);
+				entity.add(LottieSlot);
+				break;
+			}
 			default:
 				throw new Error(
 					`<${tag}> is not supported yet (only composition elements exported by @posterract/composition are accepted).`,
@@ -814,6 +901,26 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 				entity.set(Loop, { value });
 				return;
 			}
+			case LIVE_ATTR: {
+				if (typeof value !== 'string' || !value) {
+					entity.remove(Live);
+					return;
+				}
+
+				entity.add(Live);
+				entity.set(Live, { props: value });
+				return;
+			}
+			case COMPONENT_ATTR: {
+				if (typeof value !== 'string' || !value) {
+					entity.remove(Component);
+					return;
+				}
+
+				entity.add(Component);
+				entity.set(Component, { name: value });
+				return;
+			}
 			case SOURCE_ATTR: {
 				if (typeof value !== 'string' || !value) {
 					entity.remove(Source);
@@ -825,6 +932,17 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 				return;
 			}
 			case 'name': {
+				// A marker's name is the marker; it has no Name trait of its own
+				// because it is not a layer.
+				if (entity.has(Marker)) {
+					entity.set(Marker, { name: typeof value === 'string' ? value : '' });
+					return;
+				}
+				// Nor is a slot: its name addresses a slot inside the animation.
+				if (entity.has(LottieSlot)) {
+					entity.set(LottieSlot, { name: typeof value === 'string' ? value : '' });
+					return;
+				}
 				if (typeof value !== 'string' || !value) {
 					entity.remove(Name);
 					return;
@@ -886,6 +1004,12 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 				return;
 			}
 			case 'points': {
+				// Two elements author `points`: a `<polygon>` as a coordinate
+				// list, a `<diagramPlot>` as data pairs.
+				if (entity.has(Polygon)) {
+					entity.set(Polygon, { points: typeof value === 'string' ? value : '' });
+					return;
+				}
 				if (!entity.has(Diagram)) return;
 				const points = Array.isArray(value)
 					? value.filter((point) => Array.isArray(point) && point.length === 2
@@ -1013,6 +1137,23 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 				this.syncAspectLock(node);
 				return;
 			}
+			case 'speed': {
+				if (!entity.has(Lottie)) return;
+				entity.set(Lottie, { speed: Math.max(0, toNumber(value) ?? 1) });
+				return;
+			}
+			case 'loop': {
+				if (entity.has(Lottie)) {
+					entity.set(Lottie, { loop: value === true });
+					return;
+				}
+				break;
+			}
+			case 'locked': {
+				if (value === true) entity.add(Locked);
+				else entity.remove(Locked);
+				return;
+			}
 			case 'hidden': {
 				if (value === true && entity !== this.stage.entity) {
 					entity.add(Hidden);
@@ -1135,7 +1276,48 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 				entity.set(Animation, { [name]: this.toFrames(seconds ?? (name === 'duration' ? 1 : 0)) });
 				return;
 			}
+			case 'd': {
+				if (!entity.has(Path)) return;
+				entity.set(Path, { d: typeof value === 'string' ? value : '' });
+				return;
+			}
+			case 'morphTo': {
+				if (!entity.has(Path)) return;
+				entity.set(Path, { morphTo: typeof value === 'string' ? value : '' });
+				return;
+			}
+			case 'morph': {
+				if (!entity.has(Path)) return;
+				entity.set(Path, { morph: ratio(toNumber(value) ?? 0) });
+				return;
+			}
+			case 'trimStart':
+			case 'trimEnd':
+			case 'trimOffset': {
+				const field = name === 'trimStart' ? 'start' : name === 'trimEnd' ? 'end' : 'offset';
+				const fallback = name === 'trimEnd' ? 1 : 0;
+				const next = toNumber(value) ?? fallback;
+				if (!entity.has(PathTrim)) entity.add(PathTrim);
+				entity.set(PathTrim, { [field]: field === 'offset' ? next : ratio(next) });
+				return;
+			}
 			case 'value': {
+				if (entity.has(LottieSlot)) {
+					// A number is a scalar; a string that reads as a colour is
+					// one (and keyframable as a number); anything else is text.
+					const numeric = toNumber(value);
+					if (numeric !== undefined) {
+						entity.set(LottieSlot, { value: numeric, text: '', isColor: false });
+						return;
+					}
+					const color = parseColor(value);
+					if (color !== null) {
+						entity.set(LottieSlot, { value: color, text: '', isColor: true });
+						return;
+					}
+					entity.set(LottieSlot, { value: 0, text: typeof value === 'string' ? value : '', isColor: false });
+					return;
+				}
 				if (entity.has(Keyframe)) {
 					// A number, or a color on a color track; either is a number to the trait.
 					entity.set(Keyframe, { value: toNumber(value) ?? parseColor(value) ?? 0 });
@@ -1151,8 +1333,12 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 				return;
 			}
 			case 'time': {
-				if (!entity.has(Keyframe)) return;
 				const seconds = toSeconds(value);
+				if (entity.has(Marker)) {
+					entity.set(Marker, { time: this.toFrames(seconds ?? 0) });
+					return;
+				}
+				if (!entity.has(Keyframe)) return;
 				entity.set(Keyframe, { time: this.toFrames(seconds ?? 0) });
 				return;
 			}
@@ -1177,6 +1363,11 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 			case 'end':
 			case 'sourceIn':
 			case 'sourceOut': {
+				// A cue's start/end are scene-local times, like a keyframe's.
+				if (entity.has(Cue) && (name === 'start' || name === 'end')) {
+					entity.set(Cue, { [name]: this.toFrames(toSeconds(value) ?? 0) });
+					return;
+				}
 				if (entity.has(TextRange)) {
 					// A range's start/end are character indices, not times; an
 					// unset end runs to the end of the text.
@@ -1190,7 +1381,53 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 					return;
 				}
 
+				if (entity.has(After) && name === 'start') {
+					entity.set(After, { gap: this.toFrames(toSeconds(value) ?? 0) });
+					return;
+				}
 				this.syncTiming(node);
+				return;
+			}
+			case 'target':
+			case 'by': {
+				if (!entity.has(Duck)) return;
+				entity.set(Duck, { [name]: typeof value === 'string' ? value : '' });
+				return;
+			}
+			case 'amount': {
+				if (!entity.has(Duck)) return;
+				entity.set(Duck, { amount: toNumber(value) ?? -12 });
+				return;
+			}
+			case 'attack':
+			case 'release': {
+				if (!entity.has(Duck)) return;
+				const seconds = toSeconds(value);
+				entity.set(Duck, {
+					[name]: this.toFrames(seconds ?? (name === 'attack' ? 0.1 : 0.4)),
+				});
+				return;
+			}
+			case 'after': {
+				// The element's span follows another's; `start` alongside it
+				// becomes the gap rather than a scene-absolute time.
+				if (typeof value !== 'string' || !value) {
+					entity.remove(After);
+					this.syncTiming(node);
+					return;
+				}
+				entity.add(After);
+				entity.set(After, { id: value, gap: this.toFrames(toSeconds(node.props.start) ?? 0) });
+				return;
+			}
+			case 'stagger': {
+				const seconds = toSeconds(value);
+				if (seconds === undefined || seconds === 0) {
+					entity.remove(Stagger);
+					return;
+				}
+				entity.add(Stagger);
+				entity.set(Stagger, { value: this.toFrames(seconds) });
 				return;
 			}
 			case 'frameRate': {
@@ -1301,6 +1538,10 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 			}
 			case 'fill':
 			case 'color': {
+				if (entity.has(Marker)) {
+					entity.set(Marker, { color: typeof value === 'string' ? value : '' });
+					return;
+				}
 				const color = parseColor(value);
 
 				if (color === null) {
@@ -1364,6 +1605,15 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 			case 'fontStyle': {
 				entity.add(TextStyle);
 				entity.set(TextStyle, { fontStyle: typeof value === 'string' ? FONT_STYLES[value] : undefined });
+				return;
+			}
+			case 'textDecoration': {
+				// A space-separated list, because underline and strike combine;
+				// the trait holds the bitmask that makes that cheap to read.
+				entity.add(TextStyle);
+				const words = typeof value === 'string' ? value.split(/\s+/) : [];
+				const mask = words.reduce((acc, word) => acc | (TEXT_DECORATIONS[word] ?? 0), 0);
+				entity.set(TextStyle, { textDecoration: mask === 0 ? undefined : mask });
 				return;
 			}
 			case 'textAlign': {

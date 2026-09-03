@@ -105,6 +105,12 @@ export type AnimatableProperty =
   | "offset"
   | "blur"
   | "value"
+  /** How far a `<path>` has blended toward its `morphTo`, 0–1. */
+  | "morph"
+  /** Which fraction of a vector figure is drawn — see `TrimProps`. */
+  | "trimStart"
+  | "trimEnd"
+  | "trimOffset"
   /**
    * A diagram element's draw-on reveal, 0–1 and clamped to it. Only diagram
    * elements have it: `<diagramArrow>` draws its path (and its head) up to
@@ -161,7 +167,13 @@ export type CaptionPreset =
   | "whisper"
   | "paper"
   | "guinea"
-  | "stark";
+  | "stark"
+  | "pop"
+  | "karaoke"
+  | "typewriter"
+  | "banner"
+  | "punch"
+  | "marquee";
 
 // ── Shared prop groups ──────────────────────────────────────────────────────
 //
@@ -262,6 +274,14 @@ type CompositeProps = {
 };
 
 type TimingProps = {
+  /**
+   * The `id` of an element this one follows: its span begins where that one's
+   * ends, and `start` alongside it becomes the gap after it rather than a time
+   * in the scene. Re-resolved whenever the target's span changes, so trimming
+   * a clip moves everything after it instead of leaving a hole. An `after`
+   * naming nothing leaves the element where it is.
+   */
+  after?: string;
   /** Parent-timeline time at which the node begins. Default 0. */
   start?: Time;
   /** Parent-timeline time at which the node ends. Alternative to `sourceOut`. */
@@ -386,6 +406,11 @@ type FontProps = {
   /** CSS weights 100–900, or "normal" / "bold". */
   fontWeight?: number | "normal" | "bold";
   fontStyle?: "normal" | "italic" | "oblique";
+  /**
+   * Rules drawn along the text. Combine them with a space —
+   * `"underline lineThrough"`. Default "none".
+   */
+  textDecoration?: "none" | "underline" | "lineThrough" | "underline lineThrough";
   /** Extra space between glyphs, px (negative tightens). Default 0. */
   letterSpacing?: number;
   /** Casing applied when drawing; the text itself is left as written. Default "original". */
@@ -493,6 +518,17 @@ export type SceneProps = IdentityProps & PositionProps & Required<Pick<SizeProps
 };
 
 export type GroupProps = CommonProps & FillProps & {
+  /**
+   * How far apart the group's children's motion runs, as a `Time`.
+   *
+   * The nth child reads the clock `n × stagger` behind its siblings, so one
+   * animation authored on the children arrives as a cascade. Nothing is
+   * written per child: the offset is applied when motion is sampled, so the
+   * source stays one element and each child keeps one timeline row. Nested
+   * staggers add — one over rows and another over the cells in a row
+   * cascades in both directions.
+   */
+  stagger?: Time;
   /** Element children, plus `<Effect>` (filtering the group as a whole), `<Animation>` and `<KeyframeTrack>` children. */
   children?: SolidJSX.Element;
 };
@@ -539,6 +575,73 @@ export type RectProps = CommonProps & FillProps & {
    * `<RadialGradientPaint>`), plus `<Stroke>`, `<Shadow>`, `<Effect>`,
    * `<Animation>` and `<KeyframeTrack>` children.
    */
+  children?: SolidJSX.Element;
+};
+
+/**
+ * Trim Paths — which fraction of a vector figure is actually drawn.
+ *
+ * `trimEnd` animated from 0 to 1 is the classic draw-on: the line appears as
+ * if it were being drawn. `trimOffset` rotates the visible window around the
+ * figure, so a short window can chase around a closed shape without stopping
+ * at its seam. All three are keyframeable (`trim.start`, `trim.end`,
+ * `trim.offset` — authored as `trimStart`, `trimEnd`, `trimOffset`).
+ */
+type TrimProps = {
+  /** Where the drawn part begins, 0–1 of the whole figure. Default 0. */
+  trimStart?: number;
+  /** Where it ends, 0–1. Default 1 — the whole figure. */
+  trimEnd?: number;
+  /** Rotates the window around the figure, in turns. Default 0. */
+  trimOffset?: number;
+};
+
+/**
+ * `<path>` — a free vector figure in SVG path syntax.
+ *
+ * The `d` coordinates are the figure's own; without `width`/`height` the
+ * element takes the box its geometry occupies, the way an SVG bounding box
+ * does. Fills, strokes, shadows, effects and masks all work as they do on a
+ * `<rect>`.
+ */
+export type PathProps = CommonProps & FillProps & TrimProps & {
+  /** SVG path data: `M`, `L`, `H`, `V`, `C`, `S`, `Q`, `T`, `A`, `Z`. */
+  d: string;
+  /**
+   * A second figure to blend toward, as path data. Only shapes whose command
+   * sequences match can blend; when they do not, the target replaces the
+   * source at the halfway point rather than folding through it.
+   */
+  morphTo?: string;
+  /** How far toward `morphTo`, 0–1. Keyframeable as `morph`. Default 0. */
+  morph?: number;
+  /** Makes the path a mask of its parent — see `RectProps["mask"]`. */
+  mask?: boolean;
+  /** Paint, stroke, shadow, effect, animation and keyframe children. */
+  children?: SolidJSX.Element;
+};
+
+/**
+ * `<ellipse>` — an ellipse inscribed in the element's box.
+ *
+ * `width` and `height` are the box, so a circle is a square one. Built from
+ * arcs rather than drawn as a primitive, so `trim` works on it: a ring that
+ * draws itself is `trimEnd` from 0 to 1.
+ */
+export type EllipseProps = CommonProps & FillProps & TrimProps & {
+  /** Makes the ellipse a mask of its parent — see `RectProps["mask"]`. */
+  mask?: boolean;
+  children?: SolidJSX.Element;
+};
+
+/**
+ * `<polygon>` — a closed figure through a list of points.
+ */
+export type PolygonProps = CommonProps & FillProps & TrimProps & {
+  /** `"x,y x,y …"` in the element's own coordinates. */
+  points: string;
+  /** Makes the polygon a mask of its parent — see `RectProps["mask"]`. */
+  mask?: boolean;
   children?: SolidJSX.Element;
 };
 
@@ -708,6 +811,100 @@ export type KeyframeTrackProps = {
   property: AnimatableProperty;
   /** `<Keyframe>` children, in any order; they sort by `time`. */
   children?: SolidJSX.Element;
+};
+
+/**
+ * `<lottie>` — a Lottie/Bodymovin animation as a composition element.
+ *
+ * Lottie brings bezier paths, trim-path draw-on, morphing, mattes and precomps
+ * without Posterract having to grow a vector engine first. It is rendered by
+ * seeking the animation to composition time on every frame — never by playing
+ * it — so preview and export are the same frames.
+ */
+export type LottieProps = IdentityProps & TimingProps & OffsetProps & {
+  /** Path to a Lottie JSON in the project, or an imported asset. */
+  src: string;
+  /** Drawing size. Defaults to the animation's own. */
+  width?: number;
+  height?: number;
+  /** Multiplies the animation's own clock; 1 is real time. Default 1. */
+  speed?: number;
+  /** Repeat for the element's whole span rather than holding the last frame. */
+  loop?: boolean;
+  /** `<lottieSlot>` children. */
+  children?: SolidJSX.Element;
+};
+
+/**
+ * `<lottieSlot>` — one editable value inside a Lottie animation.
+ *
+ * Slots are how a Lottie file exposes its colours and text for reuse. As
+ * elements they are inspectable and keyframable like any other property.
+ */
+export type LottieSlotProps = {
+  /** The slot's name in the Lottie file. */
+  name: string;
+  /** Its value: a CSS color, a string for a text slot, or a number. */
+  value: string | number;
+};
+
+/**
+ * `<duck>` — hold one clip's level down while another one plays.
+ *
+ * The music under a voiceover, stated once instead of drawn as a volume
+ * track: `target` is what gets quieter, `by` is what makes it quieter. The
+ * envelope leads the ducking clip by `attack` and recovers over `release`,
+ * the way a person rides a fader, and it is derived from that clip's span —
+ * so trimming the voiceover moves the duck with it, and scrubbing into the
+ * middle of one shows the level an export writes there.
+ *
+ * Valid under a `<scene>`. Several ducks on the same target add up.
+ */
+export type DuckProps = {
+  /** `id` of the element that gets quieter. */
+  target: string;
+  /** `id` of the element whose span drives the duck. */
+  by: string;
+  /** How far down, in dB. Negative. Default -12. */
+  amount?: number;
+  /** How long the level takes to give way, leading the clip. Default 0.1s. */
+  attack?: Time;
+  /** How long it takes to come back. Default 0.4s. */
+  release?: Time;
+};
+
+/**
+ * `<cue>` — one caption line, valid only inside `<captions>`.
+ *
+ * Cues make captions part of the document rather than a file the composition
+ * points at: their text and timing can be edited, versioned, and read by an
+ * agent, and they survive without the transcript asset that produced them.
+ * A `<captions>` holding cues ignores its `src`.
+ */
+export type CueProps = {
+  /** When the line appears, in scene-local time. Any `Time` format. */
+  start: Time;
+  /** When it leaves. Any `Time` format. */
+  end: Time;
+  /** The line itself. */
+  children?: SolidJSX.Element;
+};
+
+/**
+ * `<marker>` — a named point on a scene's timeline.
+ *
+ * Markers are notes on the edit, not content: they render nothing and change
+ * nothing about the output. They exist so a person or an agent can label a
+ * beat, a cut, or a place to come back to, and have that label survive in the
+ * source rather than in someone's memory.
+ */
+export type MarkerProps = {
+  /** Where the marker sits, in scene-local time. Any `Time` format. */
+  time: Time;
+  /** What the marker is for. Shown on the ruler. */
+  name?: string;
+  /** Any CSS color; defaults to the editor's accent. */
+  color?: string;
 };
 
 /** `<keyframe>` — one keyframe of the `<keyframeTrack>` holding it. */

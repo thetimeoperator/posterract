@@ -26,6 +26,23 @@ function getFontFaceSet(): FontFaceSet | null {
 }
 
 /**
+ * Where a face is actually loaded from.
+ *
+ * The copy the build staged into the app's own assets when there is one —
+ * resolved against the document's base, because the desktop app serves the
+ * editor from `posterract-app://app/editor-sandbox/` and an absolute path
+ * would miss it — and the original URL otherwise, which is what the web app
+ * uses. The desktop renderer allows no network, so without the staged copy a
+ * preset falls back to a serif.
+ */
+export function fontUrl(family: keyof typeof WebFonts): string {
+	const config = WebFonts[family] as { url: string; file?: string };
+	if (!config.file) return config.url;
+	const base = typeof document !== 'undefined' ? document.baseURI : null;
+	return base ? new URL(`fonts/${config.file}`, base).toString() : config.url;
+}
+
+/**
  * Get common web fonts
  */
 export function getWebFonts(): types.FontSources[] {
@@ -35,7 +52,7 @@ export function getWebFonts(): types.FontSources[] {
 			variants: WebFonts[family as keyof typeof WebFonts].weights.map((weight) => {
 				return {
 					family,
-					source: `url(${WebFonts[family as keyof typeof WebFonts].url})`,
+					source: `url(${fontUrl(family as keyof typeof WebFonts)})`,
 					weight: weight,
 				};
 			}),
@@ -49,7 +66,7 @@ export async function loadWebFont(
 	style: FontStyle = FontStyle.NORMAL,
 	weight?: string,
 ): Promise<types.FontSource> {
-	const source = `url(${WebFonts[family].url})`;
+	const source = `url(${fontUrl(family)})`;
 	const font: types.FontSource = {
 		source,
 		family,

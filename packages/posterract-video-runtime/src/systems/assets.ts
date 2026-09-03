@@ -4,8 +4,11 @@
 
 import { parseSource } from '@posterract/composition';
 
-import { Ai, Cache, Computed, Delay, FrameRate, FramePromises, Generating, GenerationRequest, Host, Library, LoadRequest, PendingSource, PendingSync, PlaybackRate, Source, SourceError, SyncRequest, TranscriptionRequest, Trim } from '../traits';
-import { bindAsset, getAssetFile, getModifiers } from '../actions/assets';
+import { Not } from 'koota';
+
+import { LottiePlayer } from '../media/lottie';
+import { Ai, AssetId, Cache, Computed, Delay, FrameRate, FramePromises, Generating, GenerationRequest, Host, Library, LoadRequest, Lottie, LottieHandle, PendingSource, PendingSync, PlaybackRate, Source, SourceError, SyncRequest, TranscriptionRequest, Trim } from '../traits';
+import { bindAsset, getAsset, getAssetFile, getModifiers } from '../actions/assets';
 import { getEntityTree, getParentNode, getSceneAncestor } from '../queries/hierarchy';
 import { findAssetDuration, findGeometryAsset } from '../utils/time';
 import { computeAudioSyncOffsetCached } from '../media/audio-sync';
@@ -15,7 +18,52 @@ import { assert } from '../utils/assert';
 import type { Entity, World } from 'koota';
 import type { Asset } from '@posterract/video-assets';
 
+/**
+ * Give every `<lottie>` a player once its JSON asset is available.
+ *
+ * The load is registered as a frame promise, so an export waits for the
+ * animation rather than encoding the frames before it arrived — the same
+ * `hold()` contract every other async source uses.
+ */
+function resolveLottiePlayers(world: World): void {
+	for (const entity of world.query(Lottie, AssetId, Not(LottieHandle))) {
+		const asset = getAsset(world, entity.get(AssetId)!.value);
+		if (!asset) continue;
+
+		entity.add(LottieHandle);
+		const computed = store(world, Computed);
+		const eid = entity.id();
+		const done = getAssetFile(asset)
+			.then((file) => file.text())
+			.then((json) => {
+				if (!entity.isAlive()) return;
+				const player = new LottiePlayer(
+					json,
+					computed.width[eid] || DEFAULT_LOTTIE_SIZE,
+					computed.height[eid] || DEFAULT_LOTTIE_SIZE,
+				);
+				entity.set(LottieHandle, player);
+				return player.ready;
+			})
+			.catch((error: unknown) => {
+				if (!entity.isAlive()) return;
+				// A broken animation is a source error the agent's `check` can
+				// see, not a crash of the whole composition.
+				entity.add(SourceError);
+				entity.set(SourceError, {
+					value: error instanceof Error ? error.message : String(error),
+				});
+			});
+		world.get(FramePromises)?.list?.push(done);
+	}
+}
+
+/** What a Lottie draws into when the element declares no size of its own. */
+const DEFAULT_LOTTIE_SIZE = 512;
+
 export function assetSystem(world: World): void {
+	resolveLottiePlayers(world);
+
 	for (const entity of world.query(LoadRequest, Host)) {
 		const source = entity.get(LoadRequest)!.value;
 		if (!isDomImage(entity)) continue;

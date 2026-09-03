@@ -36,6 +36,7 @@ export class PaperCaptionDecoder implements CaptionDecoder {
 	public readonly type = CaptionType.PAPER;
 	public groups: ReturnType<typeof groupBy> = [];
 	public ready = false;
+	public readonly whenReady: Promise<void>;
 	public styled = false;
 
 	private readonly asset: Asset;
@@ -44,7 +45,7 @@ export class PaperCaptionDecoder implements CaptionDecoder {
 
 	constructor(asset: Asset) {
 		this.asset = asset;
-		this.init();
+		this.whenReady = this.init();
 	}
 
 	private async init() {

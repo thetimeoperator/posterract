@@ -21,6 +21,8 @@ import {
 	Root,
 } from '../traits';
 import { getParentNode } from '../queries/hierarchy';
+import { resolveRelativeTiming } from '../actions/relative-timing';
+import { applyDucking } from '../actions/ducking';
 import { getIntrinsicPaint, getSourceWindow } from '../utils/time';
 import { clamp } from '../math/common';
 import { getTransitionWindow } from '../utils/transition';
@@ -144,7 +146,21 @@ function forwardCaptionDecoder(world: World, _scene: Entity, entity: Entity): vo
 	const fps = world.get(FrameRate)?.value ?? 30;
 
 	const decoder = resolveCaptionDecoder(world, entity);
-	decoder?.seekTo(world, entity, localFrame / fps);
+	if (!decoder) return;
+
+	// A decoder loads its transcript asynchronously, so its first frames have
+	// no lines to draw. Waiting alone would not help — the seek has already
+	// happened by then — so the frame is held on a promise that seeks *after*
+	// the transcript lands. That is what keeps the first seconds of an offline
+	// render from coming out with no captions on them.
+	if (!decoder.ready) {
+		framePromises(world)?.push(
+			decoder.whenReady.then(() => decoder.seekTo(world, entity, localFrame / fps)),
+		);
+		return;
+	}
+
+	decoder.seekTo(world, entity, localFrame / fps);
 }
 
 /**
@@ -381,6 +397,9 @@ function getGlobalFrame(world: World, entity: Entity): number {
 export function playbackSystem(world: World): void {
 	const computed = store(world, Computed);
 
+	// `after` becomes a Delay before anything reads a span this frame.
+	resolveRelativeTiming(world);
+
 	// handle root playback
 	for (const entity of world.query(Playback)) {
 		advancePlayhead(world, entity);
@@ -389,6 +408,12 @@ export function playbackSystem(world: World): void {
 	for (const entity of world.query(Or(Geometry, Group, AdjustmentLayer), ChildOf(world.get(Root)!))) {
 		updateVisibility(world, entity, entity);
 		forwardDecoders(world, entity, entity);
+	}
+
+	// After visibility, because a duck reads the spans it just resolved, and
+	// before the buses sync, which is where the level is actually applied.
+	for (const scene of world.query(Playback)) {
+		applyDucking(world, computed.localTime[scene.id()] ?? 0);
 	}
 
 	// handle transition visibility

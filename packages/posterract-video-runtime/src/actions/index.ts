@@ -14,6 +14,8 @@ export * from './camera';
 export * from './hierarchy';
 export * from './cache';
 export * from './timing';
+export * from './relative-timing';
+export * from './ducking';
 export * from './resize';
 export * from './keyframe';
 export * from './overlap';

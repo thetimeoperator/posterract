@@ -40,6 +40,14 @@ import type {
   HtmlProps,
   ImageProps,
   KeyframeProps,
+  CueProps,
+  DuckProps,
+  PathProps,
+  EllipseProps,
+  PolygonProps,
+  LottieProps,
+  LottieSlotProps,
+  MarkerProps,
   KeyframeTrackProps,
   RectProps,
   SceneProps,
@@ -70,7 +78,7 @@ type HtmlElementTags = Omit<SolidJSX.HTMLElementTags, "canvas" | "audio" | "vide
 type ImgTag = Omit<SolidJSX.HTMLElementTags["img"], "src"> & { src?: AssetInput };
 
 // The shared names are re-declared below as unions with the composition props.
-type SvgElementTags = Omit<SolidJSX.SVGElementTags, "rect" | "text" | "image">;
+type SvgElementTags = Omit<SolidJSX.SVGElementTags, "rect" | "text" | "image" | "path" | "ellipse" | "polygon">;
 
 export declare namespace JSX {
   // Solid's Element type keeps Solid's control flow (<For>, <Show>, …) and
@@ -113,6 +121,14 @@ export declare namespace JSX {
     animation: AnimationProps & SourceProps;
     keyframeTrack: KeyframeTrackProps & SourceProps;
     keyframe: KeyframeProps & SourceProps;
+    marker: MarkerProps & SourceProps;
+    cue: CueProps & SourceProps;
+    duck: DuckProps & SourceProps;
+    path: (PathProps & SourceProps) | SolidJSX.SVGElementTags["path"];
+    ellipse: (EllipseProps & SourceProps) | SolidJSX.SVGElementTags["ellipse"];
+    polygon: (PolygonProps & SourceProps) | SolidJSX.SVGElementTags["polygon"];
+    lottie: LottieProps & SourceProps;
+    lottieSlot: LottieSlotProps & SourceProps;
     htmlPaint: HtmlPaintProps & SourceProps;
     html: HtmlProps & SourceProps;
     shaderPaint: ShaderPaintProps & SourceProps;

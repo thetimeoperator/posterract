@@ -36,6 +36,13 @@ export const Computed = trait({
 	// A diagram's draw-on reveal, 0..1. 1 (fully drawn) for everything else,
 	// which is the Diagram trait's own default.
 	progress: 1,
+	// Trim Paths, resolved: which fraction of a vector figure is drawn, and
+	// how far the window is rotated around it.
+	trimStart: 0,
+	trimEnd: 1,
+	trimOffset: 0,
+	// How far a path has blended toward its `morphTo`, 0..1.
+	morph: 0,
 	width: 0,
 	height: 0,
 	chars: undefined as string | undefined,

@@ -11,11 +11,12 @@ import {
 	Computed, Cache, Animation, KeyframeTrack, Keyframe, Chars,
 	UniformScale, Position, Offset, Rotation, Scale, Skew, Size, Opacity,
 	Color, Blur, Volume, Effect, StrokeStyle, CornerRadius, MixedCornerRadius,
-	ColorStop, Diagram,
+	ColorStop, Diagram, LottieSlot, Path, PathTrim, Stagger, ItemIndex,
 } from '../traits';
 import { AnimationType, AnimationPhase } from '../constants';
 import { revealChars, revealWords, scrambleChars } from '../utils/text-motion';
 import { getLocalWindow } from '../utils/time';
+import { getParentNode } from '../queries/hierarchy';
 
 import type { Entity, Trait, TraitRecord, World } from 'koota';
 
@@ -59,6 +60,14 @@ export function resetAnimatedValues(world: World, entity: Entity | null, ignore?
 	// its nearest end, here as well as at the edge of a keyframe track.
 	computed.progress[eid] = clamp01(read(Diagram, 'progress', 1));
 	computed.chars[eid] = read(Chars, 'value', '');
+	computed.trimStart[eid] = clamp01(read(PathTrim, 'start', 0));
+	computed.trimEnd[eid] = clamp01(read(PathTrim, 'end', 1));
+	computed.trimOffset[eid] = read(PathTrim, 'offset', 0);
+	computed.morph[eid] = clamp01(read(Path, 'morph', 0));
+	// A Lottie slot's authored value seeds the same channel effects use, so a
+	// track over it interpolates like any other number. The fallback is the
+	// current value rather than 0, which leaves every non-slot entity alone.
+	computed.value[eid] = read(LottieSlot, 'value', computed.value[eid] ?? 0);
 
 	if (entity.has(UniformScale) && ignore !== UniformScale) {
 		computed.scaleX[eid] = read(UniformScale, 'value', 1);
@@ -190,6 +199,32 @@ function applyAnimation(world: World, entity: Entity, anim: Entity, progress: nu
 	}
 }
 
+/**
+ * Properties that mean "a fraction of something" and are clamped to 0–1 after
+ * sampling, so an overshooting easing reads as fully drawn rather than as
+ * more than drawn.
+ */
+const RATIO_PROPERTIES = new Set<PropertyPath>(['diagram.progress', 'trim.start', 'trim.end', 'path.morph']);
+
+/**
+ * How far behind its siblings a node's motion runs, in frames.
+ *
+ * Walks up rather than out: nested staggers add, so a stagger over rows and
+ * another over the cells in each row cascades in both directions from one
+ * pair of numbers.
+ */
+function staggerOffset(world: World, entity: Entity): number {
+	let offset = 0;
+	let current: Entity | null = entity;
+	for (let parent = getParentNode(current); parent !== null; current = parent, parent = getParentNode(parent)) {
+		if (!parent.has(Stagger)) continue;
+		const step = store(world, Stagger).value[parent.id()] ?? 0;
+		if (step === 0) continue;
+		offset += step * (store(world, ItemIndex).value[current.id()] ?? 0);
+	}
+	return offset;
+}
+
 export function motionSystem(world: World): void {
 	const computed = store(world, Computed);
 	const cache = store(world, Cache);
@@ -212,7 +247,10 @@ export function motionSystem(world: World): void {
 
 		const source = getLocalWindow(entity);
 
-		const localFrame = computed.localTime[eid];
+		// A staggering ancestor shifts this node's motion clock without moving
+		// the node: the nth child simply samples its own tracks that much
+		// earlier in their span.
+		const localFrame = computed.localTime[eid]! - staggerOffset(world, entity);
 
 		// 1: Preset animations (FADE/GAIN/GROW/SHRINK/BLUR/SLIDE)
 		for (const anim of animations) {
@@ -239,11 +277,16 @@ export function motionSystem(world: World): void {
 			const property = keyframeTrack.property[tid] as PropertyPath;
 			const target = keyframeTrack.target[tid];
 			const keyframes = cache.keyframes[tid] ?? [];
+			// A track whose property the runtime does not know is skipped, not
+			// fatal: an unrecognised name should leave the frame alone rather
+			// than take the whole composition down.
+			const channel = worldProps[property] as { computed: number[] } | undefined;
+			if (channel === undefined) continue;
 			const result = sampleTrack(world, keyframes, localFrame, property);
 			if (result === null || target == null) continue;
 			// A reveal is a ratio, so a track that overshoots (a spring, a
 			// keyframe authored past the end) still reads as fully drawn.
-			worldProps[property].computed[target.id()] = property === 'diagram.progress'
+			channel.computed[target.id()] = RATIO_PROPERTIES.has(property)
 				? clamp01(result)
 				: result;
 			// A 'scale' track is the uniform scale whether or not the node also
@@ -332,6 +375,26 @@ export function getPropertyPaths(world: World) {
 		'effect.value': {
 			computed: computed.value,
 			authored: store(world, Effect).value,
+		},
+		'slot.value': {
+			computed: computed.value,
+			authored: store(world, LottieSlot).value,
+		},
+		'trim.start': {
+			computed: computed.trimStart,
+			authored: store(world, PathTrim).start,
+		},
+		'trim.end': {
+			computed: computed.trimEnd,
+			authored: store(world, PathTrim).end,
+		},
+		'trim.offset': {
+			computed: computed.trimOffset,
+			authored: store(world, PathTrim).offset,
+		},
+		'path.morph': {
+			computed: computed.morph,
+			authored: store(world, Path).morph,
 		},
 		'stroke.width': {
 			computed: computed.strokeWidth,

@@ -12,7 +12,8 @@
     "./media": "./src/media/index.ts"
   },
   "scripts": {
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "test": "node --import tsx --test src/utils/*.test.ts src/media/caption/*.test.ts src/actions/*.test.ts"
   },
   "keywords": [
     "koota",
@@ -20,15 +21,18 @@
     "video"
   ],
   "dependencies": {
-    "@posterract/video-assets": "workspace:*",
     "@posterract/composition": "workspace:*",
+    "@posterract/video-assets": "workspace:*",
     "animejs": "^4.4.1",
+    "canvaskit-wasm": "0.42.0",
     "colord": "^2.9.3",
     "koota": "^0.6.6",
     "mediabunny": "^1.32.2"
   },
   "devDependencies": {
     "@webgpu/types": "^0.1.71",
-    "typescript": "~5.9.3"
+    "typescript": "~5.9.3",
+    "tsx": "^4.23.12",
+    "@types/node": "^22.10.2"
   }
 }

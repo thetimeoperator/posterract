@@ -3,7 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 import { store } from '../world/store';
-import { Muted, Computed, AudioEngine } from '../traits';
+import { Muted, Computed, AudioEngine, DuckGain } from '../traits';
 import { attempt } from '../utils/async';
 import { assert } from '../utils/assert';
 
@@ -66,6 +66,14 @@ export class AudioBus {
 			return 0;
 		}
 
-		return Math.pow(10, volumeDb / 20);
+		// A duck is added in dB rather than multiplied in: that is what makes
+		// "6 dB under the voice" mean the same thing whatever the clip's own
+		// level is, and it composes with a volume keyframe track instead of
+		// replacing it.
+		const duckDb = this.entity.has(DuckGain)
+			? store(this.world, DuckGain).db[this.entity.id()] ?? 0
+			: 0;
+
+		return Math.pow(10, (volumeDb + duckDb) / 20);
 	}
 }
