@@ -102,6 +102,17 @@ export interface ScriptAsset extends AssetBase {
 	type: 'SCRIPT';
 }
 
+/**
+ * A Lottie/Bodymovin animation. Sized and timed from the file's own header, so
+ * a `<lottie>` that declares neither takes the animation's own.
+ */
+export interface LottieAsset extends AssetBase {
+	type: 'LOTTIE';
+	duration: number;
+	width: number;
+	height: number;
+}
+
 // `source` is the frames directory; `handle` points to the first frame's
 // file so generic preview code works.
 export interface SequenceAsset extends AssetBase {
@@ -119,7 +130,8 @@ export type Asset =
 	| VideoAsset
 	| TranscriptAsset
 	| ScriptAsset
-	| SequenceAsset;
+	| SequenceAsset
+	| LottieAsset;
 
 export type AssetType = Asset['type'];
 

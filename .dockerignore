@@ -15,4 +15,5 @@ test-results
 trending-news-character-skill copy 2
 *.png
 !apps/editor-sandbox/src/**/*.png
+!posterract-icon-1024.png
 *.pdf

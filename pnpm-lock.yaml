@@ -28,9 +28,9 @@ importers:
       '@elastic/elasticsearch':
         specifier: ^8.19.0
         version: 8.19.2
-      '@posterract/video-compiler':
+      '@posterract/contract':
         specifier: workspace:*
-        version: link:../../packages/video-compiler
+        version: link:../../packages/contract
       '@temporalio/client':
         specifier: ^1.13.2
         version: 1.21.1
@@ -168,6 +168,9 @@ importers:
       animejs:
         specifier: ^4.4.1
         version: 4.5.0(@types/three@0.184.1)(three@0.184.0)
+      canvaskit-wasm:
+        specifier: 0.42.0
+        version: 0.42.0
       cmdk-solid:
         specifier: ^1.1.2
         version: 1.1.2(solid-js@1.9.15)
@@ -478,6 +481,9 @@ importers:
       esbuild:
         specifier: ^0.28.1
         version: 0.28.2
+      tsx:
+        specifier: ^4.23.12
+        version: 4.23.12
       typescript:
         specifier: ~5.9.3
         version: 5.9.3
@@ -491,6 +497,12 @@ importers:
         specifier: ^1.9.0
         version: 1.9.15
     devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.20.1
+      tsx:
+        specifier: ^4.23.12
+        version: 4.23.12
       typescript:
         specifier: ~5.9.3
         version: 5.9.3
@@ -579,6 +591,9 @@ importers:
       animejs:
         specifier: ^4.4.1
         version: 4.5.0(@types/three@0.184.1)(three@0.184.0)
+      canvaskit-wasm:
+        specifier: 0.42.0
+        version: 0.42.0
       colord:
         specifier: ^2.9.3
         version: 2.10.0
@@ -589,9 +604,15 @@ importers:
         specifier: ^1.32.2
         version: 1.55.3
     devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.20.1
       '@webgpu/types':
         specifier: ^0.1.71
         version: 0.1.72
+      tsx:
+        specifier: ^4.23.12
+        version: 4.23.12
       typescript:
         specifier: ~5.9.3
         version: 5.9.3
@@ -2802,6 +2823,9 @@ packages:
   '@webassemblyjs/wast-printer@1.14.1':
     resolution: {integrity: sha512-kPSSXE6De1XOR820C90RIo2ogvZG+c3KiHzqUoO/F34Y2shGzesfqv7o57xrxovZJH/MetF5UjroJ/R/3isoiw==}
 
+  '@webgpu/types@0.1.21':
+    resolution: {integrity: sha512-pUrWq3V5PiSGFLeLxoGqReTZmiiXwY3jRkIG5sLLKjyqNxrwm/04b4nw7LSmGWJcKk59XOM/YRTUwOzo4MMlow==}
+
   '@webgpu/types@0.1.72':
     resolution: {integrity: sha512-0cF7RFM2edNoiIS1ODJp0/Gzv4/xSXhwoR0YCza+OWpJWtn4wmo9DvK91aLlH9+uUnwIriP7ZiC3WitmyhuzBw==}
 
@@ -3134,6 +3158,9 @@ packages:
 
   caniuse-lite@1.0.30001797:
     resolution: {integrity: sha512-l8xKG+gwAIExZGl9FrF7KUwuOmk6wbEPC9Xoy/RtnWv1XG0Q4LFlagaLpUv3Kiza3W/wm27zy0yWJEieYKAP6w==}
+
+  canvaskit-wasm@0.42.0:
+    resolution: {integrity: sha512-N3ikotmzYwDVAcpQKDMptBT2P5pIEWS9ywdmrQA2awwaMF9cxKEFuxZZHv9ay1Em9kDjxDsPtwUzDm1uNj136g==}
 
   chalk@4.1.2:
     resolution: {integrity: sha512-oKnbhFyRIXpUuez8iBMmyEa4nbj4IOQyuhc/wy9kY7/WVPcwIO9VA668Pu8RkO7+0G76SLROeyw9CpQ061i4mA==}
@@ -8538,6 +8565,8 @@ snapshots:
       '@webassemblyjs/ast': 1.14.1
       '@xtuc/long': 4.2.2
 
+  '@webgpu/types@0.1.21': {}
+
   '@webgpu/types@0.1.72': {}
 
   '@xmldom/xmldom@0.9.12': {}
@@ -8852,6 +8881,10 @@ snapshots:
       three: 0.184.0
 
   caniuse-lite@1.0.30001797: {}
+
+  canvaskit-wasm@0.42.0:
+    dependencies:
+      '@webgpu/types': 0.1.21
 
   chalk@4.1.2:
     dependencies:

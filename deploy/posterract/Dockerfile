@@ -30,6 +30,7 @@ RUN pnpm install --frozen-lockfile
 COPY apps ./apps
 COPY packages ./packages
 COPY tsconfig.base.json tsconfig.base.json
+COPY posterract-icon-1024.png posterract-icon-1024.png
 
 FROM workspace AS web-build
 
@@ -42,7 +43,8 @@ ENV VITE_CONVEX_SITE_URL=$VITE_CONVEX_SITE_URL
 ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_SITE_URL=$VITE_SITE_URL
 
-RUN pnpm --filter @posterract/editor-sandbox build \
+RUN pnpm --filter @posterract/composition build \
+    && pnpm --filter @posterract/editor-sandbox build \
     && pnpm --filter @posterract/web build \
     && mkdir -p apps/web/dist/editor-sandbox \
     && cp -R apps/editor-sandbox/dist/. apps/web/dist/editor-sandbox/

@@ -33,7 +33,7 @@ if (!/^name:\s*posterract$/m.test(frontmatter) || !/^description:\s*.+$/m.test(f
   throw new Error("SKILL.md frontmatter must declare name and description");
 }
 const manifest = JSON.parse(readFileSync(join(skill, "manifest.json"), "utf8"));
-if (manifest.entry !== "SKILL.md" || manifest.compatibility?.protocol !== 1) {
+if (manifest.entry !== "SKILL.md" || manifest.compatibility?.protocol !== 2) {
   throw new Error("Skill manifest entry or protocol compatibility is invalid");
 }
 

@@ -1084,7 +1084,10 @@ const activities = {
       [transmissionId],
     );
     const status = result.rows[0]?.status;
-    if (["live", "partial", "failed", "canceled"].includes(status)) {
+    // TikTok inbox uploads are complete from Posterract's side once TikTok has
+    // delivered the draft to the user. Treat awaiting_user as terminal for the
+    // shared media lifecycle so the asset does not remain stuck as publishing.
+    if (["awaiting_user", "live", "partial", "failed", "canceled"].includes(status)) {
       const retentionHours = status === "live" ? 48 : status === "canceled" ? 24 : 168;
       await postgres.query(
         `update media_assets m

@@ -18,6 +18,7 @@ export type ProbeResult = Extract<
 	| { type: 'AUDIO'; duration: number; sampleRate: number; channels: number }
 	| { type: 'VIDEO'; duration: number; width: number; height: number; frameRate: number; bitRate: number; sampleRate?: number; channels?: number }
 	| { type: 'TRANSCRIPT' }
+	| { type: 'LOTTIE'; duration: number; width: number; height: number }
 	| { type: 'SCRIPT' },
 	{ type: Asset['type'] }
 >;
@@ -117,6 +118,36 @@ async function sniffImageType(input: Blob): Promise<string | null> {
  * the file is of no type the library takes, or is missing what its type
  * needs (a video without a video track, say).
  */
+/**
+ * A Lottie animation's header, or null when the JSON is something else.
+ *
+ * Only the first slice is parsed when the file is large: an animation's
+ * metadata is always at the top, and a long transcript should not be read
+ * whole just to find out it is not a Lottie.
+ */
+async function readLottieHeader(
+	file: Blob,
+): Promise<{ type: 'LOTTIE'; duration: number; width: number; height: number } | null> {
+	try {
+		const value = JSON.parse(await file.text()) as {
+			v?: unknown; layers?: unknown; fr?: unknown; ip?: unknown; op?: unknown; w?: unknown; h?: unknown;
+		};
+		if (typeof value.v !== 'string' || !Array.isArray(value.layers)) return null;
+
+		const frameRate = Number(value.fr) || 30;
+		const inPoint = Number(value.ip) || 0;
+		const outPoint = Number(value.op) || 0;
+		return {
+			type: 'LOTTIE',
+			duration: Math.max(0, (outPoint - inPoint) / frameRate),
+			width: Number(value.w) || 0,
+			height: Number(value.h) || 0,
+		};
+	} catch {
+		return null;
+	}
+}
+
 export async function probeMedia(file: Blob, mimeType: string): Promise<ProbeResult> {
 	if (mimeType.startsWith('image/')) {
 		const { width, height } = mimeType === 'image/svg+xml'
@@ -125,7 +156,14 @@ export async function probeMedia(file: Blob, mimeType: string): Promise<ProbeRes
 		return { type: 'IMAGE', width, height };
 	}
 
-	if (TRANSCRIPT_TYPES.has(mimeType)) return { type: 'TRANSCRIPT' };
+	if (TRANSCRIPT_TYPES.has(mimeType)) {
+		// A Lottie file is JSON too, so the two are told apart by shape rather
+		// than by extension: `v` (the Bodymovin version) plus `layers` is the
+		// signature, and no transcript has either.
+		const lottie = await readLottieHeader(file);
+		if (lottie) return lottie;
+		return { type: 'TRANSCRIPT' };
+	}
 
 	if (mimeType.startsWith('audio/') || mimeType.startsWith('video/')) {
 		const input = new Input({ formats: ALL_FORMATS, source: new BlobSource(file) });

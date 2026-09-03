@@ -7,6 +7,10 @@ description: Build, inspect, validate, capture, and export local Posterract TSX 
 
 Work from the local project folder. Treat the project entry module as canonical — `index.tsx` at the project root (`src/index.tsx` in legacy projects; `posterract_read_source` with the default `"auto"` path resolves it) — and the active project's `.posterract/docs` as authoritative for the installed SDK version.
 
+## Canvas-first rule
+
+While Posterract Desktop has the project open, every composition edit goes through the MCP tools: `posterract_write_source` (with the `revisionId` from `posterract_read_source`) for TSX changes, or the semantic tools (`posterract_set_properties`, `posterract_set_text`, `posterract_create_element`, `posterract_move`, …) for targeted ones. Do not rewrite the entry TSX with your own file tools. An edit made through the tools appears on the canvas and timeline instantly and keeps undo and Version History intact; a raw file write bypasses all of that and can collide with the user's own edits.
+
 ## Required workflow
 
 1. Call `posterract_connection_status`. If unavailable, read `references/installation.md` and diagnose the connection; do not pretend the canvas is connected.
@@ -47,9 +51,32 @@ Work from the local project folder. Treat the project entry module as canonical 
 - MCP tool and connection map: `references/mcp.md`
 - Direct CLI diagnostics and fallback: `references/cli.md`
 - Agent-designed diagrams and mathematical explainers: `references/diagrams.md`
+- Vector motion graphics and Lottie authoring: `references/lottie.md`
 - Efficient video/audio inspection: `references/media-analysis.md`
 - Easing guidance: `references/easings.md`
 - Recovery steps: `references/troubleshooting.md`
 - Export-to-publish boundary: `references/posting-api.md`
 
 Load only the references needed for the current task. Use the examples as patterns, then verify actual supported properties against the project's local SDK docs.
+
+## What the editor shows the user
+
+The timeline is an index of the document, at one of three detail levels
+(*Clips*, *Animation*, *Everything*). Every keyframe track, preset animation,
+effect, paint, stroke and shadow you write becomes a row the user can see and
+edit. `posterract_get_context` reports the same structure: `keyframe-track`
+nodes carry the `property` they drive, `keyframe` nodes carry `time` (seconds),
+`value` and `easing`, and `animation` nodes carry `type`, `duration` and
+`phase`. Read those rather than re-parsing the TSX when you need to adjust
+motion you or the user already created.
+
+Two props are protections, not decoration:
+
+- `locked` — the user has asked that this element not be moved, trimmed or
+  deleted. Do not edit it without being asked to.
+- `workarea` on a `<scene>` — the range that exports. Changing it changes what
+  the user's render will contain.
+
+The user's work is snapshotted before every write and deleted scenes are kept
+in `.posterract/trash/`, so a mistake is recoverable — but that is a safety
+net, not a licence. Read before you write, and use revision-safe writes.

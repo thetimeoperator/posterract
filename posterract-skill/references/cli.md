@@ -58,3 +58,25 @@ posterract report [--output <zip>]
 ```
 
 Machine-readable commands print JSON or JSON Lines to stdout. Progress and recovery guidance belong on stderr. A nonzero exit indicates the operation failed or `check` found an error-severity issue.
+
+## `posterract batch` — one video per row
+
+```
+posterract batch <sceneId> --data rows.csv --output "out/{name}.mp4"
+```
+
+A project is code with named `@inspect` variables, so a spreadsheet is already
+a list of takes. Each row sets every variable whose name matches a column, then
+exports. Columns the project does not declare are reported once and ignored —
+data files usually carry other things too.
+
+`--output` is a template: `{column}` inserts a cell, `{n}` the row number.
+Without a placeholder the row number is appended, so rows cannot overwrite each
+other. Cells are sanitised to a plain filename, so a stray `/` in a spreadsheet
+cannot redirect the write.
+
+Rows render one at a time — the encoder owns the GPU — and a failed row is
+reported without stopping the rest. The command exits non-zero if any row
+failed.
+
+JSON works too: an array of objects with the same shape as the CSV rows.

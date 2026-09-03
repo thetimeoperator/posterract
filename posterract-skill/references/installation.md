@@ -13,6 +13,7 @@ No prompt needs to be copied and no terminal command is required for ordinary se
 ## Agent skill
 
 - Codex: use the in-app skill installer; restart/reload skills if the client requests it.
+- Claude Code: connecting from Posterract Desktop registers the MCP server at user scope and installs this skill to `~/.claude/skills/posterract`; both load when the next Claude Code session starts, so restart the session after connecting.
 - Claude Code: place the folder where the project or user-level Claude skills configuration can read it.
 - Cursor: add the skill folder to the agent rules/skills location used by the workspace.
 - Generic coding agent: provide `SKILL.md` as the entry instructions and preserve the relative `references/` and `examples/` folders.
