@@ -168,6 +168,46 @@ export class EditHistory {
 	}
 
 	/**
+	 * The stack as plain data, for persisting across a reload.
+	 *
+	 * Only committed steps travel: the open transaction is mid-gesture and has
+	 * no meaning once the world it addressed is gone. A step marked `broken`
+	 * would lie on replay, so the stack is truncated at the newest one rather
+	 * than carrying it.
+	 */
+	public serialize(): { undos: Transaction[]; redos: Transaction[] } {
+		const lastBroken = this.undos.map((step) => Boolean(step.broken)).lastIndexOf(true);
+		return {
+			undos: lastBroken === -1 ? [...this.undos] : this.undos.slice(lastBroken + 1),
+			redos: [...this.redos],
+		};
+	}
+
+	/**
+	 * Adopt a persisted stack. The caller is responsible for checking it was
+	 * recorded against the source revision now mounted; this only guards the
+	 * shape, so a corrupt or hand-edited cache cannot break the editor.
+	 */
+	public restore(value: unknown): boolean {
+		if (!value || typeof value !== 'object') return false;
+		const { undos, redos } = value as { undos?: unknown; redos?: unknown };
+		if (!Array.isArray(undos) || !Array.isArray(redos)) return false;
+
+		const valid = (step: unknown): step is Transaction =>
+			Boolean(step) && typeof step === 'object' &&
+			Array.isArray((step as Transaction).ops) &&
+			(step as Transaction).ops.every((op) => Boolean(op) && typeof (op as HistoryOp).kind === 'string');
+
+		if (!undos.every(valid) || !redos.every(valid)) return false;
+		this.undos = undos as Transaction[];
+		this.redos = redos as Transaction[];
+		this.open = null;
+		this.gesture = false;
+		this.changed();
+		return true;
+	}
+
+	/**
 	 * Starts over, for a fresh mount: what was recorded against the previous
 	 * document cannot be replayed against this one.
 	 */

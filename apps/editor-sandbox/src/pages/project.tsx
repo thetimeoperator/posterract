@@ -58,7 +58,7 @@ export function ProjectPage() {
               <EditorApiProvider>
                 <TimelineProvider>
                   <ExportProvider>
-                    <AiProvider>
+                    <AiProvider dir={() => project()?.dir}>
                       <LayoutProvider>
                         <EditorPage />
                       </LayoutProvider>

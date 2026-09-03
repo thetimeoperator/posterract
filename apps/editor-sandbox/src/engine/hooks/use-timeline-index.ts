@@ -5,6 +5,8 @@
 import { buildTimelineLayers, getActiveEntity } from '@posterract/video-runtime';
 import { useWorld } from '@posterract/koota-solid';
 
+import { timelineDetail } from '@/engine/timeline/detail';
+
 import { useDerived } from './use-derived';
 
 import type { TimelineIndexValue, TimelineNode } from '@posterract/video-runtime';
@@ -23,7 +25,10 @@ export function useTimelineIndex(): Accessor<TimelineIndexValue> {
 	return useDerived<TimelineIndexValue>(
 		() => {
 			const root = getActiveEntity(world);
-			return { root, layers: root === null ? [] : buildTimelineLayers(world, root) };
+			// Reading the level here makes the whole column rebuild when it
+			// changes, which is exactly the intent: it is a different index.
+			const detail = timelineDetail();
+			return { root, layers: root === null ? [] : buildTimelineLayers(world, root, detail) };
 		},
 		(prev, next) => prev.root === next.root && sameLayers(prev.layers, next.layers),
 	);

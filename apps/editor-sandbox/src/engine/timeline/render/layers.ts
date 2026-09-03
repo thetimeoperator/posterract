@@ -14,6 +14,7 @@ import {
 	store,
 } from '@posterract/video-runtime';
 import { Or } from 'koota';
+import { timelineDetail } from '../detail';
 
 import { getNodeHeight, getRowTransform, getSubtreeHeight } from '../layout';
 import { getResolution, getViewport, pixelsToFrames } from '../view';
@@ -88,7 +89,9 @@ export function renderLayers(world: World, scene: Entity, surface: TimelineSurfa
 		}
 	};
 
-	walk(buildTimelineLayers(world, scene), null);
+	// The canvas draws the same index the DOM column lists, so both sides
+	// agree about which rows exist at the current detail level.
+	walk(buildTimelineLayers(world, scene, timelineDetail()), null);
 
 	ctx.restore();
 }

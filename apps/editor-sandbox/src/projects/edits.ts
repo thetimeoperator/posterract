@@ -19,9 +19,23 @@ import type { World } from 'koota';
  */
 const DEBOUNCE = 120;
 
+/**
+ * What the editor can honestly say about the user's work reaching disk.
+ * `saving` covers both queued and in-flight edits: from the user's side the
+ * distinction is meaningless, and collapsing it stops the pill flickering
+ * between the two on every keystroke.
+ */
+export type SaveState =
+	| { status: 'idle' }
+	| { status: 'saving' }
+	| { status: 'saved'; at: number }
+	| { status: 'failed'; message: string };
+
 class EditWriter {
 	private readonly dir: string;
 	private readonly world: World;
+	private state: SaveState = { status: 'idle' };
+	private readonly watchers = new Set<(state: SaveState) => void>();
 
 	// Unrolls first: everything else addressed to what a loop rendered is
 	// addressed to the copies the unroll makes. Then inserts, in the order
@@ -55,9 +69,26 @@ class EditWriter {
 		this.world = world;
 	}
 
+	public get saveState(): SaveState {
+		return this.state;
+	}
+
+	/** Subscribe to save state; the current value arrives immediately. */
+	public watch(listener: (state: SaveState) => void): () => void {
+		this.watchers.add(listener);
+		listener(this.state);
+		return () => this.watchers.delete(listener);
+	}
+
+	private setState(state: SaveState): void {
+		this.state = state;
+		for (const listener of this.watchers) listener(state);
+	}
+
 	/** Records an edit; the write follows once edits stop arriving. */
 	public push(edit: EntityEdit): void {
 		if (this.disposed) return;
+		if (this.state.status !== 'saving') this.setState({ status: 'saving' });
 
 		if (edit.kind === 'unroll') {
 			this.unrolls.set(edit.source, edit);
@@ -241,6 +272,7 @@ class EditWriter {
 		writeProject(this.dir, edits)
 			.then((result) => this.report(result))
 			.catch((error: unknown) => {
+				this.setState({ status: 'failed', message: message(error) });
 				toast.error('Could not write to the project', { description: message(error) });
 			});
 	}
@@ -280,9 +312,22 @@ class EditWriter {
 		return [...ordered, ...waiting];
 	}
 
+	private hasQueuedEdits(): boolean {
+		return Boolean(
+			this.unrolls.size || this.inserts.size || this.moves.size ||
+			this.pending.size || this.texts.size || this.removes.size || this.variables.size,
+		);
+	}
+
 	private report(result: WriteResult): void {
 		if (result.error) {
+			this.setState({ status: 'failed', message: result.error });
 			toast.error('Could not write to the project', { description: result.error });
+		} else if (!this.hasQueuedEdits()) {
+			// Only claim "saved" once nothing is still waiting: a write that
+			// lands mid-drag is followed by another, and the pill should stay
+			// on "Saving…" until the last one settles.
+			this.setState({ status: 'saved', at: Date.now() });
 		}
 
 		if (this.disposed) return;

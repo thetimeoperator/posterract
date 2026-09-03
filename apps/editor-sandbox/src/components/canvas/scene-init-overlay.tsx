@@ -3,6 +3,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 import { createMemo, createSignal, For, Show } from "solid-js";
+import { createStoredSignal } from "@/lib/store";
+import { store } from "@/init";
 import { useQuery, useTrait, useWorld } from "@posterract/koota-solid";
 import { ChildOf, Library, Root, setCamera, Source } from "@posterract/video-runtime";
 import { Icon } from "@/components/ui/icon";
@@ -30,7 +32,9 @@ import type { LayoutPreset } from "@/lib/layout-presets";
 
 
 const DEFAULT_NAME = "New Scene";
-const DEFAULT_PRESET: LayoutPreset = { label: "Long-form 16:9", width: 1920, height: 1080 };
+// Vertical by default: the product publishes to TikTok, Reels and Shorts, so
+// a 16:9 first scene made every short-form project start with a format change.
+const DEFAULT_PRESET: LayoutPreset = { label: "Short-form 9:16", width: 1080, height: 1920 };
 
 /**
  * The empty-project prompt: a placeholder frame in the middle of the canvas
@@ -45,7 +49,11 @@ export function SceneInitOverlay() {
   const children = useQuery(ChildOf(root));
 
   const [editing, setEditing] = createSignal(false);
-  const [selectedPreset, setSelectedPreset] = createSignal<LayoutPreset>(DEFAULT_PRESET);
+  // Remembered across projects: someone who works in one format almost always
+  // works in it again, and re-picking it every time is pure friction.
+  const [selectedPreset, setSelectedPreset] = createStoredSignal<LayoutPreset>(
+    store.define<LayoutPreset>('canvas.lastScenePreset', DEFAULT_PRESET),
+  );
   const [sceneName, setSceneName] = createSignal(DEFAULT_NAME);
   const [dropping, setDropping] = createSignal(false);
 

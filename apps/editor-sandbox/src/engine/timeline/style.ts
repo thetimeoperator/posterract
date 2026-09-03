@@ -6,6 +6,8 @@ import {
 	AssetId,
 	Diagram,
 	DiagramKindType,
+	Geometry,
+	GeometryType,
 	findGeometryAsset,
 	hasHtmlPaint,
 	hasSurfacePaint,
@@ -18,6 +20,7 @@ import {
 	isScene,
 	isSequence,
 	isText,
+	isVector,
 } from '@posterract/video-runtime';
 
 import { COLORS } from './constants';
@@ -41,6 +44,7 @@ export function getClipStyle(entity: Entity, asset: Asset | null, errored = fals
 	if (isMask(entity)) return COLORS.clip.mask;
 	if (isAdjustmentLayer(entity)) return COLORS.clip.adjustment;
 	if (hasHtmlPaint(entity) || hasSurfacePaint(entity)) return COLORS.clip.html;
+	if (isVector(entity)) return COLORS.clip.vector;
 
 	switch (asset?.type) {
 		case 'VIDEO':
@@ -50,6 +54,8 @@ export function getClipStyle(entity: Entity, asset: Asset | null, errored = fals
 			return COLORS.clip.image;
 		case 'AUDIO':
 			return COLORS.clip.audio;
+		case 'LOTTIE':
+			return COLORS.clip.lottie;
 		default:
 			return COLORS.clip.shape;
 	}
@@ -87,6 +93,12 @@ export function getClipFallbackName(world: World, entity: Entity): string {
 	if (isAdjustmentLayer(entity)) return 'Adjustment';
 	if (hasHtmlPaint(entity)) return 'HTML';
 	if (hasSurfacePaint(entity)) return 'Surface';
+	if (isVector(entity)) {
+		const kind = entity.get(Geometry)?.value;
+		if (kind === GeometryType.ELLIPSE) return 'Ellipse';
+		if (kind === GeometryType.POLYGON) return 'Polygon';
+		return 'Path';
+	}
 
 	switch (getClipAsset(world, entity)?.type) {
 		case 'VIDEO':
@@ -96,6 +108,8 @@ export function getClipFallbackName(world: World, entity: Entity): string {
 			return 'Image';
 		case 'AUDIO':
 			return 'Audio';
+		case 'LOTTIE':
+			return 'Lottie';
 	}
 
 	return isRect(entity) ? 'Rectangle' : 'Layer';

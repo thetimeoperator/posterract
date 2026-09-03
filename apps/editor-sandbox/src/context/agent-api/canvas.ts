@@ -5,13 +5,20 @@
 import {
   Computed,
   FrameRate,
+  Locked,
+  Name,
+  Scene,
   Selected,
   Source,
   getActiveEntity,
+  getEntityChildren,
   setPlayhead,
 } from "@posterract/video-runtime";
-import { parseSource, type PropValue } from "@posterract/composition";
+import { stampedId } from "@/engine/delete-guard";
+import { putTrash } from "@/projects/history";
+import { parseSource, type AnimatableProperty, type PropValue } from "@posterract/composition";
 import { getDocumentEditor, getEditHistory } from "@/engine";
+import { bakeToKeyframes } from "@/engine/bake";
 import {
   groupSelection,
   ungroupSelection,
@@ -35,6 +42,8 @@ import type {
   CanvasStateResult,
   CanvasUngroupRequest,
   CanvasVariableRequest,
+  CanvasBakeRequest,
+  CanvasBakeResult,
 } from "@posterract/cli/channels";
 import type { EditorSession } from "./session";
 
@@ -128,6 +137,35 @@ export function canvasSetVariable(session: () => EditorSession, request: CanvasV
   return canvasState(session);
 }
 
+/**
+ * Sample what a property does across an element's span and write it back as a
+ * keyframe track.
+ *
+ * This is how motion written in code becomes motion an agent — or a person —
+ * can retime: a track wins over the code value, so the baked version is what
+ * plays, while the original expression stays in the source.
+ */
+export async function canvasBake(
+  session: () => EditorSession,
+  request: CanvasBakeRequest,
+): Promise<CanvasBakeResult> {
+  const { world, project } = session();
+  const target = resolveNode(world, request.id);
+  const result = await bakeToKeyframes(
+    world,
+    getDocumentEditor(world),
+    target,
+    request.property as AnimatableProperty,
+    { tolerance: request.tolerance, dir: project.dir() },
+  );
+  if (!result) {
+    throw new Error(
+      `Nothing to bake: ${request.id} has no span in the source, or "${request.property}" is not animatable on it.`,
+    );
+  }
+  return result;
+}
+
 export function canvasGroup(session: () => EditorSession, request: CanvasGroupRequest): CanvasStateResult {
   const { world } = session();
   getDocumentEditor(world).select(request.ids.map((id) => resolveNode(world, id)));
@@ -151,9 +189,22 @@ export function canvasDuplicate(session: () => EditorSession, request: CanvasIds
   return canvasState(session);
 }
 
-export function canvasRemove(session: () => EditorSession, request: CanvasIdsRequest): CanvasStateResult {
-  const { world } = session();
-  getDocumentEditor(world).remove(request.ids.map((id) => resolveNode(world, id)));
+/**
+ * The agent's delete is held to the same rule as the keyboard's: a populated
+ * scene is copied to the project trash before it goes, and a locked layer is
+ * left alone. There is no confirmation dialog on this path — the agent is
+ * acting on an instruction — but the recovery it would have offered exists.
+ */
+export async function canvasRemove(session: () => EditorSession, request: CanvasIdsRequest): Promise<CanvasStateResult> {
+  const { world, project } = session();
+  const entities = request.ids.map((id) => resolveNode(world, id)).filter((entity) => !entity.has(Locked));
+  for (const entity of entities) {
+    const id = stampedId(entity);
+    if (entity.has(Scene) && id && getEntityChildren(world, entity).length) {
+      await putTrash(project.dir(), { sceneId: id, name: entity.get(Name)?.value || "Untitled scene" });
+    }
+  }
+  if (entities.length) getDocumentEditor(world).remove(entities);
   return canvasState(session);
 }
 

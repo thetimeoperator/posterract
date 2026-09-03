@@ -32,6 +32,11 @@ export type MainWireChannel = (typeof MAIN_WIRE)[keyof typeof MAIN_WIRE];
 // directly via the CLI bridge.
 export const MAIN_CHANNELS = {
   // Renderer→Main requests
+  AI_KEYS_STATUS: "ai:keys-status",
+  AI_KEYS_SAVE: "ai:keys-save",
+  AI_KEYS_REVEAL: "ai:keys-reveal",
+  AI_GENERATE: "ai:generate",
+  AI_TRANSCRIBE: "ai:transcribe",
   APP_OPEN_EXTERNAL: "app:open-external",
   APP_OPEN_PROJECT_EDITOR: "app:open-project-editor",
   APP_SHOW_IN_FOLDER: "app:show-in-folder",
@@ -79,6 +84,21 @@ export const MAIN_CHANNELS = {
   PROJECTS_CONFIG_WRITE: "projects:config-write",
   PROJECTS_SOURCE_READ: "projects:source-read",
   PROJECTS_SOURCE_WRITE: "projects:source-write",
+  PROJECTS_REVISIONS_LIST: "projects:revisions-list",
+  PROJECTS_REVISIONS_READ: "projects:revisions-read",
+  PROJECTS_REVISIONS_RESTORE: "projects:revisions-restore",
+  PROJECTS_TRASH_PUT: "projects:trash-put",
+  PROJECTS_TRASH_LIST: "projects:trash-list",
+  PROJECTS_TRASH_READ: "projects:trash-read",
+  PROJECTS_TRASH_REMOVE: "projects:trash-remove",
+  PROJECTS_HISTORY_READ: "projects:history-read",
+  PROJECTS_HISTORY_WRITE: "projects:history-write",
+  PROJECTS_SOURCE_LOCATE: "projects:source-locate",
+  EXPORTS_RECORD: "exports:record",
+  EXPORTS_LIST: "exports:list",
+  EXPORTS_REVEAL: "exports:reveal",
+  EXPORTS_DELETE: "exports:delete",
+  EXPORTS_RENAME: "exports:rename",
   PROJECTS_FS_LIST: "projects:fs-list",
   PROJECTS_FS_STAT: "projects:fs-stat",
   PROJECTS_FS_FILE: "projects:fs-file",
@@ -86,6 +106,7 @@ export const MAIN_CHANNELS = {
   PROJECTS_FS_COPY: "projects:fs-copy",
   PROJECTS_FS_REMOVE: "projects:fs-remove",
   PROJECTS_FS_REAL_PATH: "projects:fs-real-path",
+  PROJECTS_IMPORT_LOTTIE_URL: "projects:import-lottie-url",
 
   // Local agent connection events
   AGENT_CONNECTION_CHANGED: "agent:connection-changed",
@@ -139,7 +160,88 @@ export type DeepLinkChannel =
   | typeof MAIN_CHANNELS.AUTH_CALLBACK
   | typeof MAIN_CHANNELS.CHECKOUT_CALLBACK;
 
+/** One bring-your-own-keys generation ask, mirrored by desktop's ai-local. */
+export type AiLocalGeneration = {
+  kind: "image" | "video" | "voice";
+  prompt?: string;
+  text?: string;
+  aspectRatio?: string;
+  resolution?: string;
+  quality?: string;
+  durationSec?: number;
+  voiceId?: string;
+  referenceImage?: string;
+};
+
+/** Mirrors `apps/desktop/src/revisions.ts`. */
+export type RevisionEntry = {
+  id: string;
+  path: string;
+  savedAt: number;
+  bytes: number;
+  deleted: boolean;
+};
+
+/** Mirrors `apps/desktop/src/trash.ts`. */
+export type TrashEntry = {
+  id: string;
+  sceneId: string;
+  name: string;
+  deletedAt: number;
+  bytes: number;
+};
+
+/** Mirrors `apps/desktop/src/exports-library.ts`. */
+export type ExportEntry = {
+  id: string;
+  projectId: string | null;
+  projectDir: string | null;
+  sceneId: string | null;
+  sourceRevision: string | null;
+  path: string;
+  fileName: string;
+  contentType: string;
+  durationMs: number | null;
+  width: number | null;
+  height: number | null;
+  createdAt: number;
+};
+
+export type ListedExport = ExportEntry & { bytes: number | null; missing: boolean };
+
 export type MainRequestMap = {
+  [MAIN_CHANNELS.AI_KEYS_STATUS]: {
+    request: { dir: string };
+    response: { minimax: boolean; fish: boolean; gemini: boolean; transcribe: boolean; path: string };
+  };
+  [MAIN_CHANNELS.AI_KEYS_SAVE]: {
+    request: {
+      dir: string;
+      keys: {
+        minimax?: string;
+        fish?: string;
+        gemini?: string;
+        transcribe?: string;
+        transcribeUrl?: string;
+        transcribeModel?: string;
+      };
+    };
+    response: { minimax: boolean; fish: boolean; gemini: boolean; transcribe: boolean };
+  };
+  [MAIN_CHANNELS.AI_KEYS_REVEAL]: { request: { dir: string }; response: { path: string } };
+  [MAIN_CHANNELS.AI_GENERATE]: {
+    request: { dir: string; generation: AiLocalGeneration };
+    response: { path: string; mimeType: string; previewDataUrl?: string };
+  };
+  [MAIN_CHANNELS.AI_TRANSCRIBE]: {
+    request: { dir: string; path: string };
+    response: {
+      text: string;
+      words: Array<{ text: string; start: number; end: number }>;
+      segments: Array<{ text: string; start: number; end: number }>;
+      cached: boolean;
+    };
+  };
   [MAIN_CHANNELS.APP_OPEN_EXTERNAL]: { request: { url: string }; response: void };
   [MAIN_CHANNELS.APP_OPEN_PROJECT_EDITOR]: {
     request: { dir: string; editor: "codex" | "claude" | "cursor" | "vscode" | "terminal" };
@@ -253,6 +355,50 @@ export type MainRequestMap = {
     request: { dir: string; path: string; content: string; expectedRevisionId: string };
     response: { revisionId: string; content: string; diagnostics: Array<{ message: string; line?: number; column?: number }> };
   };
+  // Version history and trash. The revision store lives outside the project
+  // (see `apps/desktop/src/revisions.ts`); trash lives inside it.
+  [MAIN_CHANNELS.PROJECTS_REVISIONS_LIST]: {
+    request: { dir: string; path: string };
+    response: RevisionEntry[];
+  };
+  [MAIN_CHANNELS.PROJECTS_REVISIONS_READ]: {
+    request: { dir: string; path: string; id: string };
+    response: string;
+  };
+  [MAIN_CHANNELS.PROJECTS_REVISIONS_RESTORE]: {
+    request: { dir: string; path: string; id: string };
+    response: { path: string; revisionId: string; diagnostics: Array<{ message: string; line?: number; column?: number }> };
+  };
+  [MAIN_CHANNELS.PROJECTS_TRASH_PUT]: {
+    request: { dir: string; sceneId: string; name: string };
+    response: TrashEntry;
+  };
+  [MAIN_CHANNELS.PROJECTS_TRASH_LIST]: { request: { dir: string }; response: TrashEntry[] };
+  [MAIN_CHANNELS.PROJECTS_TRASH_READ]: {
+    request: { dir: string; id: string };
+    response: { sceneId: string; name: string; source: string };
+  };
+  [MAIN_CHANNELS.PROJECTS_TRASH_REMOVE]: { request: { dir: string; id: string }; response: void };
+  // The editor's undo stack, cached beside the project so undo survives a
+  // reload. `value: null` clears it.
+  [MAIN_CHANNELS.PROJECTS_HISTORY_READ]: { request: { dir: string }; response: unknown };
+  [MAIN_CHANNELS.PROJECTS_HISTORY_WRITE]: { request: { dir: string; value: unknown }; response: void };
+  // Opens the project source in the user's own editor and reports where the
+  // element sits; null when the id is not in the file.
+  [MAIN_CHANNELS.PROJECTS_SOURCE_LOCATE]: {
+    request: { dir: string; id: string };
+    response: { path: string; line: number; column: number } | null;
+  };
+  // The local exports library. Nothing here uploads; the cloud handoff is a
+  // separate, explicit action.
+  [MAIN_CHANNELS.EXPORTS_RECORD]: {
+    request: Omit<ExportEntry, 'id' | 'createdAt'>;
+    response: ExportEntry;
+  };
+  [MAIN_CHANNELS.EXPORTS_LIST]: { request: void; response: ListedExport[] };
+  [MAIN_CHANNELS.EXPORTS_REVEAL]: { request: { id: string }; response: void };
+  [MAIN_CHANNELS.EXPORTS_DELETE]: { request: { id: string; removeFile?: boolean }; response: void };
+  [MAIN_CHANNELS.EXPORTS_RENAME]: { request: { id: string; name: string }; response: ExportEntry | null };
   // Project file system, for the asset library. `source` is project-relative
   // or absolute; `path` is always project-relative. Writes stream through the
   // FILE_WRITE_* channels (which create parent directories).
@@ -272,6 +418,10 @@ export type MainRequestMap = {
   };
   [MAIN_CHANNELS.PROJECTS_FS_REMOVE]: { request: { dir: string; path: string }; response: void };
   [MAIN_CHANNELS.PROJECTS_FS_REAL_PATH]: { request: { dir: string; source: string }; response: string | null };
+  [MAIN_CHANNELS.PROJECTS_IMPORT_LOTTIE_URL]: {
+    request: { dir: string; url: string; name?: string };
+    response: { path: string; width: number; height: number; duration: number };
+  };
 };
 
 export type FsEntry = {

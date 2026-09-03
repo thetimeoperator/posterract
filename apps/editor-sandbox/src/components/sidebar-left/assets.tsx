@@ -28,7 +28,17 @@ import { LazyAssetItem } from "./asset-item";
 import { FolderItem, handleFolderDrop, isAssetOrFolderDrag, ASSET_DRAG_TYPE, FOLDER_DRAG_TYPE } from "./folder-item";
 import { useLibrary } from "@/engine/library";
 import { useAssetSelection } from "@/engine/hooks";
-import { droppedFiles, importFiles, pickAndImport } from "@/engine/asset-actions";
+import { droppedFiles, importFiles, importLottieUrl, pickAndImport } from "@/engine/asset-actions";
+import { useProject } from "@/context/project";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { TextField, TextFieldInput } from "@/components/ui/text-field";
 import { isInputTarget } from "@/utils";
 
 import type { AssetLibrary } from "@posterract/video-assets";
@@ -44,6 +54,7 @@ export function Assets() {
   let root: HTMLDivElement | undefined;
   let dragCounter = 0;
 
+  const project = useProject();
   const library = useLibrary();
   const { id: selectedAssetId, select: setSelectedAssetId } = useAssetSelection();
   const [query, setQuery] = createSignal("");
@@ -118,6 +129,10 @@ export function Assets() {
     while (folder && !folders.has(folder)) folder = dirname(folder);
     setCurrentFolder(folder);
   });
+
+  const [lottieOpen, setLottieOpen] = createSignal(false);
+  const [lottieUrl, setLottieUrl] = createSignal("");
+  const [importingLottie, setImportingLottie] = createSignal(false);
 
   const withLibrary = (run: (library: AssetLibrary) => void | Promise<void>) => {
     const lib = library();
@@ -260,6 +275,23 @@ export function Assets() {
   const isFiltering = () => query().trim().length > 0 || assetFilter() !== "ALL";
   const isEmptyView = () => visibleFolders().length === 0 && filteredAssets().length === 0;
 
+  /**
+   * A Lottie is the one asset a project usually gets from the web rather than
+   * from disk, so it gets a way in that does not require finding the download
+   * first. The fetch itself happens in the main process; this only asks for
+   * the link and reports how it went.
+   */
+  const importAnimation = async () => {
+    const url = lottieUrl().trim();
+    if (!url || importingLottie()) return;
+    setImportingLottie(true);
+    const path = await importLottieUrl(project.dir(), url);
+    setImportingLottie(false);
+    if (path === null) return;
+    setLottieUrl("");
+    setLottieOpen(false);
+  };
+
   const handleCreateFolder = () => withLibrary((lib) => {
     const parent = currentFolder();
     const name = lib.uniqueFolderName(parent, "New folder");
@@ -395,6 +427,9 @@ export function Assets() {
                 <DropdownMenuItem tone="neutral" onSelect={handleImportAssets}>
                   Import assets
                   <DropdownMenuShortcut>⌘I</DropdownMenuShortcut>
+                </DropdownMenuItem>
+                <DropdownMenuItem tone="neutral" onSelect={() => setLottieOpen(true)}>
+                  Import animation from URL
                 </DropdownMenuItem>
                 <DropdownMenuItem tone="neutral" onSelect={handleCreateFolder}>
                   Create folder
@@ -541,6 +576,47 @@ export function Assets() {
           </Show>
         </div>
       </div>
+
+      <AlertDialog
+        open={lottieOpen()}
+        onOpenChange={(open) => {
+          if (!importingLottie()) setLottieOpen(open);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Import an animation</AlertDialogTitle>
+            <AlertDialogDescription>
+              Paste the link to a Lottie JSON — from LottieFiles or anywhere else. It is downloaded
+              into this project's <span class="font-mono">assets/lottie</span> folder, and nothing
+              else about the page is kept.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <TextField class="w-full">
+            <TextFieldInput
+              autofocus
+              placeholder="https://…/animation.json"
+              value={lottieUrl()}
+              onInput={(event: Event & { currentTarget: HTMLInputElement }) => setLottieUrl(event.currentTarget.value)}
+              onKeyDown={(event: KeyboardEvent) => {
+                if (event.key === "Enter") void importAnimation();
+              }}
+            />
+          </TextField>
+          <AlertDialogFooter>
+            <Button variant="secondary" disabled={importingLottie()} onClick={() => setLottieOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="default"
+              disabled={importingLottie() || lottieUrl().trim() === ""}
+              onClick={() => void importAnimation()}
+            >
+              {importingLottie() ? "Importing…" : "Import"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

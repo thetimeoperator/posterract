@@ -14,13 +14,18 @@ import { toast } from 'somoto';
 import { useWorld } from '@posterract/koota-solid';
 import { mount } from '@posterract/video-reconciler';
 import { getDocumentEditor } from '@/engine/editor';
-import { getEditHistory } from '@/engine/history';
+import { getProject, readProjectSource } from '@/projects';
+import { loadUndoCache, saveUndoCache } from '@/projects/undo-cache';
+import { getEditHistory, type EditHistory } from '@/engine/history';
 import { setInspectEntries } from '@/engine/inspect';
 import { attachLibrary, isLibraryFile } from '@/engine/library';
 import { attachProjectConfig, isProjectConfigFile } from '@/engine/project-config';
 import { loadProjectBundle, rememberProjectBundle } from '@/lib/db';
 import { isCacheFile } from '@posterract/video-assets';
 import { createEditWriter } from '@/projects/edits';
+import { bindSaveState, resetSaveState } from '@/context/save-state';
+import { SceneDeleteDialog } from '@/components/scene-delete-dialog';
+import { ShortcutSheet } from '@/components/shortcut-sheet';
 import { compileProject, watchProject } from '@/projects/host';
 import { captureProjectCover } from '@/projects/cover';
 import { useProject } from "@/context/project";
@@ -61,6 +66,7 @@ export function EditorPage() {
     let mounted: Mount | undefined;
     let mountedCode: string | undefined;
     let writer: EditWriter | undefined;
+    let unbindSaveState: (() => void) | undefined;
     let unlisten: (() => void) | undefined;
     let disposed = false;
     let generation = 0;
@@ -129,10 +135,58 @@ export function EditorPage() {
       unlisten = undefined;
       writer?.dispose();
       writer = undefined;
+      unbindSaveState?.();
+      unbindSaveState = undefined;
+      resetSaveState();
       mounted?.dispose();
       mounted = undefined;
       mountedCode = undefined;
       setInspectEntries(world, []);
+    };
+
+    /**
+     * Restore the previous session's undo stack, once, if it still matches the
+     * source on disk. Later mounts in the same session are the editor's own
+     * recompiles, whose stack is already live in memory.
+     */
+    let undoRestored = false;
+    let persistTimer: ReturnType<typeof setTimeout> | undefined;
+
+    /**
+     * Keep the cached stack in step with the file. It is written after a save
+     * settles, stamped with the revision that save produced, so a stack is
+     * never paired with source it cannot address. Debounced because a drag
+     * ends in a burst of saves and only the last one matters.
+     */
+    const persistUndo = (): void => {
+      if (persistTimer) clearTimeout(persistTimer);
+      persistTimer = setTimeout(() => {
+        void (async () => {
+          try {
+            const project = await getProject(dir);
+            if (!project || disposed) return;
+            const { revisionId } = await readProjectSource(dir, project.entry);
+            if (disposed) return;
+            await saveUndoCache(dir, revisionId, getEditHistory(world).serialize());
+          } catch {
+            // Losing the cache costs undo across a reload, nothing more.
+          }
+        })();
+      }, 400);
+    };
+
+    const adoptCachedUndo = async (history: EditHistory): Promise<void> => {
+      if (undoRestored || disposed) return;
+      undoRestored = true;
+      try {
+        const project = await getProject(dir);
+        if (!project || disposed) return;
+        const { revisionId } = await readProjectSource(dir, project.entry);
+        const cached = await loadUndoCache(dir, revisionId);
+        if (cached && !disposed) history.restore(cached);
+      } catch {
+        // A missing or unreadable cache just means no undo across the reload.
+      }
     };
 
     /** Puts `code` on the stage, unless it is what is there already. */
@@ -146,6 +200,10 @@ export function EditorPage() {
       // The rendered scene knows which element every entity came from, so
       // from here on an edit in the editor can find its way back.
       writer = createEditWriter(dir, world);
+      unbindSaveState?.();
+      unbindSaveState = bindSaveState(writer, (state) => {
+        if (state.status === 'saved') persistUndo();
+      });
       const editor = getDocumentEditor(world);
       unlisten = editor.onEdit((edit) => writer?.push(edit));
 
@@ -164,8 +222,12 @@ export function EditorPage() {
       // waiting for the compile made that first click appear to change zoom.
       if (!initialViewFitted) scheduleFit();
       // A mount comes from the file: edits recorded against the document it
-      // replaced cannot be replayed against this one.
-      getEditHistory(world).reset();
+      // replaced cannot be replayed against this one. A stack cached from a
+      // previous session is adopted only when it was recorded against exactly
+      // this revision, which is checked in `loadUndoCache`.
+      const history = getEditHistory(world);
+      history.reset();
+      void adoptCachedUndo(history);
     };
 
     const loadProject = async (): Promise<void> => {
@@ -246,6 +308,7 @@ export function EditorPage() {
 
     onCleanup(() => {
       disposed = true;
+      if (persistTimer) clearTimeout(persistTimer);
       fitSequence += 1;
       if (fitFrame !== undefined) cancelAnimationFrame(fitFrame);
       captureProjectCover(dir, engine.snapshot());
@@ -349,6 +412,10 @@ export function EditorPage() {
       <Show when={!uiVisible()}>
         <FloatingProjectHeader />
       </Show>
+      {/* Always mounted: both answer keys that work with the rest of the UI
+          hidden. */}
+      <SceneDeleteDialog />
+      <ShortcutSheet />
     </div>
   );
 }

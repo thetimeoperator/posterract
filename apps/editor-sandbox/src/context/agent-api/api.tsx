@@ -9,7 +9,8 @@ import { useProject } from '@/context/project';
 import { t, q, q0, m, m0 } from "@/lib/cli-rpc";
 import { editorSession, requireEditorSession, setEditorSession } from "./session";
 import { handleContextGet } from "./context";
-import { createAssetResolver, handleMediaProbe, handleMediaExtract, handleMediaFrame, handleMediaFilmstrip, handleMediaTranscribe, handleMediaWaveform } from "./media";
+import { createAssetResolver, handleMediaProbe, handleMediaExtract,
+  handleMediaTranscribe, handleMediaFrame, handleMediaFilmstrip, handleMediaWaveform } from "./media";
 import { handleCapture } from "./capture";
 import { handleCheck } from "./check";
 import { handleLogs } from "./logs";
@@ -37,6 +38,7 @@ import {
   canvasSetProperties,
   canvasSetText,
   canvasSetVariable,
+  canvasBake,
   canvasState,
   canvasUngroup,
   canvasUndo,
@@ -54,11 +56,13 @@ import type {
   CanvasSetTextRequest,
   CanvasUngroupRequest,
   CanvasVariableRequest,
+  CanvasBakeRequest,
   ProjectSourceReadRequest,
   ProjectSourceWriteRequest,
 } from "@posterract/cli/channels";
 
 import type { JSX, Accessor } from 'solid-js';
+import { readGeometry, type GeometryRequest } from './geometry';
 
 type EditorApiProviderProps = {
   children: JSX.Element;
@@ -194,6 +198,7 @@ function createAppRouter({ navigate }: AppRouterDeps) {
         return writeProjectSource(project.dir(), path, content, expectedRevisionId);
       }),
     }),
+    geometry: q((request: GeometryRequest) => readGeometry(requireEditorSession, request)),
     canvas: t.router({
       state: q0(() => canvasState(requireEditorSession)),
       select: m((request: CanvasSelectRequest) => canvasSelect(requireEditorSession, request)),
@@ -203,6 +208,7 @@ function createAppRouter({ navigate }: AppRouterDeps) {
       setText: m((request: CanvasSetTextRequest) => canvasSetText(requireEditorSession, request)),
       create: m((request: CanvasCreateRequest) => canvasCreate(requireEditorSession, request)),
       setVariable: m((request: CanvasVariableRequest) => canvasSetVariable(requireEditorSession, request)),
+      bake: m((request: CanvasBakeRequest) => canvasBake(requireEditorSession, request)),
       group: m((request: CanvasGroupRequest) => canvasGroup(requireEditorSession, request)),
       ungroup: m((request: CanvasUngroupRequest) => canvasUngroup(requireEditorSession, request)),
       duplicate: m((request: CanvasIdsRequest) => canvasDuplicate(requireEditorSession, request)),
@@ -222,9 +228,7 @@ function createAppRouter({ navigate }: AppRouterDeps) {
       filmstrip: q(handleMediaFilmstrip(resolveAsset)),
       waveform: q(handleMediaWaveform(resolveAsset)),
       extract: q(handleMediaExtract(resolveAsset)),
-      // The only media endpoint that leaves the machine: it uploads through
-      // the app shell's authenticated bridge and spends AI credits.
-      transcribe: q(handleMediaTranscribe(resolveAsset)),
+      transcribe: q(handleMediaTranscribe(resolveAsset, () => editorSession()?.project.dir() ?? "")),
     }),
   });
 }

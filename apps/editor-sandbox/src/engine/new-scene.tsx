@@ -23,8 +23,14 @@ export interface Size {
 	height: number;
 }
 
-/** The format a new scene gets when nothing going into it brings one. */
-export const DEFAULT_SCENE_FORMAT: Size = { width: 1920, height: 1080 };
+/**
+ * The format a new scene gets when nothing going into it brings one.
+ *
+ * Vertical, because that is what almost everything made here is for: the
+ * product publishes to TikTok, Reels and Shorts. A 16:9 default meant every
+ * short-form project started by changing the format.
+ */
+export const DEFAULT_SCENE_FORMAT: Size = { width: 1080, height: 1920 };
 
 export interface NewSceneOptions {
 	/** The scene's name; the next free "Scene N" by default. */

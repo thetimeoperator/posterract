@@ -25,12 +25,40 @@ import {
 } from '@posterract/video-runtime';
 import { Or } from 'koota';
 
+import { createStoredSignal } from '@/lib/store';
+import { store as store_ } from '@/init';
+
 import { SNAP_DISTANCE } from './config';
 import { framesToPixels, getCurrentFrame } from './view';
 
 import type { Entity, World } from 'koota';
 
 const NODES = Or(Geometry, Group, AdjustmentLayer);
+
+/**
+ * Snapping was always on, which makes frame-exact placement impossible. It is
+ * now a persisted preference with a momentary override: holding the modifier
+ * while dragging inverts whatever the preference is, so either state is one
+ * key away without changing the setting.
+ */
+const [snapping, setSnapping] = createStoredSignal(
+	store_.define<boolean>('timeline.snapping', true),
+);
+
+export const snappingEnabled = snapping;
+export const toggleSnapping = (): void => setSnapping(!snapping());
+
+let bypassed = false;
+
+/** Held while a drag is in flight; the drag reads it through `snapsNow`. */
+export function setSnapBypass(active: boolean): void {
+	bypassed = active;
+}
+
+/** Whether this moment's drag should snap at all. */
+export function snapsNow(): boolean {
+	return bypassed ? !snapping() : snapping();
+}
 
 /**
  * The frames worth snapping to. Anything whose own time moves with the drag
@@ -77,6 +105,7 @@ export function getSnapFrames(world: World): number[] {
  * have already moved.
  */
 export function findSnapDelta(world: World, resolution: number, offsetFrames: number): { delta: number; frame: number } | null {
+	if (!snapsNow()) return null;
 	const origins = store(world, ClipDragOrigin);
 
 	const edges = new Set<number>();
@@ -94,6 +123,7 @@ export function findSnapDelta(world: World, resolution: number, offsetFrames: nu
  * one edge being moved rather than a clip's two.
  */
 export function findSnapFrame(world: World, resolution: number, frame: number): number | null {
+	if (!snapsNow()) return null;
 	return nearestSnap(getSnapFrames(world), new Set([frame]), resolution)?.frame ?? null;
 }
 

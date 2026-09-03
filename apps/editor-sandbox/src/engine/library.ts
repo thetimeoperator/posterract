@@ -6,7 +6,7 @@
 // disk and kept in step with the JSX (a rename in the library is a `src`
 // edit in the file).
 
-import { AssetId, Library } from '@posterract/video-runtime';
+import { Ai, AssetId, Library } from '@posterract/video-runtime';
 import { AssetLibrary, MANIFEST_FILE, ASSETS_DIR } from '@posterract/video-assets';
 import { useTrait, useWorld } from '@posterract/koota-solid';
 import { authoredElement } from '@posterract/video-reconciler';
@@ -14,6 +14,7 @@ import type { Accessor } from 'solid-js';
 
 import { createProjectFS } from '@/projects/fs';
 import { getDocumentEditor } from './editor';
+import { LocalGenAi } from './local-genai';
 
 import type { Asset } from '@posterract/video-assets';
 import type { World } from 'koota';
@@ -31,6 +32,12 @@ export function attachLibrary(world: World, dir: string) {
 	});
 
 	world.set(Library, library);
+
+	// What makes `generate.*` written in a composition actually resolve: the
+	// runtime asks this for a declaration's asset, and it answers from the
+	// library when the same declaration has been made before. Attached here
+	// because this is where both the library and the project folder are known.
+	world.set(Ai, new LocalGenAi(() => world.get(Library) ?? null, () => dir));
 
 	return library;
 }

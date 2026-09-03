@@ -21,6 +21,8 @@ export type CaptionColorSlot = {
 export type CaptionPresetOption = {
   name: CaptionPresetName;
   label: string;
+  /** One line on what it looks like, for the gallery card. */
+  hint?: string;
   slots: CaptionColorSlot[];
 };
 
@@ -45,6 +47,37 @@ export const CAPTION_PRESET_OPTIONS: CaptionPresetOption[] = [
     ],
   },
   { name: "stark", label: "Stark", slots: [] },
+  {
+    name: "pop",
+    label: "Pop",
+    hint: "One word at a time, big",
+    slots: [{ label: "Accent", defaultColor: 0x5DFF9D }],
+  },
+  {
+    name: "karaoke",
+    label: "Karaoke",
+    hint: "The line fills in behind the voice",
+    slots: [{ label: "Fill", defaultColor: 0x24D5FF }],
+  },
+  { name: "typewriter", label: "Typewriter", hint: "Arrives a word at a time", slots: [] },
+  {
+    name: "banner",
+    label: "Banner",
+    hint: "Short wide lines, low in frame",
+    slots: [{ label: "Accent", defaultColor: 0xFFD166 }],
+  },
+  {
+    name: "punch",
+    label: "Punch",
+    hint: "The said word swells out of the line",
+    slots: [{ label: "Accent", defaultColor: 0xFF3355 }],
+  },
+  {
+    name: "marquee",
+    label: "Marquee",
+    hint: "Two or three words, rolling",
+    slots: [{ label: "Accent", defaultColor: 0x24D5FF }],
+  },
 ];
 
 /** The preset a caption with no `preset` of its own plays. */

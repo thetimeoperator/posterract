@@ -15,6 +15,7 @@
 import {
 	AdjustmentLayer,
 	ClipDragOrigin,
+	Locked,
 	Computed,
 	Geometry,
 	Group,
@@ -28,7 +29,7 @@ import { Not, Or } from 'koota';
 
 import { clamp } from '@/utils';
 import { resolveSequentialOverlaps } from '../overlap';
-import { authoredTime, moveEntityTo, trimIn, trimOut } from '../timing';
+import { authoredTime, moveEntityTo, slideEntity, slipEntity, trimIn, trimOut } from '../timing';
 import { findSnapDelta, findSnapFrame } from './snapping';
 import { framesToPixels, pixelsToFrames } from './view';
 
@@ -85,8 +86,14 @@ function endGesture(world: World, origin: typeof ClipDragOrigin | typeof TrimDra
 	resolveSequentialOverlaps(world, moved);
 }
 
-/** Notes where `entity` is, so the frames of the drag can be measured from it. */
+/**
+ * Notes where `entity` is, so the frames of the drag can be measured from it.
+ * A locked layer records no origin, which is what makes every later stage of
+ * the drag pass over it — the lock is enforced once, here, rather than being
+ * re-checked by each of move, trim and snap.
+ */
 export function beginClipDrag(world: World, entity: Entity): void {
+	if (entity.has(Locked)) return;
 	const computed = store(world, Computed);
 	const eid = entity.id();
 
@@ -101,6 +108,13 @@ export function beginClipDrag(world: World, entity: Entity): void {
 /**
  * Places `entity` at where it started plus how far the pointer has come,
  * pulled to a snap if one is near.
+ *
+ * Two modifiers change what the same gesture means, the way every NLE has
+ * them: holding ⌥ **slips** — the clip stays put and its footage moves inside
+ * it; ⌥⌘ **slides** — the clip moves and its neighbours are trimmed to give
+ * way. Both are applied from the drag's own origin each frame rather than
+ * incrementally, so letting go of the modifier mid-drag simply goes back to a
+ * plain move.
  */
 export function applyClipDrag(
 	world: World,
@@ -110,6 +124,16 @@ export function applyClipDrag(
 ): void {
 	const origin = entity.get(ClipDragOrigin)!;
 	const offset = pixelsToFrames(draggedPixels(surface), resolution);
+	const pointer = surface.pointer;
+
+	if (pointer?.altPressed) {
+		// Measured from where the clip was when the drag began, so the whole
+		// gesture is one edit rather than a hundred compounding ones.
+		moveEntityTo(world, entity, origin.start);
+		if (pointer.commandPressed) slideEntity(world, entity, offset);
+		else slipEntity(world, entity, -offset);
+		return;
+	}
 
 	// One snap for the whole drag, found from every clip in it, so clips
 	// dragged together stay the same distance apart.
@@ -121,6 +145,7 @@ export function applyClipDrag(
 
 /** Notes where `entity`'s edges are, so a trim can be measured from them. */
 export function beginTrim(world: World, entity: Entity): void {
+	if (entity.has(Locked)) return;
 	const computed = store(world, Computed);
 	const eid = entity.id();
 

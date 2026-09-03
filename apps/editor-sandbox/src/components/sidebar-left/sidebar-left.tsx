@@ -3,6 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 import { Assets } from "./assets";
+import { ExportsView } from "./exports-view";
 import { useLayout } from "@/context/layout";
 import { useEditorApi } from "@/context/agent-api";
 import { createSignal, Show } from "solid-js";
@@ -25,6 +26,11 @@ export function SidebarLeft() {
         <PosterractCodePanel />
       </div>
       <Assets />
+      {/* Finished renders live on this computer; the library is where they are
+          found again, and the only place one is sent to the cloud. */}
+      <div class="shrink-0 max-h-64 border-t border-border flex flex-col min-h-0">
+        <ExportsView />
+      </div>
     </div>
   );
 }

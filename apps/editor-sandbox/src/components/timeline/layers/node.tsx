@@ -2,12 +2,13 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { createMemo, createSignal, Show } from 'solid-js';
+import { createMemo, createSignal, For, Show } from 'solid-js';
 import { useTag, useTrait, useWorld } from '@posterract/koota-solid';
 import {
   ClipHeight,
   Expanded,
   Hidden,
+  Locked,
   Hovering,
   Muted,
   Name,
@@ -23,6 +24,9 @@ import {
   isScene,
   isSequence,
   isText,
+  isVector,
+  Geometry,
+  GeometryType,
 } from '@posterract/video-runtime';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
@@ -33,10 +37,30 @@ import {
   ContextMenuPortal,
   ContextMenuSeparator,
   ContextMenuShortcut,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import { Tooltip, TooltipContent, TooltipPortal, TooltipTrigger } from '@/components/ui/tooltip';
+import { toast } from 'somoto';
+import { MAIN_CHANNELS } from '@desktop/main-channels';
+import { mainBridge } from '@/lib/ipc';
+import { useProject } from '@/context/project';
+import { requestDelete, stampedId } from '@/engine/delete-guard';
 import { useEditor } from '@/engine/hooks';
+import { bakeToKeyframes } from '@/engine/bake';
+
+import type { AnimatableProperty } from '@posterract/composition';
+
+/**
+ * The properties the bake menu offers.
+ *
+ * Not every animatable name — a menu of thirty is not a menu. These are the
+ * ones code-driven motion is nearly always one of, and any other property can
+ * still be baked by an agent through `posterract_bake_keyframes`.
+ */
+const BAKEABLE: AnimatableProperty[] = ['x', 'y', 'rotation', 'scale', 'opacity', 'width', 'height'];
 import { DEFAULT_CLIP_HEIGHT, MAX_CLIP_HEIGHT, MIN_CLIP_HEIGHT, getClipFallbackName } from '@/engine/timeline';
 import { NESTED_INDENT_PX } from './config';
 import { useLayerContext } from './context';
@@ -47,6 +71,8 @@ import type { TimelineNode } from '@posterract/video-runtime';
 import type { LayerRowProps } from './layer';
 
 export function NodeLayer(props: LayerRowProps) {
+  const project = useProject();
+  const [baking, setBaking] = createSignal<AnimatableProperty | null>(null);
   const world = useWorld();
   const editor = useEditor();
 
@@ -138,7 +164,69 @@ export function NodeLayer(props: LayerRowProps) {
     document.addEventListener('pointerup', handleResizeEnd);
   };
 
-  const handleRemove = () => editor.remove(entity());
+  /**
+   * Open the project source where this element is written. The timeline and
+   * the file are two views of one document; this is the shortest path between
+   * them for anyone who would rather edit the TSX directly.
+   */
+  /**
+   * Turn what a property actually does into a keyframe track.
+   *
+   * The values are sampled from an offline copy of the project — the same
+   * world an export builds — so the track holds the numbers a render would
+   * produce, not what the live preview happened to be showing.
+   */
+  const handleBake = async (property: AnimatableProperty) => {
+    if (baking()) return;
+    setBaking(property);
+    try {
+      const result = await bakeToKeyframes(world, editor, entity(), property, { dir: project.dir() });
+      if (!result) {
+        toast('Nothing to bake', {
+          description: `This layer has no span, or ${property} is not animatable on it.`,
+        });
+        return;
+      }
+      toast.success(`Baked ${property}`, {
+        description: `${result.keyframes} keyframes from ${result.sampled} frames. The original code is still in the source.`,
+      });
+    } catch (cause) {
+      toast.error(`Could not bake ${property}`, {
+        description: cause instanceof Error ? cause.message : String(cause),
+      });
+    } finally {
+      setBaking(null);
+    }
+  };
+
+  const handleRevealInCode = () => {
+    const id = stampedId(entity());
+    if (!id) {
+      toast.error('This layer has no source stamp yet', {
+        description: 'Save the project once and try again.',
+      });
+      return;
+    }
+    void mainBridge
+      .call(MAIN_CHANNELS.PROJECTS_SOURCE_LOCATE, { dir: project.dir(), id })
+      .then((at) => {
+        if (!at) toast.error('That element could not be found in the project source');
+      })
+      .catch((cause: unknown) => {
+        toast.error('Could not open the source', {
+          description: cause instanceof Error ? cause.message : String(cause),
+        });
+      });
+  };
+
+  // Same guard as the delete shortcut: a populated scene is confirmed and
+  // kept in trash rather than removed on a menu click.
+  const handleRemove = () => requestDelete(world, [entity()]);
+
+  // Locking is a source-persisted property, so it survives a reload and an
+  // agent reading the file can see the layer is protected.
+  const locked = useTag(entity, Locked);
+  const toggleLocked = () => editor.editProperty(entity(), 'locked', !locked());
 
   /**
    * The column reads top-down while the file reads bottom-up: the last child
@@ -268,10 +356,25 @@ export function NodeLayer(props: LayerRowProps) {
             class="items-center flex gap-0.5 shrink-0 overflow-hidden group-hover:w-auto"
             classList={{
               'hidden': resized() !== null,
-              'w-0': !(muted() || soloed() || hidden()),
-              'w-auto': muted() || soloed() || hidden(),
+              'w-0': !(muted() || soloed() || hidden() || locked()),
+              'w-auto': muted() || soloed() || hidden() || locked(),
             }}
           >
+            <Tooltip placement="bottom">
+              <TooltipTrigger
+                as={Button}
+                variant={locked() ? "on" : "ghost"}
+                size="icon"
+                class="invisible group-hover:visible"
+                style={{ visibility: locked() ? 'visible' : undefined }}
+                onClick={toggleLocked}
+              >
+                <Icon name={locked() ? "lock-closed" : "lock-open"} class="size-6" />
+              </TooltipTrigger>
+              <TooltipPortal>
+                <TooltipContent>{locked() ? "Unlock layer" : "Lock layer"}</TooltipContent>
+              </TooltipPortal>
+            </Tooltip>
             <Tooltip placement="bottom">
               <TooltipTrigger
                 as={Button}
@@ -348,6 +451,25 @@ export function NodeLayer(props: LayerRowProps) {
             <ContextMenuShortcut>[</ContextMenuShortcut>
           </ContextMenuItem>
           <ContextMenuSeparator />
+          <ContextMenuItem onSelect={handleRevealInCode}>Reveal in code</ContextMenuItem>
+          <ContextMenuSub overlap gutter={4} shift={-8}>
+            <ContextMenuSubTrigger>Bake to keyframes</ContextMenuSubTrigger>
+            <ContextMenuPortal>
+              <ContextMenuSubContent>
+                <For each={BAKEABLE}>
+                  {(property) => (
+                    <ContextMenuItem
+                      disabled={baking() !== null}
+                      onSelect={() => void handleBake(property)}
+                    >
+                      {baking() === property ? `Baking ${property}…` : property}
+                    </ContextMenuItem>
+                  )}
+                </For>
+              </ContextMenuSubContent>
+            </ContextMenuPortal>
+          </ContextMenuSub>
+          <ContextMenuSeparator />
           <ContextMenuItem onSelect={handleRemove}>Remove</ContextMenuItem>
         </ContextMenuContent>
       </ContextMenuPortal>
@@ -365,6 +487,9 @@ function getLayerIcon(world: World, layer: TimelineNode) {
   if (isGroup(entity)) return "group";
   if (isCaption(entity)) return "captions-small";
   if (isText(entity)) return "text-small";
+  if (isVector(entity)) {
+    return entity.get(Geometry)?.value === GeometryType.ELLIPSE ? "tool.ellipse-small" : "vector-small";
+  }
 
   switch (findGeometryAsset(world, entity)?.type) {
     case 'IMAGE':
@@ -374,6 +499,8 @@ function getLayerIcon(world: World, layer: TimelineNode) {
       return "video-small";
     case 'AUDIO':
       return "audio-small";
+    case 'LOTTIE':
+      return "lottie-small";
     default:
       return "rectangle-small";
   }

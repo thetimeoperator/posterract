@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { Playback, setPlayhead } from '@posterract/video-runtime';
+import { ChildOf, Marker, Playback, setPlayhead } from '@posterract/video-runtime';
 
 import { assert } from '@/utils';
 import { RULER_INTERVALS } from '../constants';
@@ -99,6 +99,53 @@ export function renderRuler(world: World, scene: Entity, surface: TimelineSurfac
 		ctx.stroke();
 	}
 
+	drawMarkers(world, scene, surface);
+
+	ctx.restore();
+}
+
+/** How wide a marker's flag is before its label is drawn. */
+const MARKER_FLAG_WIDTH = 7;
+
+/**
+ * The scene's markers, drawn on the ruler as small flags.
+ *
+ * They sit above the ticks rather than in the layer area: a marker is a note
+ * about a moment, not about a layer, and putting it anywhere else would imply
+ * it belonged to whatever row it landed on.
+ */
+function drawMarkers(world: World, scene: Entity, surface: TimelineSurfaceState): void {
+	const { ctx } = surface;
+	if (!ctx) return;
+
+	const markers = [...world.query(ChildOf(scene), Marker)];
+	if (!markers.length) return;
+
+	const resolution = getResolution(world, scene);
+	const scroll = getScrollX(world, scene);
+
+	ctx.save();
+	ctx.font = '300 10px JetBrains Mono';
+	ctx.textBaseline = 'middle';
+	for (const entity of markers) {
+		const marker = entity.get(Marker)!;
+		const x = framesToPixels(marker.time - scroll, resolution);
+		const color = marker.color || surface.colors.border.scrubber;
+
+		ctx.fillStyle = color;
+		ctx.beginPath();
+		ctx.moveTo(x, 1);
+		ctx.lineTo(x + MARKER_FLAG_WIDTH, 1);
+		ctx.lineTo(x + MARKER_FLAG_WIDTH, RULER_LABEL_Y);
+		ctx.lineTo(x, RULER_LABEL_Y + 3);
+		ctx.closePath();
+		ctx.fill();
+
+		if (marker.name) {
+			ctx.fillStyle = surface.colors.ruler.text;
+			ctx.fillText(marker.name, x + MARKER_FLAG_WIDTH + 3, RULER_LABEL_Y);
+		}
+	}
 	ctx.restore();
 }
 

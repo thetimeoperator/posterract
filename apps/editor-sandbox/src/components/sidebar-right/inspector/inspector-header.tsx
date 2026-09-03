@@ -3,6 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 import { Icon } from "@/components/ui/icon";
+import { SavePill } from "./save-pill";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,7 +13,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { CreditsChip } from "@/components/genai";
 import { useWorld } from "@posterract/koota-solid";
 import { useCameraScale, zoomBy, zoomTo, zoomToFit } from "@/engine";
 
@@ -29,9 +29,9 @@ export function InspectorHeader() {
       <span class="text-[12px] font-450 text-foreground">
         Editor
       </span>
-      {/* Status readouts, right-aligned together: AI credits, then zoom. */}
-      <div class="ml-auto flex items-center gap-2 relative z-30" style="-webkit-app-region: no-drag;">
-        <CreditsChip />
+      {/* Status readouts, right-aligned together: save state, then zoom. */}
+      <div class="ml-auto flex items-center gap-3 relative z-30" style="-webkit-app-region: no-drag;">
+      <SavePill />
       <DropdownMenu placement="bottom-end">
         <DropdownMenuTrigger<typeof Button>
           as={(triggerProps) => (

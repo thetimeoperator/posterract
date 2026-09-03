@@ -96,6 +96,7 @@ export function SourceSettings(props: SourceSettingsProps) {
     editor.removeIntrinsicPaint(entity());
   };
 
+
   return (
     <Show when={intrinsic() !== undefined || hasFill()}>
       <PanelSection title="Source" ref={anchorRef}>

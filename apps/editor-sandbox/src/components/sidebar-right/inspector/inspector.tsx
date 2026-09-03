@@ -12,6 +12,8 @@ import {
   isAudio,
   isCaption,
   isDiagram,
+  isLottie,
+  isVector,
   isGroup,
   isMask,
   isScene,
@@ -22,6 +24,7 @@ import {
 import { useAssetSelection, useSelection, useTool } from "@/engine/hooks";
 import { InspectorHeader } from "./inspector-header";
 import { VariablesSettings } from "./variables";
+import { VersionHistory } from "./version-history";
 import { SceneTemplatePanel } from "./scene-template";
 import { AssetInfoPanel } from "./asset-info";
 import { TimeSettings } from "./time";
@@ -31,6 +34,7 @@ import { ExportPanel } from "./export";
 import { LayoutPanel } from "./layout";
 import { TransformSettings } from "./transform";
 import { CaptionSettings } from "./caption-settings";
+import { CueEditor } from "./cue-editor";
 import { TextPanel } from "./text";
 import { FillsSettings } from "./fills";
 import { SourceSettings } from "./source";
@@ -43,6 +47,8 @@ import { MasksSettings } from "./masks";
 import { AudioSettings } from "./audio";
 import { InterpolationSettings } from "./interpolation";
 import { DiagramSettings } from "./diagram";
+import { LottieSettings } from "./lottie";
+import { VectorSettings } from "./vector";
 
 import type { Entity } from "koota";
 
@@ -56,6 +62,8 @@ export type SelectionTarget =
   | "caption"
   | "diagram"
   | "audio"
+  | "lottie"
+  | "vector"
   | "adjustment"
   | "text"
   | "shape"
@@ -68,6 +76,8 @@ function classifyNode(entity: Entity): SelectionTarget {
   if (isSequence(entity)) return "sequence";
   if (isCaption(entity)) return "caption";
   if (isDiagram(entity)) return "diagram";
+  if (isLottie(entity)) return "lottie";
+  if (isVector(entity)) return "vector";
   if (isAudio(entity)) return "audio";
   if (isAdjustmentLayer(entity)) return "adjustment";
   if (isText(entity)) return "text";
@@ -136,6 +146,7 @@ export function Inspector() {
                 Click the video canvas or a timeline layer to edit it.
               </p>
             </div>
+            <VersionHistory />
             <VariablesSettings />
           </Show>
 
@@ -151,11 +162,12 @@ export function Inspector() {
             <LayoutPanel selection={nodes()} />
           </Show>
 
-          <Show when={includesTarget("shape", "diagram", "text", "scene", "caption", "group", "audio", "mask")}>
+          <Show when={includesTarget("shape", "diagram", "lottie", "vector", "text", "scene", "caption", "group", "audio", "mask")}>
             <AppearanceSettings selection={nodes()} />
           </Show>
 
           <Show when={includesTarget("caption")}>
+            <CueEditor selection={nodes()} />
             <CaptionSettings selection={nodes()} />
           </Show>
 
@@ -163,15 +175,23 @@ export function Inspector() {
             <DiagramSettings selection={nodes()} />
           </Show>
 
+          <Show when={includesTarget("lottie")}>
+            <LottieSettings selection={nodes()} />
+          </Show>
+
+          <Show when={includesTarget("vector")}>
+            <VectorSettings selection={nodes()} />
+          </Show>
+
           <Show when={includesTarget("text", "caption")}>
             <TextPanel selection={nodes()} />
           </Show>
 
-          <Show when={includesTarget("shape", "text", "scene")}>
+          <Show when={includesTarget("shape", "vector", "text", "scene")}>
             <FillsSettings selection={nodes()} />
           </Show>
 
-          <Show when={includesTarget("shape", "caption")}>
+          <Show when={includesTarget("shape", "lottie", "vector", "caption")}>
             <SourceSettings selection={nodes()} />
           </Show>
 

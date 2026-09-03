@@ -3,7 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 
-import { Audio, Captions, ImagePaint, Rect, VideoPaint } from '@posterract/video-reconciler';
+import { Audio, Captions, ImagePaint, Lottie, Rect, VideoPaint } from '@posterract/video-reconciler';
 import { Computed, getActiveEntity, getNextName, Root, Source, store } from '@posterract/video-runtime';
 import { assetName } from '@posterract/video-assets';
 
@@ -62,6 +62,8 @@ export function insertAsset(world: World, asset: Asset, options: InsertAssetOpti
 				return <Audio name={name} src={src} {...position} {...size} {...timing} />;
 			case 'TRANSCRIPT':
 				return <Captions src={src} {...timing} />;
+			case 'LOTTIE':
+				return <Lottie name={name} src={src} {...position} {...size} {...timing} />;
 			default:
 				return null;
 		}
@@ -79,6 +81,10 @@ function sizeOf(asset: Asset): { width: number; height: number } | undefined {
 			return { width: Math.round(asset.width), height: Math.round(asset.height) };
 		case 'AUDIO':
 			return { ...AUDIO_SIZE };
+		case 'LOTTIE':
+			// A Lottie draws into the box it is given, so the animation's own
+			// size is what makes an untouched import look the way it was made.
+			return { width: Math.round(asset.width), height: Math.round(asset.height) };
 		default:
 			return undefined;
 	}

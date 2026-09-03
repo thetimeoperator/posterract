@@ -9,6 +9,7 @@ import { Computed, FrameRate, getActiveEntity } from "@posterract/video-runtime"
 import { assert, downloadObject, isInputTarget } from "@/utils";
 import { useEngineContext } from "@/engine";
 import { useProject } from "@/context/project";
+import { exportProvenance } from "@/projects/provenance";
 import { track } from "@/lib/analytics";
 import { ExportProgress, type ExportConfig } from "@/components/sidebar-right/inspector/export-progress";
 import { renderScene, renderOverlay, cancelRender } from "@/context/render";
@@ -117,12 +118,38 @@ export function ExportProvider(props: { children: JSX.Element }) {
           duration_ms: Math.round(performance.now() - startedAt),
         });
         if (exportedPath) {
+          const fileName = exportedPath.split(/[\\/]/).at(-1) ?? `${name}.${format}`;
+          const durationMs = Math.round(sceneDurationSeconds(scene) * 1000);
+          // Provenance travels with the render: which project, which scene,
+          // and which revision of the source produced it. Without it a file in
+          // the library is just a video, and the loop back to the composition
+          // that made it cannot be closed.
+          const provenance = await exportProvenance(project.dir(), scene);
+          void mainBridge
+            .call(MAIN_CHANNELS.EXPORTS_RECORD, {
+              projectId: provenance.projectId,
+              projectDir: project.dir(),
+              sceneId: provenance.sceneId,
+              sourceRevision: provenance.sourceRevision,
+              path: exportedPath,
+              fileName,
+              contentType: mimeType,
+              durationMs,
+              width: provenance.width,
+              height: provenance.height,
+            })
+            .catch(() => undefined);
           window.parent.postMessage({
             type: "posterract-export-complete",
             path: exportedPath,
-            fileName: exportedPath.split(/[\\/]/).at(-1),
+            fileName,
             contentType: mimeType,
-            durationMs: Math.round(sceneDurationSeconds(scene) * 1000),
+            durationMs,
+            projectId: provenance.projectId,
+            sceneId: provenance.sceneId,
+            sourceRevision: provenance.sourceRevision,
+            width: provenance.width,
+            height: provenance.height,
           }, "*");
         }
       }

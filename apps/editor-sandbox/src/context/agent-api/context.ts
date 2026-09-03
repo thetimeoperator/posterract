@@ -3,8 +3,9 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 import {
-  AdjustmentLayer, Animation, AnimationPhase, AnimationType, Audio, Caption, Computed, Diagram,
-  DiagramKindType, Effect, Fonts, FrameRate, Geometry, Group, IsMask, Keyframe, KeyframeTrack, Name,
+  AdjustmentLayer, Animation, AnimationPhase, AnimationType, Audio, Caption, Computed, Cue, Diagram,
+  DiagramKindType, Effect, Fonts, FrameRate, Geometry, GeometryType, Group, IsMask, Keyframe, KeyframeTrack,
+  Component, Live, Lottie, LottieSlot, Marker, Name, Path, PathTrim, Polygon,
   PaintType, Scene, Sequential, Shadow, Source, Stage, Stroke, getActiveEntity,
   getEntityChildren, getIntrinsicPaint, isText,
 } from "@posterract/video-runtime";
@@ -37,6 +38,10 @@ function kindOf(entity: Entity): string {
   // Motion and decoration entities are real children in the tree. Without
   // these cases they all fell through to "node", which left an agent unable
   // to see the keyframes and animations it had just written.
+  if (entity.has(Lottie)) return "lottie";
+  if (entity.has(LottieSlot)) return "lottie-slot";
+  if (entity.has(Cue)) return "cue";
+  if (entity.has(Marker)) return "marker";
   if (entity.has(KeyframeTrack)) return "keyframe-track";
   if (entity.has(Keyframe)) return "keyframe";
   if (entity.has(Animation)) return "animation";
@@ -63,6 +68,13 @@ function kindOf(entity: Entity): string {
     }
   }
   if (!entity.has(Geometry)) return "node";
+  // Vector figures are RECT-shaped in nothing but their trait; reporting one
+  // as "rect" would leave an agent unable to see the `<path>` it just wrote.
+  switch (entity.get(Geometry)!.value) {
+    case GeometryType.PATH: return "path";
+    case GeometryType.ELLIPSE: return "ellipse";
+    case GeometryType.POLYGON: return "polygon";
+  }
   switch (getIntrinsicPaint(entity)) {
     case PaintType.VIDEO: return "video";
     case PaintType.IMAGE: return "image";
@@ -79,8 +91,42 @@ function kindOf(entity: Entity): string {
  * the source file uses, even though the runtime stores frames.
  */
 function detailOf(entity: Entity, frameRate: number): RuntimeTreeNode["detail"] {
+  const cue = entity.get(Cue);
+  if (cue) {
+    return {
+      start: Number((cue.start / frameRate).toFixed(4)),
+      end: Number((cue.end / frameRate).toFixed(4)),
+      text: cue.text,
+    };
+  }
+
+  const marker = entity.get(Marker);
+  if (marker) {
+    return {
+      time: Number((marker.time / frameRate).toFixed(4)),
+      name: marker.name,
+      ...(marker.color ? { color: marker.color } : {}),
+    };
+  }
+
   const track = entity.get(KeyframeTrack);
   if (track) return { property: trackProperty(track.property) ?? track.property };
+
+  // What a vector figure actually is: an agent that wrote a `d` should be able
+  // to read it back, and to see how much of it a trim is currently drawing.
+  const path = entity.get(Path);
+  const polygon = entity.get(Polygon);
+  const trim = entity.get(PathTrim);
+  if (path || polygon || trim) {
+    return {
+      ...(path?.d ? { d: path.d } : {}),
+      ...(path?.morphTo ? { morphTo: path.morphTo, morph: path.morph } : {}),
+      ...(polygon?.points ? { points: polygon.points } : {}),
+      ...(trim && (trim.start !== 0 || trim.end !== 1 || trim.offset !== 0)
+        ? { trimStart: trim.start, trimEnd: trim.end, trimOffset: trim.offset }
+        : {}),
+    };
+  }
 
   const keyframe = entity.get(Keyframe);
   if (keyframe) {
@@ -107,11 +153,22 @@ function detailOf(entity: Entity, frameRate: number): RuntimeTreeNode["detail"] 
 
 function runtimeTree(world: World, entity: Entity, frameRate: number): RuntimeTreeNode {
   const detail = detailOf(entity, frameRate);
+  // The project's own component this came from, when it came from one. A
+  // component compiles away, so an agent reading the tree would otherwise see
+  // the pieces and never the `<Panel>` the author wrote.
+  const component = entity.get(Component)?.name;
+  // Props this element gets from code. An agent asked to change `x` on an
+  // element whose `x` is an expression needs to know that editing the prop
+  // will be overwritten on the next tick — the source expression is what to
+  // change, or the prop should be baked first.
+  const live = entity.get(Live)?.props;
   return {
     id: sourceId(entity),
     source: entity.get(Source)?.value ?? null,
     name: entity.get(Name)?.value || null,
     kind: kindOf(entity),
+    ...(component ? { component } : {}),
+    ...(live ? { live: live.split(',') } : {}),
     ...(detail ? { detail } : {}),
     children: getEntityChildren(world, entity).map((child) => runtimeTree(world, child, frameRate)),
   };

@@ -7,14 +7,6 @@ import { ControlRow } from "@/components/ui/control-group";
 import { Icon } from "@/components/ui/icon";
 import { PanelSection } from "@/components/ui/panel-section";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectPortal,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   FloatingInspector,
   FloatingInspectorContent,
   FloatingInspectorHeader,
@@ -88,32 +80,42 @@ export function CaptionSettings(props: CaptionSettingsProps) {
 
   return (
     <PanelSection title="Caption" ref={anchorRef}>
-      <ControlRow label="Preset">
-        <Select<CaptionPresetOption>
-          value={preset()}
-          onChange={handlePresetChange}
-          options={CAPTION_PRESET_OPTIONS}
-          optionValue="name"
-          optionTextValue="label"
-          itemComponent={(itemProps) => (
-            <SelectItem item={itemProps.item}>
-              {itemProps.item.rawValue.label}
-            </SelectItem>
+      {/*
+        A gallery rather than a dropdown: a caption style is a look, and a
+        list of words is the one thing that cannot show a look. Each card
+        sets its own type in its own accent, so the grid reads as the
+        choice it is.
+      */}
+      <div class="grid grid-cols-2 gap-1.5 pb-1">
+        <For each={CAPTION_PRESET_OPTIONS}>
+          {(option) => (
+            <button
+              type="button"
+              aria-pressed={option === preset()}
+              onClick={() => handlePresetChange(option)}
+              class="group/preset flex h-16 flex-col justify-between rounded-md border p-2 text-left transition-colors"
+              classList={{
+                'border-primary bg-primary/10': option === preset(),
+                'border-white/[0.06] bg-input hover:border-white/20': option !== preset(),
+              }}
+            >
+              <span
+                class="truncate text-xs font-600"
+                style={{
+                  color: option.slots.length
+                    ? colorToHex(option.slots[0]!.defaultColor)
+                    : 'var(--color-foreground)',
+                }}
+              >
+                {option.label}
+              </span>
+              <span class="text-xxs leading-3 text-muted-foreground line-clamp-2">
+                {option.hint ?? '\u00A0'}
+              </span>
+            </button>
           )}
-        >
-          <SelectTrigger class="pl-1 gap-2">
-            <div class="text-foreground size-5 rounded-sm flex items-center justify-center bg-primary overflow-clip shrink-0">
-              <Icon name="captions" class="text-foreground" />
-            </div>
-            <SelectValue<CaptionPresetOption> class="text-xs">
-              {(state) => state.selectedOption()?.label}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectPortal>
-            <SelectContent />
-          </SelectPortal>
-        </Select>
-      </ControlRow>
+        </For>
+      </div>
 
       <For each={slots()}>
         {(slot, index) => (

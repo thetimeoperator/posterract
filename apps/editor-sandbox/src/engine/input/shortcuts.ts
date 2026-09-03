@@ -32,6 +32,27 @@ import { Not, Or } from 'koota';
 
 import { zoomBy, zoomTo, zoomToFit, zoomToSelection } from '../camera';
 import { getDocumentEditor } from '../editor';
+import { requestDelete } from '../delete-guard';
+import { toggleMarkerAtPlayhead } from '../markers';
+import { rippleDeleteSelection } from '../ripple';
+import { toggleSnapping } from '../timeline/snapping';
+import {
+	zoomTimelineIn,
+	zoomTimelineOut,
+	zoomTimelineToFit,
+	zoomTimelineToSelection,
+} from '../timeline/zoom';
+import {
+	clearInOut,
+	nudgeSelectionInTime,
+	pauseShuttle,
+	seekToCut,
+	seekToEnd,
+	seekToStart,
+	setInPoint,
+	setOutPoint,
+	shuttleBy,
+} from '../transport';
 import { groupSelection, ungroupSelection, unwrapSequenceSelection, wrapSelectionInScene, wrapSelectionInSequence } from '../group';
 import { getEditHistory } from '../history';
 import { splitAtPlayhead } from '../split';
@@ -61,8 +82,10 @@ export function redoEdit(world: World): void {
 export function deleteSelection(world: World): void {
 	const selected = [...world.query(Selected)];
 
+	// A scene with content is confirmed first and kept in the project's trash;
+	// everything else is removed here and covered by undo.
 	if (selected.length) {
-		getDocumentEditor(world).remove(selected);
+		requestDelete(world, selected);
 	}
 };
 
@@ -427,6 +450,33 @@ const PRESSED_SHORTCUTS: readonly Shortcut[] = [
 	{ keys: ['arrowup', 'shift'], action: nudge(0, -NUDGE_FAST) },
 	{ keys: ['arrowdown', 'shift'], action: nudge(0, NUDGE_FAST) },
 	{ keys: [' '], action: onSpacePressed },
+
+	// Transport and range. `J`/`K`/`L` shuttle, `I`/`O` mark the work area —
+	// which is what an export renders, so marking a range is choosing what to
+	// export rather than a second concept beside it.
+	{ keys: ['home'], action: seekToStart },
+	{ keys: ['end'], action: seekToEnd },
+	{ keys: ['arrowup', '!mod', '!shift', 'alt'], action: seekToCut(-1) },
+	{ keys: ['arrowdown', '!mod', '!shift', 'alt'], action: seekToCut(1) },
+	{ keys: ['j', '!mod'], action: shuttleBy(-1) },
+	{ keys: ['k', '!mod'], action: pauseShuttle },
+	{ keys: ['l', '!mod'], action: shuttleBy(1) },
+	{ keys: ['i', '!mod'], action: setInPoint },
+	{ keys: ['o', '!mod'], action: setOutPoint },
+	{ keys: ['x', 'alt', '!mod'], action: clearInOut },
+	{ keys: ['n', '!mod'], action: toggleSnapping },
+	{ keys: ['m', '!mod'], action: toggleMarkerAtPlayhead },
+	{ keys: ['arrowleft', 'alt', '!shift'], action: nudgeSelectionInTime(-1) },
+	{ keys: ['arrowright', 'alt', '!shift'], action: nudgeSelectionInTime(1) },
+	{ keys: ['arrowleft', 'alt', 'shift'], action: nudgeSelectionInTime(-10) },
+	{ keys: ['arrowright', 'alt', 'shift'], action: nudgeSelectionInTime(10) },
+	{ keys: ['=', 'alt', '!mod'], action: zoomTimelineIn },
+	{ keys: ['+', 'alt', '!mod'], action: zoomTimelineIn },
+	{ keys: ['-', 'alt', '!mod'], action: zoomTimelineOut },
+	{ keys: ['z', 'shift', '!mod'], action: zoomTimelineToFit },
+	{ keys: ['z', 'alt', '!mod'], action: zoomTimelineToSelection },
+	{ keys: ['backspace', 'shift'], action: rippleDeleteSelection },
+	{ keys: ['delete', 'shift'], action: rippleDeleteSelection },
 ];
 
 const LIFTED_SHORTCUTS: readonly Shortcut[] = [

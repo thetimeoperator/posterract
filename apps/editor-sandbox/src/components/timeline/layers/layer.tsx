@@ -9,6 +9,8 @@ import { Selected } from '@posterract/video-runtime';
 import { KeyframeLayer } from './keyframe';
 import { NodeLayer } from './node';
 import { SubItemLayer } from './sub-item';
+import { ComponentLayer } from './component-row';
+import { LiveLayer } from './live-row';
 
 import type { Component } from 'solid-js';
 import type { TimelineNode, TimelineNodeKind } from '@posterract/video-runtime';
@@ -26,10 +28,20 @@ export type LayerRowProps = {
   ancestorSelected: boolean;
 }
 
+// The typed part kinds all draw as sub-item rows — the kind is what decides
+// whether the row exists at all (see `TimelineDetail`), not how it looks.
 const LAYER_ROWS: Record<TimelineNodeKind, Component<LayerRowProps>> = {
   'geometry': NodeLayer,
   'sub-item': SubItemLayer,
   'keyframe-track': KeyframeLayer,
+  'effect': SubItemLayer,
+  'paint': SubItemLayer,
+  'stroke': SubItemLayer,
+  'shadow': SubItemLayer,
+  'animation': SubItemLayer,
+  'lottie-slot': SubItemLayer,
+  'component': ComponentLayer,
+  'live': LiveLayer,
 };
 
 /**

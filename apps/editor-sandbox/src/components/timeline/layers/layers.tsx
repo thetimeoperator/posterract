@@ -11,6 +11,8 @@ import {
   Computed,
   FrameRate,
   getNextName,
+  getParentNode,
+  isSequence,
   Playback,
   Source,
   togglePlayback,
@@ -34,7 +36,16 @@ import {
 import { Tooltip, TooltipContent, TooltipPortal, TooltipTrigger } from '@/components/ui/tooltip';
 import { DEFAULT_CLIP_HEIGHT, RULER_HEIGHT } from '@/engine/timeline';
 import { splitAtPlayhead } from '@/engine/split';
-import { useDerived, useEditor, useTimelineIndex } from '@/engine/hooks';
+import { useDerived, useEditor, useSelection, useTimelineIndex } from '@/engine/hooks';
+import { getDocumentEditor } from '@/engine/editor';
+import {
+  DEFAULT_TRANSITION_DURATION,
+  TRANSITION_OPTIONS,
+} from '@/components/sidebar-right/inspector/transition-types';
+import { TIMELINE_DETAILS, setTimelineDetail, timelineDetail } from '@/engine/timeline/detail';
+
+import type { TimelineDetail } from '@posterract/video-runtime';
+import type { TransitionType as TransitionName } from '@posterract/composition';
 import { useTimeline } from '@/context/timeline';
 import { useLayout } from '@/context/layout';
 import { store } from '@/init';
@@ -58,10 +69,35 @@ const HEIGHT_PRESETS = [
 
 export function Layers() {
   const world = useWorld();
+  const selection = useSelection();
   const editor = useEditor();
   const timeline = useTimeline();
   const index = useTimelineIndex();
   const { timelineMinimized, toggleTimeline } = useLayout();
+
+  /**
+   * The clip a transition would go on: the selected one, when it sits in a
+   * sequence. A transition is authored on the clip it leaves, and only a
+   * sequence has cuts for one to happen at — so anything else is not a target
+   * and the control says so instead of writing a prop that does nothing.
+   */
+  const transitionTarget = createMemo(() => {
+    const entity = selection.nodes()[0];
+    if (!entity) return null;
+    const parent = getParentNode(entity);
+    return parent && isSequence(parent) ? entity : null;
+  });
+
+  const applyTransition = (type: TransitionName | null) => {
+    const entity = transitionTarget();
+    if (!entity) return;
+    // `false` is the writer's spelling for the attribute's absence.
+    getDocumentEditor(world).editProperty(
+      entity,
+      'transition',
+      type === null ? false : { type, duration: DEFAULT_TRANSITION_DURATION },
+    );
+  };
 
   const layers = createMemo(() => index().layers);
   const scene = createMemo(() => index().root);
@@ -196,6 +232,52 @@ export function Layers() {
                 <TooltipContent shortcut="⌘B">Split at playhead</TooltipContent>
               </TooltipPortal>
             </Tooltip>
+            {/*
+              Transitions where the cuts are. A transition belongs to the clip
+              it leaves — that is how the file spells it — so the chips act on
+              the selected clip and are dark until one is selected, rather than
+              being a drop target that has to explain itself.
+            */}
+            <DropdownMenu>
+              <Tooltip placement="top">
+                <TooltipTrigger<typeof DropdownMenuTrigger>
+                  as={(triggerProps: object) => (
+                    <DropdownMenuTrigger<typeof Button>
+                      {...triggerProps}
+                      as={(buttonProps) => (
+                        <Button
+                          {...buttonProps}
+                          variant="ghost"
+                          size="icon"
+                          disabled={!transitionTarget()}
+                          class="text-muted-foreground"
+                        >
+                          <Icon name="video-transition" class="size-6" />
+                        </Button>
+                      )}
+                    />
+                  )}
+                />
+                <TooltipPortal>
+                  <TooltipContent>
+                    {transitionTarget() ? 'Transition' : 'Select a clip in a sequence'}
+                  </TooltipContent>
+                </TooltipPortal>
+              </Tooltip>
+              <DropdownMenuPortal>
+                <DropdownMenuContent class="w-[190px]">
+                  <Index each={TRANSITION_OPTIONS}>
+                    {(option) => (
+                      <DropdownMenuItem onSelect={() => applyTransition(option().name)}>
+                        {option().label}
+                      </DropdownMenuItem>
+                    )}
+                  </Index>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={() => applyTransition(null)}>Remove</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenuPortal>
+            </DropdownMenu>
             <DropdownMenu>
               <Tooltip placement="top">
                 <TooltipTrigger<typeof DropdownMenuTrigger>
@@ -217,6 +299,29 @@ export function Layers() {
               <DropdownMenuPortal>
                 <DropdownMenuContent class="w-[180px]">
                   <DropdownMenuItem onSelect={addLayer}>Add layer</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>Show</DropdownMenuSubTrigger>
+                    <DropdownMenuPortal>
+                      <DropdownMenuSubContent class="w-[260px]">
+                        <DropdownMenuRadioGroup
+                          value={timelineDetail()}
+                          onChange={(value) => setTimelineDetail(value as TimelineDetail)}
+                        >
+                          <Index each={TIMELINE_DETAILS}>
+                            {(option) => (
+                              <DropdownMenuRadioItem value={option().value}>
+                                <span class="flex flex-col">
+                                  {option().label}
+                                  <span class="text-xxs text-muted-foreground">{option().hint}</span>
+                                </span>
+                              </DropdownMenuRadioItem>
+                            )}
+                          </Index>
+                        </DropdownMenuRadioGroup>
+                      </DropdownMenuSubContent>
+                    </DropdownMenuPortal>
+                  </DropdownMenuSub>
                   <DropdownMenuSeparator />
                   <DropdownMenuSub>
                     <DropdownMenuSubTrigger>Layer height</DropdownMenuSubTrigger>

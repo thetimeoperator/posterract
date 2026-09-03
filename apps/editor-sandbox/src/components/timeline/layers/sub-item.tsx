@@ -3,12 +3,16 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 import { createMemo, Show } from 'solid-js';
-import { useTag, useWorld } from '@posterract/koota-solid';
+import { useTag, useTrait, useWorld } from '@posterract/koota-solid';
 import {
+  Animation,
+  AnimationPhase,
   ColorStop,
+  FrameRate,
   Effect,
   Expanded,
   Hovering,
+  LottieSlot,
   Name,
   Paint,
   PaintType,
@@ -20,6 +24,7 @@ import { Icon } from '@/components/ui/icon';
 import { useEditor } from '@/engine/hooks';
 import { KEYFRAME_TRACK_HEIGHT } from '@/engine/timeline';
 import { effectOption } from '@/components/sidebar-right/inspector/effect-types';
+import { animationOption } from '@/components/sidebar-right/inspector/animation-types';
 import { NESTED_INDENT_PX } from './config';
 import { setRowHover } from './hover';
 
@@ -51,7 +56,10 @@ export function SubItemLayer(props: LayerRowProps) {
 
   const hovering = useTag(entity, Hovering);
   const selected = useTag(entity, Selected);
-  const name = createMemo(() => describe(entity()));
+  // Animation rows spell their duration in seconds, which needs the world's
+  // frame rate; everything else ignores it.
+  const frameRate = useTrait(world, FrameRate);
+  const name = createMemo(() => describe(entity(), frameRate()?.value ?? 30));
 
   const toggleExpanded = () => {
     editor.editProperty(entity(), 'expanded', !entity().has(Expanded));
@@ -98,13 +106,23 @@ export function SubItemLayer(props: LayerRowProps) {
 }
 
 /** What the part calls itself, or what kind of part it is. */
-function describe(entity: Entity): string {
+function describe(entity: Entity, frameRate: number): string {
   const name = entity.get(Name)?.value;
   if (name) return name;
 
   if (entity.has(Stroke)) return 'Stroke';
   if (entity.has(Shadow)) return 'Shadow';
   if (entity.has(ColorStop)) return 'Stop';
+
+  // A preset animation says what it does and how long it takes: the two
+  // things you would otherwise have to open the inspector to see.
+  const animation = entity.get(Animation);
+  if (animation) {
+    const label = animationOption(animation.type).label;
+    const phase = animation.phase === AnimationPhase.OUT ? 'out' : 'in';
+    const seconds = animation.duration / frameRate;
+    return `${label} ${phase} · ${seconds.toFixed(2).replace(/\.?0+$/, '')}s`;
+  }
 
   if (entity.has(Paint)) {
     return PAINT_NAMES[entity.get(Paint)!.value as PaintType] ?? 'Fill';
@@ -113,6 +131,11 @@ function describe(entity: Entity): string {
   if (entity.has(Effect)) {
     return effectOption(entity.get(Effect)?.type).label;
   }
+
+  // A slot is addressed by the name it has inside the animation, so that name
+  // is the only useful thing a row can say about it.
+  const slot = entity.get(LottieSlot);
+  if (slot) return slot.name || 'Slot';
 
   return 'Sub-item';
 }

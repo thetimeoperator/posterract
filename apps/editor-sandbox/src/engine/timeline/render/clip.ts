@@ -277,6 +277,12 @@ const CAPTION_PRESETS: Record<CaptionType, string> = {
 	[CaptionType.PAPER]: 'Paper',
 	[CaptionType.GUINEA]: 'Guinea',
 	[CaptionType.STARK]: 'Stark',
+	[CaptionType.POP]: 'Pop',
+	[CaptionType.KARAOKE]: 'Karaoke',
+	[CaptionType.TYPEWRITER]: 'Typewriter',
+	[CaptionType.BANNER]: 'Banner',
+	[CaptionType.PUNCH]: 'Punch',
+	[CaptionType.MARQUEE]: 'Marquee',
 };
 
 

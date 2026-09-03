@@ -17,10 +17,14 @@
  */
 
 import {
+	Cache,
 	Computed,
 	FrameRate,
 	Host,
+	Locked,
+	findAssetDuration,
 	framesToSeconds,
+	getParentNode,
 	getSourceFrameAt,
 	getTimelineOrigin,
 	secondsToFrames,
@@ -132,4 +136,84 @@ export function moveEntityTo(world: World, entity: Entity, frame: number): void 
 	if (end !== undefined) editTime(world, entity, 'end', end + delta);
 
 	editTime(world, entity, 'start', start);
+}
+
+
+/**
+ * Slip: change which part of the source plays without moving the clip.
+ *
+ * The clip keeps its place and its length on the timeline; the footage inside
+ * it slides by `frames`. This is the edit you reach for when the timing is
+ * right but the take is framed a beat early — and the reason it is a gesture
+ * rather than two number fields is that the only way to judge it is to watch
+ * it move.
+ *
+ * Bounded by how much source there is on each side, so a slip can never run
+ * off either end of the footage.
+ */
+export function slipEntity(world: World, entity: Entity, frames: number): void {
+	if (frames === 0) return;
+	const computed = entity.get(Computed);
+	if (!computed) return;
+
+	const rate = computed.playbackRate || 1;
+	const length = computed.end - computed.start;
+	const sourceIn = authoredTime(world, entity, 'sourceIn') ?? 0;
+	const duration = findAssetDuration(world, entity);
+
+	// Without a known source length there is nothing to slip within: a shape
+	// or a text has no footage behind its window.
+	if (duration === null) return;
+
+	const wanted = sourceIn + frames * rate;
+	const max = Math.max(0, duration - length * rate);
+	const next = Math.round(Math.min(Math.max(wanted, 0), max));
+	if (next === sourceIn) return;
+
+	// The window moves; the clip does not. `sourceOut` follows only when the
+	// file states one, exactly as a trim treats it.
+	if (authoredTime(world, entity, 'sourceOut') !== undefined) {
+		editTime(world, entity, 'sourceOut', next + length * rate);
+	}
+	editTime(world, entity, 'sourceIn', next);
+}
+
+/**
+ * Slide: move the clip and let its neighbours give way.
+ *
+ * The clip travels along the timeline while the clips on either side are
+ * trimmed by the same amount, so the run of clips keeps its total length and
+ * nothing opens a gap. The moved clip's own footage is untouched — that is
+ * what separates a slide from a slip.
+ *
+ * Neighbours are the siblings that actually touch this clip's edges; a clip
+ * with empty space beside it simply moves.
+ */
+export function slideEntity(world: World, entity: Entity, frames: number): void {
+	if (frames === 0) return;
+	const computed = entity.get(Computed);
+	if (!computed) return;
+
+	const parent = getParentNode(entity);
+	if (!parent) return;
+
+	const siblings = (parent.get(Cache)?.children ?? []).filter((child) => child !== entity && !child.has(Locked));
+	const before = siblings.find((child) => Math.abs((child.get(Computed)?.end ?? -1) - computed.start) <= 1);
+	const after = siblings.find((child) => Math.abs((child.get(Computed)?.start ?? -1) - computed.end) <= 1);
+
+	// Never past a neighbour's own far edge, or the slide would invert it.
+	let delta = frames;
+	if (delta < 0 && before) {
+		delta = Math.max(delta, (before.get(Computed)?.start ?? 0) + 1 - computed.start);
+	}
+	if (delta > 0 && after) {
+		delta = Math.min(delta, (after.get(Computed)?.end ?? 0) - 1 - computed.end);
+	}
+	if (delta === 0) return;
+
+	// The neighbours first: moving the clip would change the frames the trims
+	// are measured against.
+	if (before) trimOut(world, before, computed.start + delta);
+	if (after) trimIn(world, after, computed.end + delta);
+	moveEntityTo(world, entity, computed.start + delta);
 }

@@ -7,6 +7,8 @@
 
 import { toast } from "somoto";
 import { importFiles as importFilesInto, pickFiles, saveAssetAs as saveAs } from "@posterract/video-assets";
+import { MAIN_CHANNELS } from "@desktop/main-channels";
+import { mainBridge } from "@/lib/ipc";
 import { insertAsset } from "./insert-asset";
 import { forgetAssetMedia } from "./timeline/media";
 import { forgetAssetPeaks } from "./timeline/peaks";
@@ -42,6 +44,29 @@ export async function importFiles(library: AssetLibrary, files: ReadonlyArray<Fi
 /** Opens the file picker and imports what the user picks into `folder`. */
 export async function pickAndImport(library: AssetLibrary, folder: string): Promise<Asset[]> {
   return importFiles(library, await pickFiles(), folder);
+}
+
+/**
+ * Downloads a Lottie animation from a URL into the project's
+ * `assets/lottie/`.
+ *
+ * The fetch happens in the main process — the editor's own CSP allows no
+ * network — and the file lands in the project folder, where the library
+ * watcher picks it up like any other file that appeared there. Returns the
+ * project-relative path it was written to, or null when it failed (the user
+ * has already been told why).
+ */
+export async function importLottieUrl(dir: string, url: string): Promise<string | null> {
+  try {
+    const result = await mainBridge.call(MAIN_CHANNELS.PROJECTS_IMPORT_LOTTIE_URL, { dir, url });
+    toast.success("Animation imported", { description: result.path });
+    return result.path;
+  } catch (error) {
+    toast.error("Could not import that animation", {
+      description: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
 }
 
 /**

@@ -127,6 +127,14 @@ export const COLORS = {
       background: '#2B525F',
       foreground: '#E7F4F9',
     },
+    lottie: {
+      background: '#5D3B93',
+      foreground: '#EDE3FB',
+    },
+    vector: {
+      background: '#1F5F4A',
+      foreground: '#DDF6EC',
+    },
     failed: {
       background: '#2E1D1D',
       foreground: '#FF8A8A',

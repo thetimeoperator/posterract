@@ -2,21 +2,50 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { createMemo } from "solid-js";
-import { useTrait } from "@posterract/koota-solid";
-import { Name } from "@posterract/video-runtime";
+import { createMemo, For, Show } from "solid-js";
+import { useTrait, useWorld } from "@posterract/koota-solid";
+import { Computed, FrameRate, Name, Scene, getParentNode, store } from "@posterract/video-runtime";
 import { Icon } from "@/components/ui/icon";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuPortal,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useActiveScene } from "@/engine/hooks/use-active-scene";
+import { useDerived, useEditor } from "@/engine/hooks";
+
+import type { Entity } from "koota";
+
+/** `MM:SS` for a scene's own length. */
+function duration(frames: number, frameRate: number): string {
+  const total = Math.max(0, Math.round(frames / frameRate));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+}
 
 /**
- * A stable header for the lower workspace. The scene entity is shared by the
- * canvas, layers, timeline, and mixer, so switching videos updates every pane
- * and this title in the same reactive turn.
+ * A stable header for the lower workspace, and the way between videos.
+ *
+ * The scene entity is shared by the canvas, layers, timeline and mixer, so
+ * activating one from here updates every pane in the same reactive turn. A
+ * project with several videos previously had no way to switch between them
+ * except finding the scene on the canvas.
  */
 export function VideoTimelineTitle() {
+  const world = useWorld();
+  const editor = useEditor();
   const activeScene = useActiveScene();
+  const frameRate = useTrait(world, FrameRate);
   const name = useTrait(activeScene, Name);
   const title = createMemo(() => name()?.value.trim() || "Untitled video");
+
+  // Top-level scenes only: a scene nested inside another is a component of
+  // that video, not a video of its own.
+  const scenes = useDerived<Entity[]>(
+    () => [...world.query(Scene)].filter((entity) => getParentNode(entity) === null),
+    (prev, next) => prev.length === next.length && prev.every((entity, index) => entity === next[index]),
+  );
 
   return (
     <div class="col-span-full grid h-8 min-h-8 grid-cols-[264px_1px_minmax(0,1fr)_1px_264px] bg-sidebar/95">
@@ -24,12 +53,40 @@ export function VideoTimelineTitle() {
         LAYERS
       </div>
       <div class="bg-border-strong" />
-      <div class="flex min-w-0 items-center gap-2 px-3" title={title()}>
+      <div class="flex min-w-0 items-center gap-2 px-3">
         <Icon name="film-video-export" class="size-3.5 text-primary" />
         <span class="shrink-0 text-[9px] font-semibold tracking-[0.18em] text-primary/75">
           ACTIVE VIDEO
         </span>
-        <span class="truncate text-[11px] font-medium text-foreground">{title()}</span>
+        <DropdownMenu placement="bottom-start">
+          <DropdownMenuTrigger
+            class="flex min-w-0 items-center gap-1 rounded px-1 text-[11px] font-medium text-foreground hover:bg-accent focus-ring"
+            title={title()}
+          >
+            <span class="truncate">{title()}</span>
+            <Show when={scenes().length > 1}>
+              <Icon name="chevron-down" class="size-4 shrink-0 text-muted-foreground" />
+            </Show>
+          </DropdownMenuTrigger>
+          <DropdownMenuPortal>
+            <DropdownMenuContent class="w-[240px]">
+              <For each={scenes()}>
+                {(scene) => {
+                  const label = scene.get(Name)?.value?.trim() || "Untitled video";
+                  const frames = store(world, Computed).duration[scene.id()] ?? 0;
+                  return (
+                    <DropdownMenuItem onSelect={() => editor.activate(scene)}>
+                      <span class="truncate">{label}</span>
+                      <span class="ml-auto shrink-0 text-xxs text-muted-foreground">
+                        {duration(frames, frameRate()?.value ?? 30)}
+                      </span>
+                    </DropdownMenuItem>
+                  );
+                }}
+              </For>
+            </DropdownMenuContent>
+          </DropdownMenuPortal>
+        </DropdownMenu>
       </div>
       <div class="bg-border-strong" />
       <div class="flex items-center px-3 text-[9px] font-semibold tracking-[0.18em] text-muted-foreground/70">

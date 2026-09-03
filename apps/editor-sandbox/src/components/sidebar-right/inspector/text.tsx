@@ -39,9 +39,12 @@ import {
   TextAlign,
   TextBaseline,
   TextStyle,
+  TextDecorationType,
+  FontStyle,
   Tool,
   ToolType,
   WebFonts,
+  fontUrl,
   getWebFonts,
   isCaption,
   isText,
@@ -120,6 +123,23 @@ export function TextPanel(props: TextPanelProps) {
   });
 
   /** Writes a family or weight to the trait alone, for the picker to show. */
+  const fontStyle = useDerived(() => entity().get(TextStyle)?.fontStyle ?? FontStyle.NORMAL);
+  const decoration = useDerived(() => entity().get(TextStyle)?.textDecoration ?? TextDecorationType.NONE);
+  const hasDecoration = (bit: TextDecorationType) => (decoration() & bit) !== 0;
+
+  /**
+   * Writes the whole decoration back as the space-separated list the prop
+   * takes, so the source keeps saying what it means rather than a number.
+   */
+  const toggleDecoration = (bit: TextDecorationType) => {
+    const next = decoration() ^ bit;
+    const words = [
+      next & TextDecorationType.UNDERLINE ? 'underline' : '',
+      next & TextDecorationType.LINE_THROUGH ? 'lineThrough' : '',
+    ].filter(Boolean);
+    editor.editProperty(entity(), 'textDecoration', words.length ? words.join(' ') : false);
+  };
+
   const previewFont = (params: { fontFamily?: string; fontWeight?: string }) => {
     entity().add(TextStyle);
     entity().set(TextStyle, params);
@@ -262,6 +282,45 @@ export function TextPanel(props: TextPanelProps) {
         </ControlRow>
       </Show>
 
+      {/*
+        Italic and the two rules are one row of toggles because that is how
+        every writing tool has presented them for forty years, and because
+        they combine: underlined italic is a thing people write.
+      */}
+      <ControlRow label="Style" contentClass="flex gap-1">
+        <Button
+          variant={fontStyle() === FontStyle.ITALIC ? 'secondary' : 'ghost'}
+          size="small"
+          class="flex-1 italic"
+          aria-pressed={fontStyle() === FontStyle.ITALIC}
+          onClick={() => editor.editProperty(
+            entity(),
+            'fontStyle',
+            fontStyle() === FontStyle.ITALIC ? false : 'italic',
+          )}
+        >
+          I
+        </Button>
+        <Button
+          variant={hasDecoration(TextDecorationType.UNDERLINE) ? 'secondary' : 'ghost'}
+          size="small"
+          class="flex-1 underline"
+          aria-pressed={hasDecoration(TextDecorationType.UNDERLINE)}
+          onClick={() => toggleDecoration(TextDecorationType.UNDERLINE)}
+        >
+          U
+        </Button>
+        <Button
+          variant={hasDecoration(TextDecorationType.LINE_THROUGH) ? 'secondary' : 'ghost'}
+          size="small"
+          class="flex-1 line-through"
+          aria-pressed={hasDecoration(TextDecorationType.LINE_THROUGH)}
+          onClick={() => toggleDecoration(TextDecorationType.LINE_THROUGH)}
+        >
+          S
+        </Button>
+      </ControlRow>
+
       <ControlRow label="Align" contentClass="flex gap-2">
         <SegmentedIconTabs
           class="flex-1"
@@ -295,9 +354,8 @@ export function FontDropdown(props: FontDropdownProps) {
   // Preload web fonts for preview
   onMount(() => {
     if (document.visibilityState !== 'visible') return;
-    for (const family of Object.keys(WebFonts)) {
-      const config = WebFonts[family as keyof typeof WebFonts];
-      const face = new FontFace(family, `url(${config.url})`, { weight: '400' });
+    for (const family of Object.keys(WebFonts) as Array<keyof typeof WebFonts>) {
+      const face = new FontFace(family, `url(${fontUrl(family)})`, { weight: '400' });
       face.load().then((f) => document.fonts.add(f)).catch(() => { });
     }
   });

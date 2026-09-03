@@ -6,11 +6,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5175",
-    "build": "tsc -b && vite build",
-    "build:desktop": "tsc -b && vite build --mode desktop --base=./ --outDir=../desktop/web",
+    "build": "pnpm run canvaskit && pnpm run fonts && tsc -b && vite build",
+    "build:desktop": "pnpm run canvaskit && pnpm run fonts && tsc -b && vite build --mode desktop --base=./ --outDir=../desktop/web",
     "preview": "vite preview",
     "check": "tsc -p tsconfig.app.json --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "canvaskit": "node scripts/copy-canvaskit.mjs",
+    "fonts": "node scripts/vendor-fonts.mjs"
   },
   "dependencies": {
     "@posterract/contract": "workspace:*",
@@ -41,7 +43,8 @@
     "stats.js": "^0.17.0",
     "tailwind-merge": "^3.4.0",
     "typegpu": "^0.11.9",
-    "zod": "^4.2.1"
+    "zod": "^4.2.1",
+    "canvaskit-wasm": "0.42.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",

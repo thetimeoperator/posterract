@@ -3,6 +3,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 import { assert } from "@/utils";
+
+import { setSnapBypass } from './snapping';
 import * as cfg from "./config";
 
 import type { Marquee } from "./surface";
@@ -62,6 +64,12 @@ export function createPointer(options: PointerOptions) {
   } | null = null;
 
   let shiftPressed = false;
+  // Alt turns a clip drag into a slip (the footage moves inside the clip) and,
+  // with the platform key, into a slide (the clip moves and its neighbours
+  // give way). Tracked with shift because both are read mid-drag, not only at
+  // the press: a gesture can become a slip after it has started.
+  let altPressed = false;
+  let commandPressed = false;
 
   function down(event: PointerEvent) {
     const rect = options.canvas?.getBoundingClientRect();
@@ -82,6 +90,9 @@ export function createPointer(options: PointerOptions) {
     };
 
     shiftPressed = event.shiftKey;
+    altPressed = event.altKey;
+    commandPressed = event.metaKey || event.ctrlKey;
+    setSnapBypass(event.metaKey || event.ctrlKey);
   }
 
   function move(event: PointerEvent) {
@@ -89,6 +100,9 @@ export function createPointer(options: PointerOptions) {
     if (!rect) return;
 
     shiftPressed = event.shiftKey;
+    altPressed = event.altKey;
+    commandPressed = event.metaKey || event.ctrlKey;
+    setSnapBypass(event.metaKey || event.ctrlKey);
 
     const currentX = event.clientX - rect.left;
     const currentY = event.clientY - rect.top;
@@ -129,6 +143,7 @@ export function createPointer(options: PointerOptions) {
     };
     pressRegionID = null;
     shiftPressed = event.shiftKey;
+    setSnapBypass(event.metaKey || event.ctrlKey);
   }
 
 
@@ -267,6 +282,12 @@ export function createPointer(options: PointerOptions) {
     },
     get shiftPressed() {
       return shiftPressed;
+    },
+    get altPressed() {
+      return altPressed;
+    },
+    get commandPressed() {
+      return commandPressed;
     },
     down,
     move,
