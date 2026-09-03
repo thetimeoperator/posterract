@@ -7,6 +7,8 @@ import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import * as z from "zod/v4";
 import { version } from "../package.json";
 import { readLocalControlSession, requestProjectControl, resolveProjectDir } from "./project-control";
+import { fetchVideo } from "./ytdlp";
+import { join as joinPath } from "node:path";
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 const RENDER_TIMEOUT_MS = 600_000;
@@ -73,6 +75,25 @@ function imageResult(value: unknown): ToolResult {
   };
 }
 
+/**
+ * The element ids a call names.
+ *
+ * Every tool that acts on elements spells them as `id` or `ids`, so the
+ * activity log can point at what a turn touched without each tool having to
+ * describe itself. Anything else contributes nothing rather than guessing.
+ */
+function targetsOf(input: unknown): string[] {
+  if (!input || typeof input !== "object") return [];
+  const value = input as { id?: unknown; ids?: unknown; parentId?: unknown };
+  const ids: string[] = [];
+  if (typeof value.id === "string") ids.push(value.id);
+  if (typeof value.parentId === "string") ids.push(value.parentId);
+  if (Array.isArray(value.ids)) {
+    for (const id of value.ids) if (typeof id === "string") ids.push(id);
+  }
+  return ids.slice(0, 12);
+}
+
 export async function servePosterractMcp(explicitProjectDir?: string): Promise<void> {
   const projectDir = () => resolveProjectDir(explicitProjectDir);
   const call = async (tool: string, path: string, input: unknown = undefined, timeoutMs = DEFAULT_TIMEOUT_MS) => {
@@ -81,7 +102,13 @@ export async function servePosterractMcp(explicitProjectDir?: string): Promise<v
       activeProjectDir,
       { path, input },
       timeoutMs,
-      { cliVersion: version, command: `mcp:${tool}`, projectDir: activeProjectDir, invokedAt: Date.now() },
+      {
+        cliVersion: version,
+        command: `mcp:${tool}`,
+        projectDir: activeProjectDir,
+        invokedAt: Date.now(),
+        targets: targetsOf(input),
+      },
     );
   };
   const safely = (fn: () => Promise<ToolResult>) => async () => {
@@ -96,9 +123,10 @@ export async function servePosterractMcp(explicitProjectDir?: string): Promise<v
       { name: "posterract", version },
       {
         instructions:
-          "Control the open Posterract composition through its local project. Read context and source before editing. " +
-          "Use revision-safe source writes or semantic canvas tools, validate after meaningful edits, and inspect captures before claiming visual success. " +
-          "Export only when the user asks. This server cannot post, schedule, or access social credentials.",
+          "Posterract canvas. Canvas-first: while Desktop has the project open, make composition edits through these tools " +
+          "(posterract_write_source with the revisionId from posterract_read_source, or the semantic set/create/move tools), never by rewriting index.tsx with file tools; " +
+          "tool edits show on the canvas instantly and keep undo. Start with posterract_connection_status and posterract_get_context; " +
+          "validate and inspect captures before claiming success; export only when asked. Cannot post, schedule, or access credentials.",
       },
     );
 
@@ -264,6 +292,18 @@ export async function servePosterractMcp(explicitProjectDir?: string): Promise<v
       annotations: { readOnlyHint: false, destructiveHint: true },
     }, safelyWith(async (input: Record<string, unknown>) => jsonResult(await call("create_element", "canvas.create", input))));
 
+    server.registerTool("posterract_bake_keyframes", {
+      title: "Bake motion into keyframes",
+      description: "Sample what a property actually does across an element's span and write it back as a keyframe track, so motion written in code becomes motion the timeline can retime. The original expression stays in the source; the track wins over it.",
+      inputSchema: z.object({
+        id: z.string().min(1),
+        property: z.string().min(1),
+        tolerance: z.number().min(0).max(100).optional(),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true },
+    }, safelyWith(async (input: { id: string; property: string; tolerance?: number }) =>
+      jsonResult(await call("bake_keyframes", "canvas.bake", input))));
+
     server.registerTool("posterract_set_variable", {
       title: "Set inspector variable",
       description: "Change a documented source-backed inspector variable by file and name.",
@@ -324,6 +364,20 @@ export async function servePosterractMcp(explicitProjectDir?: string): Promise<v
       annotations: { readOnlyHint: false },
     }, safely(async () => jsonResult(await call("redo", "canvas.redo"))));
 
+    server.registerTool("posterract_get_geometry", {
+      title: "Measure rendered layout",
+      description:
+        "Read post-transform bounding boxes, draw order, opacity, and text content for elements in the active video, " +
+        "with the pairs that overlap and the ones that fall off or cross the frame. Use this to check layout from data " +
+        "instead of inferring it from a capture. Boxes are in the same scene space as the source's x/y/width/height.",
+      inputSchema: z.object({
+        ids: z.array(z.string()).optional(),
+        time: z.number().nonnegative().optional(),
+      }),
+      annotations: { readOnlyHint: true },
+    }, safelyWith(async (input: { ids?: string[]; time?: number }) =>
+      jsonResult(await call("get_geometry", "geometry", input))));
+
     server.registerTool("posterract_check", {
       title: "Check video structure",
       description: "Run fast structural checks for empty spans, invisible elements, invalid durations, and failed sources.",
@@ -366,6 +420,34 @@ export async function servePosterractMcp(explicitProjectDir?: string): Promise<v
       annotations: { readOnlyHint: true },
     }, safelyWith(async ({ path }: { path: string }) => jsonResult(await call("media_probe", "media.probe", { path }))));
 
+    server.registerTool("posterract_fetch", {
+      title: "Fetch a video into the project",
+      description:
+        "Download a video or its audio from a URL into the open project's assets/video folder, using yt-dlp on this machine. Nothing is uploaded; the file lands in the project and the asset library picks it up. Requires yt-dlp on PATH.",
+      inputSchema: z.object({
+        url: z.string().min(1),
+        /** Audio only, for a music bed or a voice track. */
+        audio: z.boolean().optional(),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false },
+    }, safelyWith(async ({ url, audio }: { url: string; audio?: boolean }) => {
+      const dir = projectDir();
+      // Into the project's own media folder, named by the source's title, so
+      // the library adopts it exactly as it would a dragged-in file.
+      const paths = await fetchVideo(url, {
+        audio,
+        output: joinPath(dir, "assets", audio ? "audio" : "video", "%(title).80s.%(ext)s"),
+      });
+      return jsonResult({ paths });
+    }));
+
+    server.registerTool("posterract_media_transcribe", {
+      title: "Transcribe media",
+      description: "Transcribe a local project audio or video file to text with word timings, using the user's own transcription key. Nothing is uploaded except to the endpoint they configured; results are cached in the project by content hash.",
+      inputSchema: z.object({ path: z.string().min(1) }),
+      annotations: { readOnlyHint: true },
+    }, safelyWith(async ({ path }: { path: string }) => jsonResult(await call("media_transcribe", "media.transcribe", { path }))));
+
     server.registerTool("posterract_media_grab", {
       title: "Grab media frames",
       description: "Decode specific or evenly sampled frames from local media and return them as vision-ready images.",
@@ -396,22 +478,6 @@ export async function servePosterractMcp(explicitProjectDir?: string): Promise<v
       inputSchema: z.object({ path: z.string(), start: z.number().nonnegative().optional(), end: z.number().nonnegative().optional(), scale: z.number().positive().optional() }),
       annotations: { readOnlyHint: true },
     }, safelyWith(async (input: Record<string, unknown>) => imageResult(await call("media_waveform", "media.waveform", input, RENDER_TIMEOUT_MS))));
-
-    server.registerTool("posterract_media_transcribe", {
-      title: "Transcribe media",
-      description:
-        "Transcribe the speech in a project video or audio asset through the connected Posterract account. " +
-        "Returns segments with word-level timestamps in seconds, ready to drive captions or an edit. " +
-        "Unlike the other media tools this one uploads the file and spends AI credits (1 credit per started minute), " +
-        "so it needs Posterract Desktop with a signed-in workspace. Files must be 25 MB or smaller: " +
-        "for anything larger, extract a shorter span or an audio-only file first and transcribe that.",
-      inputSchema: z.object({
-        path: z.string().min(1),
-        durationSec: z.number().positive().optional(),
-      }),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
-    }, safelyWith(async (input: { path: string; durationSec?: number }) =>
-      jsonResult(await call("media_transcribe", "media.transcribe", input, RENDER_TIMEOUT_MS))));
 
     server.registerTool("posterract_export", {
       title: "Export local video",

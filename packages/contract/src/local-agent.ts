@@ -69,14 +69,36 @@ export type LocalAgentConnectionState = {
     lastSeenAt: number | null;
     lastCommand: string | null;
     error: string | null;
+    /**
+     * What the agent has done, newest first.
+     *
+     * The bridge is otherwise invisible: an agent edits the canvas and the
+     * only trace is the canvas changing. A log is what lets someone see that
+     * a turn happened, what it touched, and decide whether to keep it.
+     */
+    activity: LocalAgentActivityEntry[];
   };
 };
+
+/** One recorded tool call. */
+export type LocalAgentActivityEntry = {
+  /** The tool, without its `mcp:` prefix — `set_properties`, `capture`, … */
+  command: string;
+  at: number;
+  /** The element ids it named, when the tool names any. */
+  targets: string[];
+};
+
+/** How many calls the log keeps. Enough to see a turn, not a session. */
+export const LOCAL_AGENT_ACTIVITY_LIMIT = 50;
 
 export type LocalAgentActivity = {
   cliVersion: string;
   command: string;
   projectDir: string;
   invokedAt: number;
+  /** The element ids the call named, so the log can point at them. */
+  targets?: string[];
 };
 
 export type LocalAgentConnectionInternals = {
@@ -171,8 +193,31 @@ export function webLocalAgentConnectionState(): LocalAgentConnectionState {
       lastSeenAt: null,
       lastCommand: null,
       error: null,
+      activity: [],
     },
   };
+}
+
+/**
+ * The activity log as it comes off disk or the wire.
+ *
+ * Entries are data a previous build wrote, so every field is checked; a
+ * malformed one is dropped rather than rendered as `undefined` in the panel.
+ */
+function normalizeActivity(value: unknown): LocalAgentActivityEntry[] {
+  if (!Array.isArray(value)) return [];
+  const entries: LocalAgentActivityEntry[] = [];
+  for (const item of value) {
+    const entry = item as Partial<LocalAgentActivityEntry> | null;
+    if (!entry || typeof entry.command !== "string" || typeof entry.at !== "number") continue;
+    entries.push({
+      command: entry.command,
+      at: entry.at,
+      targets: Array.isArray(entry.targets) ? entry.targets.filter((id) => typeof id === "string") : [],
+    });
+    if (entries.length >= LOCAL_AGENT_ACTIVITY_LIMIT) break;
+  }
+  return entries;
 }
 
 function objectValue(value: unknown): Record<string, unknown> | null {
@@ -274,6 +319,7 @@ export function normalizeLocalAgentConnectionState(value: unknown): LocalAgentCo
       error: missingDesktopMcp
         ? "This Posterract Desktop build predates the MCP connection interface. Install the current desktop build to connect an agent."
         : typeof bridge?.error === "string" ? bridge.error : null,
+      activity: normalizeActivity(bridge?.activity),
     },
   };
 }

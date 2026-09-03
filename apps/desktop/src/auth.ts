@@ -350,7 +350,16 @@ export class DesktopAuthManager {
   /** Upload a completed local export directly to R2 without renderer IPC. */
   async uploadFile(
     path: string,
-    options: { contentType: string; durationMs?: number; width?: number; height?: number },
+    options: {
+      contentType: string;
+      durationMs?: number;
+      width?: number;
+      height?: number;
+      /** Which composition produced this render, so the post can be traced back to it. */
+      projectId?: string | null;
+      sceneId?: string | null;
+      sourceRevision?: string | null;
+    },
     onProgress?: (fraction: number) => void,
   ): Promise<UploadResult> {
     const details = await stat(path);
@@ -367,6 +376,9 @@ export class DesktopAuthManager {
         width: options.width,
         height: options.height,
         purpose: "publishing",
+        projectId: options.projectId ?? undefined,
+        sceneId: options.sceneId ?? undefined,
+        sourceRevision: options.sourceRevision ?? undefined,
       }),
     });
     const encodedUploadId = encodeURIComponent(session.uploadId);

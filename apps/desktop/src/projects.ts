@@ -27,6 +27,7 @@ import {
 } from "@posterract/video-compiler";
 import { MAIN_CHANNELS } from "./channels.ts";
 import { emit } from "./ipc.ts";
+import { locateElement } from "./element-source.ts";
 import { migrateLegacyProject } from "./legacy-migration.ts";
 import { listRevisions, readRevision, recordDeletion, snapshotBeforeWrite } from "./revisions.ts";
 
@@ -152,7 +153,7 @@ export async function restoreApprovedRoots(): Promise<void> {
   await persistApprovedRoots();
 }
 
-async function requireProjectDir(path: string): Promise<string> {
+export async function requireProjectDir(path: string): Promise<string> {
   const candidate = await canonicalExisting(path);
   if (![...approvedRoots].some((root) => isInside(root, candidate))) {
     throw new Error("Project folder is outside an approved Posterract root");
@@ -168,7 +169,7 @@ async function requireApprovedRoot(path: string): Promise<string> {
   return candidate;
 }
 
-async function requireProjectPath(dir: string, projectPath: string, mustExist = true): Promise<string> {
+export async function requireProjectPath(dir: string, projectPath: string, mustExist = true): Promise<string> {
   const root = await requireProjectDir(dir);
   if (isAbsolute(projectPath)) throw new Error("Project writes require a project-relative path");
   const candidate = resolve(root, projectPath);
@@ -292,7 +293,82 @@ const PROJECT_TSCONFIG = `${JSON.stringify(
   2,
 )}\n`;
 
-const PROJECT_AGENTS = `# Posterract creative project\n\n- The canvas and timeline are generated from the local TSX source.\n- Use the registered Posterract MCP tools for live canvas context, source edits, selection, timing, captures, media inspection, and export.\n- Keep one top-level scene per independently exportable video.\n- Preserve stable element ids when editing existing elements.\n- Do not place credentials or social-network tokens in this folder.\n- Read .posterract/docs before using an unfamiliar SDK primitive.\n- For diagrams, read .posterract/docs/diagrams.md, choose the visual design from the user's meaning, and inspect captures before claiming success.\n- Begin with posterract_connection_status, posterract_get_context, and posterract_read_source.\n- Use posterract_validate and posterract_check after every meaningful edit.\n- Inspect posterract_capture image output before claiming a visual result is correct.\n- Use the posterract CLI directly only for connection diagnostics or when MCP is unavailable.\n- Export, post, or schedule only after the user explicitly asks.\n`;
+/** First line of every app-written guidance file; remove it to take ownership. */
+const MANAGED_MARK = "<!-- posterract-managed";
+
+// Short on purpose: this is read into the agent's context at the start of
+// every session, so it carries the one rule that matters and the order of
+// operations, and points at the docs and the skill for everything else.
+const PROJECT_AGENTS = `${MANAGED_MARK}: rewritten by Posterract Desktop on open; delete this line to own the file -->\n# Posterract project\n\nPosterract Desktop renders this folder's TSX as the canvas and timeline and exposes it over the \`posterract\` MCP server.\n\n**Canvas-first.** While Desktop has this project open, edit the composition only through the tools: \`posterract_write_source\` (with the \`revisionId\` from \`posterract_read_source\`) or the semantic tools (\`posterract_set_properties\`, \`posterract_set_text\`, \`posterract_create_element\`, ...). Never rewrite index.tsx with file tools: tool edits show on the canvas instantly and keep undo and Version History; raw writes do not. If the \`posterract_*\` tools are missing, ask the user to restart the agent session.\n\n**Order:** \`posterract_connection_status\` -> \`posterract_get_context\` -> \`posterract_read_source\` -> edit -> \`posterract_validate\` + \`posterract_check\` -> \`posterract_get_geometry\` or \`posterract_capture\` (look at the image) -> repeat. Read \`.posterract/docs\` before using an unfamiliar primitive.\n\n**Rules:** one top-level scene per exportable video; keep stable element ids; no credentials in this folder; export, post, or schedule only when the user asks.\n`;
+
+/** Guidance earlier desktop versions wrote; a file still equal to one of these is app-owned and safe to refresh. */
+const LEGACY_PROJECT_AGENTS_2 = `# Posterract creative project\n\n- The canvas and timeline are generated from the local TSX source.\n- Keep one top-level scene per independently exportable video.\n- Preserve stable element ids when editing existing elements.\n- Do not place credentials or social-network tokens in this folder.\n- Read .posterract/docs before using an unfamiliar SDK primitive.\n- For diagrams, read .posterract/docs/diagrams.md, choose the visual design from the user's meaning, and inspect captures before claiming success.\n- Run posterract doctor --json before beginning local agent work.\n- Run posterract context --json --tree to inspect the active project and runtime.\n- Run posterract validate and posterract check after every meaningful edit.\n- Inspect posterract capture output before claiming a visual result is correct.\n- Export, post, or schedule only after the user explicitly asks.\n`;
+const LEGACY_PROJECT_AGENTS = `# Posterract creative project\n\n- The canvas and timeline are generated from the local TSX source.\n- Use the registered Posterract MCP tools for live canvas context, source edits, selection, timing, captures, media inspection, and export.\n- Keep one top-level scene per independently exportable video.\n- Preserve stable element ids when editing existing elements.\n- Do not place credentials or social-network tokens in this folder.\n- Read .posterract/docs before using an unfamiliar SDK primitive.\n- For diagrams, read .posterract/docs/diagrams.md, choose the visual design from the user's meaning, and inspect captures before claiming success.\n- Begin with posterract_connection_status, posterract_get_context, and posterract_read_source.\n- Use posterract_validate and posterract_check after every meaningful edit.\n- Inspect posterract_capture image output before claiming a visual result is correct.\n- Use the posterract CLI directly only for connection diagnostics or when MCP is unavailable.\n- Export, post, or schedule only after the user explicitly asks.\n`;
+
+const PROJECT_CLAUDE = PROJECT_AGENTS;
+const PROJECT_CURSOR_RULES = `---\ndescription: Posterract composition editing rules\nalwaysApply: true\n---\n${PROJECT_AGENTS}`;
+
+/**
+ * Project-scoped Claude Code hook. Claude Code runs it before every Edit or
+ * Write; it blocks the call (exit 2) when the target is the composition
+ * source and Desktop's session heartbeat is fresh, and explains which MCP
+ * tool to use instead. The guidance files ask for canvas-first editing; this
+ * is the part that makes the ask hold. The script is app-owned and refreshed
+ * on every open, like the docs.
+ */
+const PROJECT_CLAUDE_SETTINGS = `${JSON.stringify(
+  {
+    hooks: {
+      PreToolUse: [
+        {
+          matcher: "Edit|Write|MultiEdit",
+          hooks: [{ type: "command", command: 'node "$CLAUDE_PROJECT_DIR/.posterract/hooks/guard-source.mjs"' }],
+        },
+      ],
+    },
+  },
+  null,
+  2,
+)}\n`;
+
+const PROJECT_GUARD_HOOK = `// Posterract Desktop guard (app-owned; refreshed on every project open).
+// Keeps composition edits on the canvas while Desktop has the project open.
+import { existsSync, readFileSync } from "node:fs";
+import { relative, resolve, sep } from "node:path";
+
+let payload = {};
+try {
+  payload = JSON.parse(readFileSync(0, "utf8") || "{}");
+} catch {
+  // No usable input: never block on a malformed hook payload.
+}
+const filePath = payload?.tool_input?.file_path;
+if (typeof filePath !== "string") process.exit(0);
+
+const project = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+const target = relative(project, resolve(project, filePath)).split(sep).join("/");
+const isComposition =
+  target === "index.tsx" || target === "src/index.tsx" || (target.startsWith("src/") && target.endsWith(".tsx"));
+if (!isComposition) process.exit(0);
+
+const sessionPath = resolve(project, ".posterract", "runtime", "session.json");
+if (!existsSync(sessionPath)) process.exit(0);
+let live = false;
+try {
+  const session = JSON.parse(readFileSync(sessionPath, "utf8"));
+  live = typeof session.heartbeatAt === "number" && Date.now() - session.heartbeatAt < 60_000;
+} catch {
+  live = false;
+}
+if (!live) process.exit(0);
+
+process.stderr.write(
+  \`Posterract Desktop has this project open: edit \${target} through the MCP tools, not file tools \` +
+    "(posterract_read_source -> posterract_write_source with its revisionId, or posterract_set_properties / set_text / create_element). " +
+    "Tool edits show on the canvas and keep undo. If the posterract_* tools are missing, ask the user to restart the agent session.\\n",
+);
+process.exit(2);
+`;
 
 const PROJECT_README = `# Posterract project\n\nThis folder is the source of truth for a local Posterract composition.\n\n- Edit \`src/index.tsx\` in your IDE or with your coding agent.\n- Connect your agent from Posterract Desktop; the app registers the local MCP server automatically.\n- Keep media under \`assets/\`, or explicitly link approved local files.\n- Use the Posterract MCP context, validation, check, and capture tools during agent work.\n- Run \`posterract doctor\` only when diagnosing the local runtime.\n- Local export never uploads automatically.\n\nThe installed SDK documentation is under \`.posterract/docs\`.\n`;
 
@@ -336,16 +412,39 @@ async function stageProjectEnvironment(dir: string): Promise<void> {
   }
 }
 
-async function ensureProjectGuidance(dir: string): Promise<void> {
-  if (!(await exists(join(dir, "AGENTS.md")))) {
-    await writeAtomic(join(dir, "AGENTS.md"), PROJECT_AGENTS);
+/**
+ * Write a guidance file the app keeps current. It stays app-owned while its
+ * first line is the managed marker (or while it still equals the text an
+ * earlier version wrote); once the user changes it, it is theirs and is left
+ * alone.
+ */
+async function writeManagedGuidance(path: string, content: string): Promise<void> {
+  if (await exists(path)) {
+    const current = await readFile(path, "utf8").catch(() => null);
+    if (current === null || current === content) return;
+    const legacy = current === LEGACY_PROJECT_AGENTS || current === LEGACY_PROJECT_AGENTS_2;
+    if (!current.startsWith(MANAGED_MARK) && !legacy) return;
   }
+  await writeAtomic(path, content);
+}
+
+async function ensureProjectGuidance(dir: string): Promise<void> {
+  // One file per agent family, each in the place that agent reads on start:
+  // Codex reads AGENTS.md, Claude Code reads CLAUDE.md, Cursor its rules dir.
+  await writeManagedGuidance(join(dir, "AGENTS.md"), PROJECT_AGENTS);
+  await writeManagedGuidance(join(dir, "CLAUDE.md"), PROJECT_CLAUDE);
+  await writeManagedGuidance(join(dir, ".cursor", "rules", "posterract.mdc"), PROJECT_CURSOR_RULES);
   // Some Codex workspace configurations explicitly look for this project-
   // local companion file. Keep it available so a project opened inside a
   // larger repository never falls back to unrelated parent instructions.
-  if (!(await exists(join(dir, ".codex", "AGENTS.md")))) {
-    await writeAtomic(join(dir, ".codex", "AGENTS.md"), PROJECT_AGENTS);
+  await writeManagedGuidance(join(dir, ".codex", "AGENTS.md"), PROJECT_AGENTS);
+  // Claude Code settings may carry the user's own hooks and permissions, so
+  // they are only ever created, never rewritten.
+  if (!(await exists(join(dir, ".claude", "settings.json")))) {
+    await writeAtomic(join(dir, ".claude", "settings.json"), PROJECT_CLAUDE_SETTINGS);
   }
+  // The guard script is app-owned, so it follows the app version.
+  await writeAtomic(join(dir, ".posterract", "hooks", "guard-source.mjs"), PROJECT_GUARD_HOOK);
   // The packaged SDK and its docs are version-matched to the desktop. Refresh
   // the app-owned project environment on every open so an existing project
   // immediately learns newly shipped primitives without touching user source.
@@ -363,6 +462,10 @@ async function scaffold(dir: string, displayName: string, packageName = basename
     writeAtomic(join(dir, "assets.yml"), stringifyYaml({ schemaVersion: 1, assets: [] })),
     writeAtomic(join(dir, "AGENTS.md"), PROJECT_AGENTS),
     writeAtomic(join(dir, ".codex", "AGENTS.md"), PROJECT_AGENTS),
+    writeAtomic(join(dir, "CLAUDE.md"), PROJECT_CLAUDE),
+    writeAtomic(join(dir, ".cursor", "rules", "posterract.mdc"), PROJECT_CURSOR_RULES),
+    writeAtomic(join(dir, ".claude", "settings.json"), PROJECT_CLAUDE_SETTINGS),
+    writeAtomic(join(dir, ".posterract", "hooks", "guard-source.mjs"), PROJECT_GUARD_HOOK),
     writeAtomic(join(dir, "README.md"), PROJECT_README),
     writeAtomic(
       join(dir, ".gitignore"),
@@ -697,6 +800,62 @@ export async function projectRevisionContent(dir: string, path: string, id: stri
   return readRevision(await requireProjectDir(dir), path, id);
 }
 
+/**
+ * The editor's undo stack, kept beside the project so undo survives a reload.
+ *
+ * It is cache, not document: a stack recorded against a different revision of
+ * the source cannot be replayed onto it, so the caller stores the revision it
+ * belongs to and discards the file when they disagree. Pinned to one fixed
+ * path so this cannot become a general write primitive for the renderer.
+ */
+const HISTORY_CACHE = ".posterract/cache/history.json";
+const MAX_HISTORY_BYTES = 4_000_000;
+
+export async function readEditHistory(dir: string): Promise<unknown> {
+  const projectDir = await requireProjectDir(dir);
+  try {
+    return JSON.parse(await readFile(join(projectDir, HISTORY_CACHE), "utf8")) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+export async function writeEditHistory(dir: string, value: unknown): Promise<void> {
+  const projectDir = await requireProjectDir(dir);
+  const target = join(projectDir, HISTORY_CACHE);
+  if (value === null) {
+    await rm(target, { force: true });
+    return;
+  }
+  const serialized = JSON.stringify(value);
+  // A stack this large is not worth persisting: losing it costs one undo
+  // chain, keeping it would cost every project open.
+  if (serialized.length > MAX_HISTORY_BYTES) {
+    await rm(target, { force: true });
+    return;
+  }
+  await writeAtomic(target, `${serialized}\n`);
+}
+
+/**
+ * Where a stamped element is written in the project source.
+ *
+ * The timeline and the file are two views of one document, so a row has to be
+ * able to say where it lives. Returns null rather than guessing when the id
+ * cannot be found.
+ */
+export async function locateProjectElement(
+  dir: string,
+  id: string,
+): Promise<{ path: string; line: number; column: number } | null> {
+  const projectDir = await requireProjectDir(dir);
+  const project = await getProject(projectDir);
+  if (!project) return null;
+  const content = await readFile(join(projectDir, project.entry), "utf8");
+  const at = locateElement(content, id);
+  return at ? { path: project.entry, ...at } : null;
+}
+
 function revision(content: string | Uint8Array): string {
   return createHash("sha256").update(content).digest("hex");
 }
@@ -931,6 +1090,79 @@ export async function writeConfig(dir: string, config: unknown): Promise<void> {
 export async function writeProjectAsset(dir: string, path: string, bytes: Uint8Array): Promise<void> {
   const absolute = await requireProjectPath(dir, path, false);
   await writeAtomic(absolute, bytes);
+}
+
+/** How large a Lottie JSON may be before the import refuses it. */
+const LOTTIE_IMPORT_LIMIT = 32 * 1024 * 1024;
+
+/**
+ * Downloads a Lottie animation into a project's `assets/lottie/`.
+ *
+ * The renderer cannot do this itself — its CSP allows no network at all, by
+ * design — so the fetch happens here, and only for a URL the user pasted. The
+ * response is parsed and shape-checked before it is written: a page that is
+ * not an animation should fail at the import rather than as a broken element
+ * on the canvas, and nothing but a real Lottie ever lands in the project.
+ */
+export async function importLottieFromUrl(
+  dir: string,
+  url: string,
+  name?: string,
+): Promise<{ path: string; width: number; height: number; duration: number }> {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error("That is not a URL");
+  }
+  if (parsed.protocol !== "https:") throw new Error("Only https links can be imported");
+
+  const response = await fetch(parsed, { redirect: "follow" });
+  if (!response.ok) throw new Error(`That link answered ${response.status}`);
+
+  const declared = Number(response.headers.get("content-length") ?? 0);
+  if (declared > LOTTIE_IMPORT_LIMIT) throw new Error("That animation is too large to import");
+
+  const text = await response.text();
+  if (text.length > LOTTIE_IMPORT_LIMIT) throw new Error("That animation is too large to import");
+
+  let animation: Record<string, unknown>;
+  try {
+    animation = JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    throw new Error("That link is not a Lottie file — it did not parse as JSON");
+  }
+  if (typeof animation.v !== "string" || !Array.isArray(animation.layers)) {
+    throw new Error("That JSON is not a Lottie animation");
+  }
+
+  const frameRate = Number(animation.fr) || 30;
+  const outPoint = Number(animation.op) || 0;
+  const stem = (name ?? basename(parsed.pathname, ".json") ?? "animation")
+    .replace(/[^\w-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60) || "animation";
+
+  // A second import of the same name is a new file, not an overwrite: the
+  // composition may already point at the first one.
+  let relative = `assets/lottie/${stem}.json`;
+  for (let attempt = 2; attempt < 100; attempt += 1) {
+    const candidate = await requireProjectPath(dir, relative, false);
+    const taken = await stat(candidate).then(() => true, () => false);
+    if (!taken) break;
+    relative = `assets/lottie/${stem}-${attempt}.json`;
+  }
+
+  const absolute = await requireProjectPath(dir, relative, false);
+  await mkdir(dirname(absolute), { recursive: true });
+  await writeAtomic(absolute, Buffer.from(text, "utf8"));
+
+  return {
+    path: relative,
+    width: Number(animation.w) || 0,
+    height: Number(animation.h) || 0,
+    duration: outPoint / frameRate,
+  };
 }
 
 /**

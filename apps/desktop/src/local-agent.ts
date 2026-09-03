@@ -13,6 +13,8 @@ import {
   deriveLocalAgentBridgeState,
   isLocalAgentKind,
   type LocalAgentActivity,
+  type LocalAgentActivityEntry,
+  LOCAL_AGENT_ACTIVITY_LIMIT,
   type LocalAgentConnectionState,
   type LocalAgentKind,
 } from "@posterract/contract/local-agent";
@@ -28,6 +30,8 @@ type StoredPreferences = {
   lastProjectDir: string | null;
   lastSeenAt: number | null;
   lastCommand: string | null;
+  /** The recent tool calls, newest first — see `LocalAgentActivityEntry`. */
+  activity?: LocalAgentActivityEntry[];
   verifiedAt: number | null;
   cliVersion: string | null;
   skillVersion: string | null;
@@ -233,6 +237,14 @@ export class LocalAgentConnectionManager {
   private activeProject: ProjectInfo | null = null;
   private lastSeenAt: number | null = null;
   private lastCommand: string | null = null;
+  /**
+   * What the agent has done, newest first and bounded.
+   *
+   * The bridge is otherwise invisible — an agent edits and the only trace is
+   * the canvas changing — so this is what lets someone see a turn happened
+   * and what it touched.
+   */
+  private activity: LocalAgentActivityEntry[] = [];
   private verifiedAt: number | null = null;
   private launchedAt: number | null = null;
   private error: string | null = null;
@@ -270,6 +282,17 @@ export class LocalAgentConnectionManager {
     return join(homedir(), ".codex", "skills", "posterract");
   }
 
+  private claudeSkillPath(): string {
+    return join(homedir(), ".claude", "skills", "posterract");
+  }
+
+  /** Where the agent discovers skills on start; null for agents without a skill directory. */
+  private skillPathFor(agent: LocalAgentKind): string | null {
+    if (agent === "codex") return this.codexSkillPath();
+    if (agent === "claude") return this.claudeSkillPath();
+    return null;
+  }
+
   private async readBundledMetadata(): Promise<void> {
     try {
       this.cliManifest = JSON.parse(
@@ -297,6 +320,12 @@ export class LocalAgentConnectionManager {
         lastProjectDir: typeof stored.lastProjectDir === "string" ? stored.lastProjectDir : null,
         lastSeenAt: typeof stored.lastSeenAt === "number" ? stored.lastSeenAt : null,
         lastCommand: typeof stored.lastCommand === "string" ? stored.lastCommand : null,
+        activity: Array.isArray(stored.activity)
+          ? stored.activity
+              .filter((entry): entry is LocalAgentActivityEntry =>
+                Boolean(entry) && typeof entry.command === "string" && typeof entry.at === "number")
+              .slice(0, LOCAL_AGENT_ACTIVITY_LIMIT)
+          : [],
         verifiedAt: typeof stored.verifiedAt === "number" ? stored.verifiedAt : null,
         cliVersion: typeof stored.cliVersion === "string" ? stored.cliVersion : null,
         skillVersion: typeof stored.skillVersion === "string" ? stored.skillVersion : null,
@@ -323,6 +352,7 @@ export class LocalAgentConnectionManager {
       lastProjectDir: this.activeProject?.dir ?? null,
       lastSeenAt: this.lastSeenAt,
       lastCommand: this.lastCommand,
+      activity: this.activity,
       verifiedAt: this.verifiedAt,
       cliVersion: this.cli.version,
       skillVersion: this.skillManifest?.version ?? null,
@@ -375,7 +405,7 @@ export class LocalAgentConnectionManager {
     let installed = false;
     try {
       const installedManifest = JSON.parse(
-        await readFile(join(this.codexSkillPath(), "manifest.json"), "utf8"),
+        await readFile(join(this.skillPathFor(this.selectedAgent) ?? this.codexSkillPath(), "manifest.json"), "utf8"),
       ) as { name?: string; version?: string };
       installed = installedManifest.name === "posterract" && installedManifest.version === skillVersion;
     } catch {
@@ -489,6 +519,7 @@ export class LocalAgentConnectionManager {
         lastSeenAt: this.lastSeenAt,
         lastCommand: this.lastCommand,
         error: this.error ?? this.cli.conflict,
+        activity: this.activity,
       },
     };
     base.bridge.state = deriveLocalAgentBridgeState(base, {
@@ -569,9 +600,8 @@ export class LocalAgentConnectionManager {
     return { path: result.filePath };
   }
 
-  private async installCodexSkill(): Promise<{ path: string }> {
+  private async installBundledSkill(destination: string): Promise<{ path: string }> {
     if (!this.skillManifest) throw new Error("The bundled Posterract skill is unavailable");
-    const destination = this.codexSkillPath();
     if (await fileExists(destination)) {
       if (!(await fileExists(join(destination, MANAGED_SKILL_MARKER)))) {
         throw new Error(
@@ -622,8 +652,10 @@ export class LocalAgentConnectionManager {
 
   async installSkill(input: { mode?: "install" | "download" }): Promise<LocalAgentConnectionState> {
     try {
-      if ((input.mode ?? (this.selectedAgent === "codex" ? "install" : "download")) === "install") {
-        await this.installCodexSkill();
+      const destination = this.skillPathFor(this.selectedAgent);
+      if ((input.mode ?? (destination ? "install" : "download")) === "install") {
+        if (!destination) throw new Error(`${LOCAL_AGENT_LABELS[this.selectedAgent]} has no skill directory; save the ZIP instead`);
+        await this.installBundledSkill(destination);
       } else {
         await this.saveSkillDownload();
       }
@@ -701,6 +733,16 @@ export class LocalAgentConnectionManager {
           // It is kept out of client-specific directories and remains local.
           await upsertMcpJson(join(projectDir, ".posterract", "mcp.json"), "mcpServers", cliPath);
           break;
+      }
+
+      // The tools alone do not teach an agent the workflow; the skill does.
+      // Install it beside the registration so the agent discovers it on its
+      // next start. A skill problem must never undo a successful registration.
+      const skillPath = this.skillPathFor(agent);
+      if (skillPath) {
+        await this.installBundledSkill(skillPath).catch((error) => {
+          this.error = errorMessage(error);
+        });
       }
 
       this.registeredAgents.add(agent);
@@ -860,6 +902,16 @@ export class LocalAgentConnectionManager {
     if (this.activeProject && resolve(activity.projectDir) !== resolve(this.activeProject.dir)) return;
     this.lastSeenAt = Date.now();
     this.lastCommand = activity.command;
+    // The `mcp:` prefix is how the bridge recognises a tool call; it is noise
+    // in a list of what the agent did.
+    this.activity.unshift({
+      command: activity.command.replace(/^mcp:/, ""),
+      at: activity.invokedAt,
+      targets: Array.isArray(activity.targets) ? activity.targets.filter((id) => typeof id === "string") : [],
+    });
+    if (this.activity.length > LOCAL_AGENT_ACTIVITY_LIMIT) {
+      this.activity.length = LOCAL_AGENT_ACTIVITY_LIMIT;
+    }
     this.launchedAt = null;
     this.error = null;
     await this.persist();
@@ -873,6 +925,7 @@ export class LocalAgentConnectionManager {
     this.activeProject = null;
     this.lastSeenAt = null;
     this.lastCommand = null;
+    this.activity = [];
     this.verifiedAt = null;
     this.launchedAt = null;
     this.error = null;

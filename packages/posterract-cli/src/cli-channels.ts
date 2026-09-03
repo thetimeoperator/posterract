@@ -33,6 +33,8 @@ export type CliActivityMetadata = {
   command: string;
   projectDir: string;
   invokedAt: number;
+  /** The element ids the call named, so the activity log can point at them. */
+  targets?: string[];
 };
 
 export type CliRequest = {
@@ -132,15 +134,42 @@ export type RuntimeTreeNode = {
   name: string | null;
   kind: string;
   /**
+   * The project's own component this element was written inside, when it was
+   * written inside one. A component compiles away, so this is the only trace
+   * of it in the tree.
+   */
+  component?: string;
+  /**
+   * Props this element gets from code rather than from literals. Setting one
+   * of these through a tool is overwritten on the next tick: change the
+   * expression in the source, or bake the prop into keyframes first
+   * (`posterract_bake_keyframes`), which then wins over the code.
+   */
+  live?: string[];
+  /**
    * Kind-specific detail an agent cannot infer from the tree shape alone: the
    * property a `keyframe-track` drives, a `keyframe`'s time/value/easing, an
-   * `animation`'s preset and timing. Absent for kinds that carry none.
+   * `animation`'s preset and timing, a vector figure's own `d`/`points` and
+   * how much of it a trim is drawing. Absent for kinds that carry none.
    */
   detail?: Record<string, string | number | boolean | null>;
   children: RuntimeTreeNode[];
 };
 
 export type MediaProbeRequest = AssetRef;
+
+/** One word with the window it was spoken in. */
+export type TranscribedWord = { text: string; start: number; end: number };
+
+export type MediaTranscribeRequest = AssetRef;
+
+export type MediaTranscribeResult = {
+  text: string;
+  words: TranscribedWord[];
+  segments: Array<{ text: string; start: number; end: number }>;
+  /** True when the project's cache answered instead of the provider. */
+  cached: boolean;
+};
 
 export type FrameQuality = "small" | "medium" | "large" | "fullres";
 export type MediaFrameRequest = AssetRef & {
@@ -204,6 +233,46 @@ export type MediaExtractRequest = AssetRef & {
 export type MediaExtractResult = {
   path: string;
   format: "mp4" | "ogg";
+};
+
+/**
+ * Rendered geometry, so an agent can check layout from data rather than by
+ * squinting at a capture. Boxes are post-transform, in the same scene space
+ * the source's own `x`/`y`/`width`/`height` use.
+ */
+export type GeometryRequest = {
+  /** Stable source ids; every element when omitted. */
+  ids?: string[];
+  /** Scene-local seconds to measure at; the playhead when omitted. */
+  time?: number;
+};
+
+export type GeometryBox = {
+  id: string | null;
+  kind: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Painter order: higher draws on top. */
+  z: number;
+  opacity: number;
+  /** Entirely outside the frame. */
+  offscreen: boolean;
+  /** Crosses an edge of the frame. */
+  clipped: boolean;
+  /** What a text element renders, for spotting overflow. */
+  text?: string;
+};
+
+export type GeometryResult = {
+  time: number;
+  frame: number;
+  scene: { id: string | null; width: number; height: number };
+  boxes: GeometryBox[];
+  /** Pairs whose boxes partially overlap. A box fully containing another
+   * is a normal composition, not a collision, so those are left out. */
+  overlaps: Array<[string, string]>;
 };
 
 export type CheckRequest = { id: string };
@@ -301,5 +370,19 @@ export type CanvasCreateRequest = {
   element: CanvasElementTree;
 };
 export type CanvasVariableRequest = { file: string; name: string; value: string | number | boolean };
+
+export type CanvasBakeRequest = {
+  id: string;
+  property: string;
+  /** How far a sample may sit off the line before it earns a keyframe. */
+  tolerance?: number;
+};
+
+export type CanvasBakeResult = {
+  /** Keyframes written. */
+  keyframes: number;
+  /** Frames sampled before simplification. */
+  sampled: number;
+};
 export type CanvasGroupRequest = { ids: string[]; kind: "group" | "sequence" | "scene" };
 export type CanvasUngroupRequest = { id: string; kind?: "group" | "sequence" | "scene" };

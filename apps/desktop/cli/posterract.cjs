@@ -3463,9 +3463,9 @@ var require_commander = __commonJS({
 // src/index.ts
 var import_node_child_process3 = require("node:child_process");
 var import_node_crypto3 = require("node:crypto");
-var import_node_fs3 = require("node:fs");
+var import_node_fs4 = require("node:fs");
 var import_node_os4 = require("node:os");
-var import_node_path3 = require("node:path");
+var import_node_path5 = require("node:path");
 
 // ../../node_modules/.pnpm/commander@14.0.3/node_modules/commander/esm.mjs
 var import_index = __toESM(require_commander(), 1);
@@ -3672,7 +3672,7 @@ function pipeReducer(prev, fn) {
 }
 function observableToPromise(observable$1) {
   const ac = new AbortController();
-  const promise = new Promise((resolve3, reject) => {
+  const promise = new Promise((resolve4, reject) => {
     let isDone = false;
     function onDone() {
       if (isDone) return;
@@ -3685,7 +3685,7 @@ function observableToPromise(observable$1) {
     const obs$ = observable$1.subscribe({
       next(data) {
         isDone = true;
-        resolve3(data);
+        resolve4(data);
         onDone();
       },
       error(data) {
@@ -4035,15 +4035,15 @@ var resultOf = (value, ...args) => {
 };
 var import_defineProperty$3 = __toESM2(require_defineProperty(), 1);
 function withResolvers() {
-  let resolve3;
+  let resolve4;
   let reject;
   const promise = new Promise((res, rej) => {
-    resolve3 = res;
+    resolve4 = res;
     reject = rej;
   });
   return {
     promise,
-    resolve: resolve3,
+    resolve: resolve4,
     reject
   };
 }
@@ -4064,10 +4064,10 @@ async function buildConnectionMessage(connectionParams, encoder) {
 var import_defineProperty$2 = __toESM2(require_defineProperty(), 1);
 var import_defineProperty$1 = __toESM2(require_defineProperty(), 1);
 function asyncWsOpen(ws) {
-  const { promise, resolve: resolve3, reject } = withResolvers();
+  const { promise, resolve: resolve4, reject } = withResolvers();
   ws.addEventListener("open", () => {
     ws.removeEventListener("error", reject);
-    resolve3();
+    resolve4();
   });
   ws.addEventListener("error", reject);
   return promise;
@@ -4663,7 +4663,7 @@ async function requestProjectControl(projectDir, request, timeoutMs, activity) {
 var DEFAULT_TIMEOUT_MS = 6e4;
 var GENERATE_TIMEOUT_MS = 6e5;
 function transport(request, timeoutMs) {
-  return new Promise((resolve3, reject) => {
+  return new Promise((resolve4, reject) => {
     const sock = (0, import_node_net.connect)(SOCKET_PATH);
     let buf = "";
     let settled = false;
@@ -4707,7 +4707,7 @@ function transport(request, timeoutMs) {
         )));
         return;
       }
-      if (reply.ok) settle(() => resolve3(reply.data));
+      if (reply.ok) settle(() => resolve4(reply.data));
       else settle(() => reject(new Error(reply.error)));
     });
     sock.on("error", (err2) => settle(() => reject(err2)));
@@ -5595,7 +5595,7 @@ function fetchVideo(url2, opts = {}) {
   if (opts.audio) args.push("-x");
   if (opts.raw?.length) args.push(...opts.raw);
   args.push(url2);
-  return new Promise((resolve3, reject) => {
+  return new Promise((resolve4, reject) => {
     const child = (0, import_node_child_process2.spawn)(BIN, args, { stdio: ["ignore", "pipe", "inherit"] });
     let out = "";
     child.stdout.setEncoding("utf8");
@@ -5603,7 +5603,7 @@ function fetchVideo(url2, opts = {}) {
     child.on("error", reject);
     child.on("close", (code) => {
       if (code === 0) {
-        resolve3(out.split("\n").map((line) => line.trim()).filter(Boolean));
+        resolve4(out.split("\n").map((line) => line.trim()).filter(Boolean));
       } else {
         reject(new Error(`yt-dlp exited with code ${code}.`));
       }
@@ -16629,14 +16629,14 @@ function inputRequiredRoundsExceededMessage(method, maxRounds) {
   return `Multi-round-trip request '${method}' still required input after ${maxRounds} rounds (inputRequired.maxRounds)`;
 }
 function sleep3(ms, signal) {
-  return new Promise((resolve3, reject) => {
+  return new Promise((resolve4, reject) => {
     if (signal?.aborted) {
       reject(signal.reason instanceof SdkError ? signal.reason : new SdkError(SdkErrorCode.RequestTimeout, String(signal.reason)));
       return;
     }
     const timer = setTimeout(() => {
       signal?.removeEventListener("abort", onAbort);
-      resolve3();
+      resolve4();
     }, ms);
     const onAbort = () => {
       clearTimeout(timer);
@@ -17430,7 +17430,7 @@ var Protocol = class {
     const flowStartedAt = Date.now();
     let onAbort;
     let cleanupMessageId;
-    return new Promise((resolve3, reject) => {
+    return new Promise((resolve4, reject) => {
       const earlyReject = (error2) => {
         reject(error2);
       };
@@ -17498,7 +17498,7 @@ var Protocol = class {
         }
         if (decoded.kind === "invalid") return reject(decoded.error);
         if (decoded.kind === "input_required") {
-          if (options?.allowInputRequired === true) return resolve3(manualInputRequiredValue(decoded));
+          if (options?.allowInputRequired === true) return resolve4(manualInputRequiredValue(decoded));
           const flow = {
             codec,
             request,
@@ -17510,11 +17510,11 @@ var Protocol = class {
               params
             }, resultSchema, legOptions)
           };
-          return resolve3(this._resolveNonCompleteResult(decoded, flow));
+          return resolve4(this._resolveNonCompleteResult(decoded, flow));
         }
         const result = decoded.result;
         validateStandardSchema(resultSchema, result).then((parseResult) => {
-          if (parseResult.success) resolve3(parseResult.data);
+          if (parseResult.success) resolve4(parseResult.data);
           else reject(new SdkError(SdkErrorCode.InvalidResult, `Invalid result for ${request.method}: ${parseResult.error}`));
         }, reject);
       });
@@ -20426,7 +20426,7 @@ var require_compile = /* @__PURE__ */ __commonJSMin(((exports2) => {
     ref = (0, resolve_1.resolveUrl)(this.opts.uriResolver, baseId, ref);
     const schOrFunc = root.refs[ref];
     if (schOrFunc) return schOrFunc;
-    let _sch = resolve3.call(this, root, ref);
+    let _sch = resolve4.call(this, root, ref);
     if (_sch === void 0) {
       const schema = (_a4 = root.localRefs) === null || _a4 === void 0 ? void 0 : _a4[ref];
       const { schemaId } = this.opts;
@@ -20452,7 +20452,7 @@ var require_compile = /* @__PURE__ */ __commonJSMin(((exports2) => {
   function sameSchemaEnv(s1, s2) {
     return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
   }
-  function resolve3(root, ref) {
+  function resolve4(root, ref) {
     let sch;
     while (typeof (sch = this.refs[ref]) == "string") ref = sch;
     return sch || this.schemas[ref] || resolveSchema.call(this, root, ref);
@@ -20902,7 +20902,7 @@ var require_fast_uri = /* @__PURE__ */ __commonJSMin(((exports2, module2) => {
     else if (typeof uri === "object") uri = parse4(serialize(uri, options), options);
     return uri;
   }
-  function resolve3(baseURI, relativeURI, options) {
+  function resolve4(baseURI, relativeURI, options) {
     const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
     const resolved = resolveComponent(parse4(baseURI, schemelessOptions), parse4(relativeURI, schemelessOptions), schemelessOptions, true);
     schemelessOptions.skipEscape = true;
@@ -21076,7 +21076,7 @@ var require_fast_uri = /* @__PURE__ */ __commonJSMin(((exports2, module2) => {
   const fastUri = {
     SCHEMES,
     normalize,
-    resolve: resolve3,
+    resolve: resolve4,
     resolveComponent,
     equal,
     serialize,
@@ -26449,7 +26449,7 @@ var StdioServerTransport = class {
   }
   send(message) {
     if (this._closed) return Promise.reject(/* @__PURE__ */ new Error("StdioServerTransport is closed"));
-    return new Promise((resolve3, reject) => {
+    return new Promise((resolve4, reject) => {
       const json = serializeMessage(message);
       let settled = false;
       const onError = (error2) => {
@@ -26464,14 +26464,14 @@ var StdioServerTransport = class {
         settled = true;
         this._stdout.off("error", onError);
         this._stdout.off("drain", onDrain);
-        resolve3();
+        resolve4();
       };
       this._stdout.once("error", onError);
       if (this._stdout.write(json)) {
         if (settled) return;
         settled = true;
         this._stdout.off("error", onError);
-        resolve3();
+        resolve4();
       } else if (!settled) this._stdout.once("drain", onDrain);
     });
   }
@@ -26525,14 +26525,14 @@ var StdioConnectionChannel = class {
   */
   async whenRequestsAnswered(timeoutMs) {
     if (this._closed || this._pendingRequests.size === 0) return true;
-    return await new Promise((resolve3) => {
+    return await new Promise((resolve4) => {
       const waiter = () => {
         clearTimeout(timer);
-        resolve3(true);
+        resolve4(true);
       };
       const timer = setTimeout(() => {
         this._drainWaiters = this._drainWaiters.filter((pending) => pending !== waiter);
-        resolve3(false);
+        resolve4(false);
       }, timeoutMs);
       this._drainWaiters.push(waiter);
     });
@@ -26872,6 +26872,7 @@ function toError(value) {
 }
 
 // src/mcp.ts
+var import_node_path3 = require("node:path");
 var DEFAULT_TIMEOUT_MS2 = 6e4;
 var RENDER_TIMEOUT_MS = 6e5;
 var STATUS_TIMEOUT_MS = 1e4;
@@ -26916,6 +26917,17 @@ function imageResult(value) {
     structuredContent: { images: metadata }
   };
 }
+function targetsOf(input) {
+  if (!input || typeof input !== "object") return [];
+  const value = input;
+  const ids = [];
+  if (typeof value.id === "string") ids.push(value.id);
+  if (typeof value.parentId === "string") ids.push(value.parentId);
+  if (Array.isArray(value.ids)) {
+    for (const id of value.ids) if (typeof id === "string") ids.push(id);
+  }
+  return ids.slice(0, 12);
+}
 async function servePosterractMcp(explicitProjectDir) {
   const projectDir = () => resolveProjectDir(explicitProjectDir);
   const call = async (tool, path, input = void 0, timeoutMs = DEFAULT_TIMEOUT_MS2) => {
@@ -26924,7 +26936,13 @@ async function servePosterractMcp(explicitProjectDir) {
       activeProjectDir,
       { path, input },
       timeoutMs,
-      { cliVersion: version, command: `mcp:${tool}`, projectDir: activeProjectDir, invokedAt: Date.now() }
+      {
+        cliVersion: version,
+        command: `mcp:${tool}`,
+        projectDir: activeProjectDir,
+        invokedAt: Date.now(),
+        targets: targetsOf(input)
+      }
     );
   };
   const safely = (fn) => async () => {
@@ -26945,7 +26963,7 @@ async function servePosterractMcp(explicitProjectDir) {
     const server = new McpServer(
       { name: "posterract", version },
       {
-        instructions: "Control the open Posterract composition through its local project. Read context and source before editing. Use revision-safe source writes or semantic canvas tools, validate after meaningful edits, and inspect captures before claiming visual success. Export only when the user asks. This server cannot post, schedule, or access social credentials."
+        instructions: "Posterract canvas. Canvas-first: while Desktop has the project open, make composition edits through these tools (posterract_write_source with the revisionId from posterract_read_source, or the semantic set/create/move tools), never by rewriting index.tsx with file tools; tool edits show on the canvas instantly and keep undo. Start with posterract_connection_status and posterract_get_context; validate and inspect captures before claiming success; export only when asked. Cannot post, schedule, or access credentials."
       }
     );
     server.registerTool("posterract_connection_status", {
@@ -27085,6 +27103,16 @@ async function servePosterractMcp(explicitProjectDir) {
       }),
       annotations: { readOnlyHint: false, destructiveHint: true }
     }, safelyWith(async (input) => jsonResult(await call("create_element", "canvas.create", input))));
+    server.registerTool("posterract_bake_keyframes", {
+      title: "Bake motion into keyframes",
+      description: "Sample what a property actually does across an element's span and write it back as a keyframe track, so motion written in code becomes motion the timeline can retime. The original expression stays in the source; the track wins over it.",
+      inputSchema: object({
+        id: string2().min(1),
+        property: string2().min(1),
+        tolerance: number2().min(0).max(100).optional()
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true }
+    }, safelyWith(async (input) => jsonResult(await call("bake_keyframes", "canvas.bake", input))));
     server.registerTool("posterract_set_variable", {
       title: "Set inspector variable",
       description: "Change a documented source-backed inspector variable by file and name.",
@@ -27133,6 +27161,15 @@ async function servePosterractMcp(explicitProjectDir) {
       inputSchema: object({}),
       annotations: { readOnlyHint: false }
     }, safely(async () => jsonResult(await call("redo", "canvas.redo"))));
+    server.registerTool("posterract_get_geometry", {
+      title: "Measure rendered layout",
+      description: "Read post-transform bounding boxes, draw order, opacity, and text content for elements in the active video, with the pairs that overlap and the ones that fall off or cross the frame. Use this to check layout from data instead of inferring it from a capture. Boxes are in the same scene space as the source's x/y/width/height.",
+      inputSchema: object({
+        ids: array(string2()).optional(),
+        time: number2().nonnegative().optional()
+      }),
+      annotations: { readOnlyHint: true }
+    }, safelyWith(async (input) => jsonResult(await call("get_geometry", "geometry", input))));
     server.registerTool("posterract_check", {
       title: "Check video structure",
       description: "Run fast structural checks for empty spans, invisible elements, invalid durations, and failed sources.",
@@ -27171,6 +27208,29 @@ async function servePosterractMcp(explicitProjectDir) {
       inputSchema: object({ path: string2().min(1) }),
       annotations: { readOnlyHint: true }
     }, safelyWith(async ({ path }) => jsonResult(await call("media_probe", "media.probe", { path }))));
+    server.registerTool("posterract_fetch", {
+      title: "Fetch a video into the project",
+      description: "Download a video or its audio from a URL into the open project's assets/video folder, using yt-dlp on this machine. Nothing is uploaded; the file lands in the project and the asset library picks it up. Requires yt-dlp on PATH.",
+      inputSchema: object({
+        url: string2().min(1),
+        /** Audio only, for a music bed or a voice track. */
+        audio: boolean2().optional()
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false }
+    }, safelyWith(async ({ url: url2, audio }) => {
+      const dir = projectDir();
+      const paths = await fetchVideo(url2, {
+        audio,
+        output: (0, import_node_path3.join)(dir, "assets", audio ? "audio" : "video", "%(title).80s.%(ext)s")
+      });
+      return jsonResult({ paths });
+    }));
+    server.registerTool("posterract_media_transcribe", {
+      title: "Transcribe media",
+      description: "Transcribe a local project audio or video file to text with word timings, using the user's own transcription key. Nothing is uploaded except to the endpoint they configured; results are cached in the project by content hash.",
+      inputSchema: object({ path: string2().min(1) }),
+      annotations: { readOnlyHint: true }
+    }, safelyWith(async ({ path }) => jsonResult(await call("media_transcribe", "media.transcribe", { path }))));
     server.registerTool("posterract_media_grab", {
       title: "Grab media frames",
       description: "Decode specific or evenly sampled frames from local media and return them as vision-ready images.",
@@ -27199,15 +27259,6 @@ async function servePosterractMcp(explicitProjectDir) {
       inputSchema: object({ path: string2(), start: number2().nonnegative().optional(), end: number2().nonnegative().optional(), scale: number2().positive().optional() }),
       annotations: { readOnlyHint: true }
     }, safelyWith(async (input) => imageResult(await call("media_waveform", "media.waveform", input, RENDER_TIMEOUT_MS))));
-    server.registerTool("posterract_media_transcribe", {
-      title: "Transcribe media",
-      description: "Transcribe the speech in a project video or audio asset through the connected Posterract account. Returns segments with word-level timestamps in seconds, ready to drive captions or an edit. Unlike the other media tools this one uploads the file and spends AI credits (1 credit per started minute), so it needs Posterract Desktop with a signed-in workspace. Files must be 25 MB or smaller: for anything larger, extract a shorter span or an audio-only file first and transcribe that.",
-      inputSchema: object({
-        path: string2().min(1),
-        durationSec: number2().positive().optional()
-      }),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true }
-    }, safelyWith(async (input) => jsonResult(await call("media_transcribe", "media.transcribe", input, RENDER_TIMEOUT_MS))));
     server.registerTool("posterract_export", {
       title: "Export local video",
       description: "Export one video to an explicit local path. This never uploads, posts, or schedules.",
@@ -27232,6 +27283,86 @@ async function servePosterractMcp(explicitProjectDir) {
   });
   await handle.close().catch(() => {
   });
+}
+
+// src/batch.ts
+var import_node_fs3 = require("node:fs");
+var import_node_path4 = require("node:path");
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let field = "";
+  let quoted = false;
+  for (let i2 = 0; i2 < text.length; i2 += 1) {
+    const char = text[i2];
+    if (quoted) {
+      if (char === '"') {
+        if (text[i2 + 1] === '"') {
+          field += '"';
+          i2 += 1;
+        } else {
+          quoted = false;
+        }
+      } else {
+        field += char;
+      }
+      continue;
+    }
+    if (char === '"') quoted = true;
+    else if (char === ",") {
+      row.push(field);
+      field = "";
+    } else if (char === "\n" || char === "\r") {
+      if (char === "\r" && text[i2 + 1] === "\n") i2 += 1;
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = "";
+    } else {
+      field += char;
+    }
+  }
+  if (field.length || row.length) {
+    row.push(field);
+    rows.push(row);
+  }
+  const [header, ...body] = rows.filter((entry) => entry.some((cell) => cell.trim() !== ""));
+  if (!header) return [];
+  return body.map(
+    (cells) => Object.fromEntries(header.map((name, index) => [name.trim(), (cells[index] ?? "").trim()]))
+  );
+}
+function readBatchRows(path) {
+  const text = (0, import_node_fs3.readFileSync)((0, import_node_path4.resolve)(path), "utf8").replace(/^﻿/, "");
+  if ((0, import_node_path4.extname)(path).toLowerCase() === ".json") {
+    const value = JSON.parse(text);
+    if (!Array.isArray(value)) throw new Error("A JSON batch file must be an array of row objects");
+    return value.map((row) => {
+      if (!row || typeof row !== "object" || Array.isArray(row)) {
+        throw new Error("Every row of a JSON batch file must be an object");
+      }
+      return Object.fromEntries(
+        Object.entries(row).map(([key, cell]) => [key, String(cell ?? "")])
+      );
+    });
+  }
+  return parseCsv(text);
+}
+function outputPathFor(template, row, index) {
+  const used = { value: false };
+  let filled = template.replace(/\{([A-Za-z0-9_ -]+)\}/g, (_match, key) => {
+    used.value = true;
+    if (key === "n") return String(index + 1);
+    const cell = row[key];
+    if (cell === void 0) throw new Error(`The output template names "${key}", which is not a column`);
+    const safe = cell.replace(/[^\p{L}\p{N} ._-]/gu, "").replace(/^[.\s]+/, "").trim();
+    return safe || String(index + 1);
+  });
+  if (!used.value) {
+    const extension = (0, import_node_path4.extname)(filled) || ".mp4";
+    filled = (0, import_node_path4.join)((0, import_node_path4.dirname)(filled), `${(0, import_node_path4.basename)(filled, extension)}-${index + 1}${extension}`);
+  }
+  return (0, import_node_path4.resolve)(filled);
 }
 
 // src/index.ts
@@ -27294,8 +27425,8 @@ async function mediaFrame(ref, opts) {
   }
   const perSheet = parsePerSheet(opts.perSheet, opts.separate);
   const target = resolveAssetRef(ref);
-  const dir = opts.output ?? (0, import_node_path3.join)((0, import_node_os4.tmpdir)(), `posterract-grab-${(0, import_node_crypto3.randomUUID)().slice(0, 8)}`);
-  (0, import_node_fs3.mkdirSync)(dir, { recursive: true });
+  const dir = opts.output ?? (0, import_node_path5.join)((0, import_node_os4.tmpdir)(), `posterract-grab-${(0, import_node_crypto3.randomUUID)().slice(0, 8)}`);
+  (0, import_node_fs4.mkdirSync)(dir, { recursive: true });
   try {
     const images = await editor.media.frame.query({
       ...target,
@@ -27314,9 +27445,9 @@ async function mediaFrame(ref, opts) {
   }
 }
 function resolveAssetRef(ref) {
-  const absPath = (0, import_node_path3.isAbsolute)(ref) ? ref : (0, import_node_path3.resolve)(process.cwd(), ref);
-  if ((0, import_node_fs3.existsSync)(absPath)) return { path: absPath };
-  if ((0, import_node_path3.isAbsolute)(ref)) {
+  const absPath = (0, import_node_path5.isAbsolute)(ref) ? ref : (0, import_node_path5.resolve)(process.cwd(), ref);
+  if ((0, import_node_fs4.existsSync)(absPath)) return { path: absPath };
+  if ((0, import_node_path5.isAbsolute)(ref)) {
     console.error(`File not found: ${absPath}`);
     process.exit(1);
   }
@@ -27346,8 +27477,8 @@ function parseTimeArg(value, flag, allowNegative = false) {
 }
 function writeImages(images, dir) {
   for (const { timecode, base64: base642 } of images) {
-    const path = (0, import_node_path3.join)(dir, `${timecode}.png`);
-    (0, import_node_fs3.writeFileSync)(path, Buffer.from(base642, "base64"));
+    const path = (0, import_node_path5.join)(dir, `${timecode}.png`);
+    (0, import_node_fs4.writeFileSync)(path, Buffer.from(base642, "base64"));
     console.log(JSON.stringify({ timecode, path }));
   }
 }
@@ -27384,13 +27515,13 @@ function parsePreviewWindow(opts) {
 async function mediaFilmstrip(ref, opts) {
   const { start, end, scale } = parsePreviewWindow(opts);
   const target = resolveAssetRef(ref);
-  const path = opts.output ?? (0, import_node_path3.join)((0, import_node_os4.tmpdir)(), `${(0, import_node_crypto3.randomUUID)()}.png`);
-  (0, import_node_fs3.mkdirSync)((0, import_node_path3.dirname)((0, import_node_path3.resolve)(path)), { recursive: true });
+  const path = opts.output ?? (0, import_node_path5.join)((0, import_node_os4.tmpdir)(), `${(0, import_node_crypto3.randomUUID)()}.png`);
+  (0, import_node_fs4.mkdirSync)((0, import_node_path5.dirname)((0, import_node_path5.resolve)(path)), { recursive: true });
   const stop = startSpinner("Rendering filmstrip");
   try {
     const { base64: base642, ...rest } = await editor.media.filmstrip.query({ ...target, start, end, scale });
     stop();
-    (0, import_node_fs3.writeFileSync)(path, Buffer.from(base642, "base64"));
+    (0, import_node_fs4.writeFileSync)(path, Buffer.from(base642, "base64"));
     console.log(JSON.stringify({ path, ...rest }));
   } catch (e) {
     stop();
@@ -27400,13 +27531,13 @@ async function mediaFilmstrip(ref, opts) {
 async function mediaWaveform(ref, opts) {
   const { start, end, scale } = parsePreviewWindow(opts);
   const target = resolveAssetRef(ref);
-  const path = opts.output ?? (0, import_node_path3.join)((0, import_node_os4.tmpdir)(), `${(0, import_node_crypto3.randomUUID)()}.png`);
-  (0, import_node_fs3.mkdirSync)((0, import_node_path3.dirname)((0, import_node_path3.resolve)(path)), { recursive: true });
+  const path = opts.output ?? (0, import_node_path5.join)((0, import_node_os4.tmpdir)(), `${(0, import_node_crypto3.randomUUID)()}.png`);
+  (0, import_node_fs4.mkdirSync)((0, import_node_path5.dirname)((0, import_node_path5.resolve)(path)), { recursive: true });
   const stop = startSpinner("Rendering waveform");
   try {
     const { base64: base642, ...rest } = await editor.media.waveform.query({ ...target, start, end, scale });
     stop();
-    (0, import_node_fs3.writeFileSync)(path, Buffer.from(base642, "base64"));
+    (0, import_node_fs4.writeFileSync)(path, Buffer.from(base642, "base64"));
     console.log(JSON.stringify({ path, ...rest }));
   } catch (e) {
     stop();
@@ -27422,7 +27553,7 @@ async function mediaExtract(ref, opts) {
   }
   try {
     const result = await editor.media.extract.query(
-      { ...resolveAssetRef(ref), output: (0, import_node_path3.resolve)(opts.output), start, end, audioOnly: Boolean(opts.audioOnly) },
+      { ...resolveAssetRef(ref), output: (0, import_node_path5.resolve)(opts.output), start, end, audioOnly: Boolean(opts.audioOnly) },
       LONG_RUNNING
     );
     console.log(JSON.stringify(result));
@@ -27434,8 +27565,8 @@ async function captureNode(id, opts) {
   const times = (opts.time ?? ["0"]).map((t) => parseTimeArg(t, "--time"));
   const frames = times.map((t) => Math.round(t * TIME_FPS));
   const perSheet = parsePerSheet(opts.perSheet, opts.separate);
-  const dir = opts.output ?? (0, import_node_path3.join)((0, import_node_os4.tmpdir)(), `posterract-capture-${(0, import_node_crypto3.randomUUID)().slice(0, 8)}`);
-  (0, import_node_fs3.mkdirSync)(dir, { recursive: true });
+  const dir = opts.output ?? (0, import_node_path5.join)((0, import_node_os4.tmpdir)(), `posterract-capture-${(0, import_node_crypto3.randomUUID)().slice(0, 8)}`);
+  (0, import_node_fs4.mkdirSync)(dir, { recursive: true });
   try {
     const images = await editor.capture.query(
       { id, frames, combine: !opts.separate, perSheet },
@@ -27465,7 +27596,7 @@ async function exportScene(id, opts) {
     const result = await editor.export.query(
       {
         id,
-        output: (0, import_node_path3.resolve)(opts.output),
+        output: (0, import_node_path5.resolve)(opts.output),
         format: opts.format
       },
       LONG_RUNNING
@@ -27473,6 +27604,58 @@ async function exportScene(id, opts) {
     console.log(JSON.stringify(result));
   } catch (error2) {
     handleSocketError(error2);
+  }
+}
+async function batchExport(id, opts) {
+  let rows;
+  try {
+    rows = readBatchRows(opts.data);
+  } catch (error2) {
+    console.error(error2.message);
+    process.exit(1);
+  }
+  if (!rows.length) {
+    console.error(`${opts.data} has no rows.`);
+    process.exit(1);
+  }
+  let context2;
+  try {
+    context2 = await editor.context.query({ tree: false });
+  } catch (error2) {
+    handleSocketError(error2);
+  }
+  const declared = new Map((context2.variables ?? []).map((entry) => [entry.name, entry.file]));
+  if (!declared.size) {
+    console.error("This project declares no @inspect variables, so a data file has nothing to set.");
+    process.exit(1);
+  }
+  const unknown2 = [...new Set(rows.flatMap(Object.keys))].filter((name) => !declared.has(name));
+  if (unknown2.length) {
+    console.error(`Ignoring columns the project does not declare: ${unknown2.join(", ")}`);
+  }
+  let failures = 0;
+  for (const [index, row] of rows.entries()) {
+    const output = outputPathFor(opts.output, row, index);
+    try {
+      for (const [name, value] of Object.entries(row)) {
+        const file = declared.get(name);
+        if (!file) continue;
+        const parsed = value === "true" ? true : value === "false" ? false : value !== "" && Number.isFinite(Number(value)) ? Number(value) : value;
+        await editor.canvas.setVariable.mutate({ file, name, value: parsed });
+      }
+      const result = await editor.export.query(
+        { id, output, format: opts.format },
+        LONG_RUNNING
+      );
+      console.log(JSON.stringify({ row: index + 1, ...result }));
+    } catch (error2) {
+      failures += 1;
+      console.error(`Row ${index + 1} failed: ${error2.message}`);
+    }
+  }
+  if (failures) {
+    console.error(`${failures} of ${rows.length} rows failed.`);
+    process.exit(1);
   }
 }
 function launchApp(background) {
@@ -27485,7 +27668,7 @@ async function openProject(path, opts) {
     if (launched) await waitForCliSocket();
     else await editor.ping.query();
     if (path !== void 0) {
-      const result = await editor.open.mutate({ dir: (0, import_node_path3.resolve)(path) });
+      const result = await editor.open.mutate({ dir: (0, import_node_path5.resolve)(path) });
       console.log(JSON.stringify(result));
     }
   } catch (e) {
@@ -27513,22 +27696,22 @@ function packagedResourceRoot() {
   const configured = process.env.POSTERRACT_APP_PATH;
   if (!configured) return null;
   for (const candidate of [
-    (0, import_node_path3.join)(configured, "Resources", "app"),
-    (0, import_node_path3.join)(configured, "resources", "app"),
-    (0, import_node_path3.join)(configured, "app"),
+    (0, import_node_path5.join)(configured, "Resources", "app"),
+    (0, import_node_path5.join)(configured, "resources", "app"),
+    (0, import_node_path5.join)(configured, "app"),
     configured
   ]) {
-    if ((0, import_node_fs3.existsSync)((0, import_node_path3.join)(candidate, "package.json"))) return candidate;
+    if ((0, import_node_fs4.existsSync)((0, import_node_path5.join)(candidate, "package.json"))) return candidate;
   }
   return null;
 }
 function fileCheck(name, path, recovery) {
-  return { name, ok: (0, import_node_fs3.existsSync)(path), detail: path, recovery };
+  return { name, ok: (0, import_node_fs4.existsSync)(path), detail: path, recovery };
 }
 async function doctor(json = false) {
   const resources = packagedResourceRoot();
   const checks = [
-    { name: "cli", ok: (0, import_node_fs3.existsSync)(process.argv[1] ?? ""), detail: process.argv[1] ?? "unknown" },
+    { name: "cli", ok: (0, import_node_fs4.existsSync)(process.argv[1] ?? ""), detail: process.argv[1] ?? "unknown" },
     {
       name: "desktop-path",
       ok: process.platform === "darwin" || Boolean(process.env.POSTERRACT_APP_PATH),
@@ -27540,30 +27723,30 @@ async function doctor(json = false) {
     checks.push(
       fileCheck(
         "sdk",
-        (0, import_node_path3.join)(resources, "sdk", "node_modules", "@posterract", "composition", "dist", "index.d.ts"),
+        (0, import_node_path5.join)(resources, "sdk", "node_modules", "@posterract", "composition", "dist", "index.d.ts"),
         "Reinstall Posterract Desktop; its compatible SDK types are missing."
       ),
       fileCheck(
         "compiler",
-        (0, import_node_path3.join)(resources, "dist", "application.cjs"),
+        (0, import_node_path5.join)(resources, "dist", "application.cjs"),
         "Reinstall Posterract Desktop; the compiler bundle is missing."
       ),
       fileCheck(
         "esbuild",
-        (0, import_node_path3.join)(resources, "dist", process.platform === "win32" ? "esbuild.exe" : "esbuild"),
+        (0, import_node_path5.join)(resources, "dist", process.platform === "win32" ? "esbuild.exe" : "esbuild"),
         "Reinstall Posterract Desktop; the native compiler executable is missing."
       ),
       fileCheck(
         "documentation",
-        (0, import_node_path3.join)(resources, "docs", "module-contract.md"),
+        (0, import_node_path5.join)(resources, "docs", "module-contract.md"),
         "Reinstall Posterract Desktop; versioned SDK documentation is missing."
       )
     );
   }
   try {
-    const output = (0, import_node_fs3.mkdtempSync)((0, import_node_path3.join)((0, import_node_os4.tmpdir)(), "posterract-doctor-"));
-    (0, import_node_fs3.accessSync)(output, import_node_fs3.constants.R_OK | import_node_fs3.constants.W_OK);
-    (0, import_node_fs3.rmSync)(output, { recursive: true, force: true });
+    const output = (0, import_node_fs4.mkdtempSync)((0, import_node_path5.join)((0, import_node_os4.tmpdir)(), "posterract-doctor-"));
+    (0, import_node_fs4.accessSync)(output, import_node_fs4.constants.R_OK | import_node_fs4.constants.W_OK);
+    (0, import_node_fs4.rmSync)(output, { recursive: true, force: true });
     checks.push({ name: "output-directory", ok: true, detail: (0, import_node_os4.tmpdir)() });
   } catch (error2) {
     checks.push({
@@ -27688,24 +27871,24 @@ function screenshotFilename(taken, attempt) {
 }
 async function appScreenshot(opts) {
   const dir = opts.output ?? (0, import_node_os4.tmpdir)();
-  (0, import_node_fs3.mkdirSync)(dir, { recursive: true });
+  (0, import_node_fs4.mkdirSync)(dir, { recursive: true });
   try {
     const { base64: base642, width, height } = await editor.screenshot.query();
     const taken = /* @__PURE__ */ new Date();
     let attempt = 1;
-    let path = (0, import_node_path3.join)(dir, screenshotFilename(taken, attempt));
-    while ((0, import_node_fs3.existsSync)(path)) {
-      path = (0, import_node_path3.join)(dir, screenshotFilename(taken, ++attempt));
+    let path = (0, import_node_path5.join)(dir, screenshotFilename(taken, attempt));
+    while ((0, import_node_fs4.existsSync)(path)) {
+      path = (0, import_node_path5.join)(dir, screenshotFilename(taken, ++attempt));
     }
-    (0, import_node_fs3.writeFileSync)(path, Buffer.from(base642, "base64"));
+    (0, import_node_fs4.writeFileSync)(path, Buffer.from(base642, "base64"));
     console.log(JSON.stringify({ path, width, height }));
   } catch (e) {
     handleSocketError(e);
   }
 }
 async function reportDiagnostics(opts) {
-  const output = (0, import_node_path3.resolve)(opts.output ?? (0, import_node_path3.join)(process.cwd(), `posterract-report-${Date.now()}.zip`));
-  (0, import_node_fs3.mkdirSync)((0, import_node_path3.dirname)(output), { recursive: true });
+  const output = (0, import_node_path5.resolve)(opts.output ?? (0, import_node_path5.join)(process.cwd(), `posterract-report-${Date.now()}.zip`));
+  (0, import_node_fs4.mkdirSync)((0, import_node_path5.dirname)(output), { recursive: true });
   let contextValue = { status: "desktop unavailable" };
   let validation = { status: "not run" };
   let logs = [];
@@ -27720,7 +27903,7 @@ async function reportDiagnostics(opts) {
   const projectDir = contextValue.projectDir;
   if (projectDir) {
     try {
-      projectConfig = JSON.parse((0, import_node_fs3.readFileSync)((0, import_node_path3.join)(projectDir, "package.json"), "utf8"));
+      projectConfig = JSON.parse((0, import_node_fs4.readFileSync)((0, import_node_path5.join)(projectDir, "package.json"), "utf8"));
     } catch (error2) {
       projectConfig = { error: error2 instanceof Error ? error2.message : String(error2) };
     }
@@ -27828,7 +28011,13 @@ program2.command("check").description(
   `Check a node's subtree for obvious structural mistakes, without rendering (local analysis, no credits): spans where no visual is scheduled (likely black frames), children that never become visible, zero-duration or fully transparent nodes, and assets that failed to load or generate \u2014 plus subtree stats (node count by kind, nesting depth, played duration). Prints one JSON object; times in issue ranges are seconds relative to the node's start \u2014 for a scene whose workarea starts at 0, the same clock \`capture --time\` uses. Exits 1 when an error-severity issue is found. Structural only: a scheduled clip can still render black (dark footage, content smaller than the canvas), so confirm suspicious spans visually with \`capture\`.`
 ).argument("<id>", "node id to check or `file:id` when two files use the same id").option("--json", "emit only the stable JSON result").action((id, opts) => checkNode(id, opts));
 program2.command("export").description("Export one scene to a local file. This never uploads or schedules the result.").argument("<id>", "scene id to export").requiredOption("-o, --output <file>", "local .mp4, .webm, .ogg, or .mov output path").option("-f, --format <format>", "override the format inferred from the output extension").action((id, opts) => exportScene(id, opts));
-var media = program2.command("media").alias("m").description(
+var media = program2.command("batch").description(
+  "Render one video per row of a CSV or JSON file. Each column whose name matches an `@inspect` variable sets that variable before the row is exported, so a project is a template and the data file is the list of takes. Renders run one at a time and a failed row does not stop the rest."
+).argument("<id>", "scene id to export for every row").requiredOption("-d, --data <file>", "CSV or JSON file; the first CSV line names the columns").requiredOption(
+  "-o, --output <template>",
+  'output path per row, e.g. "out/{name}.mp4" \u2014 {column} inserts a cell, {n} the row number; without a placeholder the row number is appended'
+).option("-f, --format <format>", "override the format inferred from the output extension").action((id, opts) => batchExport(id, opts));
+program2.command("media").alias("m").description(
   "Inspect a media file by path without adding it to the project: probe metadata, grab representative frames, and render local previews. Local files work without an open project; library paths need one."
 );
 media.command("probe").description(

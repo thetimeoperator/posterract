@@ -41,7 +41,7 @@ function configuredState(): LocalAgentConnectionState {
       skillVersion: "0.1.0",
       installed: true,
     },
-    bridge: { state: "setup_required", lastSeenAt: null, lastCommand: null, error: null },
+    bridge: { state: "setup_required", lastSeenAt: null, lastCommand: null, error: null, activity: [] },
   };
 }
 

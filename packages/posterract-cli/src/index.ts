@@ -17,6 +17,7 @@ import { createDiagnosticZip, sanitize } from "./report";
 import { fetchVideo } from "./ytdlp";
 import { CLI_PROTOCOL_VERSION, MAX_FRAMES_PER_SHEET } from "./protocol";
 import { servePosterractMcp } from "./mcp";
+import { outputPathFor, readBatchRows, type BatchRow } from "./batch";
 import type { AssetRef, CheckIssue, FrameQuality, LogEntry, LogLevel, TimecodedImage } from "./protocol";
 
 // Captures and exports can legitimately exceed the interactive timeout.
@@ -316,6 +317,82 @@ async function exportScene(id: string, opts: ExportOptions): Promise<void> {
     console.log(JSON.stringify(result));
   } catch (error) {
     handleSocketError(error);
+  }
+}
+
+type BatchOptions = { data: string; output: string; format?: string; file?: string };
+
+/**
+ * One render per row of a data file.
+ *
+ * A project is code with named inspector variables, so a spreadsheet is
+ * already a list of takes. Each row sets the variables whose names match its
+ * columns and exports; anything the project does not declare is skipped with a
+ * note rather than failing the run, because a data file usually carries
+ * columns for other purposes too.
+ *
+ * Sequential by design: the encoder owns the GPU, so two at once is slower
+ * than one after another and far harder to read when one fails.
+ */
+async function batchExport(id: string, opts: BatchOptions): Promise<void> {
+  let rows: BatchRow[];
+  try {
+    rows = readBatchRows(opts.data);
+  } catch (error) {
+    console.error((error as Error).message);
+    process.exit(1);
+  }
+  if (!rows.length) {
+    console.error(`${opts.data} has no rows.`);
+    process.exit(1);
+  }
+
+  let context: { variables?: Array<{ file: string; name: string }> };
+  try {
+    context = await editor.context.query({ tree: false }) as typeof context;
+  } catch (error) {
+    handleSocketError(error);
+  }
+  const declared = new Map((context!.variables ?? []).map((entry) => [entry.name, entry.file]));
+  if (!declared.size) {
+    console.error("This project declares no @inspect variables, so a data file has nothing to set.");
+    process.exit(1);
+  }
+
+  const unknown = [...new Set(rows.flatMap(Object.keys))].filter((name) => !declared.has(name));
+  if (unknown.length) {
+    console.error(`Ignoring columns the project does not declare: ${unknown.join(", ")}`);
+  }
+
+  let failures = 0;
+  for (const [index, row] of rows.entries()) {
+    const output = outputPathFor(opts.output, row, index);
+    try {
+      for (const [name, value] of Object.entries(row)) {
+        const file = declared.get(name);
+        if (!file) continue;
+        // Numbers and booleans written as text in a spreadsheet should reach
+        // the variable as the type the project declared them with.
+        const parsed = value === "true" ? true : value === "false" ? false
+          : value !== "" && Number.isFinite(Number(value)) ? Number(value)
+          : value;
+        await editor.canvas.setVariable.mutate({ file, name, value: parsed });
+      }
+      const result = await editor.export.query(
+        { id, output, format: opts.format as "mp4" | "webm" | "ogg" | "mov" | undefined },
+        LONG_RUNNING,
+      );
+      console.log(JSON.stringify({ row: index + 1, ...result }));
+    } catch (error) {
+      failures += 1;
+      // One bad row should not lose the rest of a long batch.
+      console.error(`Row ${index + 1} failed: ${(error as Error).message}`);
+    }
+  }
+
+  if (failures) {
+    console.error(`${failures} of ${rows.length} rows failed.`);
+    process.exit(1);
   }
 }
 
@@ -787,6 +864,20 @@ program
   .action((id: string, opts: ExportOptions) => exportScene(id, opts));
 
 const media = program
+  .command("batch")
+  .description(
+    "Render one video per row of a CSV or JSON file. Each column whose name matches an `@inspect` variable sets that variable before the row is exported, so a project is a template and the data file is the list of takes. Renders run one at a time and a failed row does not stop the rest.",
+  )
+  .argument("<id>", "scene id to export for every row")
+  .requiredOption("-d, --data <file>", "CSV or JSON file; the first CSV line names the columns")
+  .requiredOption(
+    "-o, --output <template>",
+    'output path per row, e.g. "out/{name}.mp4" — {column} inserts a cell, {n} the row number; without a placeholder the row number is appended',
+  )
+  .option("-f, --format <format>", "override the format inferred from the output extension")
+  .action((id: string, opts: BatchOptions) => batchExport(id, opts));
+
+program
   .command("media")
   .alias("m")
   .description(

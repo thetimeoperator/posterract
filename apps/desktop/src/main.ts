@@ -62,11 +62,25 @@ import {
   writeManifest,
   writeProject,
   writeProjectAsset,
+  importLottieFromUrl,
+  locateProjectElement,
+  readEditHistory,
+  requireProjectDir,
+  writeEditHistory,
   projectRevisionContent,
   projectRevisions,
   restoreProjectRevision,
   writeProjectSource,
 } from "./projects.ts";
+import { listTrash, putTrash, readTrash, removeTrash } from "./trash.ts";
+import {
+  deleteExport,
+  listExports,
+  recordExport,
+  renameExport,
+  revealExport,
+} from "./exports-library.ts";
+import { aiGenerate, aiKeysReveal, aiKeysSave, aiKeysStatus, transcribeLocal } from "./ai-local.ts";
 
 const APP_SCHEME = "posterract-app";
 const MEDIA_SCHEME = "posterract-media";
@@ -172,7 +186,10 @@ function appHeaders(type: string, allowEval = false): Headers {
     "cross-origin-resource-policy": "same-origin",
     "content-security-policy": [
       "default-src 'self' blob: data:",
-      `script-src 'self' 'unsafe-inline'${allowEval ? " 'unsafe-eval'" : ""} blob:`,
+      // `wasm-unsafe-eval` is what lets WebAssembly compile at all. It is the
+      // narrow grant — it permits Wasm and nothing else, unlike `unsafe-eval`
+      // — and CanvasKit (the Lottie renderer) does not run without it.
+      `script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'${allowEval ? " 'unsafe-eval'" : ""} blob:`,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' blob: data: https:",
       `media-src 'self' blob: data: ${MEDIA_SCHEME}: https:`,
@@ -578,11 +595,28 @@ function registerHandlers(): void {
   );
   handle(
     MAIN_CHANNELS.CLOUD_UPLOAD_FILE,
-    ({ path, contentType, durationMs, width, height }: { path: string; contentType: string; durationMs?: number; width?: number; height?: number }) => {
-      if (!completedExportPaths.has(resolve(path))) {
-        throw new Error("Only a completed local Posterract export can be uploaded");
+    async (
+      { path, contentType, durationMs, width, height, projectId, sceneId, sourceRevision }: {
+        path: string;
+        contentType: string;
+        durationMs?: number;
+        width?: number;
+        height?: number;
+        projectId?: string | null;
+        sceneId?: string | null;
+        sourceRevision?: string | null;
+      },
+    ) => {
+      const resolvedPath = resolve(path);
+      const completedExport = completedExportPaths.has(resolvedPath);
+      const selectedInput = await isApprovedReadableFile(resolvedPath);
+      if (!completedExport && !selectedInput) {
+        throw new Error("Only a completed export or a video selected by the user can be uploaded");
       }
-      return desktopAuth.uploadFile(path, { contentType, durationMs, width, height }, (progress) =>
+      if (!completedExport && !new Set([".mp4", ".mov", ".webm"]).has(extname(resolvedPath).toLowerCase())) {
+        throw new Error("Select an MP4, MOV, or WebM video");
+      }
+      return desktopAuth.uploadFile(path, { contentType, durationMs, width, height, projectId, sceneId, sourceRevision }, (progress) =>
         emit(mainWindow, MAIN_CHANNELS.CLOUD_UPLOAD_PROGRESS, { path, progress }),
       );
     },
@@ -615,6 +649,15 @@ function registerHandlers(): void {
   handle(MAIN_CHANNELS.PROJECTS_DUPLICATE, ({ dir }: { dir: string }) => duplicateProject(dir));
   handle(MAIN_CHANNELS.PROJECTS_DELETE, ({ dir }: { dir: string }) => deleteProject(dir));
   handle(MAIN_CHANNELS.PROJECTS_COMPILE, ({ dir }: { dir: string }) => compileProject(dir));
+  // Bring-your-own-keys AI generation: keys live in the project's
+  // api-keys.json, providers are called from this process, outputs land in
+  // the project's assets/generated. Nothing leaves the user's machine but
+  // the provider requests themselves.
+  handle(MAIN_CHANNELS.AI_KEYS_STATUS, (data: Parameters<typeof aiKeysStatus>[0]) => aiKeysStatus(data));
+  handle(MAIN_CHANNELS.AI_KEYS_SAVE, (data: Parameters<typeof aiKeysSave>[0]) => aiKeysSave(data));
+  handle(MAIN_CHANNELS.AI_KEYS_REVEAL, (data: Parameters<typeof aiKeysReveal>[0]) => aiKeysReveal(data));
+  handle(MAIN_CHANNELS.AI_GENERATE, (data: Parameters<typeof aiGenerate>[0]) => aiGenerate(data));
+  handle(MAIN_CHANNELS.AI_TRANSCRIBE, (data: { dir: string; path: string }) => transcribeLocal(data));
   // Read-only sibling of PROJECTS_COMPILE for the agent bridge's `validate`:
   // same compile (stamping included), but in memory — never writes to disk.
   handle(MAIN_CHANNELS.PROJECTS_VALIDATE, ({ dir }: { dir: string }) => validateProject(dir));
@@ -648,6 +691,44 @@ function registerHandlers(): void {
   handle(MAIN_CHANNELS.PROJECTS_REVISIONS_RESTORE, ({ dir, path, id }: { dir: string; path: string; id: string }) =>
     restoreProjectRevision(dir, path, id),
   );
+  handle(
+    MAIN_CHANNELS.PROJECTS_TRASH_PUT,
+    async ({ dir, sceneId, name }: { dir: string; sceneId: string; name: string }) => {
+      const projectDir = await requireProjectDir(dir);
+      const project = await getProject(projectDir);
+      if (!project) throw new Error("Project not found");
+      return putTrash(projectDir, { sceneId, name, entryPath: project.entry });
+    },
+  );
+  handle(MAIN_CHANNELS.PROJECTS_TRASH_LIST, async ({ dir }: { dir: string }) =>
+    listTrash(await requireProjectDir(dir)),
+  );
+  handle(MAIN_CHANNELS.PROJECTS_TRASH_READ, async ({ dir, id }: { dir: string; id: string }) =>
+    readTrash(await requireProjectDir(dir), id),
+  );
+  handle(MAIN_CHANNELS.PROJECTS_TRASH_REMOVE, async ({ dir, id }: { dir: string; id: string }) =>
+    removeTrash(await requireProjectDir(dir), id),
+  );
+  handle(MAIN_CHANNELS.PROJECTS_HISTORY_READ, ({ dir }: { dir: string }) => readEditHistory(dir));
+  handle(MAIN_CHANNELS.PROJECTS_HISTORY_WRITE, ({ dir, value }: { dir: string; value: unknown }) =>
+    writeEditHistory(dir, value),
+  );
+  handle(MAIN_CHANNELS.EXPORTS_RECORD, (entry: Parameters<typeof recordExport>[0]) => recordExport(entry));
+  handle(MAIN_CHANNELS.EXPORTS_LIST, () => listExports());
+  handle(MAIN_CHANNELS.EXPORTS_REVEAL, ({ id }: { id: string }) => revealExport(id));
+  handle(MAIN_CHANNELS.EXPORTS_DELETE, ({ id, removeFile }: { id: string; removeFile?: boolean }) =>
+    deleteExport(id, removeFile === true),
+  );
+  handle(MAIN_CHANNELS.EXPORTS_RENAME, ({ id, name }: { id: string; name: string }) => renameExport(id, name));
+  handle(MAIN_CHANNELS.PROJECTS_SOURCE_LOCATE, async ({ dir, id }: { dir: string; id: string }) => {
+    const at = await locateProjectElement(dir, id);
+    if (!at) return null;
+    // Open the file itself rather than a line-addressed URL: the user's
+    // default handler for .tsx is whatever they chose, and only some of them
+    // understand a line fragment.
+    await shell.openPath(join(await requireProjectDir(dir), at.path));
+    return at;
+  });
   handle(MAIN_CHANNELS.PROJECTS_FS_LIST, ({ dir, source }: { dir: string; source: string }) => listEntries(dir, source));
   handle(MAIN_CHANNELS.PROJECTS_FS_STAT, ({ dir, source }: { dir: string; source: string }) => statEntry(dir, source));
   handle(MAIN_CHANNELS.PROJECTS_FS_FILE, async ({ dir, source }: { dir: string; source: string }) => {
@@ -664,6 +745,10 @@ function registerHandlers(): void {
   );
   handle(MAIN_CHANNELS.PROJECTS_FS_REMOVE, ({ dir, path }: { dir: string; path: string }) => removeEntry(dir, path));
   handle(MAIN_CHANNELS.PROJECTS_FS_REAL_PATH, ({ dir, source }: { dir: string; source: string }) => realPathEntry(dir, source));
+  handle(
+    MAIN_CHANNELS.PROJECTS_IMPORT_LOTTIE_URL,
+    ({ dir, url, name }: { dir: string; url: string; name?: string }) => importLottieFromUrl(dir, url, name),
+  );
   handle(MAIN_CHANNELS.FILE_TRANSFER, ({ selector, absolutePath }: { selector: string; absolutePath: string }, event) =>
     setFileInputFiles(event, selector, absolutePath),
   );
@@ -725,7 +810,13 @@ function registerHandlers(): void {
   );
   handle(MAIN_CHANNELS.FILE_WRITE_OPEN, async ({ path, exclusive }: { path: string; exclusive?: boolean }) => {
     const resolvedPath = resolve(path);
-    if (!allowedExportPath(resolvedPath) || !approvedExportPaths.has(resolvedPath)) {
+    // Approval is the whole gate. Each way into `approvedExportPaths` applies
+    // its own policy — the save dialog is the user's own choice, and the CLI
+    // handlers check the destination before adding it. Re-applying the
+    // narrower Downloads/Videos/Documents rule here rejected a project's own
+    // `exports/` folder whenever the project lived anywhere else, which is
+    // most of them.
+    if (!approvedExportPaths.has(resolvedPath)) {
       throw new Error("Export path was not approved through the save dialog");
     }
     approvedExportPaths.delete(resolvedPath);
