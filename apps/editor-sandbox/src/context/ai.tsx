@@ -13,7 +13,17 @@
 
 import { createContext, createSignal, onCleanup, onMount, useContext } from 'solid-js';
 
-import { aiGenerateLocal, aiKeysStatus, aiRevealKeys, aiSaveKeys, hasDesktopAi } from '@/lib/ai-bridge';
+import {
+	aiGenerateLocal,
+	aiGenerateMetered,
+	aiKeysStatus,
+	aiRevealKeys,
+	aiSaveKeys,
+	creditState,
+	hasDesktopAi,
+	KEY_FOR_KIND,
+	type CreditState,
+} from '@/lib/ai-bridge';
 import { assert } from '@/utils';
 
 import type { AiGenerationKind, AiGenerationRequest, AiKeyProvider, AiKeysStatus, AiLocalOutput } from '@/lib/ai-bridge';
@@ -37,6 +47,8 @@ export type AiAvailability = 'no-desktop' | 'ready';
 interface AiContextValue {
 	availability: Accessor<AiAvailability>;
 	keys: Accessor<AiKeysStatus | undefined>;
+	/** The plan's remaining credits, or undefined when there is no plan to show. */
+	credits: Accessor<CreditState | undefined>;
 	generations: Accessor<AiGenerationRow[]>;
 	busy: Accessor<boolean>;
 	/** Re-reads api-keys.json's status; called on mount and after a save. */
@@ -57,6 +69,7 @@ const AiContext = createContext<AiContextValue>();
 export function AiProvider(props: { dir: () => string | undefined; children: JSX.Element }) {
 	const [availability] = createSignal<AiAvailability>(hasDesktopAi() ? 'ready' : 'no-desktop');
 	const [keys, setKeys] = createSignal<AiKeysStatus>();
+	const [credits, setCredits] = createSignal<CreditState>();
 	const [rows, setRows] = createSignal<AiGenerationRow[]>([]);
 	const [busy, setBusy] = createSignal(false);
 	let disposed = false;
@@ -93,6 +106,37 @@ export function AiProvider(props: { dir: () => string | undefined; children: JSX
 		setRows((current) => current.map((row) => (row.id === id ? { ...row, ...patch } : row)));
 	};
 
+	/** Whether the project carries the provider key this kind of generation needs. */
+	const ownKeyFor = (kind: AiGenerationRequest['kind']): boolean =>
+		Boolean(keys()?.[KEY_FOR_KIND[kind]]);
+
+	/**
+	 * Generation on our keys, against the workspace's plan.
+	 *
+	 * The API prices, reserves and settles; the balance is re-read afterwards
+	 * so the panel shows what is actually left rather than what it guessed.
+	 */
+	const generateMetered = async (request: AiGenerationRequest): Promise<AiLocalOutput> => {
+		const result = await aiGenerateMetered(request, `gen-${crypto.randomUUID()}`);
+		void refreshCredits();
+		const url = result.output?.url;
+		if (!url) {
+			throw new Error('The generation finished but returned no file.');
+		}
+		return { path: url, mimeType: result.output?.mimeType ?? 'application/octet-stream' };
+	};
+
+	const refreshCredits = async (): Promise<void> => {
+		if (!hasDesktopAi()) return;
+		try {
+			setCredits(await creditState());
+		} catch {
+			// Signed out, offline, or on no plan — the panel simply does not
+			// show a balance, which is better than showing a wrong one.
+			setCredits(undefined);
+		}
+	};
+
 	const generate = async (
 		request: AiGenerationRequest,
 		onOutput?: (output: AiLocalOutput) => void,
@@ -112,7 +156,13 @@ export function AiProvider(props: { dir: () => string | undefined; children: JSX
 			...current,
 		]);
 		try {
-			const output = await aiGenerateLocal(dir, request);
+			// The user's own key wins when the project has one: it is their
+			// provider account, it costs them nothing here, and it is the
+			// reason the bring-your-own path exists at all. Our metered
+			// service is the fallback, not the default.
+			const output = ownKeyFor(request.kind)
+				? await aiGenerateLocal(dir, request)
+				: await generateMetered(request);
 			if (disposed) return;
 			updateRow(id, { status: 'succeeded', output });
 			if (onOutput) {
@@ -134,11 +184,14 @@ export function AiProvider(props: { dir: () => string | undefined; children: JSX
 		}
 	};
 
-	onMount(() => void refreshKeys());
+	onMount(() => {
+		void refreshKeys();
+		void refreshCredits();
+	});
 
 	return (
 		<AiContext.Provider
-			value={{ availability, keys, generations: rows, busy, refreshKeys, saveKey, revealKeys, generate }}
+			value={{ availability, keys, credits, generations: rows, busy, refreshKeys, saveKey, revealKeys, generate }}
 		>
 			{props.children}
 		</AiContext.Provider>

@@ -94,6 +94,12 @@ function targetsOf(input: unknown): string[] {
   return ids.slice(0, 12);
 }
 
+/**
+ * Generation is slow — a video can take minutes — so it gets its own budget
+ * rather than the default tool timeout, which is sized for canvas edits.
+ */
+const GENERATE_TIMEOUT_MS = 10 * 60 * 1000;
+
 export async function servePosterractMcp(explicitProjectDir?: string): Promise<void> {
   const projectDir = () => resolveProjectDir(explicitProjectDir);
   const call = async (tool: string, path: string, input: unknown = undefined, timeoutMs = DEFAULT_TIMEOUT_MS) => {
@@ -125,7 +131,7 @@ export async function servePosterractMcp(explicitProjectDir?: string): Promise<v
         instructions:
           "Posterract canvas. Canvas-first: while Desktop has the project open, make composition edits through these tools " +
           "(posterract_write_source with the revisionId from posterract_read_source, or the semantic set/create/move tools), never by rewriting index.tsx with file tools; " +
-          "tool edits show on the canvas instantly and keep undo. Start with posterract_connection_status and posterract_get_context; " +
+          "tool edits show on the canvas instantly and keep undo. Start with posterract_connection_status and posterract_get_context; a scene's `skill` names the SKILL.md folder to follow for it; " +
           "validate and inspect captures before claiming success; export only when asked. Cannot post, schedule, or access credentials.",
       },
     );
@@ -419,6 +425,48 @@ export async function servePosterractMcp(explicitProjectDir?: string): Promise<v
       inputSchema: z.object({ path: z.string().min(1) }),
       annotations: { readOnlyHint: true },
     }, safelyWith(async ({ path }: { path: string }) => jsonResult(await call("media_probe", "media.probe", { path }))));
+
+    // Generation on the user's plan, through the desktop app. An agent asks
+    // for what it wants; the price, the balance and the provider call all
+    // happen on the server, so a skill never handles a key and never has to
+    // know what anything costs.
+    server.registerTool("posterract_generate_image", {
+      title: "Generate an image",
+      description:
+        "Generate an image into the open project on the user's Posterract plan. Returns the project-relative path, ready to use as a `src`. Costs credits; refuses with an upgrade message if the plan does not include generation.",
+      inputSchema: z.object({
+        prompt: z.string().min(1),
+        resolution: z.enum(["1k", "2k"]).default("1k"),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false },
+    }, safelyWith(async (input: { prompt: string; resolution?: "1k" | "2k" }) =>
+      jsonResult(await call("generate_image", "ai.image", input, GENERATE_TIMEOUT_MS))));
+
+    server.registerTool("posterract_generate_video", {
+      title: "Generate a video clip",
+      description:
+        "Generate a video clip into the open project on the user's Posterract plan. 2k needs the Pro plan. Returns the project-relative path.",
+      inputSchema: z.object({
+        prompt: z.string().min(1),
+        resolution: z.enum(["768p", "2k"]).default("768p"),
+        durationSec: z.number().int().min(4).max(15).default(6),
+        aspectRatio: z.enum(["9:16", "16:9", "1:1", "4:3", "3:4"]).default("9:16"),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false },
+    }, safelyWith(async (input: Record<string, unknown>) =>
+      jsonResult(await call("generate_video", "ai.video", input, GENERATE_TIMEOUT_MS))));
+
+    server.registerTool("posterract_generate_voice", {
+      title: "Generate a voice track",
+      description:
+        "Speak text into an audio file in the open project on the user's Posterract plan. Returns the project-relative path.",
+      inputSchema: z.object({
+        text: z.string().min(1),
+        voiceId: z.string().optional(),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false },
+    }, safelyWith(async (input: { text: string; voiceId?: string }) =>
+      jsonResult(await call("generate_voice", "ai.voice", input, GENERATE_TIMEOUT_MS))));
 
     server.registerTool("posterract_fetch", {
       title: "Fetch a video into the project",

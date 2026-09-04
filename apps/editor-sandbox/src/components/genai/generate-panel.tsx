@@ -220,8 +220,28 @@ function GeneratePanel() {
 		return status !== undefined && !status[providerKey()];
 	};
 
+	/**
+	 * Whether this generation would run on our keys against the plan, rather
+	 * than on the project's own key.
+	 */
+	const metered = () => keyMissing() && (ai.credits()?.balance ?? 0) > 0;
+
+	/**
+	 * What the remaining balance is worth, in the thing the current tab makes.
+	 * A number of credits means nothing on its own; "about 40 clips" does.
+	 */
+	const remaining = () => {
+		const balance = ai.credits()?.balance ?? 0;
+		if (balance <= 0) return null;
+		const kind = tab();
+		if (kind === 'image') return `about ${Math.floor(balance / 5)} images`;
+		if (kind === 'voice') return `about ${Math.floor(balance / 2)}k characters`;
+		// A six-second 768p clip, the common case.
+		return `about ${Math.floor(balance / 24)} clips`;
+	};
+
 	const canGenerate = () =>
-		ai.availability() === 'ready' && !keyMissing() && !ai.busy() && !empty();
+		ai.availability() === 'ready' && (!keyMissing() || metered()) && !ai.busy() && !empty();
 
 	const submit = async () => {
 		if (!canGenerate()) return;
@@ -259,7 +279,22 @@ function GeneratePanel() {
 							items={TAB_ITEMS}
 						/>
 
-						<Show when={keyMissing()}>
+						{/*
+							A missing key is only a problem when the plan cannot
+							cover the generation either. When it can, say what is
+							left in the units of the thing being made — a credit
+							count means nothing on its own.
+						*/}
+						<Show when={metered()}>
+							<div class="flex items-baseline justify-between gap-2 rounded-md bg-input px-2.5 py-1.5 text-xxs">
+								<span class="text-muted-foreground">
+									On your <span class="text-foreground">{ai.credits()?.plan}</span> plan
+								</span>
+								<span class="text-foreground">{remaining()} left</span>
+							</div>
+						</Show>
+
+						<Show when={keyMissing() && !metered()}>
 							<KeysCard provider={providerKey()} />
 						</Show>
 

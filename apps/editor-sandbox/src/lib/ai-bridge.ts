@@ -144,3 +144,129 @@ export function nearestAspect(width: number, height: number): VideoAspect {
 	}
 	return best;
 }
+
+// ---------------------------------------------------------------------------
+// Metered generation: our keys, the user's plan, a credit ledger on the API.
+//
+// The other path in this file (`aiGenerateLocal`) runs on the user's own
+// provider keys and costs them nothing but the provider's bill. This one runs
+// on ours, which is why every part of it — the price, the balance check, the
+// provider call — happens on the server. The desktop app only says what it
+// wants; it never says what that costs.
+// ---------------------------------------------------------------------------
+
+/** What a plan currently has. Mirrors `GET /v1/credits`. */
+export interface CreditState {
+	plan: 'editor' | 'studio' | 'pro' | null;
+	balance: number;
+	allotment: number;
+	cycleResetsAt: number | null;
+}
+
+export interface MeteredGeneration {
+	generationId: string;
+	status: 'reserved' | 'succeeded' | 'failed';
+	credits?: number;
+	output?: { url?: string; mimeType?: string } | null;
+	deduped?: boolean;
+}
+
+/** A refusal the user can act on, rather than a raw HTTP failure. */
+export class GenerationRefused extends Error {
+	public readonly code: string;
+	public readonly upgradeTo?: string;
+	public readonly needed?: number;
+	public readonly balance?: number;
+
+	public constructor(code: string, message: string, extra: { upgradeTo?: string; needed?: number; balance?: number } = {}) {
+		super(message);
+		this.name = 'GenerationRefused';
+		this.code = code;
+		this.upgradeTo = extra.upgradeTo;
+		this.needed = extra.needed;
+		this.balance = extra.balance;
+	}
+}
+
+async function cloud<T>(path: string, init: { method?: string; body?: unknown; headers?: Record<string, string> } = {}): Promise<T> {
+	const response = await mainBridge.call(MAIN_CHANNELS.CLOUD_REQUEST, {
+		path,
+		method: init.method ?? 'GET',
+		headers: { 'content-type': 'application/json', ...init.headers },
+		body: init.body === undefined ? undefined : JSON.stringify(init.body),
+	});
+
+	let payload: Record<string, unknown> = {};
+	try {
+		payload = response.body ? (JSON.parse(response.body) as Record<string, unknown>) : {};
+	} catch {
+		// A non-JSON body from a proxy or an outage; the status still speaks.
+	}
+
+	if (!response.ok) {
+		const code = typeof payload.error === 'string' ? payload.error : `http_${response.status}`;
+		const detail = typeof payload.detail === 'string' ? payload.detail : undefined;
+		throw new GenerationRefused(code, detail ?? refusalMessage(code, payload), {
+			upgradeTo: typeof payload.upgradeTo === 'string' ? payload.upgradeTo : undefined,
+			needed: typeof payload.needed === 'number' ? payload.needed : undefined,
+			balance: typeof payload.balance === 'number' ? payload.balance : undefined,
+		});
+	}
+
+	return payload as T;
+}
+
+/** What to say when the API refuses, in the user's terms rather than the wire's. */
+function refusalMessage(code: string, payload: Record<string, unknown>): string {
+	if (code === 'insufficient_credits') {
+		const needed = typeof payload.needed === 'number' ? payload.needed : 0;
+		const balance = typeof payload.balance === 'number' ? payload.balance : 0;
+		return `This needs ${needed} credits and ${balance} are left this cycle.`;
+	}
+	if (code === 'plan_excludes_resolution') {
+		return 'That resolution is not included in this plan.';
+	}
+	if (code === 'plan_excludes_generation') {
+		return 'This plan includes the editor, not generation.';
+	}
+	return 'The generation could not be started.';
+}
+
+export function creditState(): Promise<CreditState> {
+	return cloud<CreditState>('/v1/credits');
+}
+
+/**
+ * Ask the API to generate. The price is quoted, reserved and settled there;
+ * an idempotency key means a dropped connection and a retry cannot bill twice.
+ */
+export function aiGenerateMetered(
+	request: AiGenerationRequest,
+	idempotencyKey: string,
+): Promise<MeteredGeneration> {
+	const body =
+		request.kind === 'voice'
+			? { kind: 'voice', model: 's2-pro', params: { text: request.text, voiceId: request.voiceId || undefined } }
+			: request.kind === 'image'
+				? {
+						kind: 'image',
+						model: 'gemini-3.1-flash-image-preview',
+						params: { prompt: request.prompt, resolution: request.resolution === '2K' ? '2k' : '1k' },
+					}
+				: {
+						kind: 'video',
+						model: 'hailuo-3',
+						params: {
+							prompt: request.prompt,
+							resolution: request.quality === '2K' ? '2k' : '768p',
+							durationSec: request.durationSec,
+							aspectRatio: request.aspectRatio,
+						},
+					};
+
+	return cloud<MeteredGeneration>('/v1/ai/generate', {
+		method: 'POST',
+		headers: { 'idempotency-key': idempotencyKey },
+		body: { ...body, mode: 'execute' },
+	});
+}

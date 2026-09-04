@@ -9,6 +9,7 @@ import { useProject } from '@/context/project';
 import { t, q, q0, m, m0 } from "@/lib/cli-rpc";
 import { editorSession, requireEditorSession, setEditorSession } from "./session";
 import { handleContextGet } from "./context";
+import { handleGenerateImage, handleGenerateVideo, handleGenerateVoice } from "./generate";
 import { createAssetResolver, handleMediaProbe, handleMediaExtract,
   handleMediaTranscribe, handleMediaFrame, handleMediaFilmstrip, handleMediaWaveform } from "./media";
 import { handleCapture } from "./capture";
@@ -229,6 +230,11 @@ function createAppRouter({ navigate }: AppRouterDeps) {
       waveform: q(handleMediaWaveform(resolveAsset)),
       extract: q(handleMediaExtract(resolveAsset)),
       transcribe: q(handleMediaTranscribe(resolveAsset, () => editorSession()?.project.dir() ?? "")),
+    }),
+    ai: t.router({
+      image: m(handleGenerateImage(() => editorSession()?.project.dir() ?? "")),
+      video: m(handleGenerateVideo(() => editorSession()?.project.dir() ?? "")),
+      voice: m(handleGenerateVoice(() => editorSession()?.project.dir() ?? "")),
     }),
   });
 }

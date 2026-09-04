@@ -37,6 +37,7 @@ export const MAIN_CHANNELS = {
   AI_KEYS_REVEAL: "ai:keys-reveal",
   AI_GENERATE: "ai:generate",
   AI_TRANSCRIBE: "ai:transcribe",
+  CLOUD_REQUEST: "cloud:request",
   APP_OPEN_EXTERNAL: "app:open-external",
   APP_OPEN_PROJECT_EDITOR: "app:open-project-editor",
   APP_SHOW_IN_FOLDER: "app:show-in-folder",
@@ -87,6 +88,9 @@ export const MAIN_CHANNELS = {
   PROJECTS_REVISIONS_LIST: "projects:revisions-list",
   PROJECTS_REVISIONS_READ: "projects:revisions-read",
   PROJECTS_REVISIONS_RESTORE: "projects:revisions-restore",
+  SKILLS_LIST: "skills:list",
+  SKILLS_ADD_FOLDER: "skills:add-folder",
+  SKILLS_REVEAL: "skills:reveal",
   PROJECTS_TRASH_PUT: "projects:trash-put",
   PROJECTS_TRASH_LIST: "projects:trash-list",
   PROJECTS_TRASH_READ: "projects:trash-read",
@@ -183,6 +187,24 @@ export type RevisionEntry = {
 };
 
 /** Mirrors `apps/desktop/src/trash.ts`. */
+/** A skill folder as the deck shows it; mirrors apps/desktop/src/skills.ts. */
+export type SkillCard = {
+  id: string;
+  name: string;
+  title: string;
+  description: string;
+  path: string;
+  source: "bundled" | "library" | "project";
+  cover: string | null;
+  logo: string | null;
+  format: "9:16" | "1:1" | "16:9" | null;
+  duration: [number, number] | null;
+  tags: string[];
+  requires: string[];
+  recipes: { label: string; prompt: string }[];
+  hasStarter: boolean;
+};
+
 export type TrashEntry = {
   id: string;
   sceneId: string;
@@ -241,6 +263,10 @@ export type MainRequestMap = {
       segments: Array<{ text: string; start: number; end: number }>;
       cached: boolean;
     };
+  };
+  [MAIN_CHANNELS.CLOUD_REQUEST]: {
+    request: { path: string; method?: string; headers?: Record<string, string>; body?: string | Uint8Array };
+    response: { status: number; ok: boolean; headers: Record<string, string>; body: string };
   };
   [MAIN_CHANNELS.APP_OPEN_EXTERNAL]: { request: { url: string }; response: void };
   [MAIN_CHANNELS.APP_OPEN_PROJECT_EDITOR]: {
@@ -369,6 +395,9 @@ export type MainRequestMap = {
     request: { dir: string; path: string; id: string };
     response: { path: string; revisionId: string; diagnostics: Array<{ message: string; line?: number; column?: number }> };
   };
+  [MAIN_CHANNELS.SKILLS_LIST]: { request: { dir: string | null }; response: SkillCard[] };
+  [MAIN_CHANNELS.SKILLS_ADD_FOLDER]: { request: Record<string, never>; response: SkillCard | null };
+  [MAIN_CHANNELS.SKILLS_REVEAL]: { request: { path: string }; response: void };
   [MAIN_CHANNELS.PROJECTS_TRASH_PUT]: {
     request: { dir: string; sceneId: string; name: string };
     response: TrashEntry;
