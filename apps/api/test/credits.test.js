@@ -27,6 +27,7 @@ const migrationNames = [
   "011-ai-credits.sql",
   "013-plan-rename.sql",
   "014-transcribe-minutes.sql",
+  "015-plan-names.sql",
 ];
 const workspaceId = "00000000-0000-4000-8000-000000000301";
 const userId = "00000000-0000-4000-8000-000000000302";
@@ -38,9 +39,12 @@ const environment = {
   STRIPE_PRODUCT_ID: "prod_posterract",
   STRIPE_MONTHLY_PRICE_ID: "price_monthly",
   STRIPE_YEARLY_PRICE_ID: "price_yearly",
-  STRIPE_PRICE_EDITOR: "price_editor",
-  STRIPE_PRICE_STUDIO: "price_studio",
-  STRIPE_PRICE_PRO: "price_pro",
+  STRIPE_PRO_MONTHLY_PRICE_ID: "price_pro",
+  STRIPE_PRO_YEARLY_PRICE_ID: "price_pro_yearly",
+  STRIPE_ALLSTAR_MONTHLY_PRICE_ID: "price_allstar",
+  STRIPE_ALLSTAR_YEARLY_PRICE_ID: "price_allstar_yearly",
+  STRIPE_SUPERSTAR_MONTHLY_PRICE_ID: "price_superstar",
+  STRIPE_SUPERSTAR_YEARLY_PRICE_ID: "price_superstar_yearly",
   SITE_URL: "https://posterract.app",
 };
 
@@ -130,7 +134,7 @@ function creditSubscription(overrides = {}) {
           current_period_start: 1_799_000_000,
           current_period_end: 1_801_678_400,
           price: {
-            id: environment.STRIPE_PRICE_EDITOR,
+            id: environment.STRIPE_PRO_MONTHLY_PRICE_ID,
             product: "prod_ai_plans",
             currency: "usd",
             unit_amount: 2_000,
@@ -164,26 +168,27 @@ function paidInvoice({ id, priceId, periodStart, periodEnd }) {
 test("credit plan definitions expose the launch catalog", async () => {
   // A credit is a cent of provider spend, so an allotment is the most a
   // subscriber can cost us: $0.00, $12.00, $30.00 against $20/$49/$99.
-  assert.equal(CREDIT_PLANS.editor.credits, 0);
-  assert.equal(CREDIT_PLANS.studio.credits, 1_200);
-  assert.equal(CREDIT_PLANS.pro.credits, 3_000);
-  assert.equal(CREDIT_PLANS.editor.monthlyAmount, 2_000);
-  assert.equal(CREDIT_PLANS.studio.monthlyAmount, 4_900);
-  assert.equal(CREDIT_PLANS.pro.monthlyAmount, 9_900);
+  assert.equal(CREDIT_PLANS.pro.credits, 0);
+  assert.equal(CREDIT_PLANS.allstar.credits, 1_200);
+  assert.equal(CREDIT_PLANS.superstar.credits, 3_000);
+  assert.equal(CREDIT_PLANS.pro.monthlyAmount, 2_000);
+  assert.equal(CREDIT_PLANS.allstar.monthlyAmount, 4_900);
+  assert.equal(CREDIT_PLANS.superstar.monthlyAmount, 9_900);
 
   const { postgres, pool } = await database();
   const { app } = await testApp(pool);
   try {
     const config = await app.inject({ method: "GET", url: "/v1/billing/config" });
     assert.equal(config.statusCode, 200);
-    assert.deepEqual(config.json().creditPlans.editor, {
-      priceId: "price_editor",
+    assert.deepEqual(config.json().creditPlans.pro, {
+      priceId: "price_pro",
+      yearlyPriceId: "price_pro_yearly",
       amount: 2_000,
       currency: "usd",
       interval: "month",
       credits: 0,
     });
-    assert.equal(config.json().creditPlans.pro.credits, 3_000);
+    assert.equal(config.json().creditPlans.superstar.credits, 3_000);
   } finally {
     await app.close();
     await postgres.close();
@@ -211,7 +216,7 @@ test("paid credit-plan invoices set the plan and reset the balance each cycle", 
       "select plan, balance from workspace_credits where workspace_id = $1",
       [workspaceId],
     );
-    assert.equal(credits.rows[0].plan, "editor");
+    assert.equal(credits.rows[0].plan, "pro");
     assert.equal(Number(credits.rows[0].balance), 0);
 
     const firstInvoice = await send({
@@ -220,7 +225,7 @@ test("paid credit-plan invoices set the plan and reset the balance each cycle", 
       data: {
         object: paidInvoice({
           id: "in_credit_1",
-          priceId: environment.STRIPE_PRICE_STUDIO,
+          priceId: environment.STRIPE_ALLSTAR_MONTHLY_PRICE_ID,
           periodStart: 1_799_000_000,
           periodEnd: 1_801_678_400,
         }),
@@ -232,7 +237,7 @@ test("paid credit-plan invoices set the plan and reset the balance each cycle", 
        from workspace_credits where workspace_id = $1`,
       [workspaceId],
     );
-    assert.equal(credits.rows[0].plan, "studio");
+    assert.equal(credits.rows[0].plan, "allstar");
     assert.equal(Number(credits.rows[0].balance), 1_200);
     assert.equal(Number(credits.rows[0].allotment), 1_200);
     assert.equal(
@@ -248,7 +253,7 @@ test("paid credit-plan invoices set the plan and reset the balance each cycle", 
     assert.equal(Number(grants.rows[0].delta), 1_200);
     assert.match(
       grants.rows[0].note,
-      /Granted 1200 studio credits for cycle \d{4}-\d{2}-\d{2} to \d{4}-\d{2}-\d{2}/,
+      /Granted 1200 allstar credits for cycle \d{4}-\d{2}-\d{2} to \d{4}-\d{2}-\d{2}/,
     );
 
     // Spend most of the cycle, then renew: the balance RESETS to the
@@ -263,7 +268,7 @@ test("paid credit-plan invoices set the plan and reset the balance each cycle", 
       data: {
         object: paidInvoice({
           id: "in_credit_2",
-          priceId: environment.STRIPE_PRICE_STUDIO,
+          priceId: environment.STRIPE_ALLSTAR_MONTHLY_PRICE_ID,
           periodStart: 1_801_678_400,
           periodEnd: 1_804_356_800,
         }),
@@ -309,7 +314,7 @@ test("cancellation clears the plan but leaves the balance until cycle end", asyn
       data: {
         object: paidInvoice({
           id: "in_cancel_1",
-          priceId: environment.STRIPE_PRICE_STUDIO,
+          priceId: environment.STRIPE_ALLSTAR_MONTHLY_PRICE_ID,
           periodStart: 1_799_000_000,
           periodEnd: 1_801_678_400,
         }),
@@ -342,7 +347,7 @@ test("cancellation clears the plan but leaves the balance until cycle end", asyn
       data: {
         object: paidInvoice({
           id: "in_studio_1",
-          priceId: environment.STRIPE_PRICE_PRO,
+          priceId: environment.STRIPE_SUPERSTAR_MONTHLY_PRICE_ID,
           periodStart: 1_801_678_400,
           periodEnd: 1_804_356_800,
         }),
@@ -353,7 +358,7 @@ test("cancellation clears the plan but leaves the balance until cycle end", asyn
       "select plan, balance, allotment from workspace_credits where workspace_id = $1",
       [workspaceId],
     );
-    assert.equal(upgraded.rows[0].plan, "pro");
+    assert.equal(upgraded.rows[0].plan, "superstar");
     assert.equal(Number(upgraded.rows[0].balance), 3_000);
     assert.equal(Number(upgraded.rows[0].allotment), 3_000);
   } finally {
@@ -437,7 +442,7 @@ test("credits refill a month from the payment date, even on a yearly invoice", a
       data: {
         object: paidInvoice({
           id: "in_yearly_1",
-          priceId: environment.STRIPE_PRICE_STUDIO,
+          priceId: environment.STRIPE_ALLSTAR_MONTHLY_PRICE_ID,
           periodStart: 1_799_000_000,
           periodEnd: 1_799_000_000 + 365 * 24 * 3600,
         }),

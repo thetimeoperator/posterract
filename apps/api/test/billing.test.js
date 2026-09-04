@@ -37,6 +37,12 @@ const environment = {
   STRIPE_PRODUCT_ID: "prod_posterract",
   STRIPE_MONTHLY_PRICE_ID: "price_monthly",
   STRIPE_YEARLY_PRICE_ID: "price_yearly",
+  STRIPE_PRO_MONTHLY_PRICE_ID: "price_pro",
+  STRIPE_PRO_YEARLY_PRICE_ID: "price_pro_yearly",
+  STRIPE_ALLSTAR_MONTHLY_PRICE_ID: "price_allstar",
+  STRIPE_ALLSTAR_YEARLY_PRICE_ID: "price_allstar_yearly",
+  STRIPE_SUPERSTAR_MONTHLY_PRICE_ID: "price_superstar",
+  STRIPE_SUPERSTAR_YEARLY_PRICE_ID: "price_superstar_yearly",
   SITE_URL: "https://posterract.app",
 };
 

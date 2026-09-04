@@ -29,6 +29,7 @@ const migrationNames = [
   "011-ai-credits.sql",
   "013-plan-rename.sql",
   "014-transcribe-minutes.sql",
+  "015-plan-names.sql",
 ];
 const workspaceId = "00000000-0000-4000-8000-000000000201";
 const userId = "00000000-0000-4000-8000-000000000202";
@@ -68,7 +69,7 @@ async function database({ balance = 150 } = {}) {
   await postgres.query(
     `insert into workspace_credits
        (workspace_id, plan, balance, allotment, cycle_started_at, cycle_resets_at)
-     values ($1, 'studio', $2, 1200, now(), now() + interval '30 days')`,
+     values ($1, 'allstar', $2, 1200, now(), now() + interval '30 days')`,
     [workspaceId, balance],
   );
   return { postgres, pool: pgPool(postgres) };
@@ -241,7 +242,7 @@ test("execute reserves credits, settles on success, and exposes the generation",
 
     const creditsState = await app.inject({ method: "GET", url: "/v1/credits" });
     assert.equal(creditsState.statusCode, 200);
-    assert.equal(creditsState.json().plan, "studio");
+    assert.equal(creditsState.json().plan, "allstar");
     assert.equal(creditsState.json().balance, 140);
     assert.equal(creditsState.json().allotment, 1_200);
     assert.equal(typeof creditsState.json().cycleResetsAt, "number");
@@ -504,7 +505,7 @@ test("plans gate generation before any credit is reserved", async () => {
   const { app } = await testApp(pool);
   try {
     await pool.query(
-      "update workspace_credits set plan = 'editor', balance = 0, allotment = 0 where workspace_id = $1",
+      "update workspace_credits set plan = 'pro', balance = 0, allotment = 0 where workspace_id = $1",
       [workspaceId],
     );
     const refused = await generate(app, "ai-plan-gate-0001", {
@@ -515,12 +516,12 @@ test("plans gate generation before any credit is reserved", async () => {
     });
     assert.equal(refused.statusCode, 403);
     assert.equal(refused.json().error, "plan_excludes_generation");
-    assert.equal(refused.json().upgradeTo, "studio");
+    assert.equal(refused.json().upgradeTo, "allstar");
 
     // 2k video is twice the cost per second of 768p, so studio is gated to
     // 768p and only pro may ask for it.
     await pool.query(
-      "update workspace_credits set plan = 'studio', balance = 1200, allotment = 1200 where workspace_id = $1",
+      "update workspace_credits set plan = 'allstar', balance = 1200, allotment = 1200 where workspace_id = $1",
       [workspaceId],
     );
     const tooBig = await generate(app, "ai-plan-gate-0002", {
@@ -531,7 +532,7 @@ test("plans gate generation before any credit is reserved", async () => {
     });
     assert.equal(tooBig.statusCode, 403);
     assert.equal(tooBig.json().error, "plan_excludes_resolution");
-    assert.equal(tooBig.json().upgradeTo, "pro");
+    assert.equal(tooBig.json().upgradeTo, "superstar");
 
     // Nothing was charged and nothing was recorded by either refusal.
     const credits = await pool.query(
@@ -548,7 +549,7 @@ test("plans gate generation before any credit is reserved", async () => {
     // Transcription goes through the same reserve, so the gate covers it too
     // — otherwise an editor subscriber could transcribe on our keys for free.
     await pool.query(
-      "update workspace_credits set plan = 'editor', balance = 0, allotment = 0 where workspace_id = $1",
+      "update workspace_credits set plan = 'pro', balance = 0, allotment = 0 where workspace_id = $1",
       [workspaceId],
     );
     const transcribe = await app.inject({
@@ -562,7 +563,7 @@ test("plans gate generation before any credit is reserved", async () => {
 
     // The same request on pro is allowed through to the ledger.
     await pool.query(
-      "update workspace_credits set plan = 'pro', balance = 3000, allotment = 3000 where workspace_id = $1",
+      "update workspace_credits set plan = 'superstar', balance = 3000, allotment = 3000 where workspace_id = $1",
       [workspaceId],
     );
     const allowed = await generate(app, "ai-plan-gate-0003", {

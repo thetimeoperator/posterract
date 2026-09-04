@@ -97,6 +97,22 @@ services:
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
+      # Per-plan prices. Each plan is sold monthly and yearly; the API refuses
+      # to start if one is missing, so a typo fails at boot rather than at a
+      # customer's checkout.
+      STRIPE_PRO_MONTHLY_PRICE_ID: ${STRIPE_PRO_MONTHLY_PRICE_ID:-}
+      STRIPE_PRO_YEARLY_PRICE_ID: ${STRIPE_PRO_YEARLY_PRICE_ID:-}
+      STRIPE_ALLSTAR_MONTHLY_PRICE_ID: ${STRIPE_ALLSTAR_MONTHLY_PRICE_ID:-}
+      STRIPE_ALLSTAR_YEARLY_PRICE_ID: ${STRIPE_ALLSTAR_YEARLY_PRICE_ID:-}
+      STRIPE_SUPERSTAR_MONTHLY_PRICE_ID: ${STRIPE_SUPERSTAR_MONTHLY_PRICE_ID:-}
+      STRIPE_SUPERSTAR_YEARLY_PRICE_ID: ${STRIPE_SUPERSTAR_YEARLY_PRICE_ID:-}
+      # Generation runs on our provider accounts, so these live only here and
+      # never reach a client.
+      MINIMAX_API_KEY: ${MINIMAX_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      FISH_AUDIO_API_KEY: ${FISH_AUDIO_API_KEY:-}
+      TRANSCRIBE_API_KEY: ${TRANSCRIBE_API_KEY:-}
+      TRANSCRIBE_API_URL: ${TRANSCRIBE_API_URL:-}
       STRIPE_PRODUCT_ID: ${STRIPE_PRODUCT_ID:-}
       STRIPE_MONTHLY_PRICE_ID: ${STRIPE_MONTHLY_PRICE_ID:-}
       STRIPE_YEARLY_PRICE_ID: ${STRIPE_YEARLY_PRICE_ID:-}
@@ -134,7 +150,7 @@ services:
     build:
       context: ../..
       dockerfile: deploy/posterract/Dockerfile
-      target: backend-runtime
+      target: orchestrator-runtime
     command: ["pnpm", "--filter", "@posterract/orchestrator", "start"]
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}

@@ -12,44 +12,43 @@ const UUID_PATTERN =
 
 /**
  * The subscription plans. Each maps one Stripe monthly price (configured
- * through STRIPE_PRICE_EDITOR / STRIPE_PRICE_STUDIO / STRIPE_PRICE_PRO) to the
+ * through STRIPE_<PLAN>_MONTHLY_PRICE_ID / STRIPE_<PLAN>_YEARLY_PRICE_ID) to the
  * credits granted every paid cycle. Balances reset to the allotment on each
  * cycle — no rollover, which is what makes the margin predictable.
  *
  * A credit is one cent of provider spend at our cost (see ai/pricing.js), so
  * an allotment reads directly as the most a subscriber can cost us:
  *
- *   editor  $20  →     0 credits  →  $0.00 to serve  →  $19.12 after Stripe
- *   studio  $49  → 1,200 credits  →  $12.00          →  $35.28
- *   pro     $99  → 3,000 credits  →  $30.00          →  $65.83
+ *   pro        $20  →     0 credits  →  $0.00 to serve  →  $19.12 after Stripe
+ *   allstar    $49  → 1,200 credits  →  $12.00          →  $35.28
+ *   superstar  $99  → 3,000 credits  →  $30.00          →  $65.83
  *
  * Those profits hold at *full* burn, so unused credits are upside rather than
  * the thing holding the number up. Stripe's 2.9% + $0.30 is already deducted.
  *
- * `editor` grants no credits on purpose: it is the plan for people who bring
- * their own provider keys, and generation endpoints refuse it by plan rather
- * than by balance, so the message can say "upgrade" instead of "out of
- * credits".
+ * `pro` grants no credits on purpose: it is the plan for people who bring their
+ * own provider keys, and generation endpoints refuse it by plan rather than by
+ * balance, so the message can say "upgrade" instead of "out of credits".
  */
 export const CREDIT_PLANS = Object.freeze({
-  editor: Object.freeze({ id: "editor", monthlyAmount: 2_000, credits: 0, transcribeMinutes: 0 }),
-  studio: Object.freeze({ id: "studio", monthlyAmount: 4_900, credits: 1_200, transcribeMinutes: 120 }),
-  pro: Object.freeze({ id: "pro", monthlyAmount: 9_900, credits: 3_000, transcribeMinutes: 400 }),
+  pro: Object.freeze({ id: "pro", monthlyAmount: 2_000, credits: 0, transcribeMinutes: 0 }),
+  allstar: Object.freeze({ id: "allstar", monthlyAmount: 4_900, credits: 1_200, transcribeMinutes: 120 }),
+  superstar: Object.freeze({ id: "superstar", monthlyAmount: 9_900, credits: 3_000, transcribeMinutes: 400 }),
 });
 
 /**
  * Transcription is allowed by the minute rather than charged in credits.
  *
- * At Qwen's $0.000035/second an hour costs about 13 cents, so a full studio
- * allowance is $0.25 and a full pro allowance $0.84 — a rounding error beside
+ * At Qwen's $0.000035/second an hour costs about 13 cents, so a full allstar
+ * allowance is $0.25 and a full superstar allowance $0.84 — a rounding error beside
  * one six-second video clip. Charging credits for it would mean captions can
  * fail for want of a resource worth pennies, on the feature that makes
  * short-form video work. The cap exists to bound abuse, not to price the work.
  */
 export const PLAN_TRANSCRIBE_SECONDS = Object.freeze({
-  editor: 0,
-  studio: 120 * 60,
-  pro: 400 * 60,
+  pro: 0,
+  allstar: 120 * 60,
+  superstar: 400 * 60,
 });
 
 /**
@@ -61,9 +60,9 @@ export const PLAN_TRANSCRIBE_SECONDS = Object.freeze({
  * from depending on which resolution its subscribers happen to pick.
  */
 export const PLAN_VIDEO_RESOLUTIONS = Object.freeze({
-  editor: Object.freeze([]),
-  studio: Object.freeze(["768p"]),
-  pro: Object.freeze(["768p", "2k"]),
+  pro: Object.freeze([]),
+  allstar: Object.freeze(["768p"]),
+  superstar: Object.freeze(["768p", "2k"]),
 });
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set([
   "active",
@@ -232,10 +231,23 @@ function configuration(environment) {
     productId: configuredValue(environment, "STRIPE_PRODUCT_ID"),
     monthlyPriceId: configuredValue(environment, "STRIPE_MONTHLY_PRICE_ID"),
     yearlyPriceId: configuredValue(environment, "STRIPE_YEARLY_PRICE_ID"),
+    // Every plan is sold monthly and yearly. Credits refill a month from the
+    // payment date either way (see `rollCycleIfDue`), so the interval is
+    // purely a billing choice — a yearly subscriber is charged once and still
+    // gets their allowance every month.
     creditPrices: {
-      editor: configuredValue(environment, "STRIPE_PRICE_EDITOR"),
-      studio: configuredValue(environment, "STRIPE_PRICE_STUDIO"),
-      pro: configuredValue(environment, "STRIPE_PRICE_PRO"),
+      pro: {
+        monthly: configuredValue(environment, "STRIPE_PRO_MONTHLY_PRICE_ID"),
+        yearly: configuredValue(environment, "STRIPE_PRO_YEARLY_PRICE_ID"),
+      },
+      allstar: {
+        monthly: configuredValue(environment, "STRIPE_ALLSTAR_MONTHLY_PRICE_ID"),
+        yearly: configuredValue(environment, "STRIPE_ALLSTAR_YEARLY_PRICE_ID"),
+      },
+      superstar: {
+        monthly: configuredValue(environment, "STRIPE_SUPERSTAR_MONTHLY_PRICE_ID"),
+        yearly: configuredValue(environment, "STRIPE_SUPERSTAR_YEARLY_PRICE_ID"),
+      },
     },
     siteUrl: safeSiteUrl(
       configuredValue(environment, "SITE_URL") ??
@@ -254,14 +266,27 @@ function configuration(environment) {
   if (!config.yearlyPriceId?.startsWith("price_")) {
     errors.push("STRIPE_YEARLY_PRICE_ID");
   }
+  // Every plan is sold both ways, so every price is required. A missing one
+  // would otherwise fail silently at checkout — the plan would simply refuse
+  // that interval — instead of here, where it is a configuration error anyone
+  // can see and fix.
+  for (const plan of Object.values(CREDIT_PLANS)) {
+    const prices = config.creditPrices[plan.id];
+    for (const interval of ["monthly", "yearly"]) {
+      if (!prices?.[interval]?.startsWith("price_")) {
+        errors.push(`STRIPE_${plan.id.toUpperCase()}_${interval === "monthly" ? "MONTHLY" : "YEARLY"}_PRICE_ID`);
+      }
+    }
+  }
   return { ...config, errors, configured: errors.length === 0 };
 }
 
 function creditPlanForPrice(config, priceId) {
   if (typeof priceId !== "string" || priceId.length === 0) return undefined;
-  return Object.values(CREDIT_PLANS).find(
-    (plan) => config.creditPrices[plan.id] === priceId,
-  );
+  return Object.values(CREDIT_PLANS).find((plan) => {
+    const prices = config.creditPrices[plan.id];
+    return prices?.monthly === priceId || prices?.yearly === priceId;
+  });
 }
 
 function cycleDate(value) {
@@ -734,12 +759,10 @@ export function createStripeBillingService({
         : undefined;
     if (plan !== undefined && plan !== null) {
       if (!tier) throw new BillingError(400, "invalid_plan");
-      if (!config.creditPrices[tier.id]) {
+      const prices = config.creditPrices[tier.id];
+      const wanted = interval === "yearly" ? prices?.yearly : prices?.monthly;
+      if (!wanted) {
         throw new BillingError(400, "billing_plan_not_configured");
-      }
-      // Tier prices are monthly-only — there is no yearly tier price to sell.
-      if (interval === "yearly") {
-        throw new BillingError(400, "invalid_billing_interval");
       }
     }
     await verifyCatalog();
@@ -768,7 +791,7 @@ export function createStripeBillingService({
 
     const customerId = await ensureCustomer(workspaceId, userId);
     const priceId = tier
-      ? config.creditPrices[tier.id]
+      ? (interval === "yearly" ? config.creditPrices[tier.id].yearly : config.creditPrices[tier.id].monthly)
       : interval === "yearly"
         ? config.yearlyPriceId
         : config.monthlyPriceId;
@@ -871,11 +894,14 @@ export function createStripeBillingService({
 
   function publicConfig() {
     const creditPlanEntries = Object.values(CREDIT_PLANS)
-      .filter((plan) => config.creditPrices[plan.id])
+      .filter((plan) => config.creditPrices[plan.id]?.monthly)
       .map((plan) => [
         plan.id,
         {
-          priceId: config.creditPrices[plan.id],
+          priceId: config.creditPrices[plan.id].monthly,
+          ...(config.creditPrices[plan.id].yearly
+            ? { yearlyPriceId: config.creditPrices[plan.id].yearly }
+            : {}),
           amount: plan.monthlyAmount,
           currency: "usd",
           interval: "month",

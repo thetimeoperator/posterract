@@ -197,8 +197,8 @@ function planRefusal(plan, kind, params) {
       error: "plan_excludes_generation",
       plan: plan ?? null,
       detail:
-        "This plan includes the editor and publishing, not generation. Upgrade to Studio to generate images, video and voice, or add your own provider keys.",
-      upgradeTo: "studio",
+        "This plan includes the editor and publishing, not generation. Upgrade to Allstar to generate images, video and voice, or add your own provider keys.",
+      upgradeTo: "allstar",
     };
   }
 
@@ -208,7 +208,7 @@ function planRefusal(plan, kind, params) {
       plan,
       resolution: params.resolution,
       detail: `${params.resolution} video is not included in the ${plan} plan.`,
-      upgradeTo: "pro",
+      upgradeTo: "superstar",
     };
   }
 
@@ -237,8 +237,8 @@ async function consumeTranscribeSeconds(postgres, workspaceId, seconds) {
       error: "plan_excludes_transcription",
       plan,
       detail:
-        "This plan does not include transcription. Upgrade to Studio for 120 minutes a cycle, or add your own transcription key.",
-      upgradeTo: "studio",
+        "This plan does not include transcription. Upgrade to Allstar for 120 minutes a cycle, or add your own transcription key.",
+      upgradeTo: "allstar",
     };
   }
 

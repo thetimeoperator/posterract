@@ -59,3 +59,9 @@ FROM workspace AS backend-runtime
 ENV NODE_ENV=production
 COPY deploy/posterract/postgres/init ./deploy/posterract/postgres/init
 EXPOSE 3001 3002
+
+FROM backend-runtime AS orchestrator-runtime
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
