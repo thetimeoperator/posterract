@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import Stripe from "stripe";
 import {
+  addOneMonth,
   clearWorkspacePlan,
   grantPlanCycle,
   setWorkspacePlan,
@@ -558,7 +559,11 @@ async function applyInvoiceEvent(client, workspaceId, invoice, paymentStatus, co
       (await subscriptionCreditPlan(client, config, subscriptionId));
     if (resolved) {
       const cycleStartedAt = resolved.periodStart ?? paidAt ?? new Date();
-      const cycleResetsAt = resolved.periodEnd ?? null;
+      // A month from the payment date, not the invoice period. Stripe bills a
+      // yearly plan once; credits still refill monthly, so a yearly
+      // subscriber is not granted one month's allowance for a year's money.
+      // `rollCycleIfDue` advances this anchor on each read.
+      const cycleResetsAt = addOneMonth(new Date(cycleStartedAt));
       await grantPlanCycle(client, {
         workspaceId,
         plan: resolved.plan.id,

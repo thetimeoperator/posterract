@@ -5,6 +5,7 @@ import { hashRequest } from "../security.js";
 import {
   loadCreditLedger,
   loadWorkspaceCredits,
+  rollCycleIfDue,
   refundCredits,
   reserveCredits,
   settleCredits,
@@ -223,6 +224,7 @@ function planRefusal(plan, kind, params) {
  * requests all pass against the same stale number.
  */
 async function consumeTranscribeSeconds(postgres, workspaceId, seconds) {
+  await rollCycleIfDue(postgres, workspaceId, (plan) => CREDIT_PLANS[plan]?.credits ?? 0);
   const account = await postgres.query(
     "select plan, transcribe_seconds_used from workspace_credits where workspace_id = $1",
     [workspaceId],
@@ -512,6 +514,9 @@ export function registerAiRoutes(
       // What the plan allows, before what the balance allows. A subscriber on
       // the editor plan has no credits by design, so telling them they are out
       // of credits would be both true and useless — the answer is to upgrade.
+      // Refill first: credits renew monthly from the payment date, and a
+      // yearly subscriber's renewal arrives here rather than from Stripe.
+      await rollCycleIfDue(client, workspaceId, (plan) => CREDIT_PLANS[plan]?.credits ?? 0);
       const account = await loadWorkspaceCredits(client, workspaceId);
       const refusal = planRefusal(account.plan, kind, params);
       if (refusal) {
@@ -591,7 +596,13 @@ export function registerAiRoutes(
   app.get(
     "/v1/credits",
     { preHandler: requireScope("ai:read") },
-    async (request) => loadWorkspaceCredits(postgres, requiredWorkspace(request)),
+    async (request) => {
+      // Reading the balance is the commonest way a due refill is noticed:
+      // the panel asks for it every time it opens.
+      const workspaceId = requiredWorkspace(request);
+      await rollCycleIfDue(postgres, workspaceId, (plan) => CREDIT_PLANS[plan]?.credits ?? 0);
+      return loadWorkspaceCredits(postgres, workspaceId);
+    },
   );
 
   app.get(

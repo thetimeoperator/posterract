@@ -7,6 +7,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import Fastify from "fastify";
 import Stripe from "stripe";
+import { rollCycleIfDue } from "../src/credits.js";
 import {
   CREDIT_PLANS,
   createStripeBillingService,
@@ -409,6 +410,86 @@ test("legacy subscriptions without credit prices never touch credit accounts", a
       [workspaceId],
     );
     assert.equal(credits.rows[0].count, 0);
+  } finally {
+    await app.close();
+    await postgres.close();
+  }
+});
+
+/**
+ * Credits refill monthly from the payment date, whatever cadence Stripe
+ * invoices on. A yearly subscriber is invoiced once; without this they would
+ * be granted a single month's allowance for a year's money.
+ */
+test("credits refill a month from the payment date, even on a yearly invoice", async () => {
+  const { postgres, pool } = await database();
+  const { app, send } = await testApp(pool);
+  try {
+    await send({
+      id: "evt_yearly_subscription",
+      type: "customer.subscription.created",
+      data: { object: creditSubscription() },
+    });
+    // A yearly invoice: one payment, a period a year long.
+    await send({
+      id: "evt_yearly_invoice",
+      type: "invoice.paid",
+      data: {
+        object: paidInvoice({
+          id: "in_yearly_1",
+          priceId: environment.STRIPE_PRICE_STUDIO,
+          periodStart: 1_799_000_000,
+          periodEnd: 1_799_000_000 + 365 * 24 * 3600,
+        }),
+      },
+    });
+
+    // The cycle resets a month after payment, not a year.
+    let credits = await pool.query(
+      "select balance, cycle_started_at, cycle_resets_at from workspace_credits where workspace_id = $1",
+      [workspaceId],
+    );
+    assert.equal(Number(credits.rows[0].balance), 1_200);
+    const started = new Date(credits.rows[0].cycle_started_at).getTime();
+    const resets = new Date(credits.rows[0].cycle_resets_at).getTime();
+    const days = (resets - started) / (24 * 3600 * 1000);
+    assert.ok(days >= 28 && days <= 31, `expected a one-month cycle, got ${days} days`);
+
+    // Spend most of it, then move the clock past the reset: the next read
+    // refills to the allowance rather than waiting for another invoice.
+    await pool.query(
+      `update workspace_credits
+          set balance = 40,
+              transcribe_seconds_used = 3600,
+              cycle_resets_at = now() - interval '1 day'
+        where workspace_id = $1`,
+      [workspaceId],
+    );
+    // The refill is lazy — it happens on the next read of the account, which
+    // is what makes it work without a scheduler.
+    const rolled = await rollCycleIfDue(pool, workspaceId, (plan) => CREDIT_PLANS[plan].credits);
+    assert.equal(rolled, true, "a due cycle rolls");
+    credits = await pool.query(
+      "select balance from workspace_credits where workspace_id = $1",
+      [workspaceId],
+    );
+    assert.equal(Number(credits.rows[0].balance), 1_200, "a due cycle refills to the allowance");
+
+    // Transcription minutes reset with it.
+    credits = await pool.query(
+      "select transcribe_seconds_used from workspace_credits where workspace_id = $1",
+      [workspaceId],
+    );
+    assert.equal(Number(credits.rows[0].transcribe_seconds_used), 0);
+
+    // The allowance is a ceiling, not something that accumulates: a long
+    // absence grants once, not once per month missed.
+    const grants = await pool.query(
+      `select count(*)::int as count from credit_ledger
+        where workspace_id = $1 and kind = 'grant'`,
+      [workspaceId],
+    );
+    assert.equal(grants.rows[0].count, 2);
   } finally {
     await app.close();
     await postgres.close();

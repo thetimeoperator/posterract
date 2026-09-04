@@ -183,3 +183,93 @@ export async function refundCredits(
     note,
   });
 }
+
+/**
+ * Advance the credit cycle if its reset date has passed.
+ *
+ * Credits refill monthly from the payment date, whatever cadence Stripe
+ * invoices on. Without this a yearly subscriber would be granted once and get
+ * a single month's allowance for a year's money, because the grant used to
+ * follow the invoice period.
+ *
+ * The roll is lazy — it happens the next time the account is read rather than
+ * on a schedule — so it needs no cron and cannot drift. A workspace nobody
+ * touches for five months rolls straight to the current period on the next
+ * read and is granted once, not five times: the allowance is a ceiling per
+ * month, not something that accumulates.
+ *
+ * Only an active plan rolls. A cancelled one keeps whatever balance it had
+ * until its final period ends, which is what the customer paid for.
+ */
+export async function rollCycleIfDue(client, workspaceId, allotmentFor) {
+  const current = await client.query(
+    `select plan, allotment, cycle_started_at, cycle_resets_at
+       from workspace_credits where workspace_id = $1 for update`,
+    [workspaceId],
+  );
+  const row = current.rows[0];
+  if (!row?.plan || !row.cycle_resets_at) return false;
+
+  const now = Date.now();
+  let resetsAt = new Date(row.cycle_resets_at);
+  if (now < resetsAt.getTime()) return false;
+
+  // Walk forward a month at a time to the period we are actually in, so a
+  // long absence lands on the right anchor date rather than one month past
+  // whenever it was last read.
+  let startedAt = new Date(row.cycle_started_at ?? resetsAt);
+  let guard = 0;
+  while (resetsAt.getTime() <= now && guard < 240) {
+    startedAt = new Date(resetsAt);
+    resetsAt = addOneMonth(resetsAt);
+    guard += 1;
+  }
+
+  const allotment = allotmentFor?.(row.plan) ?? Number(row.allotment ?? 0);
+  const previousBalance = Number(
+    (await client.query("select balance from workspace_credits where workspace_id = $1", [workspaceId]))
+      .rows[0]?.balance ?? 0,
+  );
+
+  await client.query(
+    `update workspace_credits
+        set balance = $2,
+            allotment = $2,
+            cycle_started_at = $3,
+            cycle_resets_at = $4,
+            transcribe_seconds_used = 0,
+            updated_at = now()
+      where workspace_id = $1`,
+    [workspaceId, allotment, startedAt.toISOString(), resetsAt.toISOString()],
+  );
+
+  if (previousBalance > 0) {
+    await recordLedgerEntry(client, {
+      workspaceId,
+      delta: -previousBalance,
+      kind: "expire",
+      note: `Unused credits expired at the ${row.plan} monthly refill`,
+    });
+  }
+  await recordLedgerEntry(client, {
+    workspaceId,
+    delta: allotment,
+    kind: "grant",
+    note: `Granted ${allotment} ${row.plan} credits for the month beginning ${startedAt.toISOString().slice(0, 10)}`,
+  });
+  return true;
+}
+
+/**
+ * One month on from `date`, keeping the anchor day where the month is short:
+ * a subscription bought on the 31st refills on the 28th in February and back
+ * on the 31st in March, rather than drifting earlier every month.
+ */
+export function addOneMonth(date) {
+  const anchorDay = date.getUTCDate();
+  const next = new Date(date);
+  next.setUTCMonth(next.getUTCMonth() + 1, 1);
+  const daysInMonth = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
+  next.setUTCDate(Math.min(anchorDay, daysInMonth));
+  return next;
+}
