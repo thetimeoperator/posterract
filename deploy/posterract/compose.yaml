@@ -36,8 +36,11 @@ services:
         VITE_CONVEX_SITE_URL: ${VITE_CONVEX_SITE_URL}
         VITE_API_URL: ${VITE_API_URL:-}
         VITE_SITE_URL: ${VITE_SITE_URL}
+        VITE_DESKTOP_MAC_DOWNLOAD_URL: ${VITE_DESKTOP_MAC_DOWNLOAD_URL:-}
     expose:
       - "8080"
+    volumes:
+      - ${POSTERRACT_RELEASES_DIR:-/srv/posterract/downloads}:/srv/downloads:ro
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8080/"]
       interval: 15s
