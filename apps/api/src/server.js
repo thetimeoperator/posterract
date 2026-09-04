@@ -38,6 +38,7 @@ import {
   resendAuthConfigured,
 } from "./email.js";
 import { registerOAuthRoutes } from "./oauth.js";
+import { registerAiRoutes } from "./ai/routes.js";
 import { loadAnalyticsDashboard } from "./analytics.js";
 import { registerMetaRoutes } from "./meta.js";
 import {
@@ -112,6 +113,8 @@ const agentApiScopes = new Set([
   "creative-renders:read",
   "creative-renders:write",
   "media:write",
+  "ai:read",
+  "ai:write",
   "points:read",
   "posts:read",
   "posts:write",
@@ -1423,6 +1426,14 @@ app.get(
 registerOAuthRoutes(app, { postgres, requireScope, requiredWorkspace });
 registerAccountSetRoutes(app, { postgres, requireScope, requiredWorkspace });
 registerMetaRoutes(app, { postgres });
+registerAiRoutes(app, {
+  postgres,
+  requireScope,
+  requiredWorkspace,
+  r2,
+  r2Bucket: env.R2_BUCKET,
+  logger: app.log,
+});
 
 app.get(
   "/v1/analytics",
