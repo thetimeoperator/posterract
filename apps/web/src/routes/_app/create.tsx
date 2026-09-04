@@ -77,7 +77,7 @@ function DownloadDesktop() {
               className="inline-flex h-11 items-center gap-2.5 rounded-[12px] border border-neon/35 bg-neon/[0.10] px-5 font-display text-[13px] font-semibold text-neon transition-colors hover:bg-neon/[0.16]"
               href={MAC_DESKTOP_DOWNLOAD}
             >
-              <Apple size={16} /> Download for macOS
+              <Apple size={16} /> Download for Mac
             </a>
           ) : (
             <span className="inline-flex h-11 items-center gap-2.5 rounded-[12px] border border-white/[0.09] px-5 text-[12px] text-starlight-faint">
@@ -91,6 +91,12 @@ function DownloadDesktop() {
             Set up agent access <ArrowRight size={14} />
           </a>
         </div>
+
+        {MAC_DESKTOP_DOWNLOAD ? (
+          <p className="mt-3 text-[11px] text-starlight-faint">
+            Apple silicon (M1 or later), macOS 11+. Intel Macs are not supported yet.
+          </p>
+        ) : null}
       </div>
 
       <div className="mt-12 grid gap-3 sm:grid-cols-3">
