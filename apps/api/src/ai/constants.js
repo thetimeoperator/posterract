@@ -18,12 +18,34 @@ export const MINIMAX_VIDEO_MODEL = "hailuo-3";
 export const FISH_VOICE_MODEL = "s2-pro";
 
 // Whisper-class transcription model name forwarded to TRANSCRIBE_API_URL.
-export const DEFAULT_TRANSCRIBE_MODEL = "whisper-1";
+/**
+ * Transcription runs on Alibaba's Qwen ASR through its OpenAI-compatible
+ * endpoint, so the provider below needs no adapter.
+ *
+ * `qwen3-asr-flash` is the batch (file) model at $0.000035/second — about
+ * $0.13 an hour, roughly a third of OpenAI Whisper's $0.36. The `-realtime`
+ * and `-streaming` variants cost $0.00009/second for live transcription,
+ * which captions never need: they are made from a finished file.
+ *
+ * Set TRANSCRIBE_API_URL to
+ * https://dashscope-intl.aliyuncs.com/compatible-mode/v1 and
+ * TRANSCRIBE_API_KEY to a DashScope key. Any other OpenAI-compatible endpoint
+ * (Groq, OpenAI, a local Whisper server) works by changing those two values
+ * and this model name.
+ */
+export const DEFAULT_TRANSCRIBE_MODEL = "qwen3-asr-flash";
 
 export const IMAGE_MODELS = new Set([GEMINI_IMAGE_MODEL]);
 export const VIDEO_MODELS = new Set([MINIMAX_VIDEO_MODEL]);
 export const VOICE_MODELS = new Set([FISH_VOICE_MODEL]);
-export const TRANSCRIBE_MODELS = new Set([DEFAULT_TRANSCRIBE_MODEL]);
+export const TRANSCRIBE_MODELS = new Set([
+  DEFAULT_TRANSCRIBE_MODEL,
+  "qwen-audio-3.0-asr-flash",
+  "qwen-audio-3.0-asr-flash-filetrans",
+  // Kept accepted so an existing key on another provider keeps working.
+  "whisper-1",
+  "whisper-large-v3-turbo",
+]);
 
 export const IMAGE_RESOLUTIONS = new Set(["1k", "2k"]);
 export const VIDEO_RESOLUTIONS = new Set(["768p", "2k"]);

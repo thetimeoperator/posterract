@@ -9,7 +9,7 @@ import {
   reserveCredits,
   settleCredits,
 } from "../credits.js";
-import { CREDIT_PLANS, PLAN_VIDEO_RESOLUTIONS } from "../billing.js";
+import { CREDIT_PLANS, PLAN_TRANSCRIBE_SECONDS, PLAN_VIDEO_RESOLUTIONS } from "../billing.js";
 import { DEFAULT_TRANSCRIBE_MODEL } from "./constants.js";
 import { GENERATION_KINDS, quote, validateGeneration } from "./pricing.js";
 import * as fishProvider from "./providers/fish.js";
@@ -208,6 +208,54 @@ function planRefusal(plan, kind, params) {
       resolution: params.resolution,
       detail: `${params.resolution} video is not included in the ${plan} plan.`,
       upgradeTo: "pro",
+    };
+  }
+
+  return undefined;
+}
+
+/**
+ * Take `seconds` out of the workspace's transcription allowance, or say why
+ * it cannot be taken.
+ *
+ * The check and the increment are one statement for the same reason the
+ * credit reserve is: reading a total and then deciding lets concurrent
+ * requests all pass against the same stale number.
+ */
+async function consumeTranscribeSeconds(postgres, workspaceId, seconds) {
+  const account = await postgres.query(
+    "select plan, transcribe_seconds_used from workspace_credits where workspace_id = $1",
+    [workspaceId],
+  );
+  const plan = account.rows[0]?.plan ?? null;
+  const allowance = PLAN_TRANSCRIBE_SECONDS[plan] ?? 0;
+
+  if (allowance === 0) {
+    return {
+      error: "plan_excludes_transcription",
+      plan,
+      detail:
+        "This plan does not include transcription. Upgrade to Studio for 120 minutes a cycle, or add your own transcription key.",
+      upgradeTo: "studio",
+    };
+  }
+
+  const claimed = await postgres.query(
+    `update workspace_credits
+        set transcribe_seconds_used = transcribe_seconds_used + $2
+      where workspace_id = $1 and transcribe_seconds_used + $2 <= $3
+      returning transcribe_seconds_used`,
+    [workspaceId, seconds, allowance],
+  );
+
+  if (!claimed.rows[0]) {
+    const used = Number(account.rows[0]?.transcribe_seconds_used ?? 0);
+    return {
+      error: "transcription_limit_reached",
+      plan,
+      usedMinutes: Math.round(used / 60),
+      limitMinutes: Math.round(allowance / 60),
+      detail: `This cycle's ${Math.round(allowance / 60)} minutes of transcription are used up.`,
     };
   }
 
@@ -744,16 +792,38 @@ export function registerAiRoutes(
           ...(mediaId ? { mediaId } : {}),
           ...(audio?.filename ? { filename: audio.filename } : {}),
         };
+        // Transcription is allowed by the minute, not charged in credits: at
+        // Qwen's rate an hour costs about 13 cents, and a caption job that
+        // fails for want of credits fails on the feature that makes
+        // short-form video work. The reservation is therefore zero-credit,
+        // and the cap is enforced separately.
+        const overCap = await consumeTranscribeSeconds(postgres, workspaceId, durationSec);
+        if (overCap) {
+          // Excluded by the plan is a 403 like every other plan refusal;
+          // 429 means the allowance existed and has been used up.
+          reply.code(overCap.error === "plan_excludes_transcription" ? 403 : 429).send(overCap);
+          return;
+        }
+
         const reserved = await reserveGeneration(request, reply, key, {
           kind: "transcribe",
           model,
           params,
           declarationHash: undefined,
-          credits: priced.credits,
+          credits: 0,
           respondStatus: 200,
           completeInTransaction: false,
         });
-        if (!reserved) return;
+        if (!reserved) {
+          // Give the minutes back: nothing was transcribed.
+          await postgres.query(
+            `update workspace_credits
+                set transcribe_seconds_used = greatest(0, transcribe_seconds_used - $2)
+              where workspace_id = $1`,
+            [workspaceId, durationSec],
+          );
+          return;
+        }
 
         const task = {
           generationId: reserved.generationId,
@@ -765,7 +835,7 @@ export function registerAiRoutes(
             bytes: audio?.data,
             mimeType: audio?.contentType,
           },
-          credits: priced.credits,
+          credits: 0,
         };
         try {
           if (media && r2 && r2Bucket && !task.params.bytes) {
@@ -779,7 +849,7 @@ export function registerAiRoutes(
           const output = await runGeneration(task);
           const response = {
             segments: output.segments ?? [],
-            creditsSettled: priced.credits,
+            creditsSettled: 0,
           };
           await completeIdempotency(
             postgres,

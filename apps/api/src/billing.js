@@ -31,9 +31,24 @@ const UUID_PATTERN =
  * credits".
  */
 export const CREDIT_PLANS = Object.freeze({
-  editor: Object.freeze({ id: "editor", monthlyAmount: 2_000, credits: 0 }),
-  studio: Object.freeze({ id: "studio", monthlyAmount: 4_900, credits: 1_200 }),
-  pro: Object.freeze({ id: "pro", monthlyAmount: 9_900, credits: 3_000 }),
+  editor: Object.freeze({ id: "editor", monthlyAmount: 2_000, credits: 0, transcribeMinutes: 0 }),
+  studio: Object.freeze({ id: "studio", monthlyAmount: 4_900, credits: 1_200, transcribeMinutes: 120 }),
+  pro: Object.freeze({ id: "pro", monthlyAmount: 9_900, credits: 3_000, transcribeMinutes: 400 }),
+});
+
+/**
+ * Transcription is allowed by the minute rather than charged in credits.
+ *
+ * At Qwen's $0.000035/second an hour costs about 13 cents, so a full studio
+ * allowance is $0.25 and a full pro allowance $0.84 — a rounding error beside
+ * one six-second video clip. Charging credits for it would mean captions can
+ * fail for want of a resource worth pennies, on the feature that makes
+ * short-form video work. The cap exists to bound abuse, not to price the work.
+ */
+export const PLAN_TRANSCRIBE_SECONDS = Object.freeze({
+  editor: 0,
+  studio: 120 * 60,
+  pro: 400 * 60,
 });
 
 /**

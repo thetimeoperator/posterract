@@ -25,6 +25,7 @@ const migrationNames = [
   "006-stripe-billing.sql",
   "011-ai-credits.sql",
   "013-plan-rename.sql",
+  "014-transcribe-minutes.sql",
 ];
 const workspaceId = "00000000-0000-4000-8000-000000000301";
 const userId = "00000000-0000-4000-8000-000000000302";

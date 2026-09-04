@@ -28,6 +28,7 @@ const migrationNames = [
   "002-postgres-cutover.sql",
   "011-ai-credits.sql",
   "013-plan-rename.sql",
+  "014-transcribe-minutes.sql",
 ];
 const workspaceId = "00000000-0000-4000-8000-000000000201";
 const userId = "00000000-0000-4000-8000-000000000202";
@@ -430,7 +431,7 @@ test("transcription charges by the minute and returns mock segments", async () =
     });
     assert.equal(transcribed.statusCode, 200);
     assert.deepEqual(transcribed.json().segments, MOCK_TRANSCRIPTION_SEGMENTS);
-    assert.equal(transcribed.json().creditsSettled, 3);
+    assert.equal(transcribed.json().creditsSettled, 0);
     assert.equal(transcribed.json().segments[0].words[0].text, "Posterract");
 
     const replay = await app.inject({
@@ -464,11 +465,21 @@ test("transcription charges by the minute and returns mock segments", async () =
       payload: multipart,
     });
     assert.equal(uploaded.statusCode, 200);
-    assert.equal(uploaded.json().creditsSettled, 2);
+    // Transcription is allowed by the minute, not charged in credits: at
+    // Qwen's rate an hour costs about 13 cents, and a caption job that fails
+    // for want of credits fails on the feature short-form video needs most.
+    assert.equal(uploaded.json().creditsSettled, 0);
     assert.deepEqual(uploaded.json().segments, MOCK_TRANSCRIPTION_SEGMENTS);
 
     const creditsState = await app.inject({ method: "GET", url: "/v1/credits" });
-    assert.equal(creditsState.json().balance, 145);
+    assert.equal(creditsState.json().balance, 150, "transcription must not touch credits");
+
+    // The minutes are what moved.
+    const used = await pool.query(
+      "select transcribe_seconds_used from workspace_credits where workspace_id = $1",
+      [workspaceId],
+    );
+    assert.ok(Number(used.rows[0].transcribe_seconds_used) > 0);
     const generations = await pool.query(
       `select kind, status, credits_settled from ai_generations
        where workspace_id = $1 order by created_at asc`,
@@ -533,6 +544,21 @@ test("plans gate generation before any credit is reserved", async () => {
       [workspaceId],
     );
     assert.equal(generations.rows[0].count, 0);
+
+    // Transcription goes through the same reserve, so the gate covers it too
+    // — otherwise an editor subscriber could transcribe on our keys for free.
+    await pool.query(
+      "update workspace_credits set plan = 'editor', balance = 0, allotment = 0 where workspace_id = $1",
+      [workspaceId],
+    );
+    const transcribe = await app.inject({
+      method: "POST",
+      url: "/v1/ai/transcribe",
+      headers: { "idempotency-key": "ai-plan-gate-transcribe" },
+      payload: { durationSec: 60 },
+    });
+    assert.equal(transcribe.statusCode, 403);
+    assert.equal(transcribe.json().error, "plan_excludes_transcription");
 
     // The same request on pro is allowed through to the ledger.
     await pool.query(
