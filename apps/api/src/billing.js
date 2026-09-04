@@ -229,8 +229,15 @@ function configuration(environment) {
     webhookSecret: configuredValue(environment, "STRIPE_WEBHOOK_SECRET"),
     publishableKey: configuredValue(environment, "STRIPE_PUBLISHABLE_KEY"),
     productId: configuredValue(environment, "STRIPE_PRODUCT_ID"),
-    monthlyPriceId: configuredValue(environment, "STRIPE_MONTHLY_PRICE_ID"),
-    yearlyPriceId: configuredValue(environment, "STRIPE_YEARLY_PRICE_ID"),
+    // The base subscription is the Pro plan. There is no separate product
+    // any more, so these fall back to Pro's own prices rather than demanding
+    // a duplicate pair of variables that would have to be kept in step.
+    monthlyPriceId:
+      configuredValue(environment, "STRIPE_MONTHLY_PRICE_ID") ??
+      configuredValue(environment, "STRIPE_PRO_MONTHLY_PRICE_ID"),
+    yearlyPriceId:
+      configuredValue(environment, "STRIPE_YEARLY_PRICE_ID") ??
+      configuredValue(environment, "STRIPE_PRO_YEARLY_PRICE_ID"),
     // Every plan is sold monthly and yearly. Credits refill a month from the
     // payment date either way (see `rollCycleIfDue`), so the interval is
     // purely a billing choice — a yearly subscriber is charged once and still
@@ -261,10 +268,10 @@ function configuration(environment) {
   }
   if (!config.productId?.startsWith("prod_")) errors.push("STRIPE_PRODUCT_ID");
   if (!config.monthlyPriceId?.startsWith("price_")) {
-    errors.push("STRIPE_MONTHLY_PRICE_ID");
+    errors.push("STRIPE_PRO_MONTHLY_PRICE_ID");
   }
   if (!config.yearlyPriceId?.startsWith("price_")) {
-    errors.push("STRIPE_YEARLY_PRICE_ID");
+    errors.push("STRIPE_PRO_YEARLY_PRICE_ID");
   }
   // Every plan is sold both ways, so every price is required. A missing one
   // would otherwise fail silently at checkout — the plan would simply refuse
