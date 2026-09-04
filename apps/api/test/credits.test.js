@@ -174,6 +174,11 @@ test("credit plan definitions expose the launch catalog", async () => {
   assert.equal(CREDIT_PLANS.pro.monthlyAmount, 2_000);
   assert.equal(CREDIT_PLANS.allstar.monthlyAmount, 4_900);
   assert.equal(CREDIT_PLANS.superstar.monthlyAmount, 9_900);
+  // Ten months' money for twelve months of service, and the figure the plan card
+  // shows on the yearly cycle — it used to show the monthly one relabelled.
+  assert.equal(CREDIT_PLANS.pro.yearlyAmount, 20_000);
+  assert.equal(CREDIT_PLANS.allstar.yearlyAmount, 49_000);
+  assert.equal(CREDIT_PLANS.superstar.yearlyAmount, 99_000);
 
   const { postgres, pool } = await database();
   const { app } = await testApp(pool);
@@ -184,10 +189,13 @@ test("credit plan definitions expose the launch catalog", async () => {
       priceId: "price_pro",
       yearlyPriceId: "price_pro_yearly",
       amount: 2_000,
+      yearlyAmount: 20_000,
       currency: "usd",
       interval: "month",
       credits: 0,
     });
+    assert.equal(config.json().creditPlans.allstar.yearlyAmount, 49_000);
+    assert.equal(config.json().creditPlans.superstar.yearlyAmount, 99_000);
     assert.equal(config.json().creditPlans.superstar.credits, 3_000);
   } finally {
     await app.close();
