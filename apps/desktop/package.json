@@ -25,7 +25,8 @@
     "test:element-source": "esbuild src/element-source.test.ts --bundle --platform=node --format=esm --outfile=.tmp/element-source.test.mjs && node --test .tmp/element-source.test.mjs",
     "test:revisions": "esbuild src/revisions.test.ts --bundle --platform=node --format=esm --alias:electron=./src/testing/electron-stub.ts --outfile=.tmp/revisions.test.mjs && POSTERRACT_TEST_USER_DATA=\"$(mktemp -d)\" node --test .tmp/revisions.test.mjs",
     "test:agent-connection": "esbuild src/local-agent-state.test.ts --bundle --platform=node --format=cjs --outfile=.tmp/local-agent-state.test.cjs && esbuild src/mcp-client-config.test.ts --bundle --platform=node --format=cjs --outfile=.tmp/mcp-client-config.test.cjs && node --test .tmp/local-agent-state.test.cjs .tmp/mcp-client-config.test.cjs",
-    "test:mailbox": "esbuild src/project-control-mailbox.test.ts --bundle --platform=node --format=esm --alias:electron=./src/testing/electron-stub.ts --outfile=.tmp/project-control-mailbox.test.mjs && node --test .tmp/project-control-mailbox.test.mjs"
+    "test:mailbox": "esbuild src/project-control-mailbox.test.ts --bundle --platform=node --format=esm --alias:electron=./src/testing/electron-stub.ts --outfile=.tmp/project-control-mailbox.test.mjs && node --test .tmp/project-control-mailbox.test.mjs",
+    "test:skills": "esbuild src/skills.test.ts --bundle --platform=node --format=esm --alias:electron=./src/testing/electron-stub.ts --outfile=.tmp/skills.test.mjs && node --test .tmp/skills.test.mjs"
   },
   "dependencies": {
     "@posterract/cli": "workspace:*",
@@ -41,6 +42,7 @@
     "@electron-forge/maker-squirrel": "7.11.2",
     "@electron-forge/maker-zip": "^7.11.1",
     "@electron-forge/shared-types": "^7.11.1",
+    "@electron/notarize": "^2.5.0",
     "@reforged/maker-appimage": "5.3.1",
     "@types/node": "^24.10.1",
     "electron": "^43.1.1",

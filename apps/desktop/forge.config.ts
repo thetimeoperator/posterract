@@ -12,6 +12,17 @@ const iconBase = resolve(desktopRoot, "assets", "icon");
 const desktopIcon =
   process.platform === "darwin" ? `${iconBase}.icns` : process.platform === "win32" ? `${iconBase}.ico` : `${iconBase}.png`;
 
+// Notarization needs all three, and Apple rejects the submission if any is wrong.
+// Kept as one value so the packager and the postMake staple below cannot disagree.
+const appleCredentials =
+  process.env.APPLE_ID && process.env.APPLE_PASSWORD && process.env.APPLE_TEAM_ID
+    ? {
+        appleId: process.env.APPLE_ID,
+        appleIdPassword: process.env.APPLE_PASSWORD,
+        teamId: process.env.APPLE_TEAM_ID,
+      }
+    : undefined;
+
 const config: ForgeConfig = {
   packagerConfig: {
     name: "Posterract",
@@ -38,17 +49,12 @@ const config: ForgeConfig = {
       !path.startsWith("/examples/") &&
       path !== "/skill" &&
       !path.startsWith("/skill/") &&
+      path !== "/skills" &&
+      !path.startsWith("/skills/") &&
       path !== "/assets" &&
       !path.startsWith("/assets/"),
     osxSign: process.env.SKIP_SIGN ? undefined : {},
-    osxNotarize:
-      process.env.APPLE_ID && process.env.APPLE_PASSWORD && process.env.APPLE_TEAM_ID
-        ? {
-            appleId: process.env.APPLE_ID,
-            appleIdPassword: process.env.APPLE_PASSWORD,
-            teamId: process.env.APPLE_TEAM_ID,
-          }
-        : undefined,
+    osxNotarize: appleCredentials,
   },
   makers: [
     new MakerZIP({}, ["darwin"]),
@@ -81,6 +87,34 @@ const config: ForgeConfig = {
       },
     }),
   ],
+  hooks: {
+    // An unsigned build fails loudly — @electron/osx-sign throws when it finds no
+    // identity. A signed-but-unnotarized one does not: it produces a .dmg that looks
+    // like a finished release and is refused on every Mac but the one that built it.
+    // Refuse to reach the makers in that state; local builds opt out with SKIP_SIGN=1.
+    preMake: async () => {
+      if (process.platform !== "darwin" || process.env.SKIP_SIGN || appleCredentials) return;
+      throw new Error(
+        "Refusing to make an unnotarized macOS release: it will be rejected on every other Mac. " +
+          "Set APPLE_ID, APPLE_PASSWORD (an app-specific password) and APPLE_TEAM_ID, " +
+          "or pass SKIP_SIGN=1 for a local build.",
+      );
+    },
+    // The app inside the image is stapled during packaging, but the .dmg wrapper is
+    // what carries the quarantine flag on download, and Gatekeeper judges it first.
+    // Notarizing the wrapper too is what makes a fresh download open on a double click.
+    postMake: async (_config, results) => {
+      if (!appleCredentials) return results;
+      const { notarize } = await import("@electron/notarize");
+      for (const result of results) {
+        if (result.platform !== "darwin") continue;
+        for (const artifact of result.artifacts.filter((path) => path.endsWith(".dmg"))) {
+          await notarize({ appPath: artifact, ...appleCredentials });
+        }
+      }
+      return results;
+    },
+  },
 };
 
 export default config;
