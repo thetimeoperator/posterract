@@ -93,20 +93,30 @@ function stripeMock() {
       retrieve: async (id) => ({ id, active: true }),
     },
     prices: {
-      retrieve: async (id) => ({
-        id,
-        active: true,
-        type: "recurring",
-        product: environment.STRIPE_PRODUCT_ID,
-        currency: "usd",
-        unit_amount:
-          id === environment.STRIPE_YEARLY_PRICE_ID ? 20_000 : 2_000,
-        recurring: {
-          interval:
-            id === environment.STRIPE_YEARLY_PRICE_ID ? "year" : "month",
-          interval_count: 1,
-        },
-      }),
+      // The whole catalogue, because checkout verifies every price a customer
+      // can be sent to — not just the base pair.
+      retrieve: async (id) => {
+        const catalogue = {
+          [environment.STRIPE_MONTHLY_PRICE_ID]: ["month", 2_000],
+          [environment.STRIPE_YEARLY_PRICE_ID]: ["year", 20_000],
+          [environment.STRIPE_PRO_MONTHLY_PRICE_ID]: ["month", 2_000],
+          [environment.STRIPE_PRO_YEARLY_PRICE_ID]: ["year", 20_000],
+          [environment.STRIPE_ALLSTAR_MONTHLY_PRICE_ID]: ["month", 4_900],
+          [environment.STRIPE_ALLSTAR_YEARLY_PRICE_ID]: ["year", 49_000],
+          [environment.STRIPE_SUPERSTAR_MONTHLY_PRICE_ID]: ["month", 9_900],
+          [environment.STRIPE_SUPERSTAR_YEARLY_PRICE_ID]: ["year", 99_000],
+        };
+        const [interval, unitAmount] = catalogue[id] ?? ["month", 2_000];
+        return {
+          id,
+          active: true,
+          type: "recurring",
+          product: environment.STRIPE_PRODUCT_ID,
+          currency: "usd",
+          unit_amount: unitAmount,
+          recurring: { interval, interval_count: 1 },
+        };
+      },
     },
     customers: {
       create: async (...args) => {
@@ -427,6 +437,39 @@ test("product entitlement requires an active subscription without a failed payme
   }
 });
 
+test("Checkout refuses a tier whose Stripe price does not match the catalogue", async () => {
+  const { postgres, pool } = await database();
+  const { client } = stripeMock();
+  // A tier price mistyped in the Stripe dashboard — $4.90 where $49.00 was meant.
+  // Verifying only the base pair let exactly this reach a live checkout page.
+  const inner = client.prices.retrieve;
+  const stripe = {
+    ...client,
+    prices: {
+      retrieve: async (id) => {
+        const price = await inner(id);
+        return id === environment.STRIPE_ALLSTAR_MONTHLY_PRICE_ID
+          ? { ...price, unit_amount: 490 }
+          : price;
+      },
+    },
+  };
+  const { app } = await testApp(pool, stripe);
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/billing/checkout",
+      headers: { "idempotency-key": "checkout-mistyped-0001" },
+      payload: { plan: "allstar", interval: "monthly" },
+    });
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.json().error, "stripe_catalog_mismatch");
+  } finally {
+    await app.close();
+    await postgres.end?.();
+  }
+});
+
 test("Checkout validates the live catalog and prevents duplicate subscriptions", async () => {
   const { postgres, pool } = await database();
   const { client, calls } = stripeMock();
@@ -436,6 +479,11 @@ test("Checkout validates the live catalog and prevents duplicate subscriptions",
     assert.equal(config.statusCode, 200);
     assert.equal(config.json().configured, true);
     assert.equal(config.json().plans.yearly.amount, 20_000);
+    // The yearly amount must be the one Stripe holds. Deriving it from the
+    // monthly figure advertised $49/year for a plan billed $490.
+    assert.equal(config.json().creditPlans.allstar.amount, 4_900);
+    assert.equal(config.json().creditPlans.allstar.yearlyAmount, 49_000);
+    assert.equal(config.json().creditPlans.superstar.yearlyAmount, 99_000);
 
     const missingKey = await app.inject({
       method: "POST",

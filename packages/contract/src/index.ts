@@ -527,8 +527,14 @@ export type BillingCreditPlanDTO = {
   priceId: string;
   /** Stripe price for the yearly interval, when the tier is sold that way. */
   yearlyPriceId?: string;
-  /** Monthly amount in cents; the yearly price is shown by Stripe at checkout. */
+  /** Monthly amount in cents, as Stripe holds it. */
   amount: number;
+  /**
+   * Yearly amount in cents, read from Stripe rather than derived. Absent when the
+   * catalog could not be read: a client must not present a yearly price it had to
+   * guess, since the guess is not what the card is charged.
+   */
+  yearlyAmount?: number;
   currency: "usd";
   interval: "month";
   /** Generation allowance per month. Zero means the tier includes no generation. */

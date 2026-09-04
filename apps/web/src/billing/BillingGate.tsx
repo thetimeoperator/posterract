@@ -156,10 +156,15 @@ export function BillingGate({ children }: { children: ReactNode }) {
   const plans = config?.plans;
   const creditPlans = config?.creditPlans;
   const tier = creditPlans?.[planId];
-  // The tier's monthly amount is authoritative; the yearly figure Stripe
-  // charges is shown on its own checkout page rather than guessed here.
+  // Labelling the monthly amount "/year" advertised a tenth of what the card is
+  // charged. Each interval now shows the amount Stripe actually holds for it, and
+  // a yearly price the API could not read is not rendered or sold at all.
   const selectedPlan = tier
-    ? { amount: tier.amount, interval: cycle === "yearly" ? "year" : "month" }
+    ? cycle === "yearly"
+      ? tier.yearlyAmount !== undefined
+        ? { amount: tier.yearlyAmount, interval: "year" as const }
+        : undefined
+      : { amount: tier.amount, interval: "month" as const }
     : plans?.[cycle];
   const needsPortal = MANAGEABLE_STATUSES.has(subscription?.status ?? "");
   const cancelled = returnState === "cancelled";
@@ -314,7 +319,7 @@ export function BillingGate({ children }: { children: ReactNode }) {
                   <div className="pointer-events-none absolute -right-16 -top-16 h-44 w-44 rounded-full bg-ice/[0.10] blur-[58px]" aria-hidden />
                   <div className="pointer-events-none absolute -bottom-20 -left-14 h-44 w-44 rounded-full bg-neon/[0.10] blur-[64px]" aria-hidden />
                   <div className="relative flex min-h-[340px] flex-col">
-                    {!needsPortal && selectedPlan ? (
+                    {!needsPortal ? (
                       <>
                         <p className="font-display text-[15px] font-semibold text-starlight">Choose your plan</p>
                         {creditPlans && (
@@ -378,13 +383,22 @@ export function BillingGate({ children }: { children: ReactNode }) {
                             })}
                           </div>
                         )}
-                        <p className="mt-6 font-display text-[clamp(43px,6vw,58px)] font-semibold leading-none tracking-[-0.055em] text-starlight">
-                          {price(selectedPlan.amount)}
-                          <small className="ml-1 text-[11px] font-normal tracking-normal text-starlight-faint">/{selectedPlan.interval}</small>
-                        </p>
-                        <p className="mt-2 text-[10px] text-starlight-dim">
-                          {cycle === "yearly" ? "Billed yearly. Credits still refill every month." : "Billed monthly. Switch or cancel anytime."}
-                        </p>
+                        {selectedPlan ? (
+                          <>
+                            <p className="mt-6 font-display text-[clamp(43px,6vw,58px)] font-semibold leading-none tracking-[-0.055em] text-starlight">
+                              {price(selectedPlan.amount)}
+                              <small className="ml-1 text-[11px] font-normal tracking-normal text-starlight-faint">/{selectedPlan.interval}</small>
+                            </p>
+                            <p className="mt-2 text-[10px] text-starlight-dim">
+                              {cycle === "yearly" ? "Billed yearly. Credits still refill every month." : "Billed monthly. Switch or cancel anytime."}
+                            </p>
+                          </>
+                        ) : (
+                          <p className="mt-6 text-[11px] leading-relaxed text-starlight-dim">
+                            Yearly pricing for this plan is unavailable right now. Choose monthly, or
+                            try again in a few minutes.
+                          </p>
+                        )}
                         <div className="mt-5 grid grid-cols-2 gap-2 border-y border-white/[0.07] py-3 text-[9px] text-starlight-faint">
                           <span>No setup fee</span>
                           <span className="text-right">Cancel anytime</span>

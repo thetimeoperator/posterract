@@ -636,27 +636,50 @@ export function createStripeBillingService({
   async function verifyCatalog() {
     requireConfigured();
     if (catalogCache?.expiresAt > Date.now()) return catalogCache.value;
-    const [product, monthly, yearly] = await Promise.all([
+
+    // Every price a customer can be sent to, deduped. Checking only the base
+    // pair let four hand-entered tier prices reach a live checkout unverified,
+    // where a mistyped amount or a one-off price charges the wrong thing.
+    const wanted = new Map();
+    const want = (priceId, interval, amount) => {
+      if (!priceId) return;
+      const existing = wanted.get(priceId);
+      // Pro's prices are also the base pair; keep the assertion we can make.
+      if (existing && !(existing.amount === undefined && amount !== undefined)) return;
+      wanted.set(priceId, { interval, amount });
+    };
+    want(config.monthlyPriceId, "month", 2_000);
+    want(config.yearlyPriceId, "year", 20_000);
+    for (const plan of Object.values(CREDIT_PLANS)) {
+      const prices = config.creditPrices[plan.id];
+      if (!prices) continue;
+      want(prices.monthly, "month", plan.monthlyAmount);
+      // The yearly figure is Stripe's to state; we assert its shape, not its size.
+      want(prices.yearly, "year", undefined);
+    }
+
+    const ids = [...wanted.keys()];
+    const [product, ...prices] = await Promise.all([
       stripe.products.retrieve(config.productId),
-      stripe.prices.retrieve(config.monthlyPriceId),
-      stripe.prices.retrieve(config.yearlyPriceId),
+      ...ids.map((id) => stripe.prices.retrieve(id)),
     ]);
-    const expected = [
-      [monthly, "month", 2_000],
-      [yearly, "year", 20_000],
-    ];
+
+    const amounts = new Map();
     const valid =
       product.active !== false &&
-      expected.every(
-        ([price, interval, amount]) =>
+      prices.every((price, index) => {
+        const expected = wanted.get(ids[index]);
+        amounts.set(ids[index], price.unit_amount);
+        return (
           price.active !== false &&
           stripeId(price.product) === config.productId &&
           price.type === "recurring" &&
-          price.recurring?.interval === interval &&
+          price.recurring?.interval === expected.interval &&
           price.recurring?.interval_count === 1 &&
           price.currency === "usd" &&
-          price.unit_amount === amount,
-      );
+          (expected.amount === undefined || price.unit_amount === expected.amount)
+        );
+      });
     if (!valid) {
       throw new BillingError(503, "stripe_catalog_mismatch");
     }
@@ -664,6 +687,19 @@ export function createStripeBillingService({
       productId: config.productId,
       monthly: { priceId: config.monthlyPriceId, amount: 2_000, currency: "usd" },
       yearly: { priceId: config.yearlyPriceId, amount: 20_000, currency: "usd" },
+      tierAmounts: Object.fromEntries(
+        Object.values(CREDIT_PLANS)
+          .filter((plan) => config.creditPrices[plan.id]?.monthly)
+          .map((plan) => [
+            plan.id,
+            {
+              monthly: amounts.get(config.creditPrices[plan.id].monthly),
+              yearly: config.creditPrices[plan.id].yearly
+                ? amounts.get(config.creditPrices[plan.id].yearly)
+                : undefined,
+            },
+          ]),
+      ),
     };
     catalogCache = { value, expiresAt: Date.now() + 10 * 60_000 };
     return value;
@@ -899,7 +935,18 @@ export function createStripeBillingService({
     return publicSubscription(result.rows[0]);
   }
 
-  function publicConfig() {
+  async function publicConfig() {
+    // Stripe is the authority on what a card is actually charged. Deriving the
+    // yearly figure from the monthly one advertised a price we do not charge,
+    // so a tier omits its yearly amount rather than guess at one.
+    let tierAmounts;
+    if (config.configured) {
+      try {
+        ({ tierAmounts } = await verifyCatalog());
+      } catch {
+        tierAmounts = undefined;
+      }
+    }
     const creditPlanEntries = Object.values(CREDIT_PLANS)
       .filter((plan) => config.creditPrices[plan.id]?.monthly)
       .map((plan) => [
@@ -909,7 +956,10 @@ export function createStripeBillingService({
           ...(config.creditPrices[plan.id].yearly
             ? { yearlyPriceId: config.creditPrices[plan.id].yearly }
             : {}),
-          amount: plan.monthlyAmount,
+          amount: tierAmounts?.[plan.id]?.monthly ?? plan.monthlyAmount,
+          ...(tierAmounts?.[plan.id]?.yearly !== undefined
+            ? { yearlyAmount: tierAmounts[plan.id].yearly }
+            : {}),
           currency: "usd",
           interval: "month",
           credits: plan.credits,
