@@ -45,11 +45,12 @@ ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_SITE_URL=$VITE_SITE_URL
 ENV VITE_DESKTOP_MAC_DOWNLOAD_URL=$VITE_DESKTOP_MAC_DOWNLOAD_URL
 
+# The canvas is desktop-only: a project is TSX on the user's disk and the agent
+# bridge is a local process, so the web build ships the scheduler and the download
+# screen. Desktop bundles its own copy of the editor under renderer/editor-sandbox,
+# so building it here only put a second, unreachable editor on the public origin.
 RUN pnpm --filter @posterract/composition build \
-    && pnpm --filter @posterract/editor-sandbox build \
-    && pnpm --filter @posterract/web build \
-    && mkdir -p apps/web/dist/editor-sandbox \
-    && cp -R apps/editor-sandbox/dist/. apps/web/dist/editor-sandbox/
+    && pnpm --filter @posterract/web build
 
 FROM nginx:1.29-alpine AS web-runtime
 COPY deploy/posterract/nginx.conf /etc/nginx/conf.d/default.conf
