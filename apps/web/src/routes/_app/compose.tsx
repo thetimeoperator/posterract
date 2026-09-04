@@ -119,10 +119,6 @@ function Composer() {
       return;
     }
     setSubmitting(true);
-    const tiktokCaption = platforms.includes("tiktok") ? fullCaptionFor("tiktok") : "";
-    const copyPromise = mode === "now" && tiktokCaption && navigator.clipboard
-      ? navigator.clipboard.writeText(tiktokCaption).then(() => true).catch(() => false)
-      : Promise.resolve(false);
     try {
       const t = await createTransmission({
         title: resolvedTitle,
@@ -138,15 +134,12 @@ function Composer() {
         scheduleMode: mode,
         scheduledFor,
       });
-      const copiedTikTokCaption = await copyPromise;
       pushSignal({
         tone: "success",
         title: mode === "now" ? "Transmission initiated" : "Transmission in trajectory",
         detail:
           mode === "now"
-            ? copiedTikTokCaption
-              ? `Publishing “${t.title}” now. TikTok caption copied—paste it into the delivered draft.`
-              : `Publishing “${t.title}” to ${platforms.length} platform${platforms.length > 1 ? "s" : ""} now.`
+            ? `Publishing “${t.title}” to ${platforms.length} platform${platforms.length > 1 ? "s" : ""} now.`
             : `“${t.title}” will publish ${new Date(scheduledFor).toLocaleString()}.`,
       });
       void navigate({ to: "/transmissions" });

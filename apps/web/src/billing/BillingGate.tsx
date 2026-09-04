@@ -13,6 +13,18 @@ import { isPosterractDesktop, openExternalUrl } from "@/lib/desktop";
 import { useAuthState } from "@/lib/useAuthState";
 
 type BillingCycle = "monthly" | "yearly";
+type PlanId = "pro" | "allstar" | "superstar";
+
+/**
+ * What each tier is for, in the buyer's terms. The allowances come from the
+ * API so they can never drift from what the ledger actually grants; only the
+ * pitch lives here.
+ */
+const TIERS: ReadonlyArray<{ id: PlanId; name: string; pitch: string }> = [
+  { id: "pro", name: "Pro", pitch: "The editor, the agent bridge, and scheduling. Bring your own AI keys." },
+  { id: "allstar", name: "Allstar", pitch: "Everything in Pro, plus generation on our models." },
+  { id: "superstar", name: "Superstar", pitch: "More of everything, and the only tier with 2K video." },
+];
 type GateStatus = "checking" | "ready" | "error";
 
 const MANAGEABLE_STATUSES = new Set(["past_due", "unpaid", "paused", "trialing"]);
@@ -45,6 +57,9 @@ export function BillingGate({ children }: { children: ReactNode }) {
   const [subscription, setSubscription] = useState<BillingSubscriptionDTO | null>(null);
   const [cycle, setCycle] = useState<BillingCycle>("monthly");
   const [busy, setBusy] = useState<"checkout" | "portal" | "signout" | null>(null);
+  // Allstar is the tier most people want: it is the cheapest one that
+  // generates, which is what the product is for.
+  const [planId, setPlanId] = useState<PlanId>("allstar");
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
   const returnState = useMemo(
@@ -139,7 +154,13 @@ export function BillingGate({ children }: { children: ReactNode }) {
   if (status === "ready" && subscription?.entitled) return children;
 
   const plans = config?.plans;
-  const selectedPlan = plans?.[cycle];
+  const creditPlans = config?.creditPlans;
+  const tier = creditPlans?.[planId];
+  // The tier's monthly amount is authoritative; the yearly figure Stripe
+  // charges is shown on its own checkout page rather than guessed here.
+  const selectedPlan = tier
+    ? { amount: tier.amount, interval: cycle === "yearly" ? "year" : "month" }
+    : plans?.[cycle];
   const needsPortal = MANAGEABLE_STATUSES.has(subscription?.status ?? "");
   const cancelled = returnState === "cancelled";
   const userEmail = authState.user?.email;
@@ -151,7 +172,7 @@ export function BillingGate({ children }: { children: ReactNode }) {
       const checkout = await billingRequest<BillingCheckoutDTO>("/v1/billing/checkout", {
         method: "POST",
         headers: { "Idempotency-Key": `checkout-${crypto.randomUUID()}` },
-        body: JSON.stringify({ interval: cycle }),
+        body: JSON.stringify({ plan: planId, interval: cycle }),
       });
       await openExternalUrl(checkout.url);
       setBusy(null);
@@ -295,7 +316,43 @@ export function BillingGate({ children }: { children: ReactNode }) {
                   <div className="relative flex min-h-[340px] flex-col">
                     {!needsPortal && selectedPlan ? (
                       <>
-                        <p className="font-display text-[15px] font-semibold text-starlight">Choose billing</p>
+                        <p className="font-display text-[15px] font-semibold text-starlight">Choose your plan</p>
+                        {creditPlans && (
+                          <div className="mt-4 flex flex-col gap-1.5" role="radiogroup" aria-label="Plan">
+                            {TIERS.filter((entry) => creditPlans[entry.id]).map((entry) => {
+                              const plan = creditPlans[entry.id]!;
+                              const selected = planId === entry.id;
+                              return (
+                                <button
+                                  key={entry.id}
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={selected}
+                                  onClick={() => setPlanId(entry.id)}
+                                  className={clsx(
+                                    "rounded-[11px] border px-3 py-2.5 text-left transition-colors",
+                                    selected
+                                      ? "border-neon/45 bg-neon/[0.08]"
+                                      : "border-white/[0.08] bg-black/20 hover:border-white/[0.16]",
+                                  )}
+                                >
+                                  <span className="flex items-baseline justify-between gap-2">
+                                    <span className={clsx("font-display text-[12px] font-semibold", selected ? "text-neon" : "text-starlight")}>
+                                      {entry.name}
+                                    </span>
+                                    <span className="text-[10px] tabular-nums text-starlight-faint">
+                                      {price(plan.amount)}/mo
+                                    </span>
+                                  </span>
+                                  <span className="mt-0.5 block text-[9.5px] leading-relaxed text-starlight-faint">
+                                    {entry.pitch}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <p className="mt-5 font-display text-[15px] font-semibold text-starlight">Billing</p>
                         {plans && (
                           <div className="mt-4 grid grid-cols-2 rounded-[12px] border border-white/[0.08] bg-black/20 p-1" role="radiogroup" aria-label="Billing cycle">
                             {(["monthly", "yearly"] as const).map((option) => {
@@ -326,7 +383,7 @@ export function BillingGate({ children }: { children: ReactNode }) {
                           <small className="ml-1 text-[11px] font-normal tracking-normal text-starlight-faint">/{selectedPlan.interval}</small>
                         </p>
                         <p className="mt-2 text-[10px] text-starlight-dim">
-                          {cycle === "yearly" ? "Save $40 compared with monthly billing." : "Billed monthly. Switch or cancel anytime."}
+                          {cycle === "yearly" ? "Billed yearly. Credits still refill every month." : "Billed monthly. Switch or cancel anytime."}
                         </p>
                         <div className="mt-5 grid grid-cols-2 gap-2 border-y border-white/[0.07] py-3 text-[9px] text-starlight-faint">
                           <span>No setup fee</span>

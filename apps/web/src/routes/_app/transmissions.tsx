@@ -100,19 +100,6 @@ function TransmissionRow({
   const projections = useProjections().filter((p) => p.transmissionId === t.id);
   const events = useEvents().filter((e) => e.transmissionId === t.id);
   const { cancelTransmission, duplicateTransmission, retryProjection } = useEngineActions();
-  const tiktokDraft = projections.find(
-    (projection) => projection.provider === "tiktok" && projection.status === "awaiting_user",
-  );
-
-  const copyTikTokCaption = async () => {
-    if (!tiktokDraft?.caption) return;
-    try {
-      await navigator.clipboard.writeText(tiktokDraft.caption);
-      pushSignal({ tone: "success", title: "TikTok caption copied", detail: "Paste it into the draft TikTok delivered." });
-    } catch {
-      pushSignal({ tone: "danger", title: "Could not copy caption", detail: "Expand the transmission to read the saved caption." });
-    }
-  };
 
   const statusDots = Object.fromEntries(
     projections.map((p) => [
@@ -167,16 +154,6 @@ function TransmissionRow({
           <div className="col-start-2 flex items-center justify-between gap-2 sm:contents">
           <StatusBadge status={t.status} />
           <div className="flex flex-none items-center gap-1">
-            {tiktokDraft?.caption && (
-              <Button
-                size="sm"
-                variant="secondary"
-                icon={<Copy size={12} />}
-                onClick={() => void copyTikTokCaption()}
-              >
-                Copy TikTok caption
-              </Button>
-            )}
             {t.status === "scheduled" && (
               <Button
                 size="sm"

@@ -68,7 +68,7 @@ export function AnimatedPricingCard({ onLaunch }: AnimatedPricingCardProps) {
         </div>
 
         <p className="site-pricing-summary">
-          One plan for creators and agents: the scheduler, the editor, and the AI tools inside it. Bring your own AI keys—pay the providers directly, we never mark up generation.
+          The scheduler, the desktop editor, and the agent bridge. Bring your own AI keys on Pro, or generate on ours with Allstar and Superstar.
         </p>
 
         <ul className="site-pricing-features">

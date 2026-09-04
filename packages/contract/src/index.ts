@@ -521,6 +521,20 @@ export type BillingPlanDTO = {
   interval: BillingInterval;
 };
 
+/** One purchasable tier, as the API advertises it. */
+export type BillingCreditPlanDTO = {
+  /** Stripe price for the monthly interval. */
+  priceId: string;
+  /** Stripe price for the yearly interval, when the tier is sold that way. */
+  yearlyPriceId?: string;
+  /** Monthly amount in cents; the yearly price is shown by Stripe at checkout. */
+  amount: number;
+  currency: "usd";
+  interval: "month";
+  /** Generation allowance per month. Zero means the tier includes no generation. */
+  credits: number;
+};
+
 export type BillingConfigDTO = {
   configured: boolean;
   publishableKey?: string;
@@ -529,6 +543,11 @@ export type BillingConfigDTO = {
     monthly: BillingPlanDTO;
     yearly: BillingPlanDTO;
   };
+  /**
+   * The purchasable tiers, keyed by plan id (`pro`, `allstar`, `superstar`).
+   * `plans` above describes the base subscription, which is the Pro tier.
+   */
+  creditPlans?: Record<string, BillingCreditPlanDTO>;
 };
 
 export type BillingSubscriptionDTO = {

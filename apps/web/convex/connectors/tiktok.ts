@@ -266,6 +266,8 @@ export async function tiktokUploadVideoDraft(args: {
   mimeType?: string;
   /** Known object size lets the worker stream upload ranges without buffering the whole video. */
   sizeBytes?: number;
+  /** Optional server-side range reader for normalized temporary media. */
+  readRange?: (start: number, end: number) => Promise<ArrayBuffer>;
   resumePublishId?: string;
   onPublishId?: (publishId: string) => Promise<void> | void;
   onProgress?: PublishProgress;
@@ -317,6 +319,8 @@ export async function tiktokUploadVideoDraft(args: {
       const end = i === chunkCount - 1 ? size - 1 : start + chunkSize - 1;
       const chunk = bufferedVideo
         ? bufferedVideo.slice(start, end + 1)
+        : args.readRange
+          ? await args.readRange(start, end)
         : await (async () => {
             const response = await fetch(videoUrl, {
               headers: { Range: `bytes=${start}-${end}` },
