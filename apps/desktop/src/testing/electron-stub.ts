@@ -38,3 +38,12 @@ export const ipcMain = {
 export function emitIpcMainEvent(channel: string, event: unknown, payload: unknown): void {
   for (const listener of ipcListeners.get(channel) ?? []) listener(event, payload);
 }
+
+export const dialog = {
+  showOpenDialog: async () => ({ canceled: true, filePaths: [] as string[] }),
+};
+
+export const shell = {
+  showItemInFolder: (_path: string): void => undefined,
+  openExternal: async (_url: string): Promise<void> => undefined,
+};
