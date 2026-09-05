@@ -16,6 +16,7 @@
  * the JSX may well be generating.
  */
 
+import { openSkillDeck } from '../skill-deck';
 import {
 	ChildOf, Computed, Culled, Geometry, Group, Hovering,
 	Interactive, KeepAspectRatio, RenderSurface, Root, Scene,
@@ -324,6 +325,25 @@ export function handleLabelInteraction(world: World, event: DispatchedPointerEve
 }
 
 /** A resize handle on the selection mask: an edge, or a corner. */
+/** The skill chip on a scene header: a click opens the deck for that scene. */
+export function handleSkillInteraction(world: World, event: DispatchedPointerEvent): void {
+	if (event.target.kind !== 'hud') return;
+
+	const entity = event.target.entity;
+	if (!entity?.isAlive()) return;
+
+	if (event.type === 'pointerenter') {
+		clearHovering(world);
+		entity.add(Hovering);
+	}
+	if (event.type === 'pointerleave') {
+		clearHovering(world);
+	}
+	if (event.type === 'click') {
+		openSkillDeck(entity);
+	}
+}
+
 export function handleResizeInteraction(world: World, event: DispatchedPointerEvent): void {
 	if (event.target.kind !== 'hud' || !isHandle(event.target.id)) return;
 

@@ -25,12 +25,9 @@ export function InspectorHeader() {
   const zoomLabel = () => `${Math.round(scale() * 100)}%`;
 
   return (
-    <div class="h-12 shrink-0 flex items-center px-4">
-      <span class="text-[12px] font-450 text-foreground">
-        Editor
-      </span>
-      {/* Status readouts, right-aligned together: save state, then zoom. */}
-      <div class="ml-auto flex items-center gap-3 relative z-30" style="-webkit-app-region: no-drag;">
+    <div class="shrink-0 flex items-center">
+      {/* Status readouts together: save state, then zoom. Lives in the command bar. */}
+      <div class="flex items-center gap-3 relative z-30" style="-webkit-app-region: no-drag;">
       <SavePill />
       <DropdownMenu placement="bottom-end">
         <DropdownMenuTrigger<typeof Button>

@@ -5,7 +5,7 @@
 import { Not, Or } from 'koota';
 import {
 	Active, Computed, Culled, FrameRate, Geometry, Group, Hidden,
-	HitRegions, Hovering, Name, Playback, RenderSurface, Root, Selected,
+	HitRegions, Hovering, Name, Playback, RenderSurface, Root, Scene, SceneSkill, Selected,
 	Sequential, ChildOf,
 	entityQuad, entityWorldMat, getMaskSelection, getSelectionMask, getSourceFailure,
 	invert2D, isGenerating,
@@ -16,7 +16,7 @@ import {
 import { Hud, Keys, SnapLines } from '../traits';
 import {
 	handleLabelInteraction, handleMaskInteraction, handlePlayInteraction,
-	handleResizeInteraction, handleRotateInteraction,
+	handleResizeInteraction, handleRotateInteraction, handleSkillInteraction,
 } from '../input/interactions';
 import { getMarqueeQuad } from '../input/snapping';
 import { getMountedNameInput } from './name-input';
@@ -24,12 +24,26 @@ import { getMountedNameInput } from './name-input';
 import type { Entity, World } from 'koota';
 import type { Mat2D } from '@posterract/video-runtime';
 
-const ACCENT = '#008CFF';
-const SNAP_COLOR = '#F43535';
+const ACCENT = '#65ff9a';
+const SNAP_COLOR = '#7cf7ff';
 const ERROR_COLOR = '#FF8A8A';
-const HEADER_FONT = '350 11px Inter, sans-serif';
+const HEADER_FONT = '500 11px Inter, sans-serif';
 const HEADER_HEIGHT = 22;
-const ACTIVE_BADGE_WIDTH = 60;
+const ACTIVE_BADGE_WIDTH = 52;
+const CHIP_HEIGHT = 16;
+const CHIP_PADDING = 7;
+const CHIP_GAP = 6;
+const NEON = '#65ff9a';
+const NEON_GLASS = 'rgba(101, 255, 154, 0.16)';
+const NEON_EDGE = 'rgba(101, 255, 154, 0.45)';
+const MINT = '#eafff3';
+const MINT_DIM = 'rgba(234, 255, 243, 0.64)';
+const MINT_FAINT = 'rgba(234, 255, 243, 0.45)';
+
+/** "lead-with-animations" → "Lead With Animations", for the chip. */
+function chipTitle(name: string): string {
+	return name.replace(/[-_]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()).trim();
+}
 
 type Ctx2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
@@ -115,8 +129,16 @@ function drawHeader(world: World, ctx: Ctx2D, entity: Entity, resolution: number
 	const playback = entity.get(Playback);
 	const selected = entity.has(Selected);
 	const active = entity.has(Active);
-	const foreground = failure ? ERROR_COLOR : selected ? '#cce8ff' : 'rgba(242, 242, 242, 0.64)';
+	const foreground = failure ? ERROR_COLOR : selected ? MINT : MINT_DIM;
 	const regions = world.get(HitRegions)!.list;
+
+	// The skill chip: what kind of video this scene is, or the invitation to
+	// say. Only scenes carry one, and an empty chip only shows on the scene
+	// being worked on, so the canvas stays quiet.
+	const skillName = entity.has(Scene) ? entity.get(SceneSkill)?.value ?? '' : '';
+	const chipText = skillName ? `⚡ ${chipTitle(skillName)}` : active || selected ? '+ Skill' : '';
+	ctx.font = HEADER_FONT;
+	const chipWidth = chipText ? Math.ceil(ctx.measureText(chipText).width) + CHIP_PADDING * 2 : 0;
 
 	ctx.setTransform(header.mat.a, header.mat.b, header.mat.c, header.mat.d, header.mat.e, header.mat.f);
 
@@ -148,7 +170,8 @@ function drawHeader(world: World, ctx: Ctx2D, entity: Entity, resolution: number
 	ctx.font = HEADER_FONT;
 
 	const badgeWidth = active ? ACTIVE_BADGE_WIDTH : 0;
-	const fitted = fitTextToWidth(ctx, label, header.width - labelStart - badgeWidth);
+	const chipReserve = chipWidth ? chipWidth + CHIP_GAP : 0;
+	const fitted = fitTextToWidth(ctx, label, header.width - labelStart - badgeWidth - chipReserve);
 
 	if (fitted) {
 		ctx.fillStyle = foreground;
@@ -180,20 +203,54 @@ function drawHeader(world: World, ctx: Ctx2D, entity: Entity, resolution: number
 		ctx.setTransform(header.mat.a, header.mat.b, header.mat.c, header.mat.d, header.mat.e, header.mat.f);
 		ctx.translate((fitted?.width ?? 0) + labelStart + 4, 0);
 		ctx.beginPath();
-		ctx.roundRect(0, 0, 40, 16, 2);
+		ctx.roundRect(0.5, 0.5, ACTIVE_BADGE_WIDTH - 8, CHIP_HEIGHT - 1, CHIP_HEIGHT / 2);
 		ctx.closePath();
-		ctx.fillStyle = selected ? '#013e70' : '#292929';
+		ctx.fillStyle = NEON_GLASS;
 		ctx.fill();
+		ctx.strokeStyle = NEON_EDGE;
+		ctx.lineWidth = 1;
+		ctx.stroke();
 
-		ctx.translate(4, 3);
+		ctx.translate(7, 3);
 		ctx.textAlign = 'left';
 		ctx.textBaseline = 'top';
 		ctx.font = HEADER_FONT;
-		ctx.fillStyle = foreground;
+		ctx.fillStyle = NEON;
 		ctx.fillText('Active', 0, 0);
 	}
 
-	if (playback && (fitted?.width ?? 0) + badgeWidth + 60 < header.width) {
+	if (chipText && header.width > badgeWidth + chipWidth + 24) {
+		const chipX = (fitted?.width ?? 0) + labelStart + 4 + (active ? ACTIVE_BADGE_WIDTH - 4 : 0) + CHIP_GAP;
+		ctx.setTransform(header.mat.a, header.mat.b, header.mat.c, header.mat.d, header.mat.e, header.mat.f);
+		ctx.translate(chipX, 0);
+		ctx.beginPath();
+		ctx.roundRect(0.5, 0.5, chipWidth - 1, CHIP_HEIGHT - 1, CHIP_HEIGHT / 2);
+		ctx.closePath();
+		ctx.fillStyle = skillName ? NEON_GLASS : 'rgba(234, 255, 243, 0.06)';
+		ctx.fill();
+		ctx.strokeStyle = skillName ? NEON_EDGE : 'rgba(234, 255, 243, 0.22)';
+		ctx.lineWidth = 1;
+		ctx.stroke();
+
+		ctx.translate(CHIP_PADDING, 3);
+		ctx.textAlign = 'left';
+		ctx.textBaseline = 'top';
+		ctx.font = HEADER_FONT;
+		ctx.fillStyle = skillName ? NEON : MINT_DIM;
+		ctx.fillText(chipText, 0, 0);
+
+		regions.push({
+			target: {
+				kind: 'hud',
+				id: 'skill',
+				entity,
+				quad: rectToQuad(multiply2D(header.mat, translate2D(chipX, 0)), chipWidth, CHIP_HEIGHT),
+			},
+			callback: handleSkillInteraction,
+		});
+	}
+
+	if (playback && (fitted?.width ?? 0) + labelStart + badgeWidth + chipReserve + 56 < header.width) {
 		ctx.setTransform(header.mat.a, header.mat.b, header.mat.c, header.mat.d, header.mat.e, header.mat.f);
 		ctx.translate(header.width, 3);
 		ctx.textAlign = 'right';
@@ -206,9 +263,9 @@ function drawHeader(world: World, ctx: Ctx2D, entity: Entity, resolution: number
 
 		if (selected) {
 			ctx.globalAlpha = 0.7;
-			ctx.fillStyle = '#cce8ff';
+			ctx.fillStyle = MINT;
 		} else {
-			ctx.fillStyle = 'rgba(121, 121, 121, 1)';
+			ctx.fillStyle = MINT_FAINT;
 		}
 
 		ctx.fillText(`${minutes}:${rest}`, 0, 0);

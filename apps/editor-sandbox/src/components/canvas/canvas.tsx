@@ -11,6 +11,7 @@ import { Toolbar } from "./toolbar";
 import { DrawOverlay } from "./draw-overlay";
 import { toast } from "somoto"
 import { SceneInitOverlay } from "./scene-init-overlay";
+import { SkillDeck } from "./skill-deck";
 import { ASSET_DRAG_TYPE } from "@/components/sidebar-left/folder-item";
 
 import type { Asset } from "@posterract/video-assets";
@@ -76,9 +77,10 @@ export function Canvas() {
       >
         <Toolbar />
         <DrawOverlay />
-        <SceneInitOverlay />
         <EngineCanvas />
         <CameraController />
+        <SceneInitOverlay />
+        <SkillDeck />
       </div>
     </div>
   );

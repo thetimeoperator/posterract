@@ -6,7 +6,7 @@ import {
   AdjustmentLayer, Animation, AnimationPhase, AnimationType, Audio, Caption, Computed, Cue, Diagram,
   DiagramKindType, Effect, Fonts, FrameRate, Geometry, GeometryType, Group, IsMask, Keyframe, KeyframeTrack,
   Component, Live, Lottie, LottieSlot, Marker, Name, Path, PathTrim, Polygon,
-  PaintType, Scene, Sequential, Shadow, Source, Stage, Stroke, getActiveEntity,
+  PaintType, Scene, SceneSkill, Sequential, Shadow, Source, Stage, Stroke, getActiveEntity,
   getEntityChildren, getIntrinsicPaint, isText,
 } from "@posterract/video-runtime";
 import { ANIMATION_TYPES, trackProperty } from "@posterract/video-reconciler";
@@ -19,6 +19,7 @@ import { getInspectEntries } from "@/engine/inspect";
 import type { Accessor } from "solid-js";
 import type { EditorSession } from "./session";
 import type { ContextRequest, RuntimeTreeNode } from "@posterract/cli/channels";
+import { findSkill, refreshSkills, skillCards } from "@/lib/skills";
 import type { Entity, World } from "koota";
 
 function sourceId(entity: Entity): string | null {
@@ -91,6 +92,13 @@ function kindOf(entity: Entity): string {
  * the source file uses, even though the runtime stores frames.
  */
 function detailOf(entity: Entity, frameRate: number): RuntimeTreeNode["detail"] {
+  // A scene's skill: the SKILL.md folder it is made with, and where that
+  // folder is when it is installed on this machine.
+  if (entity.has(Scene)) {
+    const skill = entity.get(SceneSkill)?.value;
+    if (skill) return { skill, skillPath: findSkill(skill)?.path ?? null };
+  }
+
   const cue = entity.get(Cue);
   if (cue) {
     return {
@@ -204,6 +212,11 @@ export function handleContextGet(session: Accessor<EditorSession | null>) {
     }
     const stage = tree ? [...world.query(Stage)][0] : undefined;
 
+    // The skill list is fetched lazily; the first context call pays for it.
+    const activeSkillName = active?.get(SceneSkill)?.value ?? "";
+    if (activeSkillName && !skillCards().length) await refreshSkills(project.dir()).catch(() => undefined);
+    const activeSkill = activeSkillName ? { name: activeSkillName, path: findSkill(activeSkillName)?.path ?? null } : null;
+
     return {
       rootDir,
       projectDir: project.dir(),
@@ -212,6 +225,8 @@ export function handleContextGet(session: Accessor<EditorSession | null>) {
       currentTime: active ? (active.get(Computed)?.localTime ?? 0) / frameRate : null,
       frameRate,
       activeSceneId: active ? sourceId(active) : null,
+      // The active scene's skill, with the folder path an agent should read.
+      activeSkill,
       // Exactly sha256 of the entry file's on-disk bytes: the same value
       // `source.read` reports as `revisionId` (both go through the desktop's
       // `readProjectSource`), so agents get one revision namespace that only

@@ -14,7 +14,7 @@ import type { Entity, World } from 'koota';
 import type { TimelineSurfaceState } from '../surface';
 
 const HANDLE_WIDTH = 5;
-const BAR_HEIGHT = 10;
+const BAR_HEIGHT = 5;
 
 // Where the work area was when the drag started: every frame of the drag is
 // measured from there, so a slow drag and a fast one land in the same place.

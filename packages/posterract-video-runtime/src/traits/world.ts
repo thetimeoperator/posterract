@@ -36,6 +36,15 @@ export type RuntimeMode = 'realtime' | 'offline-video' | 'offline-audio';
 
 export const Mode = trait({ value: 'realtime' as RuntimeMode });
 
+/**
+ * How the realtime workspace ground is painted; a preview-only affordance the
+ * editor sets from its theme. `noir` is the product's green-and-black
+ * gradient, `frost` the same ground pushed deeper into green for the glass
+ * look.
+ */
+export type WorkspaceLook = 'noir' | 'frost' | 'clear';
+export const WorkspaceTheme = trait({ value: 'noir' as WorkspaceLook });
+
 // Frame clock (was timestamp).
 export const Time = trait({ now: 0, delta: 0 });
 

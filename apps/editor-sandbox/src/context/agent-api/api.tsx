@@ -72,6 +72,8 @@ type EditorApiProviderProps = {
 type EditorApiContextValue = {
   isFullscreen: Accessor<boolean>;
   isDesktop: boolean;
+  /** macOS draws its window controls over the page; no other platform does. */
+  isMac: boolean;
 };
 
 const EditorApiContext = createContext<EditorApiContextValue>();
@@ -124,6 +126,7 @@ export function EditorApiProvider(props: EditorApiProviderProps) {
       value={{
         isFullscreen,
         isDesktop: !!window.desktop,
+        isMac: window.desktop?.platform === "darwin",
       }}
     >
       {props.children}

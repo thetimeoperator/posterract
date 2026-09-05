@@ -14,12 +14,22 @@ type LayoutContextValue = {
   setTimelineHeight(height: number): void;
   toggleUI(): void;
   toggleTimeline(): void;
+  /** The audio mixer, a pop-over beside the dock rather than a fixed column. */
+  mixerOpen: Accessor<boolean>;
+  toggleMixer(): void;
+  /** The look of the shell: `noir` (the default) or `frost`, the glass mode. */
+  editorTheme: Accessor<EditorTheme>;
+  toggleEditorTheme(): void;
 };
+
+export type EditorTheme = 'noir' | 'frost';
 
 const LayoutContext = createContext<LayoutContextValue>();
 
-export const MIN_TIMELINE_HEIGHT = 120;
-export const DEFAULT_TIMELINE_HEIGHT = 234;
+export const MIN_TIMELINE_HEIGHT = 96;
+// The dock is an instrument over the canvas, not a row of the window, so it
+// starts small: a ruler and three lanes. The canvas is the point.
+export const DEFAULT_TIMELINE_HEIGHT = 156;
 
 export function LayoutProvider(props: { children: JSX.Element }) {
   const [uiVisible, setUiVisible] = createStoredSignal(
@@ -30,11 +40,21 @@ export function LayoutProvider(props: { children: JSX.Element }) {
     store.define<number>('layout.timelineHeight', DEFAULT_TIMELINE_HEIGHT),
   );
   const [timelineMinimized, setTimelineMinimized] = createStoredSignal(
-    store.define<boolean>('layout.timelineMinimized', false),
+    store.define<boolean>('layout.timelineMinimized', true),
+  );
+
+  const [mixerOpen, setMixerOpen] = createStoredSignal(
+    store.define<boolean>('layout.mixerVisible', true),
   );
 
   const toggleUI = () => setUiVisible(!uiVisible());
   const toggleTimeline = () => setTimelineMinimized(!timelineMinimized());
+  const toggleMixer = () => setMixerOpen(!mixerOpen());
+
+  const [editorTheme, setEditorTheme] = createStoredSignal(
+    store.define<EditorTheme>('layout.editorTheme', 'noir'),
+  );
+  const toggleEditorTheme = () => setEditorTheme(editorTheme() === 'noir' ? 'frost' : 'noir');
 
   return (
     <LayoutContext.Provider
@@ -45,6 +65,10 @@ export function LayoutProvider(props: { children: JSX.Element }) {
         setTimelineHeight,
         toggleUI,
         toggleTimeline,
+        mixerOpen,
+        toggleMixer,
+        editorTheme,
+        toggleEditorTheme,
       }}>
       {props.children}
     </LayoutContext.Provider>

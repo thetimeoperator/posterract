@@ -2,7 +2,6 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { KNOB_PATH } from '../paths';
 import { RULER_HEIGHT } from '../config';
 import { framesToPixels, getCurrentFrame, getFrameRate, getResolution, getScrollX } from '../view';
 
@@ -46,14 +45,15 @@ export function renderPlayhead(world: World, scene: Entity, surface: TimelineSur
 		return;
 	}
 
-	// The knob, sitting in the ruler.
+	// The needle: a glowing head resting on the ruler's baseline and a single
+	// lit line down through the lanes.
 	ctx.save();
-	ctx.translate(-5, 2);
 	ctx.fillStyle = surface.colors.border.ring;
-	ctx.strokeStyle = surface.colors.border.darker;
-	ctx.lineWidth = 2;
-	ctx.stroke(KNOB_PATH);
-	ctx.fill(KNOB_PATH);
+	ctx.shadowColor = 'rgba(101, 255, 154, 0.8)';
+	ctx.shadowBlur = 10;
+	ctx.beginPath();
+	ctx.arc(0, RULER_HEIGHT - 6, 4, 0, Math.PI * 2);
+	ctx.fill();
 	ctx.restore();
 
 	ctx.translate(0, RULER_HEIGHT);
@@ -61,17 +61,20 @@ export function renderPlayhead(world: World, scene: Entity, surface: TimelineSur
 	renderMotionTrail(world, surface, frame);
 
 	ctx.beginPath();
-	ctx.moveTo(0, 0);
+	ctx.moveTo(0, -6);
 	ctx.lineTo(0, canvas.height);
-	ctx.closePath();
 
-	ctx.strokeStyle = surface.colors.border.darker;
+	ctx.strokeStyle = 'rgba(5, 8, 11, 0.55)';
 	ctx.lineWidth = 3;
 	ctx.stroke();
 
+	ctx.save();
+	ctx.shadowColor = 'rgba(101, 255, 154, 0.7)';
+	ctx.shadowBlur = 8;
 	ctx.strokeStyle = surface.colors.border.ring;
 	ctx.lineWidth = 1;
 	ctx.stroke();
+	ctx.restore();
 
 	ctx.restore();
 }
@@ -152,6 +155,6 @@ function renderCollapsedPlayhead(surface: TimelineSurfaceState, frame: number): 
 	ctx.fill();
 	ctx.stroke();
 
-	ctx.fillStyle = 'white';
+	ctx.fillStyle = '#05080b';
 	ctx.fillText(label, 0, PILL_TOP + PILL_HEIGHT / 2 + 0.5);
 }

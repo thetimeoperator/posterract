@@ -31,12 +31,14 @@ export const CLICK_DISTANCE_THRESHOLD = 5;
 export const DOUBLE_CLICK_THRESHOLD = 500;
 
 export const RULER_HEIGHT = 36;
-export const RULER_TICK_HEIGHT_MAJOR = 9;
+export const RULER_TICK_HEIGHT_MAJOR = 7;
 export const RULER_TICK_HEIGHT_MINOR = 3;
-export const RULER_LABEL_Y = 18;
+export const RULER_LABEL_Y = 20;
+/** The lane above the time labels where markers sit, so the two never collide. */
+export const MARKER_LANE_HEIGHT = 12;
 
-export const CLIP_CORNER_RADIUS = 4;
-export const CLIP_FONT = '11px Inter';
+export const CLIP_CORNER_RADIUS = 8;
+export const CLIP_FONT = '500 11px Inter';
 export const CLIP_LABEL_X = 6;
 export const CLIP_LABEL_Y = 10;
 export const CLIP_LABEL_HEIGHT = 20;

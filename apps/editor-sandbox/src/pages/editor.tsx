@@ -2,12 +2,14 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
+import { Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from "solid-js";
 import { Canvas } from "@/components/canvas";
 import { Timeline, Layers, VideoTimelineTitle } from "@/components/timeline";
 import { Soundboard, Inspector } from "@/components/sidebar-right";
 import { FloatingProjectHeader, SidebarLeft } from "@/components/sidebar-left";
+import { CommandBar } from "@/components/shell/command-bar";
 import { useLayout, MIN_TIMELINE_HEIGHT } from "@/context/layout";
+import { useDerived } from "@/engine/hooks";
 import { useEditorApi } from "@/context/agent-api";
 import { RULER_HEIGHT } from "@/engine/timeline";
 import { toast } from 'somoto';
@@ -31,15 +33,20 @@ import { captureProjectCover } from '@/projects/cover';
 import { useProject } from "@/context/project";
 import { useEngineContext } from "@/engine";
 import {
-  focusContent,
+  Computed,
+  FrameRate,
   getActiveEntity,
   getCameraMatrix,
+  getCameraScale,
   getContentBounds,
   getParentNode,
   getViewport,
   RenderSurface,
   Root,
   Scene,
+  setCamera,
+  store,
+  WorkspaceTheme,
 } from '@posterract/video-runtime';
 
 import type { Mount } from '@posterract/video-reconciler';
@@ -47,10 +54,95 @@ import type { EditWriter } from '@/projects/edits';
 
 const MIN_CANVAS_HEIGHT = 200;
 const TIMELINE_TITLE_HEIGHT = 32;
+/** Instruments float this far from the window edge and from each other. */
+const INSTRUMENT_INSET = 16;
+const SIDE_INSTRUMENT_WIDTH = 224;
+const MIXER_WIDTH = 248;
+const BAR_HEIGHT = 40;
+/** The bar sits higher than the other instruments so the traffic lights read as part of it. */
+const BAR_TOP = 8;
+/**
+ * Where the command bar starts on macOS while windowed.
+ *
+ * titleBarStyle "hiddenInset" draws the traffic lights over the page at roughly
+ * x 20-72. The bar began at 16 and so passed underneath them, which read as the
+ * bar cutting across the buttons. Starting after them puts the lights back on
+ * the canvas where they belong.
+ */
+const MAC_BAR_LEFT = 84;
+/** Where the side instruments start: below the command bar. */
+const SIDE_TOP = BAR_TOP + BAR_HEIGHT + INSTRUMENT_INSET;
+
+/** A media query as a signal, for the instruments to size themselves by. */
+function useMedia(query: string) {
+  const list = window.matchMedia(query);
+  const [matches, setMatches] = createSignal(list.matches);
+  const update = () => setMatches(list.matches);
+  list.addEventListener('change', update);
+  onCleanup(() => list.removeEventListener('change', update));
+  return matches;
+}
+/** How long the pointer rests on the canvas before the instruments step back. */
+const FOCUS_FADE_MS = 1500;
+const MIN_FIT_ZOOM = 0.02;
+
+type Insets = { left: number; right: number; top: number; bottom: number };
+
+/**
+ * Fit the composition into the part of the canvas the instruments leave
+ * uncovered. `focusContent` fits to the whole surface, which is now the whole
+ * window — with panels floating over it, that would park scenes underneath
+ * them.
+ */
+function fitVisible(world: ReturnType<typeof useWorld>, insets: Insets, padding: number): void {
+  const bounds = getContentBounds(world);
+  const viewport = getViewport(world);
+  if (!bounds || !viewport || bounds.width <= 0 || bounds.height <= 0) return;
+
+  const width = viewport.width - insets.left - insets.right - padding * 2;
+  const height = viewport.height - insets.top - insets.bottom - padding * 2;
+  if (width <= 0 || height <= 0) return;
+
+  const scale = Math.max(MIN_FIT_ZOOM, Math.min(1, width / bounds.width, height / bounds.height));
+  const centerX = insets.left + padding + width / 2;
+  const centerY = insets.top + padding + height / 2;
+
+  setCamera(world, {
+    a: scale,
+    b: 0,
+    c: 0,
+    d: scale,
+    e: centerX - (bounds.x + bounds.width / 2) * scale,
+    f: centerY - (bounds.y + bounds.height / 2) * scale,
+  });
+}
+
+function formatClock(seconds: number, fps: number): string {
+  const whole = Math.max(0, Math.floor(seconds));
+  const frames = Math.round((seconds - whole) * fps);
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}.${String(frames).padStart(2, '0')}`;
+}
 
 export function EditorPage() {
-  const { uiVisible, timelineMinimized, timelineHeight, setTimelineHeight } = useLayout();
-  const { isDesktop, isFullscreen } = useEditorApi();
+  const { uiVisible, timelineMinimized, timelineHeight, setTimelineHeight, toggleTimeline, mixerOpen, editorTheme } = useLayout();
+  // Narrower windows get narrower instruments; the mixer steps out first, so
+  // the timeline keeps its room. The canvas is never the thing that shrinks.
+  const compact = useMedia('(max-width: 1320px)');
+  const narrow = useMedia('(max-width: 1080px)');
+  const sideWidth = createMemo(() => (narrow() ? 184 : compact() ? 204 : SIDE_INSTRUMENT_WIDTH));
+  /** The mixer sits beside the dock; in Peek the dock is a strip and the mixer steps out. */
+  const mixerShown = createMemo(() => mixerOpen() && !timelineMinimized() && !compact());
+
+  // The workspace ground follows the shell's theme; the runtime paints it.
+  createEffect(() => {
+    const value = editorTheme();
+    if (!world.has(WorkspaceTheme)) world.add(WorkspaceTheme);
+    world.set(WorkspaceTheme, { value });
+  });
+  const { isDesktop, isFullscreen, isMac } = useEditorApi();
+  // Only macOS reserves this space, and only while windowed — fullscreen hides
+  // the traffic lights entirely.
+  const barLeft = createMemo(() => (isMac && !isFullscreen() ? MAC_BAR_LEFT : INSTRUMENT_INSET));
   const [resizing, setResizing] = createSignal(false);
   const project = useProject();
   const world = useWorld();
@@ -101,7 +193,7 @@ export function EditorPage() {
         );
 
         if (layoutIsFinal && bounds && canvasHost) {
-          focusContent(world, 32);
+          fitVisible(world, untrack(insets), 32);
           const root = world.get(Root);
           if (root) getDocumentEditor(world).reportEdit(root, 'camera', getCameraMatrix(world));
           initialViewFitted = true;
@@ -319,19 +411,55 @@ export function EditorPage() {
     });
   });
 
-  const timelineStyles = createMemo(() => {
-    if (!uiVisible()) return;
+  /** The dock's full height on screen: its title row plus the lanes, or the ruler alone in Peek. */
+  const dockHeight = createMemo(() => (timelineMinimized() ? RULER_HEIGHT + 8 : timelineHeight() + TIMELINE_TITLE_HEIGHT));
+  /** Where the side instruments end: just above the dock. */
+  const dockBottom = createMemo(() => INSTRUMENT_INSET * 2 + dockHeight());
 
-    const height = timelineMinimized() ? RULER_HEIGHT : timelineHeight();
+  /** What the instruments cover, for fitting the composition between them. */
+  const insets = createMemo<Insets>(() => {
+    if (!uiVisible()) return { left: 0, right: 0, top: 0, bottom: 0 };
+    // The left instrument carries a 52px rail beside its drawer.
+    const left = INSTRUMENT_INSET * 2 + sideWidth() + 52;
+    const right = INSTRUMENT_INSET * 2 + sideWidth();
+    // The top inset leaves room for the scene headers drawn above the frames.
+    return { left, right, top: SIDE_TOP + 44, bottom: dockBottom() };
+  });
 
-    return {
-      'grid-template-rows': `1fr 1px ${TIMELINE_TITLE_HEIGHT}px ${height}px`,
-    };
+  // Focus fade: rest the pointer on the canvas and the instruments step back;
+  // touch one and they return. Keyboard use counts as touching them.
+  const [focusMode, setFocusMode] = createSignal<'canvas' | ''>('');
+  let focusTimer: ReturnType<typeof setTimeout> | undefined;
+  const armFocusFade = () => {
+    if (focusTimer) clearTimeout(focusTimer);
+    focusTimer = setTimeout(() => setFocusMode('canvas'), FOCUS_FADE_MS);
+  };
+  const clearFocusFade = () => {
+    if (focusTimer) clearTimeout(focusTimer);
+    focusTimer = undefined;
+    setFocusMode('');
+  };
+  onMount(() => {
+    window.addEventListener('keydown', clearFocusFade);
+    onCleanup(() => {
+      window.removeEventListener('keydown', clearFocusFade);
+      if (focusTimer) clearTimeout(focusTimer);
+    });
+  });
+
+  // Telemetry corner: zoom and playhead, the HUD readout heritage made useful.
+  const zoomPercent = useDerived(() => Math.round(getCameraScale(world) * 100));
+  const playheadClock = useDerived(() => {
+    const active = getActiveEntity(world);
+    const fps = world.get(FrameRate)?.value ?? 30;
+    const frame = active ? (store(world, Computed).localTime[active.id()] ?? 0) : 0;
+    return formatClock(frame / fps, fps);
   });
 
   const handleResizeStart = (e: PointerEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (timelineMinimized()) return;
     const startY = e.clientY;
     const startHeight = timelineHeight();
     setResizing(true);
@@ -340,7 +468,7 @@ export function EditorPage() {
       const deltaY = startY - ev.clientY;
       const maxHeight = Math.max(
         MIN_TIMELINE_HEIGHT,
-        window.innerHeight - MIN_CANVAS_HEIGHT - TIMELINE_TITLE_HEIGHT - 1,
+        window.innerHeight - MIN_CANVAS_HEIGHT - TIMELINE_TITLE_HEIGHT - INSTRUMENT_INSET * 2,
       );
       const next = Math.max(MIN_TIMELINE_HEIGHT, Math.min(maxHeight, startHeight + deltaY));
       setTimelineHeight(next);
@@ -358,57 +486,109 @@ export function EditorPage() {
 
   return (
     <div
-      class="posterract-editor-shell h-screen w-full overflow-hidden grid"
-      classList={{
-        'grid-cols-[264px_1px_1fr_1px_264px]': uiVisible(),
-        'grid-cols-[1fr]': !uiVisible(),
-        'grid-rows-[1fr]': !uiVisible(),
-      }}
-      style={timelineStyles()}
+      class="posterract-editor-shell relative h-screen w-full overflow-hidden"
+      data-focus={focusMode()}
+      data-resizing={resizing()}
+      data-theme={editorTheme()}
+      style={{ '--canvas-bottom-inset': uiVisible() ? `${dockBottom() + 4}px` : '16px' }}
     >
-      <Show when={isDesktop && !isFullscreen()}>
+      {/* With the instruments hidden there is no command bar to drag the
+          window by, so a bare strip along the top stands in for it. With them
+          shown, the bar is the drag area — a strip here would sit over it
+          and swallow its clicks. */}
+      <Show when={isDesktop && !isFullscreen() && !uiVisible()}>
         <div class="fixed top-0 left-0 right-0 h-10 z-20" style="-webkit-app-region: drag;" />
       </Show>
+
+      {/* The canvas is the whole window; everything else floats over it. */}
+      <div class="absolute inset-0" onPointerMove={armFocusFade} onPointerLeave={clearFocusFade}>
+        <Canvas />
+      </div>
+
+      <div
+        class="posterract-telemetry"
+        classList={{ 'opacity-0': !uiVisible() }}
+        style={{ left: `${INSTRUMENT_INSET * 2 + sideWidth() + 52 + 8}px`, bottom: `${dockBottom() + 2}px` }}
+      >
+        <span>ZOOM <b>{zoomPercent()}%</b></span>
+        <span>T <b>{playheadClock()}</b></span>
+      </div>
+
       <Show when={uiVisible()}>
-        <SidebarLeft />
-        <div class="bg-border-strong" />
-      </Show>
-      <Canvas />
-      <Show when={uiVisible()}>
-        <div class="bg-border-strong" />
-        <Inspector />
-      </Show>
-      <Show when={uiVisible()}>
-        <div class="col-span-full bg-border-strong relative">
-          <Show when={!timelineMinimized()}>
+        <div class="posterract-instrument-layer" onPointerMove={clearFocusFade}>
+          {/* The command bar: wordmark, project, scenes, save state, zoom, layout toggles. */}
+          <div
+            class="posterract-instrument posterract-bar"
+            style={{ left: `${barLeft()}px`, right: `${INSTRUMENT_INSET}px`, top: `${BAR_TOP}px`, height: `${BAR_HEIGHT}px` }}
+          >
+            <CommandBar />
+          </div>
+
+          <div
+            class="posterract-instrument"
+            style={{ left: `${INSTRUMENT_INSET}px`, top: `${SIDE_TOP}px`, width: `${sideWidth() + 52}px`, bottom: `${dockBottom()}px` }}
+          >
+            <SidebarLeft />
+          </div>
+
+          <div
+            class="posterract-instrument"
+            style={{ right: `${INSTRUMENT_INSET}px`, top: `${SIDE_TOP}px`, width: `${sideWidth()}px`, bottom: `${dockBottom()}px` }}
+          >
+            <Inspector />
+          </div>
+
+          {/* The timeline dock: grab the top edge to resize, double-click it for Peek. */}
+          <div
+            class="posterract-instrument posterract-dock"
+            style={{
+              left: `${INSTRUMENT_INSET}px`,
+              right: `${mixerShown() ? INSTRUMENT_INSET * 2 + MIXER_WIDTH : INSTRUMENT_INSET}px`,
+              bottom: `${INSTRUMENT_INSET}px`,
+              height: `${dockHeight()}px`,
+            }}
+          >
             <div
-              class="absolute left-0 right-0 -top-px h-0.75 z-10 cursor-ns-resize group"
+              class="posterract-instrument-grab"
+              classList={{ 'bg-primary': resizing() }}
               onPointerDown={handleResizeStart}
+              onDblClick={toggleTimeline}
+              title="Drag to resize · double-click for Peek"
+            />
+            <div
+              class="grid h-full min-h-0"
+              style={{ 'grid-template-rows': timelineMinimized() ? '1fr' : `${TIMELINE_TITLE_HEIGHT}px 1fr` }}
             >
-              <div
-                class="absolute left-0 right-0 top-px h-px transition-colors group-hover:bg-primary"
-                classList={{ 'bg-primary': resizing() }}
-              />
+              <Show when={!timelineMinimized()}>
+                <VideoTimelineTitle />
+              </Show>
+              <div class="grid min-h-0" style={{ 'grid-template-columns': '220px 1px minmax(0, 1fr)' }}>
+                <div class="min-h-0 overflow-hidden">
+                  <Layers />
+                </div>
+                <div class="bg-border-strong" />
+                <Timeline />
+              </div>
+            </div>
+          </div>
+
+          {/* The audio mixer: its own instrument beside the dock, the same height. */}
+          <Show when={mixerShown()}>
+            <div
+              class="posterract-instrument posterract-mixer"
+              style={{ right: `${INSTRUMENT_INSET}px`, bottom: `${INSTRUMENT_INSET}px`, width: `${MIXER_WIDTH}px`, height: `${dockHeight()}px` }}
+            >
+              <div class="flex h-8 items-center px-3 text-[9px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/70">
+                Audio mixer
+              </div>
+              <div class="min-h-0" style={{ height: `${dockHeight() - 32}px` }}>
+                <Soundboard />
+              </div>
             </div>
           </Show>
         </div>
       </Show>
-      <Show when={uiVisible()}>
-        <VideoTimelineTitle />
-      </Show>
-      <Show when={uiVisible()}>
-        <Layers />
-        <div class="bg-border-strong" />
-      </Show>
-      <Show when={uiVisible()}>
-        <Timeline />
-      </Show>
-      <Show when={uiVisible()}>
-        <div class="bg-border-strong" />
-        <Show when={!timelineMinimized()}>
-          <Soundboard />
-        </Show>
-      </Show>
+
       <Show when={!uiVisible()}>
         <FloatingProjectHeader />
       </Show>

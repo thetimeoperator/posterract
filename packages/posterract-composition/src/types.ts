@@ -498,6 +498,14 @@ export type SceneProps = IdentityProps & PositionProps & Required<Pick<SizeProps
    */
   active?: boolean;
   /**
+   * The skill this scene is made with: the `name` of a skill folder (a
+   * SKILL.md with its assets), chosen from the editor's Skill Deck or set by
+   * an agent. It is part of the document — the scene means "a video of this
+   * kind" — and the agent reads it to know which SKILL.md to follow. A name
+   * whose folder is not installed on this machine is kept, not dropped.
+   */
+  skill?: string;
+  /**
    * Decibels on the scene's own bus, which everything in it mixes into: the
    * master fader. 0 = unity, negative attenuates (-6 = half as loud),
    * -Infinity = silence. A clip's own `volume` composes with this one.

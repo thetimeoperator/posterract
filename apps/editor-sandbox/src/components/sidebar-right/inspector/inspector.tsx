@@ -22,9 +22,9 @@ import {
   isText,
 } from "@posterract/video-runtime";
 import { useAssetSelection, useSelection, useTool } from "@/engine/hooks";
-import { InspectorHeader } from "./inspector-header";
 import { VariablesSettings } from "./variables";
 import { VersionHistory } from "./version-history";
+import { SceneSkillPanel } from "./scene-skill";
 import { SceneTemplatePanel } from "./scene-template";
 import { AssetInfoPanel } from "./asset-info";
 import { TimeSettings } from "./time";
@@ -124,7 +124,6 @@ export function Inspector() {
 
   return (
     <div class="h-full min-h-0 flex flex-col" data-right-sidebar>
-      <InspectorHeader />
       <Show when={selectionHash()} keyed>
         <ControlScrollArea class="flex-1 min-h-0" scrollKey={selectionHash()}>
           <Show when={includesTarget("scene-tool")}>
@@ -136,6 +135,7 @@ export function Inspector() {
           </Show>
 
           <Show when={includesTarget("scene") && !isNested()}>
+            <SceneSkillPanel selection={nodes()} />
             <ExportPanel selection={nodes()} />
           </Show>
 

@@ -21,7 +21,7 @@ import {
 	BlendMode, Effect, Transition, MixedCornerRadius,
 	LocalTransform, WorldTransform, Computed, Cache,
 	Host,
-	Mode, FrameRate, Camera, Background, RenderSurface,
+	Mode, WorkspaceTheme, FrameRate, Camera, Background, RenderSurface,
 	HitRegions,
 	Root,
 } from '../traits';
@@ -1317,14 +1317,37 @@ export function renderSystem(world: World): void {
 	// The stage background is a preview-only affordance; offline encoding
 	// renders just the scene onto a transparent canvas (the scene paints its
 	// own fill if it has one).
-	if (world.get(Mode)?.value === 'realtime') {
-		const base = colorToHex(world.get(Root)!.get(Background)?.value ?? 0);
+	const look = world.get(WorkspaceTheme)?.value ?? 'noir';
+	if (world.get(Mode)?.value === 'realtime' && look === 'clear') {
+		// A host that paints its own ground behind a transparent canvas (the
+		// website's hero) wants only the composition drawn.
+		world.get(HitRegions)?.list.push({
+			target: { kind: 'hud', id: 'canvas', quad: getCanvasQuad(cw, ch) },
+		});
+	} else if (world.get(Mode)?.value === 'realtime') {
+		// The workspace ground: the green-and-black gradient the product is
+		// known by. An authored stage colour only tints it, so no project can
+		// turn the editor another colour.
+		const frost = look === 'frost';
 		const workspace = ctx.createLinearGradient(0, 0, 0, ch);
-		workspace.addColorStop(0, '#0b0e0d');
-		workspace.addColorStop(0.46, base);
-		workspace.addColorStop(0.72, '#06110a');
-		workspace.addColorStop(1, '#0d2a16');
+		workspace.addColorStop(0, frost ? '#0a1510' : '#0b0e0d');
+		workspace.addColorStop(0.46, frost ? '#0b2016' : '#0a1210');
+		workspace.addColorStop(0.72, frost ? '#092a18' : '#06110a');
+		workspace.addColorStop(1, frost ? '#10482a' : '#0d2a16');
 		ctx.fillStyle = workspace;
+		ctx.fillRect(0, 0, cw, ch);
+		const authored = world.get(Root)!.get(Background)?.value;
+		if (authored !== undefined && authored !== 0) {
+			ctx.globalAlpha = 0.18;
+			ctx.fillStyle = colorToHex(authored);
+			ctx.fillRect(0, 0, cw, ch);
+			ctx.globalAlpha = 1;
+		}
+		const glow = ctx.createRadialGradient(cw / 2, ch * 1.1, 0, cw / 2, ch * 1.1, Math.max(cw, ch) * 0.75);
+		glow.addColorStop(0, frost ? 'rgba(60, 200, 100, 0.42)' : 'rgba(42, 154, 74, 0.30)');
+		glow.addColorStop(0.5, frost ? 'rgba(28, 120, 60, 0.18)' : 'rgba(20, 79, 40, 0.12)');
+		glow.addColorStop(1, 'rgba(20, 79, 40, 0)');
+		ctx.fillStyle = glow;
 		ctx.fillRect(0, 0, cw, ch);
 		world.get(HitRegions)?.list.push({
 			target: { kind: 'hud', id: 'canvas', quad: getCanvasQuad(cw, ch) },

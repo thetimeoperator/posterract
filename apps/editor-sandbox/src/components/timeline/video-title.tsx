@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useActiveScene } from "@/engine/hooks/use-active-scene";
 import { useDerived, useEditor } from "@/engine/hooks";
+import { useLayout } from "@/context/layout";
+import { Button } from "@/components/ui/button";
 
 import type { Entity } from "koota";
 
@@ -36,6 +38,7 @@ export function VideoTimelineTitle() {
   const world = useWorld();
   const editor = useEditor();
   const activeScene = useActiveScene();
+  const { mixerOpen, toggleMixer, toggleTimeline } = useLayout();
   const frameRate = useTrait(world, FrameRate);
   const name = useTrait(activeScene, Name);
   const title = createMemo(() => name()?.value.trim() || "Untitled video");
@@ -48,7 +51,7 @@ export function VideoTimelineTitle() {
   );
 
   return (
-    <div class="col-span-full grid h-8 min-h-8 grid-cols-[264px_1px_minmax(0,1fr)_1px_264px] bg-sidebar/95">
+    <div class="grid h-8 min-h-8 grid-cols-[220px_1px_minmax(0,1fr)] border-b border-border">
       <div class="flex items-center px-3 text-[9px] font-semibold tracking-[0.18em] text-muted-foreground/70">
         LAYERS
       </div>
@@ -87,10 +90,28 @@ export function VideoTimelineTitle() {
             </DropdownMenuContent>
           </DropdownMenuPortal>
         </DropdownMenu>
-      </div>
-      <div class="bg-border-strong" />
-      <div class="flex items-center px-3 text-[9px] font-semibold tracking-[0.18em] text-muted-foreground/70">
-        AUDIO MIXER
+        {/* The dock's own controls: the mixer pop-over and Peek. */}
+        <div class="ml-auto flex items-center gap-0.5">
+          <Button
+            variant="ghost"
+            size="small"
+            class="h-6 px-2 text-[10px] tracking-[0.08em] uppercase text-muted-foreground"
+            classList={{ 'text-primary': mixerOpen() }}
+            onClick={toggleMixer}
+            title="Audio mixer"
+          >
+            Mixer
+          </Button>
+          <Button
+            variant="ghost"
+            size="small"
+            class="h-6 px-2 text-[10px] tracking-[0.08em] uppercase text-muted-foreground"
+            onClick={toggleTimeline}
+            title="Collapse the dock to a strip"
+          >
+            Peek
+          </Button>
+        </div>
       </div>
     </div>
   );

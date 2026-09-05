@@ -7,6 +7,7 @@ import { ChildOf, Marker, Playback, setPlayhead } from '@posterract/video-runtim
 import { assert } from '@/utils';
 import { RULER_INTERVALS } from '../constants';
 import {
+	MARKER_LANE_HEIGHT,
 	RULER_HEIGHT,
 	RULER_LABEL_Y,
 	RULER_TICK_HEIGHT_MAJOR,
@@ -75,13 +76,15 @@ export function renderRuler(world: World, scene: Entity, surface: TimelineSurfac
 	const majorOffset = RULER_HEIGHT - RULER_TICK_HEIGHT_MAJOR;
 	const minorOffset = RULER_HEIGHT - RULER_TICK_HEIGHT_MINOR;
 
-	ctx.font = '300 10px JetBrains Mono';
+	// A time strip, not a comb: sparse mono labels, hairline ticks, and a
+	// baseline the lanes hang from.
+	ctx.font = '400 10px JetBrains Mono';
 	ctx.fillStyle = surface.colors.ruler.text;
 	ctx.textBaseline = 'middle';
 	ctx.textAlign = 'center';
 
 	for (let frame = Math.floor(firstFrame / step) * step; frame <= lastFrame; frame += step) {
-		const x = framesToPixels(frame, resolution);
+		const x = Math.round(framesToPixels(frame, resolution)) + 0.5;
 		let y = minorOffset;
 
 		// Only the ticks of the interval itself are labelled; the rest are the
@@ -99,20 +102,23 @@ export function renderRuler(world: World, scene: Entity, surface: TimelineSurfac
 		ctx.stroke();
 	}
 
+	ctx.strokeStyle = surface.colors.ruler.tick;
+	ctx.beginPath();
+	ctx.moveTo(minX, RULER_HEIGHT - 0.5);
+	ctx.lineTo(maxX, RULER_HEIGHT - 0.5);
+	ctx.stroke();
+
 	drawMarkers(world, scene, surface);
 
 	ctx.restore();
 }
 
-/** How wide a marker's flag is before its label is drawn. */
-const MARKER_FLAG_WIDTH = 7;
+const MARKER_HALF = 3.5;
 
 /**
- * The scene's markers, drawn on the ruler as small flags.
- *
- * They sit above the ticks rather than in the layer area: a marker is a note
- * about a moment, not about a layer, and putting it anywhere else would imply
- * it belonged to whatever row it landed on.
+ * The scene's markers, in their own lane above the time labels: a small lit
+ * diamond with the name beside it. A marker is a note about a moment, not
+ * about a layer, and in its own lane it can never sit on top of a time.
  */
 function drawMarkers(world: World, scene: Entity, surface: TimelineSurfaceState): void {
 	const { ctx } = surface;
@@ -123,27 +129,33 @@ function drawMarkers(world: World, scene: Entity, surface: TimelineSurfaceState)
 
 	const resolution = getResolution(world, scene);
 	const scroll = getScrollX(world, scene);
+	const y = MARKER_LANE_HEIGHT / 2 + 1;
 
 	ctx.save();
-	ctx.font = '300 10px JetBrains Mono';
+	ctx.font = '500 9px JetBrains Mono';
 	ctx.textBaseline = 'middle';
+	ctx.textAlign = 'left';
 	for (const entity of markers) {
 		const marker = entity.get(Marker)!;
 		const x = framesToPixels(marker.time - scroll, resolution);
 		const color = marker.color || surface.colors.border.scrubber;
 
 		ctx.fillStyle = color;
+		ctx.shadowColor = color;
+		ctx.shadowBlur = 6;
 		ctx.beginPath();
-		ctx.moveTo(x, 1);
-		ctx.lineTo(x + MARKER_FLAG_WIDTH, 1);
-		ctx.lineTo(x + MARKER_FLAG_WIDTH, RULER_LABEL_Y);
-		ctx.lineTo(x, RULER_LABEL_Y + 3);
+		ctx.moveTo(x, y - MARKER_HALF);
+		ctx.lineTo(x + MARKER_HALF, y);
+		ctx.lineTo(x, y + MARKER_HALF);
+		ctx.lineTo(x - MARKER_HALF, y);
 		ctx.closePath();
 		ctx.fill();
+		ctx.shadowBlur = 0;
 
 		if (marker.name) {
-			ctx.fillStyle = surface.colors.ruler.text;
-			ctx.fillText(marker.name, x + MARKER_FLAG_WIDTH + 3, RULER_LABEL_Y);
+			ctx.globalAlpha = 0.85;
+			ctx.fillText(marker.name, x + MARKER_HALF + 4, y);
+			ctx.globalAlpha = 1;
 		}
 	}
 	ctx.restore();
@@ -155,7 +167,7 @@ function formatTickLabel(frame: number, fps: number): string {
 	if (frame % fps !== 0) return `${frame}f`;
 
 	const total = Math.round(frame / fps);
-	const minutes = Math.floor(total / 60).toString().padStart(2, '0');
+	const minutes = Math.floor(total / 60).toString();
 	const seconds = Math.floor(total % 60).toString().padStart(2, '0');
 
 	return `${minutes}:${seconds}`;

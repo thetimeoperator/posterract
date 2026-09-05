@@ -167,11 +167,9 @@ function handleKeyframe(
 	editor.editProperty(keyframe, 'time', framesToSeconds(Math.max(0, origin.time + moved), getFrameRate(world)));
 }
 
+/** A keyframe is a point of light, not a diamond of ink. */
 function diamond(ctx: CanvasRenderingContext2D, x: number, y: number): void {
 	ctx.beginPath();
-	ctx.moveTo(x, y - HALF);
-	ctx.lineTo(x + HALF, y);
-	ctx.lineTo(x, y + HALF);
-	ctx.lineTo(x - HALF, y);
+	ctx.arc(x, y, HALF * 0.8, 0, Math.PI * 2);
 	ctx.closePath();
 }

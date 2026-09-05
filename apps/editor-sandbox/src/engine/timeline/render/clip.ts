@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { Caption, CaptionType, Chars, ClipDragOrigin, Computed, Hidden, Name, Selected, TrimDragOrigin, fitsChildren, getGeneratingColor, getSourceFailure, isCaption, isGenerating, isGroup, isText, store } from '@posterract/video-runtime';
+import { Caption, CaptionType, Chars, ClipDragOrigin, Computed, Hidden, Hovering, Name, Selected, TrimDragOrigin, fitsChildren, getGeneratingColor, getSourceFailure, isCaption, isGenerating, isGroup, isText, store } from '@posterract/video-runtime';
 
 import { getDocumentEditor } from '../../editor';
 import {
@@ -69,11 +69,25 @@ export function renderClip(
 
 	const generating = isGenerating(entity);
 
+	const radius = capsuleRadius(row.height);
+
+	// A capsule of lit glass: the kind's colour, lighter at the top, with a
+	// hairline highlight along the upper edge.
 	ctx.save();
 	ctx.beginPath();
-	ctx.roundRect(left, 0, width, row.height, CLIP_CORNER_RADIUS);
-	ctx.fillStyle = generating ? getGeneratingColor(world) : style.background;
+	ctx.roundRect(left, 0, width, row.height, radius);
+	if (generating) {
+		ctx.fillStyle = getGeneratingColor(world);
+	} else {
+		const gradient = ctx.createLinearGradient(0, 0, 0, row.height);
+		gradient.addColorStop(0, lighten(style.background, 0.14));
+		gradient.addColorStop(1, style.background);
+		ctx.fillStyle = gradient;
+	}
 	ctx.fill();
+	ctx.clip();
+	ctx.fillStyle = 'rgba(234, 255, 243, 0.10)';
+	ctx.fillRect(left, 0, width, 1);
 	ctx.restore();
 
 	if (!generating && !error) {
@@ -116,17 +130,61 @@ export function renderClip(
 
 	// Last, so it sits over whatever the clip drew inside itself.
 	const selected = entity.has(Selected);
+	const hovering = entity.has(Hovering);
 
 	ctx.save();
 	ctx.beginPath();
-	ctx.roundRect(left, 0, width, row.height, CLIP_CORNER_RADIUS);
-	ctx.clip();
-	ctx.strokeStyle = selected ? surface.colors.border.ring : surface.colors.border.darker;
-	ctx.lineWidth = selected ? 2 : 1;
-	ctx.stroke();
+	ctx.roundRect(left + 0.5, 0.5, width - 1, row.height - 1, radius);
+	if (selected) {
+		// The selection glows rather than thickens: a neon ring with light
+		// bleeding off it, and pill handles where a trim would start.
+		ctx.shadowColor = 'rgba(101, 255, 154, 0.55)';
+		ctx.shadowBlur = 12;
+		ctx.strokeStyle = surface.colors.border.ring;
+		ctx.lineWidth = 1;
+		ctx.stroke();
+		ctx.shadowBlur = 0;
+		if (width > 28 && !fitsChildren(entity)) {
+			ctx.fillStyle = surface.colors.border.ring;
+			const handleHeight = Math.min(14, row.height - 10);
+			const handleTop = (row.height - handleHeight) / 2;
+			ctx.beginPath();
+			ctx.roundRect(left + 4, handleTop, 3, handleHeight, 1.5);
+			ctx.roundRect(left + width - 7, handleTop, 3, handleHeight, 1.5);
+			ctx.fill();
+		}
+	} else {
+		ctx.strokeStyle = hovering ? surface.colors.border.input : surface.colors.border.darker;
+		ctx.lineWidth = 1;
+		ctx.stroke();
+	}
 	ctx.restore();
 
 	handleTrim(world, surface, entity, left, width, row, resolution);
+}
+
+/** A capsule's corner radius: the configured one, unless the row is too short for it. */
+function capsuleRadius(height: number): number {
+	return Math.max(2, Math.min(CLIP_CORNER_RADIUS, height / 2 - 1));
+}
+
+const LIGHTEN_CACHE = new Map<string, string>();
+
+/** `color` mixed toward white by `amount`; hex and rgba() are what the palette uses. */
+function lighten(color: string, amount: number): string {
+	const key = `${color}|${amount}`;
+	const cached = LIGHTEN_CACHE.get(key);
+	if (cached) return cached;
+
+	let result = color;
+	const hex = /^#([0-9a-f]{6})$/i.exec(color);
+	if (hex) {
+		const value = parseInt(hex[1]!, 16);
+		const mix = (channel: number) => Math.round(channel + (255 - channel) * amount);
+		result = `rgb(${mix(value >> 16)}, ${mix((value >> 8) & 255)}, ${mix(value & 255)})`;
+	}
+	LIGHTEN_CACHE.set(key, result);
+	return result;
 }
 
 /**

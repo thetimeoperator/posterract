@@ -136,6 +136,17 @@ export async function createEncoder(world: World, config: EncoderConfig) {
 	const buffer = await TargetBuffer.create(config.target);
 	const format = await createOutputFormat(buffer, config.format);
 	const output = new Output({ format, target: buffer.target });
+	const reservePacketMultiplier = 1.5;
+	const maximumVideoPacketCount = Math.max(
+		1,
+		Math.ceil(duration * frameRate * reservePacketMultiplier) + 2,
+	);
+	// Mediabunny recommends budgeting roughly one audio packet per 10 ms and
+	// adding a safety margin when reserving MP4 metadata at the front.
+	const maximumAudioPacketCount = Math.max(
+		1,
+		Math.ceil(duration * 100 * reservePacketMultiplier) + 2,
+	);
 
 	if (config.comment) {
 		output.setMetadataTags({ comment: config.comment });
@@ -158,11 +169,21 @@ export async function createEncoder(world: World, config: EncoderConfig) {
 	});
 
 	if (audioEnabled) {
-		output.addAudioTrack(audioSource);
+		output.addAudioTrack(
+			audioSource,
+			buffer.fastStart === 'reserve'
+				? { maximumPacketCount: maximumAudioPacketCount }
+				: undefined,
+		);
 	}
 
 	if (videoEnabled) {
-		output.addVideoTrack(videoSource);
+		output.addVideoTrack(
+			videoSource,
+			buffer.fastStart === 'reserve'
+				? { maximumPacketCount: maximumVideoPacketCount }
+				: undefined,
+		);
 	}
 
 	// Audio worklet streams render-quantum chunks back to the main thread so
@@ -458,4 +479,3 @@ export async function resolverSystem(world: World) {
 		world.set(FramePromises, { list: [] });
 	}
 }
-

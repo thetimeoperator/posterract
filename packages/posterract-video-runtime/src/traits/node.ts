@@ -85,6 +85,9 @@ export const Group = trait();
 // Scenes are NOT Groups.
 export const Scene = trait();
 
+/** The skill folder a scene is made with; empty when none was chosen. */
+export const SceneSkill = trait({ value: '' });
+
 // Tag marking a geometry as an audio clip (no visual rendering).
 export const Audio = trait();
 

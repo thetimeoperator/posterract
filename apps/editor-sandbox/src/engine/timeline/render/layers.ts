@@ -118,12 +118,17 @@ function renderRow(
 	row.height = getNodeHeight(node);
 	ctx.globalAlpha = getClipAlpha(node.entity);
 
-	if (node.entity.has(Hovering)) {
+	// Each row is a track: a darker strip of glass with a breath of space
+	// above and below it, instead of a gridline.
+	{
 		const [left, right] = getViewport(world, scene, surface.layout.width);
-		ctx.globalAlpha = 0.5;
-		ctx.fillStyle = surface.colors.background.accent;
-		ctx.fillRect(left, 0, right - left, row.height);
-		ctx.globalAlpha = 1;
+		const inset = Math.min(2, row.height / 8);
+		ctx.save();
+		ctx.beginPath();
+		ctx.roundRect(left, inset, right - left, row.height - inset * 2, Math.min(8, row.height / 2 - inset));
+		ctx.fillStyle = node.entity.has(Hovering) ? surface.colors.background.accent : surface.colors.background.muted;
+		ctx.fill();
+		ctx.restore();
 	}
 
 	if (!node.entity.has(Sequential)) {

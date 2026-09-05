@@ -8,12 +8,12 @@ import type { ContainerFormat, WritableFileTarget } from './types';
 
 export class TargetBuffer {
   public target: Target;
-  public fastStart: false | 'in-memory';
+  public fastStart: false | 'in-memory' | 'reserve';
   public handle: FileSystemFileHandle | WritableFileTarget | undefined;
 
   public constructor(
     target: StreamTarget | BufferTarget,
-    fastStart: false | 'in-memory',
+    fastStart: false | 'in-memory' | 'reserve',
     handle: FileSystemFileHandle | WritableFileTarget | undefined
   ) {
     this.target = target;
@@ -26,7 +26,7 @@ export class TargetBuffer {
   ): Promise<TargetBuffer> {
     if (handle) {
       const fileStream = await handle.createWritable();
-      return new TargetBuffer(new StreamTarget(fileStream, { chunked: true }), false, handle);
+      return new TargetBuffer(new StreamTarget(fileStream, { chunked: true }), 'reserve', handle);
     }
 
     return new TargetBuffer(new BufferTarget(), 'in-memory', undefined);

@@ -25,6 +25,7 @@ import {
 import { useEditor } from "@/engine";
 import { droppedFiles, importFiles } from "@/engine/asset-actions";
 import { createScene, insertAssetsInNewScene } from "@/engine/new-scene";
+import { openSkillDeck } from "@/engine/skill-deck";
 import { ASSET_DRAG_TYPE } from "@/components/sidebar-left/folder-item";
 
 import type { Rect } from "@posterract/video-runtime";
@@ -124,7 +125,11 @@ export function SceneInitOverlay() {
 
   const handleInitializeScene = () => {
     const scene = createScene(world, selectedPreset(), sceneOptions());
-    if (scene) editor.select(scene);
+    if (scene) {
+      editor.select(scene);
+      // A new scene's first question is what kind of video it is.
+      openSkillDeck(scene);
+    }
   };
 
   /**
