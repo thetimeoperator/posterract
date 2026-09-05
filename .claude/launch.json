@@ -6,6 +6,12 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@posterract/web", "dev"],
       "port": 5173
+    },
+    {
+      "name": "editor",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@posterract/editor-sandbox", "dev"],
+      "port": 5175
     }
   ]
 }
