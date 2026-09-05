@@ -154,3 +154,60 @@ test("TikTok draft upload merges trailing bytes into the final declared chunk", 
     globalThis.setTimeout = originalSetTimeout;
   }
 });
+
+test("TikTok draft upload can read normalized server-side byte ranges", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalSetTimeout = globalThis.setTimeout;
+  const requests = [];
+  const reads = [];
+
+  globalThis.setTimeout = (callback) => {
+    queueMicrotask(callback);
+    return 0;
+  };
+  globalThis.fetch = async (input, init = {}) => {
+    const url = String(input);
+    requests.push({ url, init });
+    if (url.endsWith("/v2/post/publish/inbox/video/init/")) {
+      return Response.json({
+        data: {
+          publish_id: "v_inbox_file~v2.normalized",
+          upload_url: "https://open-upload.tiktokapis.com/video/normalized",
+        },
+        error: { code: "ok", message: "" },
+      });
+    }
+    if (url === "https://open-upload.tiktokapis.com/video/normalized") {
+      return new Response(null, { status: 201 });
+    }
+    if (url.endsWith("/v2/post/publish/status/fetch/")) {
+      return Response.json({
+        data: { status: "SEND_TO_USER_INBOX" },
+        error: { code: "ok", message: "" },
+      });
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  };
+
+  try {
+    const result = await tiktokUploadVideoDraft({
+      accessToken: "test-token",
+      videoUrl: "unused-for-normalized-media",
+      mimeType: "video/mp4",
+      sizeBytes: 4,
+      readRange: async (start, end) => {
+        reads.push([start, end]);
+        return new Uint8Array([1, 2, 3, 4]).buffer;
+      },
+    });
+    assert.equal(result.inboxDelivered, true);
+    assert.deepEqual(reads, [[0, 3]]);
+    assert.equal(
+      requests.some(({ url }) => url === "unused-for-normalized-media"),
+      false,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    globalThis.setTimeout = originalSetTimeout;
+  }
+});

@@ -1,6 +1,13 @@
 import http from "node:http";
+import { execFile } from "node:child_process";
+import { createWriteStream } from "node:fs";
+import { mkdtemp, open, rm, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { promisify } from "node:util";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { NativeConnection, Worker } from "@temporalio/worker";
@@ -44,6 +51,7 @@ import {
 } from "../../web/convex/connectors/youtube.ts";
 
 const env = process.env;
+const execFileAsync = promisify(execFile);
 const postgres = new Pool({
   connectionString: env.DATABASE_URL,
   max: Number(env.POSTGRES_POOL_MAX ?? 10),
@@ -133,6 +141,76 @@ async function signedMediaUrl(r2Key) {
     new GetObjectCommand({ Bucket: env.R2_BUCKET, Key: r2Key }),
     { expiresIn: Number(env.R2_SIGNED_DOWNLOAD_TTL_SECONDS ?? 3_600) },
   );
+}
+
+async function prepareTikTokMedia(videoUrl) {
+  const directory = await mkdtemp(join(tmpdir(), "posterract-tiktok-"));
+  const inputPath = join(directory, "source");
+  const outputPath = join(directory, "tiktok-ready.mp4");
+  try {
+    const response = await fetch(videoUrl);
+    if (!response.ok || !response.body) {
+      throw new Error(`TikTok media preparation download failed: ${response.status}`);
+    }
+    await pipeline(
+      Readable.fromWeb(response.body),
+      createWriteStream(inputPath),
+    );
+    await execFileAsync(env.FFMPEG_PATH ?? "ffmpeg", [
+      "-y",
+      "-v",
+      "error",
+      "-i",
+      inputPath,
+      "-map",
+      "0:v:0",
+      "-map",
+      "0:a:0?",
+      "-c",
+      "copy",
+      "-map_metadata",
+      "-1",
+      "-movflags",
+      "+faststart",
+      outputPath,
+    ]);
+    const prepared = await stat(outputPath);
+    if (prepared.size <= 0) throw new Error("TikTok media preparation produced an empty file");
+
+    return {
+      mimeType: "video/mp4",
+      sizeBytes: prepared.size,
+      readRange: async (start, end) => {
+        const length = end - start + 1;
+        const buffer = Buffer.allocUnsafe(length);
+        const file = await open(outputPath, "r");
+        try {
+          let offset = 0;
+          while (offset < length) {
+            const { bytesRead } = await file.read(
+              buffer,
+              offset,
+              length - offset,
+              start + offset,
+            );
+            if (bytesRead === 0) {
+              throw new Error("TikTok media preparation ended before the requested range");
+            }
+            offset += bytesRead;
+          }
+          const result = new Uint8Array(length);
+          result.set(buffer);
+          return result.buffer;
+        } finally {
+          await file.close();
+        }
+      },
+      cleanup: () => rm(directory, { recursive: true, force: true }),
+    };
+  } catch (error) {
+    await rm(directory, { recursive: true, force: true });
+    throw error;
+  }
 }
 
 async function loadProjectionContext(projectionId) {
@@ -372,25 +450,32 @@ async function executeConnector(row, accessToken, videoUrl) {
     };
   }
   if (row.provider === "tiktok") {
-    const result = await tiktokUploadVideoDraft({
-      accessToken,
-      videoUrl,
-      mimeType: row.mime_type,
-      sizeBytes: Number(row.size_bytes),
-      resumePublishId: row.pending_container_id ?? undefined,
-      onPublishId: onContainer,
-      onProgress,
-    });
-    return {
-      status: result.postId ? "live" : "awaiting_user",
-      platformPostId: result.postId,
-      platformPostUrl: result.postId
-        ? `https://www.tiktok.com/@${row.handle}/video/${result.postId}`
-        : undefined,
-      summary: result.postId
-        ? "TikTok post is live"
-        : "TikTok draft sent — open TikTok inbox to review and post",
-    };
+    await onProgress("uploading", "Optimizing video for TikTok");
+    const prepared = await prepareTikTokMedia(videoUrl);
+    try {
+      const result = await tiktokUploadVideoDraft({
+        accessToken,
+        videoUrl,
+        mimeType: prepared.mimeType,
+        sizeBytes: prepared.sizeBytes,
+        readRange: prepared.readRange,
+        resumePublishId: row.pending_container_id ?? undefined,
+        onPublishId: onContainer,
+        onProgress,
+      });
+      return {
+        status: result.postId ? "live" : "awaiting_user",
+        platformPostId: result.postId,
+        platformPostUrl: result.postId
+          ? `https://www.tiktok.com/@${row.handle}/video/${result.postId}`
+          : undefined,
+        summary: result.postId
+          ? "TikTok post is live"
+          : "TikTok draft sent — open TikTok inbox to review and post",
+      };
+    } finally {
+      await prepared.cleanup();
+    }
   }
   if (row.provider === "youtube") {
     return youtubePublish(row, accessToken, videoUrl);
@@ -1110,7 +1195,7 @@ const activities = {
   async enqueueAnalyticsIndex(transmissionId) {
     await postgres.query(
       `insert into outbox_events (aggregate_type, aggregate_id, event_type, payload)
-       values ('transmission', $1, 'transmission.analytics_index_requested',
+       values ('transmission', $1::uuid, 'transmission.analytics_index_requested',
          jsonb_build_object('transmissionId', $1::text))`,
       [transmissionId],
     );
