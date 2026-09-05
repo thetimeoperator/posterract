@@ -17,14 +17,18 @@ test("a bare name that is nowhere on the search path is not installed", () => {
 test("a bare name is found in a directory the session PATH omits", () => {
   // A desktop-launched Linux app does not inherit the login shell's PATH, so
   // ~/.local/bin has to be searched explicitly or a real install looks missing.
+  //
+  // resolveCommand joins with the host separator, so this case is asserted on
+  // separator-independent form — the rule is what is under test, not join().
+  const posix = (path: string) => path.replace(/\\/g, "/");
   const found = resolveCommand(
     ["claude"],
     ["/usr/bin", "/home/sina/.local/bin"],
     plain,
-    (path) => path === "/home/sina/.local/bin/claude",
+    (path) => posix(path) === "/home/sina/.local/bin/claude",
     posixAbsolute,
   );
-  assert.equal(found, "/home/sina/.local/bin/claude");
+  assert.equal(found && posix(found), "/home/sina/.local/bin/claude");
 });
 
 test("an absolute candidate wins over a search, and a missing one is skipped", () => {

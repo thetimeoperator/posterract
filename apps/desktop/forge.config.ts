@@ -73,6 +73,7 @@ const config: ForgeConfig = {
         genericName: "Video Editor",
         description: "Agent-native local video editor",
         productDescription: "Edit local video compositions with coding agents and publish explicitly through Posterract.",
+        bin: "Posterract",
         section: "video",
         priority: "optional",
         maintainer: "Posterract",
@@ -82,6 +83,9 @@ const config: ForgeConfig = {
     }),
     new MakerAppImage({
       options: {
+        // Defaults to the package name, posterract-desktop, which is not what
+        // packagerConfig.executableName produces.
+        bin: "Posterract",
         categories: ["AudioVideo", "Video"],
         icon: `${iconBase}.png`,
       },
