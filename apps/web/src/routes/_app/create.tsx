@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowRight, Bot, Clapperboard, HardDrive } from "lucide-react";
+import { Bot, Clapperboard, HardDrive } from "lucide-react";
 import { Button, Modal, pushSignal } from "@posterract/hyperkit";
 import { DesktopDownloads, anyDesktopBuild } from "@/components/DesktopDownloads";
 import { desktopRequest, isPosterractDesktop } from "@/lib/desktop";
@@ -72,12 +72,6 @@ function DownloadDesktop() {
 
         <div className="mt-7 flex flex-wrap items-center gap-3">
           <DesktopDownloads />
-          <a
-            className="inline-flex h-11 items-center gap-1.5 px-1 text-[12px] font-semibold text-starlight-dim transition-colors hover:text-starlight"
-            href="/uplink"
-          >
-            Set up agent access <ArrowRight size={14} />
-          </a>
         </div>
 
         {anyDesktopBuild ? null : (

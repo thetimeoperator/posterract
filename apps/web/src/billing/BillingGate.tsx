@@ -5,6 +5,7 @@ import type {
   BillingConfigDTO,
   BillingSubscriptionDTO,
 } from "@posterract/contract";
+import { DesktopHandoff } from "@/billing/DesktopHandoff";
 import { authClient, posterractApiUrl } from "@/lib/authClient";
 import { SpaceBackdrop } from "@/shell/SpaceBackdrop";
 import { cloudJson } from "@/lib/cloudRequest";
@@ -66,6 +67,15 @@ export function BillingGate({ children }: { children: ReactNode }) {
     () => new URLSearchParams(window.location.search).get("billing"),
     [],
   );
+  // Payment buys the editor, and the editor is a desktop app: the download is
+  // put in front of a new subscriber rather than left to be discovered.
+  const [handoffOpen, setHandoffOpen] = useState(
+    () => new URLSearchParams(window.location.search).get("welcome") === "desktop",
+  );
+  const closeHandoff = () => {
+    setHandoffOpen(false);
+    window.history.replaceState({}, "", window.location.pathname);
+  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -104,7 +114,7 @@ export function BillingGate({ children }: { children: ReactNode }) {
           if (nextSubscription.entitled) {
             setSubscription(nextSubscription);
             setStatus("ready");
-            if (returnState === "success") window.location.replace("/");
+            if (returnState === "success") window.location.replace("/?welcome=desktop");
             return;
           }
           if (attempt < attempts - 1) await wait();
@@ -151,7 +161,14 @@ export function BillingGate({ children }: { children: ReactNode }) {
     };
   }, [subscription?.entitled]);
 
-  if (status === "ready" && subscription?.entitled) return children;
+  if (status === "ready" && subscription?.entitled) {
+    return (
+      <>
+        {children}
+        <DesktopHandoff open={handoffOpen} onClose={closeHandoff} />
+      </>
+    );
+  }
 
   const plans = config?.plans;
   const creditPlans = config?.creditPlans;
