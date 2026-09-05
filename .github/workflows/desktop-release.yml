@@ -49,6 +49,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # local-agent.ts imports @posterract/composition, whose export map points at
+      # dist/. The desktop build produces it, but the tests run first — and should,
+      # so a broken build is not paid for before they have had their say.
+      - name: Build the packages the tests import
+        run: pnpm --filter @posterract/composition build
+
       - name: Test agent discovery
         run: pnpm --filter @posterract/desktop test:agent-discovery
 
