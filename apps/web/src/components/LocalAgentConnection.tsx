@@ -1,8 +1,7 @@
-import { Download, FolderOpen } from "lucide-react";
+import { FolderOpen } from "lucide-react";
 import { Panel } from "@posterract/hyperkit";
+import { DesktopDownloads } from "@/components/DesktopDownloads";
 import { isPosterractDesktop } from "@/lib/desktop";
-
-const MAC_DESKTOP_DOWNLOAD = import.meta.env.VITE_DESKTOP_MAC_DOWNLOAD_URL as string | undefined;
 
 const HOW_IT_WORKS = [
   "Posterract adds one entry to your agent's configuration naming a command on this computer.",
@@ -38,21 +37,7 @@ export function LocalAgentConnection() {
             </div>
           ) : (
             <div className="mt-5">
-              {MAC_DESKTOP_DOWNLOAD ? (
-                <a
-                  className="inline-flex h-10 items-center gap-2 rounded-[11px] border border-neon/35 bg-neon/[0.09] px-4 font-display text-[12px] font-semibold text-neon hover:bg-neon/[0.14]"
-                  href={MAC_DESKTOP_DOWNLOAD}
-                >
-                  <Download size={15} /> Download Posterract Desktop
-                </a>
-              ) : (
-                <button
-                  disabled
-                  className="h-10 rounded-[11px] border border-white/[0.08] px-4 text-[11px] text-starlight-faint opacity-65"
-                >
-                  Desktop download pending signed release
-                </button>
-              )}
+              <DesktopDownloads compact />
             </div>
           )}
         </div>

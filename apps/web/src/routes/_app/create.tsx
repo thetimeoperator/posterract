@@ -1,8 +1,9 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Apple, ArrowRight, Bot, Clapperboard, Download, HardDrive } from "lucide-react";
+import { ArrowRight, Bot, Clapperboard, HardDrive } from "lucide-react";
 import { Button, Modal, pushSignal } from "@posterract/hyperkit";
+import { DesktopDownloads, anyDesktopBuild } from "@/components/DesktopDownloads";
 import { desktopRequest, isPosterractDesktop } from "@/lib/desktop";
 import { refreshPostgresEngine } from "@/engine/postgres";
 
@@ -26,8 +27,6 @@ export const Route = createFileRoute("/_app/create")({
 const SANDBOX_URL =
   (import.meta.env.VITE_EDITOR_SANDBOX_URL as string | undefined)?.replace(/\/$/, "") ??
   (import.meta.env.DEV ? "http://127.0.0.1:5175" : "/editor-sandbox");
-
-const MAC_DESKTOP_DOWNLOAD = import.meta.env.VITE_DESKTOP_MAC_DOWNLOAD_URL as string | undefined;
 
 /**
  * Creating a video happens in Posterract Desktop, never in the browser: the
@@ -72,18 +71,7 @@ function DownloadDesktop() {
         </p>
 
         <div className="mt-7 flex flex-wrap items-center gap-3">
-          {MAC_DESKTOP_DOWNLOAD ? (
-            <a
-              className="inline-flex h-11 items-center gap-2.5 rounded-[12px] border border-neon/35 bg-neon/[0.10] px-5 font-display text-[13px] font-semibold text-neon transition-colors hover:bg-neon/[0.16]"
-              href={MAC_DESKTOP_DOWNLOAD}
-            >
-              <Apple size={16} /> Download for Mac
-            </a>
-          ) : (
-            <span className="inline-flex h-11 items-center gap-2.5 rounded-[12px] border border-white/[0.09] px-5 text-[12px] text-starlight-faint">
-              <Download size={15} /> Desktop download coming soon
-            </span>
-          )}
+          <DesktopDownloads />
           <a
             className="inline-flex h-11 items-center gap-1.5 px-1 text-[12px] font-semibold text-starlight-dim transition-colors hover:text-starlight"
             href="/uplink"
@@ -92,11 +80,12 @@ function DownloadDesktop() {
           </a>
         </div>
 
-        {MAC_DESKTOP_DOWNLOAD ? (
-          <p className="mt-3 text-[11px] text-starlight-faint">
-            Apple silicon (M1 or later), macOS 11+. Intel Macs are not supported yet.
+        {anyDesktopBuild ? null : (
+          <p className="mt-3 text-[11px] leading-relaxed text-starlight-faint">
+            Signed builds are on the way. The editor runs on your own machine, so there is nothing
+            to try in the browser until then.
           </p>
-        ) : null}
+        )}
       </div>
 
       <div className="mt-12 grid gap-3 sm:grid-cols-3">
