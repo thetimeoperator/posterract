@@ -1,109 +1,143 @@
-import { Apple, Download, Monitor, Terminal } from "lucide-react";
+import { useState } from "react";
+import { Apple, ChevronDown, Download, Monitor, Terminal } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 /**
  * One build per platform, each produced on its own machine: esbuild ships inside
  * the app as a native binary for the host, so there is no universal artifact.
- * A platform without a configured URL is offered as "coming soon" rather than
- * hidden, so the page never implies we only run on one operating system.
+ *
+ * macOS leads regardless of who is looking. It is the only signed and notarized
+ * build, so it is the one we stand behind, and a visitor comparing platforms
+ * should see that rather than have the page quietly reorder itself around them.
  */
-export type DesktopPlatform = "mac" | "windows" | "linux";
+export const MAC_URL = import.meta.env.VITE_DESKTOP_MAC_DOWNLOAD_URL as string | undefined;
+export const WINDOWS_URL = import.meta.env.VITE_DESKTOP_WINDOWS_DOWNLOAD_URL as string | undefined;
+export const LINUX_APPIMAGE_URL = import.meta.env.VITE_DESKTOP_LINUX_DOWNLOAD_URL as string | undefined;
+export const LINUX_DEB_URL = import.meta.env.VITE_DESKTOP_LINUX_DEB_URL as string | undefined;
 
-type Build = {
-  id: DesktopPlatform;
-  label: string;
-  requirement: string;
-  icon: LucideIcon;
-  url: string | undefined;
-};
+export const anyDesktopBuild = Boolean(MAC_URL || WINDOWS_URL || LINUX_APPIMAGE_URL);
 
-export const DESKTOP_BUILDS: Build[] = [
-  {
-    id: "mac",
-    label: "macOS",
-    requirement: "Apple silicon · macOS 11+",
-    icon: Apple,
-    url: import.meta.env.VITE_DESKTOP_MAC_DOWNLOAD_URL as string | undefined,
-  },
-  {
-    id: "windows",
-    label: "Windows",
-    requirement: "64-bit · Windows 10+",
-    icon: Monitor,
-    url: import.meta.env.VITE_DESKTOP_WINDOWS_DOWNLOAD_URL as string | undefined,
-  },
-  {
-    id: "linux",
-    label: "Linux",
-    requirement: "AppImage · x86-64",
-    icon: Terminal,
-    url: import.meta.env.VITE_DESKTOP_LINUX_DOWNLOAD_URL as string | undefined,
-  },
+/** Linux has no single package everyone can install, so the choice is the user's. */
+const LINUX_FORMATS: { label: string; note: string; url: string | undefined }[] = [
+  { label: "AppImage", note: "Any distribution — Arch, Fedora, Ubuntu", url: LINUX_APPIMAGE_URL },
+  { label: ".deb", note: "Debian and Ubuntu — installs to your menu", url: LINUX_DEB_URL },
 ];
 
-export const anyDesktopBuild = DESKTOP_BUILDS.some((build) => build.url);
+function Pending({ label }: { label: string }) {
+  return (
+    <span
+      className="inline-flex h-11 items-center gap-2 rounded-[12px] border border-white/[0.08] px-4 text-[11px] text-starlight-faint"
+      title={`${label} build coming soon`}
+    >
+      <Download size={14} /> {label} soon
+    </span>
+  );
+}
 
-/**
- * The visitor's platform, or null when it cannot be told. Guessing wrong is
- * worse than not guessing: all three buttons are shown either way, and this
- * only decides which one is emphasised.
- */
-export function detectPlatform(): DesktopPlatform | null {
-  if (typeof navigator === "undefined") return null;
-  // userAgentData is the modern signal; platform is deprecated but still the
-  // only thing Safari and Firefox report.
-  const hinted = (navigator as { userAgentData?: { platform?: string } }).userAgentData?.platform;
-  const source = `${hinted ?? ""} ${navigator.platform ?? ""} ${navigator.userAgent ?? ""}`.toLowerCase();
-  // Android carries "linux" in its user agent, and neither it nor iOS runs a
-  // desktop build, so they must not be read as a match.
-  if (/android|iphone|ipad|ipod/.test(source)) return null;
-  if (/mac/.test(source)) return "mac";
-  if (/win/.test(source)) return "windows";
-  if (/linux|x11|cros/.test(source)) return "linux";
-  return null;
+function Secondary({
+  icon: Glyph,
+  label,
+  requirement,
+  compact,
+  ...rest
+}: {
+  icon: LucideIcon;
+  label: string;
+  requirement: string;
+  compact: boolean;
+} & React.ComponentPropsWithoutRef<"a"> &
+  React.ComponentPropsWithoutRef<"button">) {
+  const className =
+    "inline-flex h-11 flex-col justify-center rounded-[12px] border border-white/[0.11] px-4 text-left text-starlight-dim transition-colors hover:border-white/25 hover:text-starlight";
+  const inner = (
+    <>
+      <span className="flex items-center gap-2 font-display text-[12.5px] font-semibold leading-none">
+        <Glyph size={15} /> {label}
+        {"onClick" in rest && rest.onClick ? <ChevronDown size={13} className="opacity-70" /> : null}
+      </span>
+      {!compact && <span className="mt-1 text-[9.5px] leading-none opacity-70">{requirement}</span>}
+    </>
+  );
+  return "href" in rest && rest.href ? (
+    <a className={className} {...(rest as React.ComponentPropsWithoutRef<"a">)}>
+      {inner}
+    </a>
+  ) : (
+    <button type="button" className={className} {...(rest as React.ComponentPropsWithoutRef<"button">)}>
+      {inner}
+    </button>
+  );
 }
 
 export function DesktopDownloads({ compact = false }: { compact?: boolean }) {
-  const detected = detectPlatform();
-  // The visitor's own platform leads; the others stay visible beside it.
-  const builds = [...DESKTOP_BUILDS].sort(
-    (a, b) => Number(b.id === detected) - Number(a.id === detected),
-  );
+  const [linuxOpen, setLinuxOpen] = useState(false);
+  const linuxAvailable = LINUX_FORMATS.some((format) => format.url);
 
   return (
-    <div className={compact ? "flex flex-wrap gap-2" : "flex flex-wrap gap-2.5"}>
-      {builds.map(({ id, label, requirement, icon: Glyph, url }) => {
-        const primary = id === detected;
-        if (!url) {
-          return (
-            <span
-              key={id}
-              className="inline-flex h-11 items-center gap-2 rounded-[12px] border border-white/[0.08] px-4 text-[11px] text-starlight-faint"
-              title={`${label} build coming soon`}
-            >
-              <Download size={14} /> {label} soon
-            </span>
-          );
-        }
-        return (
+    <div>
+      <div className="flex flex-wrap items-start gap-2.5">
+        {MAC_URL ? (
           <a
-            key={id}
-            href={url}
-            className={
-              primary
-                ? "inline-flex h-11 flex-col justify-center rounded-[12px] border border-neon/40 bg-neon/[0.12] px-4 text-neon transition-colors hover:bg-neon/[0.18]"
-                : "inline-flex h-11 flex-col justify-center rounded-[12px] border border-white/[0.11] px-4 text-starlight-dim transition-colors hover:border-white/25 hover:text-starlight"
-            }
+            href={MAC_URL}
+            className="inline-flex h-11 flex-col justify-center rounded-[12px] border border-neon/40 bg-neon/[0.12] px-5 text-neon transition-colors hover:bg-neon/[0.18]"
           >
             <span className="flex items-center gap-2 font-display text-[12.5px] font-semibold leading-none">
-              <Glyph size={15} /> {label}
+              <Apple size={15} /> macOS
             </span>
             {!compact && (
-              <span className="mt-1 text-[9.5px] leading-none opacity-70">{requirement}</span>
+              <span className="mt-1 text-[9.5px] leading-none opacity-75">Apple silicon · macOS 11+</span>
             )}
           </a>
-        );
-      })}
+        ) : (
+          <Pending label="macOS" />
+        )}
+
+        {WINDOWS_URL ? (
+          <Secondary
+            icon={Monitor}
+            label="Windows"
+            requirement="64-bit · Windows 10+"
+            compact={compact}
+            href={WINDOWS_URL}
+          />
+        ) : (
+          <Pending label="Windows" />
+        )}
+
+        {linuxAvailable ? (
+          <Secondary
+            icon={Terminal}
+            label="Linux"
+            requirement={linuxOpen ? "Pick a format" : "AppImage or .deb"}
+            compact={compact}
+            onClick={() => setLinuxOpen((open) => !open)}
+            aria-expanded={linuxOpen}
+          />
+        ) : (
+          <Pending label="Linux" />
+        )}
+      </div>
+
+      {linuxOpen && (
+        <div className="mt-2.5 flex flex-wrap gap-2 rounded-[12px] border border-white/[0.08] bg-black/25 p-2.5">
+          {LINUX_FORMATS.map(({ label, note, url }) =>
+            url ? (
+              <a
+                key={label}
+                href={url}
+                className="inline-flex flex-col rounded-[10px] border border-white/[0.10] px-3.5 py-2 text-starlight-dim transition-colors hover:border-neon/35 hover:text-starlight"
+              >
+                <span className="font-display text-[12px] font-semibold leading-none">{label}</span>
+                <span className="mt-1 text-[9.5px] leading-none opacity-70">{note}</span>
+              </a>
+            ) : (
+              <span key={label} className="px-3.5 py-2 text-[10px] text-starlight-faint">
+                {label} soon
+              </span>
+            ),
+          )}
+        </div>
+      )}
     </div>
   );
 }
