@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join, resolve, sep } from "node:path";
+import { delimiter, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { app, dialog, shell } from "electron";
 import { unzipSync } from "fflate";
 import {
@@ -84,29 +84,95 @@ const AGENT_COMMANDS: Record<"codex" | "claude" | "code", string[]> =
           "/opt/homebrew/bin/codex",
           "/usr/local/bin/codex",
           join(homedir(), ".local", "bin", "codex"),
+          "codex",
         ],
         claude: [
           join(homedir(), ".local", "bin", "claude"),
           "/opt/homebrew/bin/claude",
           "/usr/local/bin/claude",
+          "claude",
         ],
         code: [
           "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code",
           "/opt/homebrew/bin/code",
           "/usr/local/bin/code",
+          "code",
         ],
       }
     : process.platform === "win32"
-      ? { codex: ["codex.exe"], claude: ["claude.exe"], code: ["code.cmd"] }
-      : { codex: ["codex"], claude: ["claude"], code: ["code"] };
+      ? { codex: ["codex"], claude: ["claude"], code: ["code"] }
+      : {
+          codex: [join(homedir(), ".local", "bin", "codex"), "/usr/local/bin/codex", "codex"],
+          claude: [join(homedir(), ".local", "bin", "claude"), "/usr/local/bin/claude", "claude"],
+          code: ["/usr/share/code/bin/code", "/snap/bin/code", "/usr/bin/code", "code"],
+        };
+
+/**
+ * Where a bare command name is looked for.
+ *
+ * PATH alone is not enough: a desktop-launched process inherits the session's
+ * environment, not the login shell's, so an agent installed to ~/.local/bin is
+ * invisible on Linux even though the terminal finds it immediately.
+ */
+function searchDirectories(): string[] {
+  const fromPath = (process.env.PATH ?? "").split(delimiter).filter(Boolean);
+  const unlisted =
+    process.platform === "win32"
+      ? [
+          join(process.env.APPDATA ?? join(homedir(), "AppData", "Roaming"), "npm"),
+          join(
+            process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"),
+            "Programs",
+            "Microsoft VS Code",
+            "bin",
+          ),
+        ]
+      : [join(homedir(), ".local", "bin"), "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/snap/bin"];
+  return [...new Set([...fromPath, ...unlisted])];
+}
+
+/** On Windows the executable is codex.cmd or code.cmd, never a bare name. */
+function nameVariants(name: string): string[] {
+  if (process.platform !== "win32") return [name];
+  const extensions = (process.env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean);
+  return [name, ...extensions.map((extension) => `${name}${extension.toLowerCase()}`)];
+}
 
 /** The client's executable, or null when it is not on this machine. */
-function findAgentCommand(name: "codex" | "claude" | "code"): string | null {
-  const candidates = AGENT_COMMANDS[name];
-  const located = candidates.find((candidate) => candidate.includes("/") && existsSync(candidate));
+/**
+ * Pick the first candidate that exists: absolute paths as given, bare names
+ * searched across `directories`.
+ *
+ * Separated from the filesystem so the rule itself can be tested. The rule is
+ * that a bare name must be *found*, never assumed — returning it unverified
+ * reported every agent as installed on Windows and Linux, including on machines
+ * with none of them, and turned a missing agent into a spawn error much later.
+ */
+export function resolveCommand(
+  candidates: readonly string[],
+  directories: readonly string[],
+  variantsOf: (name: string) => string[],
+  exists: (path: string) => boolean,
+  absolute: (path: string) => boolean = isAbsolute,
+): string | null {
+  const located = candidates.find((candidate) => absolute(candidate) && exists(candidate));
   if (located) return located;
-  // A bare name on a platform we do not probe by path is resolved by the OS.
-  return candidates.length === 1 && !candidates[0]!.includes("/") ? candidates[0]! : null;
+  for (const candidate of candidates) {
+    if (absolute(candidate)) continue;
+    for (const directory of directories) {
+      for (const variant of variantsOf(candidate)) {
+        const resolved = join(directory, variant);
+        if (exists(resolved)) return resolved;
+      }
+    }
+  }
+  return null;
+}
+
+function findAgentCommand(name: "codex" | "claude" | "code"): string | null {
+  // isAbsolute, not a "/" test: a Windows path is separated by backslashes, so
+  // the old check never matched one and fell through to the bare-name branch.
+  return resolveCommand(AGENT_COMMANDS[name], searchDirectories(), nameVariants, existsSync);
 }
 
 function agentCommand(name: "codex" | "claude" | "code"): string {
