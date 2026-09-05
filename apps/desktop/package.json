@@ -19,7 +19,7 @@
     "dev": "pnpm run build && electron-forge start",
     "package": "pnpm run build && electron-forge package",
     "prepare:dmg": "node scripts/prepare-dmg-native.mjs",
-    "make": "pnpm run build && pnpm run prepare:dmg && electron-forge make",
+    "make": "pnpm run build && pnpm run prepare:dmg && pnpm run prepare:squirrel && electron-forge make",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:migration": "esbuild src/legacy-migration.test.ts --bundle --platform=node --format=cjs --external:esbuild --outfile=.tmp/legacy-migration.test.cjs && node --test .tmp/legacy-migration.test.cjs",
     "test:element-source": "esbuild src/element-source.test.ts --bundle --platform=node --format=esm --outfile=.tmp/element-source.test.mjs && node --test .tmp/element-source.test.mjs",
@@ -27,7 +27,8 @@
     "test:agent-connection": "esbuild src/local-agent-state.test.ts --bundle --platform=node --format=cjs --outfile=.tmp/local-agent-state.test.cjs && esbuild src/mcp-client-config.test.ts --bundle --platform=node --format=cjs --outfile=.tmp/mcp-client-config.test.cjs && node --test .tmp/local-agent-state.test.cjs .tmp/mcp-client-config.test.cjs",
     "test:mailbox": "esbuild src/project-control-mailbox.test.ts --bundle --platform=node --format=esm --alias:electron=./src/testing/electron-stub.ts --outfile=.tmp/project-control-mailbox.test.mjs && node --test .tmp/project-control-mailbox.test.mjs",
     "test:skills": "esbuild src/skills.test.ts --bundle --platform=node --format=esm --alias:electron=./src/testing/electron-stub.ts --outfile=.tmp/skills.test.mjs && node --test .tmp/skills.test.mjs",
-    "test:agent-discovery": "esbuild src/agent-discovery.test.ts --bundle --platform=node --format=cjs --alias:electron=./src/testing/electron-stub.ts --outfile=.tmp/agent-discovery.test.cjs && node --test .tmp/agent-discovery.test.cjs"
+    "test:agent-discovery": "esbuild src/agent-discovery.test.ts --bundle --platform=node --format=cjs --alias:electron=./src/testing/electron-stub.ts --outfile=.tmp/agent-discovery.test.cjs && node --test .tmp/agent-discovery.test.cjs",
+    "prepare:squirrel": "node scripts/prepare-squirrel-vendor.mjs"
   },
   "dependencies": {
     "@posterract/cli": "workspace:*",
