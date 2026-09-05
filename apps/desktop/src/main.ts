@@ -23,6 +23,7 @@ import { handle, installMainBridge, invoke, emit } from "./ipc.ts";
 import { DesktopAuthManager } from "./auth.ts";
 import { isCliHeadless, startCliServer, stopCliServer } from "./cli-server.ts";
 import { LocalAgentConnectionManager } from "./local-agent.ts";
+import { addSkillFolder, listSkills, revealSkill } from "./skills.ts";
 import {
   initializeProjectControlMailbox,
   setProjectControlMailbox,
@@ -703,6 +704,14 @@ function registerHandlers(): void {
   handle(MAIN_CHANNELS.PROJECTS_TRASH_LIST, async ({ dir }: { dir: string }) =>
     listTrash(await requireProjectDir(dir)),
   );
+  // Skill folders: the content types a scene can be made as (see skills.ts).
+  handle(MAIN_CHANNELS.SKILLS_LIST, async ({ dir }: { dir: string | null }) =>
+    listSkills(dir ? await requireProjectDir(dir) : null),
+  );
+  handle(MAIN_CHANNELS.SKILLS_ADD_FOLDER, async () => addSkillFolder());
+  handle(MAIN_CHANNELS.SKILLS_REVEAL, async ({ path }: { path: string }) => {
+    revealSkill(path);
+  });
   handle(MAIN_CHANNELS.PROJECTS_TRASH_READ, async ({ dir, id }: { dir: string; id: string }) =>
     readTrash(await requireProjectDir(dir), id),
   );

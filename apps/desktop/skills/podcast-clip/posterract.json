@@ -1,0 +1,10 @@
+{
+  "title": "Podcast Clip",
+  "format": "9:16",
+  "duration": [30, 90],
+  "tags": ["clip", "captions", "podcast"],
+  "requires": [],
+  "recipes": [
+    { "label": "Build this scene as a Podcast Clip", "prompt": "Build the active scene as a Podcast Clip. Read its SKILL.md in the skill folder first, plan the beats, then build with the Posterract canvas tools and verify with a capture." }
+  ]
+}

@@ -11,6 +11,10 @@ Work from the local project folder. Treat the project entry module as canonical 
 
 While Posterract Desktop has the project open, every composition edit goes through the MCP tools: `posterract_write_source` (with the `revisionId` from `posterract_read_source`) for TSX changes, or the semantic tools (`posterract_set_properties`, `posterract_set_text`, `posterract_create_element`, `posterract_move`, …) for targeted ones. Do not rewrite the entry TSX with your own file tools. An edit made through the tools appears on the canvas and timeline instantly and keeps undo and Version History intact; a raw file write bypasses all of that and can collide with the user's own edits.
 
+## Scene skills
+
+A scene may carry `skill="<name>"`, the skill folder it is made with (chosen from the editor's Skill Deck or written in the source). `posterract_get_context` reports each scene's skill and its folder path. Read that folder's SKILL.md before editing the scene and follow its workflow; if the folder is missing on this machine, say so instead of guessing.
+
 ## Required workflow
 
 1. Call `posterract_connection_status`. If unavailable, read `references/installation.md` and diagnose the connection; do not pretend the canvas is connected.

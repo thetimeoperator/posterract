@@ -1,0 +1,10 @@
+{
+  "title": "Talking Head",
+  "format": "9:16",
+  "duration": [20, 60],
+  "tags": ["captions", "hook", "creator"],
+  "requires": [],
+  "recipes": [
+    { "label": "Build this scene as a Talking Head", "prompt": "Build the active scene as a Talking Head. Read its SKILL.md in the skill folder first, plan the beats, then build with the Posterract canvas tools and verify with a capture." }
+  ]
+}

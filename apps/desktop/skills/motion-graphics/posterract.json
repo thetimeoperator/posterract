@@ -1,0 +1,10 @@
+{
+  "title": "Motion Graphics",
+  "format": "9:16",
+  "duration": [8, 30],
+  "tags": ["animation", "type", "diagram"],
+  "requires": [],
+  "recipes": [
+    { "label": "Build this scene as a Motion Graphics", "prompt": "Build the active scene as a Motion Graphics. Read its SKILL.md in the skill folder first, plan the beats, then build with the Posterract canvas tools and verify with a capture." }
+  ]
+}

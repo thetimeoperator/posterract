@@ -1,0 +1,10 @@
+{
+  "title": "Short-form Video",
+  "format": "9:16",
+  "duration": [15, 45],
+  "tags": ["captions", "music", "cuts"],
+  "requires": [],
+  "recipes": [
+    { "label": "Build this scene as a Short-form Video", "prompt": "Build the active scene as a Short-form Video. Read its SKILL.md in the skill folder first, plan the beats, then build with the Posterract canvas tools and verify with a capture." }
+  ]
+}

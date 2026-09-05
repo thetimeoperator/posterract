@@ -26928,6 +26928,7 @@ function targetsOf(input) {
   }
   return ids.slice(0, 12);
 }
+var GENERATE_TIMEOUT_MS2 = 10 * 60 * 1e3;
 async function servePosterractMcp(explicitProjectDir) {
   const projectDir = () => resolveProjectDir(explicitProjectDir);
   const call = async (tool, path, input = void 0, timeoutMs = DEFAULT_TIMEOUT_MS2) => {
@@ -26963,7 +26964,7 @@ async function servePosterractMcp(explicitProjectDir) {
     const server = new McpServer(
       { name: "posterract", version },
       {
-        instructions: "Posterract canvas. Canvas-first: while Desktop has the project open, make composition edits through these tools (posterract_write_source with the revisionId from posterract_read_source, or the semantic set/create/move tools), never by rewriting index.tsx with file tools; tool edits show on the canvas instantly and keep undo. Start with posterract_connection_status and posterract_get_context; validate and inspect captures before claiming success; export only when asked. Cannot post, schedule, or access credentials."
+        instructions: "Posterract canvas. Canvas-first: while Desktop has the project open, make composition edits through these tools (posterract_write_source with the revisionId from posterract_read_source, or the semantic set/create/move tools), never by rewriting index.tsx with file tools; tool edits show on the canvas instantly and keep undo. Start with posterract_connection_status and posterract_get_context; a scene's `skill` names the SKILL.md folder to follow for it; validate and inspect captures before claiming success; export only when asked. Cannot post, schedule, or access credentials."
       }
     );
     server.registerTool("posterract_connection_status", {
@@ -27208,6 +27209,35 @@ async function servePosterractMcp(explicitProjectDir) {
       inputSchema: object({ path: string2().min(1) }),
       annotations: { readOnlyHint: true }
     }, safelyWith(async ({ path }) => jsonResult(await call("media_probe", "media.probe", { path }))));
+    server.registerTool("posterract_generate_image", {
+      title: "Generate an image",
+      description: "Generate an image into the open project on the user's Posterract plan. Returns the project-relative path, ready to use as a `src`. Costs credits; refuses with an upgrade message if the plan does not include generation.",
+      inputSchema: object({
+        prompt: string2().min(1),
+        resolution: _enum(["1k", "2k"]).default("1k")
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false }
+    }, safelyWith(async (input) => jsonResult(await call("generate_image", "ai.image", input, GENERATE_TIMEOUT_MS2))));
+    server.registerTool("posterract_generate_video", {
+      title: "Generate a video clip",
+      description: "Generate a video clip into the open project on the user's Posterract plan. 2k needs the Pro plan. Returns the project-relative path.",
+      inputSchema: object({
+        prompt: string2().min(1),
+        resolution: _enum(["768p", "2k"]).default("768p"),
+        durationSec: number2().int().min(4).max(15).default(6),
+        aspectRatio: _enum(["9:16", "16:9", "1:1", "4:3", "3:4"]).default("9:16")
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false }
+    }, safelyWith(async (input) => jsonResult(await call("generate_video", "ai.video", input, GENERATE_TIMEOUT_MS2))));
+    server.registerTool("posterract_generate_voice", {
+      title: "Generate a voice track",
+      description: "Speak text into an audio file in the open project on the user's Posterract plan. Returns the project-relative path.",
+      inputSchema: object({
+        text: string2().min(1),
+        voiceId: string2().optional()
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false }
+    }, safelyWith(async (input) => jsonResult(await call("generate_voice", "ai.voice", input, GENERATE_TIMEOUT_MS2))));
     server.registerTool("posterract_fetch", {
       title: "Fetch a video into the project",
       description: "Download a video or its audio from a URL into the open project's assets/video folder, using yt-dlp on this machine. Nothing is uploaded; the file lands in the project and the asset library picks it up. Requires yt-dlp on PATH.",

@@ -1,0 +1,10 @@
+{
+  "title": "Diagram Explainer",
+  "format": "9:16",
+  "duration": [20, 90],
+  "tags": ["diagram", "explainer", "captions"],
+  "requires": [],
+  "recipes": [
+    { "label": "Build this scene as a Diagram Explainer", "prompt": "Build the active scene as a Diagram Explainer. Read its SKILL.md in the skill folder first, plan the beats, then build with the Posterract canvas tools and verify with a capture." }
+  ]
+}
