@@ -1,0 +1,70 @@
+# Windows and Linux desktop builds.
+#
+# macOS is deliberately absent: that build must be signed and notarized with the
+# founder's Developer ID, and putting the signing key in CI is a bigger decision
+# than this file should make on its own. It is built locally with `pnpm make`.
+#
+# esbuild ships inside the app as a native binary for the host platform (see
+# scripts/copy-esbuild-binary.mjs), so each target really does have to build on
+# its own runner — one machine cannot produce all three.
+name: Desktop release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: Linux (x64)
+            artifact: posterract-linux-x64
+          - os: windows-latest
+            label: Windows (x64)
+            artifact: posterract-windows-x64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # MakerDeb shells out to dpkg and fakeroot, neither of which is guaranteed
+      # on the runner image.
+      - name: Install Linux packaging tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fakeroot dpkg
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Test agent discovery
+        run: pnpm --filter @posterract/desktop test:agent-discovery
+
+      - name: Build distributables
+        run: pnpm --filter @posterract/desktop make
+
+      - name: Collect artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            apps/desktop/out/make/**/*.deb
+            apps/desktop/out/make/**/*.AppImage
+            apps/desktop/out/make/**/*.rpm
+            apps/desktop/out/make/**/*.exe
+            apps/desktop/out/make/**/*.nupkg
+            apps/desktop/out/make/**/*.zip
