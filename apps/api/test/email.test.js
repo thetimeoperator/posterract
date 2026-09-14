@@ -134,6 +134,7 @@ test("Resend mailer sends the Work with me form to the inbox with the sender as 
     name: "Creator <b>",
     email: "creator@example.test",
     description: "Two pages, one voice.\n<script>alert(1)</script>",
+    option: "$3,000 per month to manage one set of accounts",
     ip: "203.0.113.9",
   });
 
@@ -142,7 +143,9 @@ test("Resend mailer sends the Work with me form to the inbox with the sender as 
   const body = JSON.parse(request.options.body);
   assert.deepEqual(body.to, ["founder@example.test"]);
   assert.equal(body.reply_to, "creator@example.test");
-  assert.equal(body.subject, "Work with me: Creator <b>");
+  assert.equal(body.subject, "Work with me: Creator <b> ($3,000 per month to manage one set of accounts)");
+  assert.match(body.text, /Option: \$3,000 per month/);
+  assert.match(body.html, /Option: \$3,000 per month/);
   assert.match(body.text, /Two pages, one voice\./);
   assert.match(body.text, /203\.0\.113\.9/);
   assert.match(body.html, /&lt;script&gt;/);

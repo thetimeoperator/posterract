@@ -1,5 +1,5 @@
 import { useState, type FormEvent, type ReactNode } from "react";
-import { MoveRight } from "lucide-react";
+import { Button3D } from "@/components/ui/button-3d";
 import { AGENTS } from "./agents";
 import { OpsWindow } from "./OpsWindow";
 
@@ -57,15 +57,19 @@ export function workWithMe() {
 export function AgencyHero({ fork }: { fork: ReactNode }) {
   return (
     <>
-      <div className="site-stage-copy">
-        <div className="site-stage-lever">{fork}</div>
-        <h1 id="site-title" aria-label="I program content agents that grow your page">
-          <span className="site-hero-title-line">I program content agents</span>
-          <span className="site-hero-title-line">that grow your page.</span>
-        </h1>
-        <p className="site-kicker site-stage-kicker">WORK WITH ME // CONTENT AGENTS, PROGRAMMED FOR YOUR PAGE</p>
+      <div className="site-stage-head">
+        <div className="site-stage-copy">
+          <div className="site-stage-lever">{fork}</div>
+          <h1 id="site-title" aria-label="I program content agents that grow your page">
+            <span className="site-hero-title-line">I program content agents</span>
+            <span className="site-hero-title-line">that grow your page.</span>
+          </h1>
+          <p className="site-kicker site-stage-kicker">WORK WITH ME // CONTENT AGENTS, PROGRAMMED FOR YOUR PAGE</p>
+        </div>
       </div>
-      <WorkForm />
+      <div className="site-work-stage" id="apply">
+        <WorkForm />
+      </div>
     </>
   );
 }
@@ -73,22 +77,28 @@ export function AgencyHero({ fork }: { fork: ReactNode }) {
 type SendState = "idle" | "sending" | "sent" | "mailed";
 
 /**
- * The form: the two options at the top, then name, email and a description
- * of up to 1000 characters. It posts to the API, which mails it to the
- * founder with the sender as reply-to; if the API cannot take it, the mail
- * app opens with the same message, addressed to him.
+ * The brief: one large panel in the lever's material. "Two Options:" with
+ * the two prices as choosable tiles, then name, email and a description of
+ * up to 1000 characters, then the 3D Send. It posts to the API, which mails
+ * the founder with the sender as reply-to; if the API cannot take it, the
+ * mail app opens with the same message, addressed to him.
  */
 export function WorkForm() {
   const [state, setState] = useState<SendState>("idle");
   const [count, setCount] = useState(0);
+  const [option, setOption] = useState<string | null>(null);
   const [sentTo, setSentTo] = useState("");
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const form = event.currentTarget;
-    const data = new FormData(form);
+    const data = new FormData(event.currentTarget);
     const field = (name: string) => String(data.get(name) ?? "").trim();
-    const message = { name: field("name"), email: field("email"), description: field("description").slice(0, DESCRIPTION_LIMIT) };
+    const message = {
+      name: field("name"),
+      email: field("email"),
+      description: field("description").slice(0, DESCRIPTION_LIMIT),
+      ...(option ? { option } : {}),
+    };
     setState("sending");
     try {
       const response = await fetch(`${API_BASE}/v1/contact`, {
@@ -99,41 +109,62 @@ export function WorkForm() {
       if (!response.ok) throw new Error(`contact ${response.status}`);
       setSentTo(message.email);
       setState("sent");
-      form.reset();
-      setCount(0);
     } catch {
-      const body = [`Name: ${message.name}`, `Email: ${message.email}`, "", message.description].join("\n");
+      const body = [`Name: ${message.name}`, `Email: ${message.email}`, ...(option ? [`Option: ${option}`] : []), "", message.description].join("\n");
       window.location.href = `mailto:${AGENCY.inbox}?subject=${encodeURIComponent(`Work with me: ${message.name}`)}&body=${encodeURIComponent(body)}`;
       setState("mailed");
     }
   };
 
+  if (state === "sent") {
+    return (
+      <div className="site-brief site-brief-done" role="status">
+        <p className="site-brief-sent">Sent.</p>
+        <p className="site-brief-sent-line">I'll answer at {sentTo}.</p>
+      </div>
+    );
+  }
+
   return (
-    <form className="site-apply-form site-work-form" id="apply" onSubmit={submit} aria-labelledby="work-options-title">
-      <div className="site-work-options">
-        <p className="site-work-options-title" id="work-options-title">Two Options:</p>
-        <ul>
-          {OPTIONS.map((option) => (
-            <li key={option.price}><strong>{option.price}</strong> {option.line}</li>
-          ))}
-        </ul>
+    <form className="site-brief" onSubmit={submit} aria-labelledby="brief-title">
+      <h2 className="site-brief-title" id="brief-title">Two Options:</h2>
+
+      <div className="site-brief-options" role="radiogroup" aria-label="Two options">
+        {OPTIONS.map((entry) => {
+          const value = `${entry.price} ${entry.line}`;
+          const selected = option === value;
+          return (
+            <label className="site-brief-option" data-selected={selected} key={entry.price}>
+              <input type="radio" name="option" value={value} checked={selected} onChange={() => setOption(value)} />
+              <span className="site-brief-led" aria-hidden="true" />
+              <span className="site-brief-price">{entry.price}</span>
+              <span className="site-brief-line">{entry.line}</span>
+            </label>
+          );
+        })}
       </div>
-      <div className="site-apply-row">
-        <label>Name<input name="name" type="text" autoComplete="name" maxLength={120} required /></label>
-        <label>Email<input name="email" type="email" autoComplete="email" maxLength={254} required /></label>
+
+      <div className="site-brief-fields">
+        <div className="site-brief-row">
+          <label className="site-brief-field">
+            <span>Name</span>
+            <input name="name" type="text" autoComplete="name" maxLength={120} required />
+          </label>
+          <label className="site-brief-field">
+            <span>Email</span>
+            <input name="email" type="email" autoComplete="email" maxLength={254} required />
+          </label>
+        </div>
+        <label className="site-brief-field">
+          <span>Description</span>
+          <textarea name="description" rows={7} maxLength={DESCRIPTION_LIMIT} required onChange={(event) => setCount(event.target.value.length)} />
+          <span className="site-brief-count" aria-live="polite">{count} / {DESCRIPTION_LIMIT}</span>
+        </label>
       </div>
-      <label>
-        Description
-        <textarea name="description" rows={6} maxLength={DESCRIPTION_LIMIT} required onChange={(event) => setCount(event.target.value.length)} />
-        <span className="site-work-count" aria-live="polite">{count} / {DESCRIPTION_LIMIT}</span>
-      </label>
-      <div className="site-apply-actions">
-        <button className="site-primary" type="submit" disabled={state === "sending"}>
-          {state === "sending" ? "Sending" : "Send"}
-          <MoveRight aria-hidden="true" size={15} strokeWidth={1.8} />
-        </button>
-        {state === "sent" && <p className="site-apply-note">Sent. I'll answer at {sentTo}.</p>}
-        {state === "mailed" && <p className="site-apply-note">Your mail app opened with the message. If it didn't, write to {AGENCY.inbox}.</p>}
+
+      <div className="site-brief-actions">
+        <Button3D label={state === "sending" ? "Sending" : "Send"} type="submit" disabled={state === "sending"} />
+        {state === "mailed" && <p className="site-brief-note">Your mail app opened with the message. If it didn't, write to {AGENCY.inbox}.</p>}
       </div>
     </form>
   );

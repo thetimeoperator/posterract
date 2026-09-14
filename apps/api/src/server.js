@@ -915,6 +915,7 @@ app.post(
             pattern: "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
           },
           description: { type: "string", minLength: 1, maxLength: 1000 },
+          option: { type: "string", maxLength: 80 },
         },
       },
     },
@@ -932,12 +933,13 @@ app.post(
       reply.header("retry-after", Math.ceil(contactWindowMs / 1000));
       return reply.code(429).send({ error: "rate_limit_exceeded" });
     }
-    const { name, email, description } = request.body;
+    const { name, email, description, option } = request.body;
     await authMailer.sendContact({
       to: contactInbox,
       name: name.trim(),
       email: email.trim(),
       description: description.trim(),
+      option: option?.trim() || undefined,
       ip: address,
     });
     return reply.code(202).send({ ok: true });

@@ -240,7 +240,7 @@ export function Landing() {
         {mode === "work" ? (
           <section className="site-hero site-hero-landing site-hero-work" aria-labelledby="site-title">
             <div className="site-hero-shade" aria-hidden="true" />
-            <motion.div className="site-stage-head site-work-head" key="hero-work" {...entrance}>
+            <motion.div key="hero-work" {...entrance}>
               <AgencyHero fork={forkNode} />
             </motion.div>
           </section>

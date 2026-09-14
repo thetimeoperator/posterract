@@ -11,14 +11,17 @@ type Button3DProps = {
   onClick?: () => void;
   /** An arrow after the label, like the reference. */
   arrow?: boolean;
+  /** "submit" makes it a form's button. */
+  type?: "button" | "submit";
+  disabled?: boolean;
   "aria-label"?: string;
 };
 
-export function Button3D({ label, onClick, arrow = true, "aria-label": ariaLabel }: Button3DProps) {
+export function Button3D({ label, onClick, arrow = true, type = "button", disabled, "aria-label": ariaLabel }: Button3DProps) {
   const { hovered, handlers } = useHoverIntent();
   return (
     <div className="site-b3d-scene">
-      <button type="button" className="site-b3d" onClick={onClick} aria-label={ariaLabel} {...handlers}>
+      <button type={type} className="site-b3d" onClick={onClick} disabled={disabled} aria-label={ariaLabel} {...handlers}>
         <span className="site-b3d-glow" aria-hidden="true" />
         <span className="site-b3d-edge" aria-hidden="true" />
         <span className="site-b3d-front">
