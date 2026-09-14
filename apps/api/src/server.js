@@ -879,7 +879,9 @@ app.get("/v1/auth/config", async () => ({
 }));
 
 const contactInbox = env.CONTACT_TO_EMAIL || "pahlevansina@gmail.com";
-const contactLimitPerHour = Number(env.CONTACT_RATE_LIMIT_PER_HOUR ?? 5);
+/** How many messages one visitor may send per window: two every three hours unless the env says otherwise. */
+const contactLimit = Number(env.CONTACT_RATE_LIMIT ?? 2);
+const contactWindowMs = Number(env.CONTACT_RATE_WINDOW_HOURS ?? 3) * 3_600_000;
 
 /**
  * The visitor's address for the contact form's rate limit. The gateway
@@ -922,12 +924,12 @@ app.post(
       return reply.code(503).send({ error: "contact_unavailable" });
     }
     const address = contactClientAddress(request);
-    const hour = Math.floor(Date.now() / 3_600_000);
-    const rateKey = `posterract:contact-rate:${address}:${hour}`;
+    const bucket = Math.floor(Date.now() / contactWindowMs);
+    const rateKey = `posterract:contact-rate:${address}:${bucket}`;
     const rateCount = await redis.incr(rateKey);
-    if (rateCount === 1) await redis.expire(rateKey, 7_200);
-    if (rateCount > contactLimitPerHour) {
-      reply.header("retry-after", 3_600);
+    if (rateCount === 1) await redis.expire(rateKey, Math.ceil((contactWindowMs * 2) / 1000));
+    if (rateCount > contactLimit) {
+      reply.header("retry-after", Math.ceil(contactWindowMs / 1000));
       return reply.code(429).send({ error: "rate_limit_exceeded" });
     }
     const { name, email, description } = request.body;
