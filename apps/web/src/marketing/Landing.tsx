@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { motion, useReducedMotion } from "framer-motion";
 import { PLATFORM_MARK_SOURCES } from "@posterract/hyperkit";
 import { HeroStage } from "@/marketing/hero/HeroStage";
@@ -131,7 +130,6 @@ export function Landing() {
   const [authReturnUrl, setAuthReturnUrl] = useState(() => billingSelectionUrl(readBillingSelection()));
   const [authMode, setAuthMode] = useState<WelcomeAuthMode>("signin");
   const [mode, setMode] = useState<LandingMode>(readMode);
-  const navigate = useNavigate();
 
   useEffect(() => {
     if (!authOpen) return;
@@ -183,8 +181,12 @@ export function Landing() {
     window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
   };
 
-  /** The nav's two buttons: each goes to its own page. */
-  const goAuth = (nextMode: WelcomeAuthMode) => void navigate({ to: "/gate", search: { mode: nextMode } });
+  /**
+   * The nav's two buttons: each goes to its own page. A full load, not a
+   * router hop: while signed out, the app shell sends any client-side move
+   * away from "/" straight back to "/", which would cancel the hop.
+   */
+  const goAuth = (nextMode: WelcomeAuthMode) => window.location.assign(`/gate?mode=${nextMode}`);
 
   const entrance = reduceMotion ? {} : { initial: { opacity: 0, y: 18 }, animate: { opacity: 1, y: 0 }, transition: ENTER };
 
