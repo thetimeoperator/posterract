@@ -4,6 +4,7 @@ import { Button, Input, Modal, Panel, PlatformChip, Toggle, pushSignal } from "@
 import { PUBLISHING_PLATFORM_IDS, type PlatformId } from "@posterract/contract";
 import { useProfile, initials } from "@/state/profile";
 import { blobStore } from "@/engine/idb";
+import { BillingSettings } from "@/billing/BillingSettings";
 
 export const Route = createFileRoute("/_app/settings")({
   component: SettingsPage,
@@ -33,6 +34,7 @@ function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
+      <BillingSettings />
       <Panel kicker="Profile" title="Who's operating" brackets>
         <div className="flex items-start gap-5">
           <span className="border-aurora flex h-14 w-14 flex-none items-center justify-center rounded-full font-display text-[18px] font-bold text-starlight">

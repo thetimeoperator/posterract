@@ -561,10 +561,12 @@ export type BillingSubscriptionDTO = {
   accessState: "active" | "inactive";
   entitled: boolean;
   plan: {
+    id?: "pro" | "allstar" | "superstar";
     unitAmount: number;
     currency: "usd";
     interval: BillingInterval;
   } | null;
+  canManageBilling?: boolean;
   cancelAtPeriodEnd: boolean;
   currentPeriodStart?: number;
   currentPeriodEnd?: number;

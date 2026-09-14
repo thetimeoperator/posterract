@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DragEvent } from "react";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { ArrowRight, CalendarDays, CalendarPlus2, ChevronLeft, ChevronRight, Clock3, GripVertical, Plus } from "lucide-react";
 import clsx from "clsx";
 import { Button, EmptyState, Modal, Panel, PlatformRuneRow, Segmented, StatusBadge, pushSignal } from "@posterract/hyperkit";
-import type { PlatformId } from "@posterract/contract";
+import type { PlatformId, TransmissionStatus } from "@posterract/contract";
+import { CalendarPostDialog } from "@/components/CalendarPostDialog";
+import { addCalendarDays, startOfWeek, scheduleTimeForDay, sameCalendarDay, calendarDayKey } from "@/lib/calendar-date";
 import { ArtifactThumb } from "@/components/ArtifactThumb";
 import { useEngineActions, useProjections, useTransmissions } from "@/engine/useEngine";
 
@@ -12,32 +14,8 @@ export const Route = createFileRoute("/_app/continuum")({
   component: Continuum,
 });
 
-const DAY = 86400_000;
-
-function startOfWeek(ts: number): number {
-  const d = new Date(ts);
-  d.setHours(0, 0, 0, 0);
-  const dow = (d.getDay() + 6) % 7; // Monday = 0
-  return d.getTime() - dow * DAY;
-}
-
-function scheduleTimeForDay(day: number, now: number): number {
-  return Math.max(day + 12 * 3600_000, now + 30 * 60_000);
-}
-
-function sameCalendarDay(left: number, right: number): boolean {
-  const a = new Date(left);
-  const b = new Date(right);
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
-}
-
-function calendarDayKey(timestamp: number): string {
-  const date = new Date(timestamp);
-  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+function PostStatusDot({ status }: { status: TransmissionStatus }) {
+  return <span role="img" aria-label={`Status: ${status}`} title={status} className={clsx("inline-block h-1.5 w-1.5 flex-none rounded-full", status === "live" ? "bg-neon" : status === "scheduled" ? "bg-ice" : status === "failed" || status === "partial" ? "bg-redshift" : status === "canceled" ? "bg-starlight-faint" : "bg-solar")} />;
 }
 
 function useMediaQuery(query: string): boolean {
@@ -97,9 +75,13 @@ function Continuum() {
   const transmissions = useTransmissions();
   const projections = useProjections();
   const { rescheduleTransmission } = useEngineActions();
-  const [weekStart, setWeekStart] = useState(() => startOfWeek(Date.now()));
+  const [periodAnchor, setPeriodAnchor] = useState(() => Date.now());
   const [view, setView] = useState<"week" | "month">("month");
   const [now, setNow] = useState(Date.now());
+  const [selectedPost, setSelectedPost] = useState<string | null>(null);
+  const closePost = useCallback(() => setSelectedPost(null), []);
+  const closeDay = useCallback(() => setSelectedDay(null), []);
+  const openPost = (id: string) => { setSelectedDay(null); setSelectedPost(id); };
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropDay, setDropDay] = useState<number | null>(null);
@@ -111,33 +93,32 @@ function Continuum() {
     return () => clearInterval(t);
   }, []);
 
-  const days = useMemo(() => Array.from({ length: 7 }, (_, i) => weekStart + i * DAY), [weekStart]);
+  const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addCalendarDays(startOfWeek(periodAnchor), i)), [periodAnchor]);
   const isCurrentPeriod =
     view === "week"
-      ? startOfWeek(now) === weekStart
-      : new Date(now).getFullYear() === new Date(weekStart).getFullYear() &&
-        new Date(now).getMonth() === new Date(weekStart).getMonth();
+      ? startOfWeek(now) === startOfWeek(periodAnchor)
+      : new Date(now).getFullYear() === new Date(periodAnchor).getFullYear() &&
+        new Date(now).getMonth() === new Date(periodAnchor).getMonth();
 
   const byDay = useMemo(() => {
     const map = new Map<number, typeof transmissions>();
     for (const day of days) map.set(day, []);
     for (const t of transmissions) {
       if (!t.scheduledFor || t.status === "draft") continue;
-      const day = startOfWeek(t.scheduledFor) === weekStart ? t.scheduledFor - ((t.scheduledFor - weekStart) % DAY) : null;
-      const key = days.find((d) => t.scheduledFor! >= d && t.scheduledFor! < d + DAY);
-      if (key !== undefined && day !== null) map.get(key)!.push(t);
+      const key = days.find((d) => t.scheduledFor! >= d && t.scheduledFor! < addCalendarDays(d, 1));
+      if (key !== undefined) map.get(key)!.push(t);
     }
     for (const list of map.values()) list.sort((a, b) => (a.scheduledFor ?? 0) - (b.scheduledFor ?? 0));
     return map;
-  }, [transmissions, days, weekStart]);
+  }, [transmissions, days, periodAnchor]);
 
   const weekLabel = `${new Date(days[0]).toLocaleDateString([], { month: "short", day: "numeric" })} – ${new Date(
     days[6],
   ).toLocaleDateString([], { month: "short", day: "numeric" })}`;
 
   const weekTotal = days.reduce((sum, d) => sum + (byDay.get(d)?.length ?? 0), 0);
-  const monthStart = new Date(new Date(weekStart).getFullYear(), new Date(weekStart).getMonth(), 1).getTime();
-  const nextMonthStart = new Date(new Date(weekStart).getFullYear(), new Date(weekStart).getMonth() + 1, 1).getTime();
+  const monthStart = new Date(new Date(periodAnchor).getFullYear(), new Date(periodAnchor).getMonth(), 1).getTime();
+  const nextMonthStart = new Date(new Date(periodAnchor).getFullYear(), new Date(periodAnchor).getMonth() + 1, 1).getTime();
   const monthTotal = transmissions.filter(
     (transmission) =>
       transmission.status !== "draft" &&
@@ -149,10 +130,10 @@ function Continuum() {
 
   const movePeriod = (direction: -1 | 1) => {
     if (view === "week") {
-      setWeekStart((current) => current + direction * 7 * DAY);
+      setPeriodAnchor((current) => addCalendarDays(current, direction * 7));
       return;
     }
-    setWeekStart((current) => {
+    setPeriodAnchor((current) => {
       const date = new Date(current);
       return new Date(date.getFullYear(), date.getMonth() + direction, 1).getTime();
     });
@@ -172,7 +153,7 @@ function Continuum() {
   };
 
   const allowDayDrop = (event: DragEvent<HTMLElement>, day: number) => {
-    if (!draggingId || day + DAY <= now) return;
+    if (!draggingId || addCalendarDays(day, 1) <= now) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
     setDropDay(day);
@@ -194,7 +175,7 @@ function Continuum() {
       !transmission ||
       transmission.status !== "scheduled" ||
       !transmission.scheduledFor ||
-      day + DAY <= now ||
+      addCalendarDays(day, 1) <= now ||
       sameCalendarDay(transmission.scheduledFor, day)
     ) {
       return;
@@ -275,24 +256,25 @@ function Continuum() {
           <ChevronRight size={14} />
         </Button>
         <p className="font-display text-[15px] font-semibold text-starlight">
-          {view === "week" ? weekLabel : new Date(weekStart).toLocaleDateString([], { month: "long", year: "numeric" })}
+          {view === "week" ? weekLabel : new Date(periodAnchor).toLocaleDateString([], { month: "long", year: "numeric" })}
         </p>
         {!isCurrentPeriod && (
-          <Button size="sm" variant="tertiary" onClick={() => setWeekStart(startOfWeek(Date.now()))}>
+          <Button size="sm" variant="tertiary" onClick={() => setPeriodAnchor(Date.now())}>
             Back to this {view}
           </Button>
         )}
         <p className="ml-auto telemetry text-[11px] text-starlight-faint">
-          {periodTotal} post{periodTotal === 1 ? "" : "s"} this {view}
+          {Intl.DateTimeFormat().resolvedOptions().timeZone} · {periodTotal} post{periodTotal === 1 ? "" : "s"} this {view}
         </p>
       </div>
 
       {view === "month" ? (
         <MonthView
-          anchor={weekStart}
+          anchor={periodAnchor}
           now={now}
           transmissions={transmissions}
           onPickDay={setSelectedDay}
+          onPickPost={openPost}
           draggingId={draggingId}
           dropDay={dropDay}
           reschedulingId={reschedulingId}
@@ -306,8 +288,8 @@ function Continuum() {
       {!showDesktopWeek && <div className="space-y-2" aria-label="Schedule agenda">
         {days.map((day) => {
           const items = byDay.get(day) ?? [];
-          const past = day + DAY < now;
-          const isToday = now >= day && now < day + DAY;
+          const past = addCalendarDays(day, 1) < now;
+          const isToday = now >= day && now < addCalendarDays(day, 1);
           return (
             <section
               key={day}
@@ -334,9 +316,8 @@ function Continuum() {
               </div>
               <div className="mt-2 space-y-1.5">
                 {items.length === 0 ? <p className="rounded-[10px] border border-dashed border-[var(--glass-border)] px-3 py-3 text-[10px] text-starlight-faint">No posts scheduled.</p> : items.map((t) => {
-                  const platforms = projections.filter((p) => p.transmissionId === t.id).map((p) => p.provider) as PlatformId[];
                   const canDrag = t.status === "scheduled" && reschedulingId !== t.id;
-                  return <div key={t.id} data-draggable-post data-transmission-id={t.id} draggable={canDrag} onDragStart={(event) => beginPostDrag(event, t.id)} onDragEnd={finishPostDrag} title={canDrag ? "Drag to move this scheduled post" : undefined} className={clsx("calendar-post-shell", canDrag && "calendar-post-shell--draggable", draggingId === t.id && "is-dragging", reschedulingId === t.id && "is-rescheduling")}><Link data-calendar-post-surface draggable={false} to="/transmissions" className="calendar-post-block calendar-post-block--agenda flex items-center gap-2 rounded-[10px] p-2.5"><ArtifactThumb artifactId={t.artifactId} className="h-11 w-8 flex-none" hoverPreview={false} /><div className="min-w-0 flex-1"><p className="telemetry text-[10px] text-neon">{new Date(t.scheduledFor!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p><p className="truncate text-[12px] font-medium text-starlight">{t.title}</p><div className="mt-1"><PlatformRuneRow platforms={platforms} /></div></div>{canDrag && <GripVertical size={14} className="calendar-post-grip flex-none" aria-hidden />}<StatusBadge status={t.status} size="sm" /></Link></div>;
+                  return <div key={t.id} data-draggable-post data-transmission-id={t.id} draggable={canDrag} onDragStart={(event) => beginPostDrag(event, t.id)} onDragEnd={finishPostDrag} title={canDrag ? "Drag to move this scheduled post" : undefined} className={clsx("calendar-post-shell", canDrag && "calendar-post-shell--draggable", draggingId === t.id && "is-dragging", reschedulingId === t.id && "is-rescheduling")}><button type="button" onClick={() => openPost(t.id)} data-calendar-post-surface draggable={false} className="calendar-post-block calendar-post-block--agenda w-full text-left flex items-center gap-2 rounded-[10px] p-2.5"><PostStatusDot status={t.status} /><ArtifactThumb artifactId={t.artifactId} className="h-11 w-8 flex-none" hoverPreview={false} /><div className="min-w-0 flex-1"><p className="telemetry text-[10px] text-neon">{new Date(t.scheduledFor!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p><p className="truncate text-[12px] font-medium text-starlight">{t.title}</p></div>{canDrag && <GripVertical size={14} className="calendar-post-grip flex-none" aria-hidden />}</button></div>;
                 })}
               </div>
             </section>
@@ -345,10 +326,10 @@ function Continuum() {
       </div>}
       {showDesktopWeek && <div className="grid grid-cols-7 gap-2">
         {days.map((day) => {
-          const isToday = now >= day && now < day + DAY;
-          const dayFrac = isToday ? (now - day) / DAY : 0;
+          const isToday = now >= day && now < addCalendarDays(day, 1);
+          const dayFrac = isToday ? (now - day) / (addCalendarDays(day, 1) - day) : 0;
           const items = byDay.get(day) ?? [];
-          const past = day + DAY < now;
+          const past = addCalendarDays(day, 1) < now;
 
           return (
             <div
@@ -390,7 +371,6 @@ function Continuum() {
 
               <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto">
                 {items.map((t) => {
-                  const platforms = projections.filter((p) => p.transmissionId === t.id).map((p) => p.provider) as PlatformId[];
                   const canDrag = t.status === "scheduled" && reschedulingId !== t.id;
                   return (
                     <div
@@ -408,13 +388,15 @@ function Continuum() {
                         reschedulingId === t.id && "is-rescheduling",
                       )}
                     >
-                    <Link
+                    <button
+                      type="button"
+                      onClick={() => openPost(t.id)}
                       data-calendar-post-surface
                       draggable={false}
-                      to="/transmissions"
-                      className="calendar-post-block calendar-post-block--week block rounded-[10px] p-2"
+                      className="calendar-post-block calendar-post-block--week w-full text-left block rounded-[10px] p-2"
                     >
                       <div className="flex items-center gap-2">
+                        <PostStatusDot status={t.status} />
                         <ArtifactThumb artifactId={t.artifactId} className="h-10 w-7 flex-none" hoverPreview={false} />
                         <div className="min-w-0 flex-1">
                           <p className="telemetry text-[10px] text-neon">
@@ -424,11 +406,7 @@ function Continuum() {
                         </div>
                         {canDrag && <GripVertical size={13} className="calendar-post-grip flex-none" aria-hidden />}
                       </div>
-                      <div className="mt-1.5 flex items-center justify-between gap-1">
-                        <PlatformRuneRow platforms={platforms} />
-                        <StatusBadge status={t.status} size="sm" />
-                      </div>
-                    </Link>
+                    </button>
                     </div>
                   );
                 })}
@@ -463,12 +441,14 @@ function Continuum() {
         </Panel>
       )}
 
+      <CalendarPostDialog transmissionId={selectedPost} onClose={closePost} />
       <DayInspector
         day={selectedDay}
         now={now}
         transmissions={transmissions}
         projections={projections}
-        onClose={() => setSelectedDay(null)}
+        onClose={closeDay}
+        onPickPost={openPost}
       />
     </div>
   );
@@ -480,12 +460,14 @@ function DayInspector({
   transmissions,
   projections,
   onClose,
+  onPickPost,
 }: {
   day: number | null;
   now: number;
   transmissions: ReturnType<typeof useTransmissions>;
   projections: ReturnType<typeof useProjections>;
   onClose: () => void;
+  onPickPost: (id: string) => void;
 }) {
   const dayStart = day ?? startOfWeek(now);
   const items = transmissions
@@ -494,12 +476,12 @@ function DayInspector({
         transmission.scheduledFor &&
         transmission.status !== "draft" &&
         transmission.scheduledFor >= dayStart &&
-        transmission.scheduledFor < dayStart + DAY,
+        transmission.scheduledFor < addCalendarDays(dayStart, 1),
     )
     .sort((a, b) => (a.scheduledFor ?? 0) - (b.scheduledFor ?? 0));
   const date = new Date(dayStart);
-  const isToday = now >= dayStart && now < dayStart + DAY;
-  const isPast = dayStart + DAY <= now;
+  const isToday = now >= dayStart && now < addCalendarDays(dayStart, 1);
+  const isPast = addCalendarDays(dayStart, 1) <= now;
   const scheduleAt = isPast ? undefined : scheduleTimeForDay(dayStart, now);
   const dateLabel = date.toLocaleDateString([], {
     weekday: "long",
@@ -573,7 +555,7 @@ function DayInspector({
               .filter((projection) => projection.transmissionId === transmission.id)
               .map((projection) => projection.provider) as PlatformId[];
             return (
-              <Link key={transmission.id} to="/transmissions" className="day-inspector-post">
+              <button type="button" key={transmission.id} onClick={() => onPickPost(transmission.id)} className="day-inspector-post w-full text-left">
                 <ArtifactThumb artifactId={transmission.artifactId} className="h-12 w-9 flex-none" hoverPreview={false} />
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-1.5 telemetry text-[9px] text-neon">
@@ -584,7 +566,7 @@ function DayInspector({
                   <span className="mt-1 block"><PlatformRuneRow platforms={platforms} /></span>
                 </span>
                 <StatusBadge status={transmission.status} size="sm" />
-              </Link>
+              </button>
             );
           })}
         </div>
@@ -599,6 +581,7 @@ function MonthView({
   now,
   transmissions,
   onPickDay,
+  onPickPost,
   draggingId,
   dropDay,
   reschedulingId,
@@ -611,6 +594,7 @@ function MonthView({
   now: number;
   transmissions: ReturnType<typeof useTransmissions>;
   onPickDay: (day: number) => void;
+  onPickPost: (id: string) => void;
   draggingId: string | null;
   dropDay: number | null;
   reschedulingId: string | null;
@@ -622,7 +606,7 @@ function MonthView({
   const anchorDate = new Date(anchor);
   const first = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1).getTime();
   const gridStart = startOfWeek(first);
-  const cells = useMemo(() => Array.from({ length: 42 }, (_, i) => gridStart + i * DAY), [gridStart]);
+  const cells = useMemo(() => Array.from({ length: 42 }, (_, i) => addCalendarDays(gridStart, i)), [gridStart]);
   const month = anchorDate.getMonth();
 
   const transmissionsByDay = useMemo(() => {
@@ -634,6 +618,7 @@ function MonthView({
       if (day) day.push(transmission);
       else grouped.set(key, [transmission]);
     }
+    for (const items of grouped.values()) items.sort((a, b) => (a.scheduledFor ?? 0) - (b.scheduledFor ?? 0));
     return grouped;
   }, [transmissions]);
 
@@ -647,18 +632,14 @@ function MonthView({
       <div className="grid grid-cols-7 gap-1.5">
         {cells.map((day) => {
           const inMonth = new Date(day).getMonth() === month;
-          const isToday = now >= day && now < day + DAY;
+          const isToday = now >= day && now < addCalendarDays(day, 1);
           const items = transmissionsByDay.get(calendarDayKey(day)) ?? [];
           return (
             <div
               key={day}
-              role="button"
-              tabIndex={0}
+              role="group"
               data-calendar-day={day}
               onClick={() => onPickDay(day)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") onPickDay(day);
-              }}
               onDragOver={(event) => onDragOverDay(event, day)}
               onDrop={(event) => onDropDay(event, day)}
               className={clsx(
@@ -669,14 +650,17 @@ function MonthView({
               )}
               aria-label={new Date(day).toDateString()}
             >
-              <span className={clsx("telemetry text-[11px]", isToday ? "text-neon" : "text-starlight-faint")}>
+              <button type="button" onClick={(event) => { event.stopPropagation(); onPickDay(day); }} aria-label={`View ${new Date(day).toDateString()}`} className={clsx("telemetry text-left text-[11px]", isToday ? "text-neon" : "text-starlight-faint")}>
                 {new Date(day).getDate()}
-              </span>
+              </button>
               <span className="mt-1 flex flex-col gap-0.5">
                 {items.slice(0, 2).map((t) => {
                   const canDrag = t.status === "scheduled" && reschedulingId !== t.id;
                   return (
-                  <span
+                  <button
+                    type="button"
+                    onClick={(event) => { event.stopPropagation(); onPickPost(t.id); }}
+                    aria-label={`View post: ${t.title}`}
                     key={t.id}
                     data-draggable-post
                     data-transmission-id={t.id}
@@ -692,14 +676,15 @@ function MonthView({
                     )}
                     data-calendar-post-surface
                   >
+                    <PostStatusDot status={t.status} />
                     {canDrag && <GripVertical size={9} className="calendar-post-grip flex-none" aria-hidden />}
                     <span className="min-w-0 truncate">
                     <span className="telemetry text-neon">
-                      {new Date(t.scheduledFor!).toLocaleTimeString([], { hour: "numeric" })}
+                      {new Date(t.scheduledFor!).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
                     </span>{" "}
                     {t.title.replace(/^Sample: /, "")}
                     </span>
-                  </span>
+                  </button>
                   );
                 })}
                 {items.length > 2 && (

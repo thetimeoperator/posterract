@@ -129,11 +129,17 @@
 
 .site-intro-background-sticky > .site-aether-canvas {
   position: absolute;
-  inset: -4%;
-  width: 108%;
-  height: 108%;
+  top: -24%;
+  left: -4%;
+  /* The canvas sets its own 100% size inline, so these need !important. It
+     overruns the viewport on every side, with headroom above for the parallax
+     shift that moves it down as the page scrolls; otherwise the right edge and,
+     as you scroll, the top of the world show black. */
+  width: 108% !important;
+  height: 148% !important;
   opacity: 0.94;
-  transform: translate3d(0, var(--site-intro-shift), 0) scale(1.02);
+  /* Capped: a tall world could otherwise push the canvas past its headroom. */
+  transform: translate3d(0, min(var(--site-intro-shift), 200px), 0) scale(1.02);
   transform-origin: center;
   will-change: transform;
 }

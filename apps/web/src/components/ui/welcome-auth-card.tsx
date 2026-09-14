@@ -141,6 +141,7 @@ export function WelcomeAuthCard({
             email,
             password,
             name: name.trim() || email.split("@")[0],
+            callbackURL: new URL(successUrl, window.location.origin).toString(),
           })
         : await authClient.signIn.email({ email, password, rememberMe: true });
       if (result.error) {
