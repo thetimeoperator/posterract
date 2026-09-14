@@ -329,8 +329,16 @@ const UNIFORMS = {
 
 const pendingContextReleases = new WeakMap<HTMLCanvasElement, number>()
 
-export function ShaderBackground({ className }: { className?: string }) {
+export type ShaderColor = [number, number, number]
+
+/**
+ * `colors` replaces the palette (up to eight sRGB triplets in 0..1, the
+ * first four are used) and can change while the world runs; the shader keeps
+ * its time and drift, only the colours move.
+ */
+export function ShaderBackground({ className, colors }: { className?: string; colors?: ShaderColor[] }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const applyColorsRef = useRef<((next: ShaderColor[]) => void) | null>(null)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -393,6 +401,12 @@ export function ShaderBackground({ className }: { className?: string }) {
       cursor: gl.getUniformLocation(program, "u_cursor"),
     }
     gl.uniform3fv(uni.colors, new Float32Array(UNIFORMS.colors.flat()))
+    applyColorsRef.current = (next) => {
+      const padded = next.slice(0, 8)
+      while (padded.length < 8) padded.push(padded[padded.length - 1] ?? [0, 0, 0])
+      gl.uniform3fv(uni.colors, new Float32Array(padded.flat()))
+      requestRender()
+    }
     gl.uniform4f(
       uni.shape,
       UNIFORMS.scale,
@@ -588,6 +602,7 @@ export function ShaderBackground({ className }: { className?: string }) {
     requestRender()
     return () => {
       disposed = true
+      applyColorsRef.current = null
       cancelAnimationFrame(raf)
       resizeObserver.disconnect()
       intersectionObserver.disconnect()
@@ -615,6 +630,10 @@ export function ShaderBackground({ className }: { className?: string }) {
       pendingContextReleases.set(canvas, releaseTimer)
     }
   }, [])
+
+  useEffect(() => {
+    applyColorsRef.current?.(colors ?? UNIFORMS.colors)
+  }, [colors])
 
   return (
     <canvas ref={canvasRef} className={className} style={{ display: "block", width: "100%", height: "100%" }} />

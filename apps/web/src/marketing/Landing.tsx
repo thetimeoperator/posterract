@@ -10,11 +10,12 @@ import { RandomLetterSwap } from "@/components/ui/random-letter-swap";
 import { useHoverIntent } from "@/components/ui/use-hover-intent";
 import { ShinyButton } from "@/components/ui/shiny-button";
 import { LeverSwitch } from "@/components/ui/lever-switch";
-import { AgencyFinalCta, AgencyHero, Faq, HowItRuns, Team, workWithMe } from "@/marketing/agency";
+import { AgencyFinalCta, AgencyHero, Faq, HowItRuns, Team } from "@/marketing/agency";
 import { OpsWindow } from "@/marketing/agency/OpsWindow";
 import "@/styles/homepage.css";
 import "@/styles/homepage-readability.css";
 import "@/styles/landing-two-mode.css";
+import "@/styles/landing-cyan.css";
 
 /**
  * The landing page with two jobs and one switch.
@@ -130,6 +131,8 @@ export function Landing() {
   const [authReturnUrl, setAuthReturnUrl] = useState(() => billingSelectionUrl(readBillingSelection()));
   const [authMode, setAuthMode] = useState<WelcomeAuthMode>("signin");
   const [mode, setMode] = useState<LandingMode>(readMode);
+  /** The mode before the last switch: the new page's lever starts there and throws across. */
+  const previousMode = useRef<LandingMode | null>(null);
 
   useEffect(() => {
     if (!authOpen) return;
@@ -176,6 +179,7 @@ export function Landing() {
 
   const switchMode = (next: LandingMode) => {
     if (next === mode) return;
+    previousMode.current = mode;
     setMode(next);
     writeMode(next);
     window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
@@ -206,18 +210,19 @@ export function Landing() {
         { value: "work", label: SWITCH[1]!.label },
       ]}
       value={mode}
+      from={previousMode.current ?? undefined}
       onChange={switchMode}
       label="What this page is for"
     />
   );
 
   return (
-    <main className="site" id="top">
+    <main className="site" id="top" data-palette={mode === "work" ? "cyan" : undefined}>
       <a className="site-skip" href={mode === "work" ? "#apply" : "#pricing"}>{mode === "work" ? "Skip to the application" : "Skip to pricing"}</a>
       <div className="site-stars" aria-hidden />
       <div className="site-grid" aria-hidden />
 
-      <LandingIntroWorld>
+      <LandingIntroWorld palette={mode === "work" ? "cyan" : "green"}>
         <header className="site-nav site-nav-landing site-nav-slim" data-scrolled={scrolled}>
           <div className="site-nav-brand">
             <a className="site-wordmark" href="#top" aria-label="Posterract home">POSTER<span>RACT</span></a>
@@ -229,20 +234,14 @@ export function Landing() {
           </nav>
           <div className="site-nav-actions">
             <NavButton className="site-nav-ghost" label="Sign in" onClick={() => goAuth("signin")} />
-            {mode === "work" ? (
-              <ShinyButton size="sm" label="Work with me" onClick={workWithMe} />
-            ) : (
-              <ShinyButton size="sm" label="Sign up" onClick={() => goAuth("signup")} />
-            )}
+            <ShinyButton size="sm" label="Sign up" onClick={() => goAuth("signup")} />
           </div>
         </header>
 
         {mode === "work" ? (
           <section className="site-hero site-hero-landing site-hero-work" aria-labelledby="site-title">
             <div className="site-hero-shade" aria-hidden="true" />
-            <motion.div key="hero-work" {...entrance}>
-              <AgencyHero fork={forkNode} />
-            </motion.div>
+            <AgencyHero fork={forkNode} />
           </section>
         ) : (
           <HeroStage fork={forkNode} onLaunch={() => openAuth("signup")} />

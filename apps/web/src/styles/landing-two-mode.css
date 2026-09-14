@@ -1394,14 +1394,14 @@
   align-content: start;
 }
 
-/* The stage: one large centered panel over the world. */
+/* The stage: one panel over the world, its left edge on the headline's. */
 .site-work-stage {
   position: relative;
   z-index: 4;
   width: calc(100% - (2 * var(--site-edge)));
   max-width: 1400px;
-  margin: clamp(36px, 5vh, 64px) auto 0;
-  padding: 0 0 clamp(72px, 10vh, 128px);
+  margin: clamp(24px, 3.5vh, 44px) auto 0;
+  padding: 0 0 clamp(56px, 8vh, 96px);
   scroll-margin-top: 72px;
 }
 
@@ -1409,10 +1409,10 @@
 .site-brief {
   position: relative;
   display: grid;
-  width: min(1080px, 100%);
-  margin: 0 auto;
-  padding: clamp(32px, 4.6vw, 64px) clamp(24px, 4.6vw, 64px) clamp(36px, 4.6vw, 60px);
-  gap: clamp(28px, 3.4vw, 44px);
+  width: min(940px, 100%);
+  margin: 0;
+  padding: clamp(26px, 3.2vw, 44px) clamp(22px, 3.2vw, 44px) clamp(28px, 3.2vw, 40px);
+  gap: clamp(20px, 2.4vw, 30px);
   border: 1px solid rgba(101, 255, 154, 0.22);
   border-radius: 8px;
   background: linear-gradient(160deg, rgba(14, 38, 25, 0.86) 0%, rgba(5, 16, 10, 0.9) 42%, rgba(3, 11, 7, 0.94) 100%);
@@ -1441,7 +1441,7 @@
   margin: 0;
   color: var(--site-ink);
   font-family: var(--font-display);
-  font-size: clamp(38px, 4.6vw, 64px);
+  font-size: clamp(32px, 3.4vw, 46px);
   font-weight: 560;
   letter-spacing: -0.05em;
   line-height: 1;
@@ -1457,10 +1457,9 @@
 .site-brief-option {
   position: relative;
   display: grid;
-  min-height: 200px;
-  padding: clamp(22px, 2.6vw, 34px) clamp(22px, 2.8vw, 36px);
+  padding: clamp(18px, 2vw, 26px) clamp(18px, 2.2vw, 28px);
   align-content: end;
-  gap: 12px;
+  gap: 8px;
   border: 1px solid rgba(101, 255, 154, 0.16);
   border-radius: 6px;
   background: rgba(0, 8, 4, 0.55);
@@ -1513,7 +1512,7 @@
 .site-brief-price {
   color: var(--site-green);
   font-family: var(--font-display);
-  font-size: clamp(48px, 5.8vw, 84px);
+  font-size: clamp(38px, 4.2vw, 58px);
   font-weight: 620;
   letter-spacing: -0.055em;
   line-height: 0.95;
@@ -1523,7 +1522,7 @@
 .site-brief-line {
   color: var(--site-ink);
   font-family: var(--font-display);
-  font-size: clamp(17px, 1.5vw, 22px);
+  font-size: clamp(15px, 1.25vw, 18px);
   font-weight: 500;
   letter-spacing: -0.015em;
   line-height: 1.25;
@@ -1533,18 +1532,18 @@
 /* The fields */
 .site-brief-fields {
   display: grid;
-  gap: 18px;
+  gap: 14px;
 }
 
 .site-brief-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 18px;
+  gap: 14px;
 }
 
 .site-brief-field {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .site-brief-field > span:first-child {
@@ -1559,21 +1558,21 @@
 .site .site-brief-field input,
 .site .site-brief-field textarea {
   width: 100%;
-  min-height: 58px;
-  padding: 0 18px;
+  min-height: 50px;
+  padding: 0 16px;
   border: 1px solid rgba(101, 255, 154, 0.18);
   border-radius: 4px;
   background: rgba(0, 6, 3, 0.62);
   color: var(--site-ink);
-  font: 500 16px/1.4 var(--font-body);
+  font: 500 15px/1.4 var(--font-body);
   letter-spacing: 0;
   box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.4);
   transition: border-color 140ms ease, box-shadow 140ms ease;
 }
 
 .site .site-brief-field textarea {
-  min-height: 200px;
-  padding: 16px 18px;
+  min-height: 150px;
+  padding: 14px 16px;
   resize: vertical;
 }
 
@@ -1599,7 +1598,7 @@
   align-items: center;
   justify-content: center;
   gap: 18px 28px;
-  padding-top: 4px;
+  padding-top: 0;
 }
 
 .site-brief-note {
@@ -1618,7 +1617,7 @@
 
 /* Sent: the panel holds only the word. */
 .site-brief-done {
-  min-height: 340px;
+  min-height: 260px;
   align-content: center;
   justify-items: center;
   gap: 14px;
@@ -1646,7 +1645,7 @@
   .site-brief { padding: 28px 20px 30px; gap: 26px; border-radius: 6px; }
   .site-brief-title { font-size: clamp(34px, 9vw, 44px); }
   .site-brief-options { grid-template-columns: 1fr; }
-  .site-brief-option { min-height: 0; padding: 22px 22px 24px; align-content: start; }
-  .site-brief-price { font-size: clamp(44px, 13vw, 60px); }
+  .site-brief-option { padding: 18px 18px 20px; align-content: start; }
+  .site-brief-price { font-size: clamp(40px, 12vw, 54px); }
   .site-brief-row { grid-template-columns: 1fr; }
 }

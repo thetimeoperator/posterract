@@ -13,15 +13,19 @@ type LeverSwitchProps<T extends string> = {
   value: T;
   onChange: (value: T) => void;
   label: string;
+  /** Where the arm starts when this instance mounts; the other option's side makes it throw across on arrival. */
+  from?: T;
 };
 
 const THROW = 34;
 
-export function LeverSwitch<T extends string>({ options, value, onChange, label }: LeverSwitchProps<T>) {
+export function LeverSwitch<T extends string>({ options, value, onChange, label, from }: LeverSwitchProps<T>) {
   const reduce = useReducedMotion() === true;
   const [left, right] = options;
   const atLeft = value === left.value;
   const flip = () => onChange(atLeft ? right.value : left.value);
+  const target = atLeft ? -THROW : THROW;
+  const start = from === undefined ? target : from === left.value ? -THROW : THROW;
 
   return (
     <div className="site-lever" role="tablist" aria-label={label}>
@@ -46,8 +50,8 @@ export function LeverSwitch<T extends string>({ options, value, onChange, label 
         <motion.span
           className="site-lever-arm"
           aria-hidden="true"
-          initial={false}
-          animate={{ rotate: atLeft ? -THROW : THROW }}
+          initial={{ rotate: start }}
+          animate={{ rotate: target }}
           transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 260, damping: 16, mass: 0.7 }}
         >
           <span className="site-lever-knob" />
