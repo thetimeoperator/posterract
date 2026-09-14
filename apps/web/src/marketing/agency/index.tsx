@@ -65,6 +65,9 @@ export function AgencyHero({ fork }: { fork: ReactNode }) {
             <span className="site-hero-title-line">that grow your page.</span>
           </h1>
           <p className="site-kicker site-stage-kicker">WORK WITH ME // CONTENT AGENTS, PROGRAMMED FOR YOUR PAGE</p>
+          <p className="site-hero-lede site-stage-lede">
+            You pay and tell me how your business makes money. I create a variety of content formats and start posting. When one produces results, I scale. You focus on your business.
+          </p>
         </div>
       </div>
       <div className="site-work-stage" id="apply">
