@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useReducedMotion } from "framer-motion";
 import { PLATFORM_MARK_SOURCES } from "@posterract/hyperkit";
 import { AGENTS } from "./agents";
@@ -100,16 +100,30 @@ export function OpsWindow() {
   const reduceMotion = useReducedMotion();
   const [progress, setProgress] = useState({ index: 0, chars: 0 });
 
+  const root = useRef<HTMLDivElement>(null);
+
+  // The clock only runs while the window is on screen: off screen it holds
+  // where it is, so nothing below the page moves while the reader is elsewhere.
   useEffect(() => {
     if (reduceMotion) {
       setProgress({ index: SCRIPT.length, chars: 0 });
       return;
     }
-    const began = performance.now();
+    let visible = false;
+    let elapsed = 0;
+    let lastTick = performance.now();
     let shown = { index: -1, chars: -1 };
     let timer = 0;
+    const observer = new IntersectionObserver(([entry]) => {
+      visible = entry?.isIntersecting ?? false;
+      lastTick = performance.now();
+    }, { threshold: 0.15 });
+    if (root.current) observer.observe(root.current);
     const tick = () => {
-      const t = (performance.now() - began) % CYCLE_MS;
+      const now = performance.now();
+      if (visible) elapsed += now - lastTick;
+      lastTick = now;
+      const t = elapsed % CYCLE_MS;
       const next = t >= TIMELINE[TIMELINE.length - 1]!.end ? { index: SCRIPT.length, chars: 0 } : progressAt(t);
       if (next.index !== shown.index || next.chars !== shown.chars) {
         shown = next;
@@ -118,7 +132,10 @@ export function OpsWindow() {
       timer = window.setTimeout(tick, 40);
     };
     tick();
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      observer.disconnect();
+    };
   }, [reduceMotion]);
 
   /** Which agents have run so far, so the board fills in step with the terminal. */
@@ -133,7 +150,7 @@ export function OpsWindow() {
   const finished = progress.index >= SCRIPT.length;
 
   return (
-    <div className="site-roadmap-terminal site-ops" aria-label="An example week run by the agents">
+    <div className="site-roadmap-terminal site-ops" aria-label="An example week run by the agents" ref={root}>
       <div className="site-roadmap-chrome">
         <div className="site-roadmap-lights" aria-hidden="true"><i /><i /><i /></div>
         <span>posterract://pages/yourpage/ops</span>
