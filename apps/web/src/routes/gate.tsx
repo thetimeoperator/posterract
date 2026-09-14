@@ -4,13 +4,19 @@ import { WelcomeAuthCard } from "@/components/ui/welcome-auth-card";
 import { ENGINE_MODE } from "@/engine/useEngine";
 import { useAuthState } from "@/lib/useAuthState";
 
+/** `?mode=signup` opens the card on sign-up; anything else, or nothing, opens sign-in. */
+type GateSearch = { mode?: "signin" | "signup" };
+
 export const Route = createFileRoute("/gate")({
+  validateSearch: (search: Record<string, unknown>): GateSearch =>
+    search.mode === "signup" || search.mode === "signin" ? { mode: search.mode } : {},
   component: Gate,
 });
 
 /** Shared welcome screen for direct authentication deep links. */
 function Gate() {
   const navigate = useNavigate();
+  const { mode } = Route.useSearch();
   const { isAuthenticated } = useAuthState();
 
   if (ENGINE_MODE === "demo" || isAuthenticated) {
@@ -24,7 +30,7 @@ function Gate() {
         <div className="welcome-auth-gate-shade" />
       </div>
       <div className="welcome-auth-gate-card">
-        <WelcomeAuthCard onSuccess={() => void navigate({ to: "/" })} />
+        <WelcomeAuthCard initialMode={mode ?? "signin"} onSuccess={() => void navigate({ to: "/" })} />
       </div>
     </main>
   );

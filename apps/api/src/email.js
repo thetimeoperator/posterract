@@ -102,7 +102,7 @@ export function createResendAuthMailer({
     throw new Error("Resend authentication email configuration is incomplete");
   }
 
-  const send = async ({ kind, token, to, subject, text, html }) => {
+  const send = async ({ kind, token, to, subject, text, html, replyTo }) => {
     const digest = createHash("sha256")
       .update(`${kind}:${token}`)
       .digest("hex");
@@ -116,6 +116,7 @@ export function createResendAuthMailer({
       body: JSON.stringify({
         from: environment.RESEND_FROM_EMAIL,
         to: [to],
+        ...(replyTo ? { reply_to: replyTo } : {}),
         subject,
         text,
         html,
@@ -221,7 +222,46 @@ export function createResendAuthMailer({
         }),
       });
     },
+
+    /** The landing page's "Work with me" form, mailed to the founder; replying answers the sender. */
+    sendContact({ to, name, email, description, ip }) {
+      const stamp = new Date().toISOString();
+      return send({
+        kind: "contact",
+        token: `${email}:${stamp}:${description}`,
+        to,
+        replyTo: email,
+        subject: `Work with me: ${name}`,
+        text: `Name: ${name}\nEmail: ${email}\n\n${description}\n\nSent from the Work with me form on posterract.app at ${stamp}${ip ? ` from ${ip}` : ""}.`,
+        html: contactMarkup({ name, email, description, stamp }),
+      });
+    },
   };
+}
+
+function contactMarkup({ name, email, description, stamp }) {
+  const safeEmail = escapeHtml(email);
+  return `<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head>
+  <body style="margin:0;background:#030706;color:#effff5;font-family:Arial,sans-serif">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#030706;padding:40px 16px">
+      <tr><td align="center">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;overflow:hidden;border:1px solid #244536;border-radius:20px;background:#07100c">
+          <tr><td style="height:2px;background:#65ff9a"></td></tr>
+          <tr><td style="padding:34px 38px 30px">
+            <div style="font-size:14px;font-weight:700;letter-spacing:.2em;color:#effff5">POSTER<span style="color:#65ff9a">RACT</span></div>
+            <div style="margin-top:36px;font-family:monospace;font-size:11px;letter-spacing:.12em;color:#65ff9a;text-transform:uppercase">Work with me // form</div>
+            <h1 style="margin:12px 0 0;font-size:30px;line-height:1.08;letter-spacing:-.04em;color:#effff5">${escapeHtml(name)}</h1>
+            <p style="margin:10px 0 0;font-size:15px;line-height:1.7;color:#9ab3a4"><a href="mailto:${safeEmail}" style="color:#65ff9a;text-decoration:none">${safeEmail}</a></p>
+            <p style="margin:24px 0 0;white-space:pre-wrap;font-size:15px;line-height:1.7;color:#effff5">${escapeHtml(description)}</p>
+            <p style="margin:28px 0 0;font-size:12px;line-height:1.6;color:#60796a">Sent from the Work with me form on posterract.app at ${escapeHtml(stamp)}. Reply to this email to answer.</p>
+          </td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+</html>`;
 }
 
 export function dispatchAuthEmail(delivery) {

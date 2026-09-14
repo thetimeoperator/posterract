@@ -1385,3 +1385,83 @@
 .site-hero-landing {
   grid-template-rows: auto auto;
 }
+
+/* Work mode hero: the product page's headline structure on the left, the form beside it */
+.site-hero-work {
+  min-height: 0;
+  padding-top: 0;
+  grid-template-rows: auto;
+  align-content: start;
+}
+
+.site-hero-work .site-stage-head {
+  padding-bottom: clamp(56px, 8vh, 96px);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 560px);
+  column-gap: clamp(32px, 5vw, 96px);
+  align-items: start;
+}
+
+.site-work-form {
+  gap: 14px;
+  scroll-margin-top: 80px;
+}
+
+.site-work-options {
+  display: grid;
+  margin-bottom: 4px;
+  padding-bottom: 18px;
+  gap: 10px;
+  border-bottom: 1px solid var(--site-line);
+}
+
+.site-work-options-title {
+  margin: 0;
+  color: var(--site-ink);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 560;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.site-work-options ul {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  gap: 8px;
+  list-style: none;
+}
+
+.site-work-options li {
+  color: #cbe5d3;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.site-work-options strong {
+  color: var(--site-green);
+  font-weight: 650;
+}
+
+.site-work-count {
+  justify-self: end;
+  color: #6d8a79;
+}
+
+.site-work-form .site-primary {
+  gap: 10px;
+}
+
+.site-work-form .site-primary:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+@media (max-width: 900px) {
+  .site-hero-work .site-stage-head {
+    padding-top: 60px;
+    padding-bottom: 48px;
+    grid-template-columns: 1fr;
+    row-gap: 28px;
+  }
+}

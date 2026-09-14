@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { motion, useReducedMotion } from "framer-motion";
 import { PLATFORM_MARK_SOURCES } from "@posterract/hyperkit";
 import { HeroStage } from "@/marketing/hero/HeroStage";
@@ -10,7 +11,7 @@ import { RandomLetterSwap } from "@/components/ui/random-letter-swap";
 import { useHoverIntent } from "@/components/ui/use-hover-intent";
 import { ShinyButton } from "@/components/ui/shiny-button";
 import { LeverSwitch } from "@/components/ui/lever-switch";
-import { AgencyFinalCta, AgencyHero, Apply, Engagement, Faq, HowItRuns, Team, workWithMe, type Shape } from "@/marketing/agency";
+import { AgencyFinalCta, AgencyHero, Faq, HowItRuns, Team, workWithMe } from "@/marketing/agency";
 import { OpsWindow } from "@/marketing/agency/OpsWindow";
 import "@/styles/homepage.css";
 import "@/styles/homepage-readability.css";
@@ -54,8 +55,7 @@ const SECTIONS: Record<LandingMode, Array<{ n: string; label: string; href: stri
   work: [
     { n: "01", label: "The team", href: "#team" },
     { n: "02", label: "How it runs", href: "#how" },
-    { n: "03", label: "Ways to work", href: "#engage" },
-    { n: "04", label: "Apply", href: "#apply" },
+    { n: "03", label: "Apply", href: "#apply" },
   ],
 };
 
@@ -131,7 +131,7 @@ export function Landing() {
   const [authReturnUrl, setAuthReturnUrl] = useState(() => billingSelectionUrl(readBillingSelection()));
   const [authMode, setAuthMode] = useState<WelcomeAuthMode>("signin");
   const [mode, setMode] = useState<LandingMode>(readMode);
-  const [shape, setShape] = useState<Shape>("managed");
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!authOpen) return;
@@ -183,10 +183,8 @@ export function Landing() {
     window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
   };
 
-  const chooseShape = (next: Shape) => {
-    setShape(next);
-    document.getElementById("apply")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
+  /** The nav's two buttons: each goes to its own page. */
+  const goAuth = (nextMode: WelcomeAuthMode) => void navigate({ to: "/gate", search: { mode: nextMode } });
 
   const entrance = reduceMotion ? {} : { initial: { opacity: 0, y: 18 }, animate: { opacity: 1, y: 0 }, transition: ENTER };
 
@@ -228,21 +226,20 @@ export function Landing() {
             ))}
           </nav>
           <div className="site-nav-actions">
-            <NavButton className="site-nav-ghost" label="Sign in" onClick={() => openAuth("signin")} />
+            <NavButton className="site-nav-ghost" label="Sign in" onClick={() => goAuth("signin")} />
             {mode === "work" ? (
               <ShinyButton size="sm" label="Work with me" onClick={workWithMe} />
             ) : (
-              <ShinyButton size="sm" label="Launch Posterract" onClick={() => openAuth("signup")} />
+              <ShinyButton size="sm" label="Sign up" onClick={() => goAuth("signup")} />
             )}
           </div>
         </header>
 
         {mode === "work" ? (
-          <section className="site-hero site-hero-landing" aria-labelledby="site-title">
+          <section className="site-hero site-hero-landing site-hero-work" aria-labelledby="site-title">
             <div className="site-hero-shade" aria-hidden="true" />
-            <div className="site-hero-lever">{forkNode}</div>
-            <motion.div className="site-hero-main site-hero-main-work" key="hero-work" {...entrance}>
-              <AgencyHero />
+            <motion.div className="site-stage-head site-work-head" key="hero-work" {...entrance}>
+              <AgencyHero fork={forkNode} />
             </motion.div>
           </section>
         ) : (
@@ -264,8 +261,6 @@ export function Landing() {
       <motion.div key={`ground-${mode}`} {...entrance}>
         {mode === "work" ? (
           <>
-            <Engagement onChoose={chooseShape} />
-            <Apply shape={shape} onShape={setShape} />
             <Faq />
             <AgencyFinalCta onProduct={() => switchMode("product")} />
           </>

@@ -17,3 +17,7 @@
 @media(max-width:760px){.posterract-pricing{max-width:560px;padding:74px 0 60px}.rp-single-card{grid-template-columns:1fr;margin-top:34px;border-radius:22px}.rp-purchase{border-right:0;border-bottom:1px solid #c4efd51a}.rp-billing{margin-top:24px}.rp-payment-note{min-height:0}.rp-price{font-size:76px}.rp-intro{font-size:13px}}
 @media(max-width:380px){.rp-purchase,.rp-included{padding:24px}.rp-plan-name h3{font-size:21px}.rp-price{font-size:66px}.rp-billing{gap:7px}.rp-saving{padding:5px}.rp-heading h2{font-size:35px}}
 @media(prefers-reduced-motion:reduce){.posterract-pricing *,.posterract-pricing *:before,.posterract-pricing *:after{transition:none!important;animation:none!important}}
+/* The white title is the smaller line; the plan line sits under it, bigger. */
+.rp-heading h2{font-size:clamp(30px,3.6vw,48px);font-weight:520}.rp-heading h2 span{display:block;margin-top:10px;font-size:clamp(40px,5.6vw,72px);font-weight:560;line-height:1}
+@media(max-width:380px){.rp-heading h2{font-size:28px}.rp-heading h2 span{font-size:38px}}
+

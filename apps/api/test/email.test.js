@@ -118,3 +118,34 @@ test("Resend auth configuration requires both key and sender", () => {
     false,
   );
 });
+
+test("Resend mailer sends the Work with me form to the inbox with the sender as reply-to", async () => {
+  let request;
+  const mailer = createResendAuthMailer({
+    environment,
+    fetchImplementation: async (url, options) => {
+      request = { url, options };
+      return new Response(JSON.stringify({ id: "email_contact" }), { status: 200 });
+    },
+  });
+
+  await mailer.sendContact({
+    to: "founder@example.test",
+    name: "Creator <b>",
+    email: "creator@example.test",
+    description: "Two pages, one voice.\n<script>alert(1)</script>",
+    ip: "203.0.113.9",
+  });
+
+  assert.equal(request.url, "https://api.resend.com/emails");
+  assert.match(request.options.headers["Idempotency-Key"], /^posterract-contact-/);
+  const body = JSON.parse(request.options.body);
+  assert.deepEqual(body.to, ["founder@example.test"]);
+  assert.equal(body.reply_to, "creator@example.test");
+  assert.equal(body.subject, "Work with me: Creator <b>");
+  assert.match(body.text, /Two pages, one voice\./);
+  assert.match(body.text, /203\.0\.113\.9/);
+  assert.match(body.html, /&lt;script&gt;/);
+  assert.doesNotMatch(body.html, /<script>/);
+});
+

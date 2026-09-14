@@ -878,6 +878,55 @@ app.get("/v1/auth/config", async () => ({
   },
 }));
 
+const contactInbox = env.CONTACT_TO_EMAIL || "pahlevansina@gmail.com";
+const contactLimitPerHour = Number(env.CONTACT_RATE_LIMIT_PER_HOUR ?? 5);
+
+/** The landing page's "Work with me" form: mailed to the founder through Resend, with the sender as reply-to. */
+app.post(
+  "/v1/contact",
+  {
+    schema: {
+      body: {
+        type: "object",
+        required: ["name", "email", "description"],
+        additionalProperties: false,
+        properties: {
+          name: { type: "string", minLength: 1, maxLength: 120 },
+          email: {
+            type: "string",
+            minLength: 3,
+            maxLength: 254,
+            pattern: "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+          },
+          description: { type: "string", minLength: 1, maxLength: 1000 },
+        },
+      },
+    },
+  },
+  async (request, reply) => {
+    if (!authMailer) {
+      return reply.code(503).send({ error: "contact_unavailable" });
+    }
+    const hour = Math.floor(Date.now() / 3_600_000);
+    const rateKey = `posterract:contact-rate:${request.ip}:${hour}`;
+    const rateCount = await redis.incr(rateKey);
+    if (rateCount === 1) await redis.expire(rateKey, 7_200);
+    if (rateCount > contactLimitPerHour) {
+      reply.header("retry-after", 3_600);
+      return reply.code(429).send({ error: "rate_limit_exceeded" });
+    }
+    const { name, email, description } = request.body;
+    await authMailer.sendContact({
+      to: contactInbox,
+      name: name.trim(),
+      email: email.trim(),
+      description: description.trim(),
+      ip: request.ip,
+    });
+    return reply.code(202).send({ ok: true });
+  },
+);
+
 registerDesktopAuthRoutes(app, {
   postgres,
   requireBrowserSession,
@@ -939,6 +988,9 @@ app.get("/v1/openapi.json", async () => ({
     "/v1/posts/{id}/cancel": { post: { summary: "Cancel a scheduled post" } },
     "/v1/posts/{id}/reschedule": { post: { summary: "Move a scheduled post to a new date or time" } },
     "/v1/projections/{id}/retry": { post: { summary: "Retry one failed platform" } },
+    "/v1/contact": {
+      post: { summary: "Send the landing page's Work with me form to the founder", security: [] },
+    },
     "/v1/billing/config": {
       get: { summary: "Read the public live subscription catalog", security: [] },
     },

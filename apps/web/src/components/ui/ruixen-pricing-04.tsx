@@ -13,11 +13,10 @@ import "@/styles/pricing.css";
 
 const priceFormat: Format = { currency: "USD", style: "currency", minimumFractionDigits: 0, maximumFractionDigits: 0, currencyDisplay: "narrowSymbol" };
 const features = [
-  ["Create", "Full desktop video editor & agent connection"],
-  ["Schedule", "A shared calendar for your connected platforms"],
-  ["Publish", "Direct publishing & TikTok draft delivery"],
-  ["Track", "Publishing history & performance analytics"],
-  ["Connect", "Agent API access & your media library"],
+  ["Full Figma-Style Video Editor", "Collab with your agent on an infinite canvas-style video editor"],
+  ["Social Media Scheduler", "Connect up to 100 accounts on each platform"],
+  ["Post with your agent", "Create an API key and give it to your agent to post for you"],
+  ["VIRAL Content Formats", "Specific viral content formats in skill folders for your agent"],
 ];
 
 export default function Pricing_04({ onLaunch }: { onLaunch: (selection: BillingSelection) => void }) {
@@ -49,8 +48,8 @@ export default function Pricing_04({ onLaunch }: { onLaunch: (selection: Billing
     <div className="rp-ambient" aria-hidden="true" />
     <header className="rp-heading">
       <p className="rp-eyebrow"><Command size={14} aria-hidden="true" /> POSTERRACT / ONE PLAN</p>
-      <h2 id="pricing-title">Your entire workflow.<br /><span>One simple plan.</span></h2>
-      <p className="rp-intro">Create, schedule, and publish with your agent.<br />Bring your own AI keys. Make it yours.</p>
+      <h2 id="pricing-title">Your agent's entire<br />content workflow<span>One simple plan.</span></h2>
+      <p className="rp-intro">Create, schedule, and publish with your agent.</p>
     </header>
 
     {error && <p className="rp-error" role="status">Pricing is temporarily unavailable. <button type="button" onClick={() => setRetry((value) => value + 1)}>Try again</button></p>}
@@ -73,7 +72,7 @@ export default function Pricing_04({ onLaunch }: { onLaunch: (selection: Billing
         <p className="rp-purchase-note"><ShieldCheck size={13} aria-hidden="true" /> Secure checkout with Stripe</p>
       </div>
       <div className="rp-included">
-        <p className="rp-section-label">FROM FIRST IDEA TO PUBLISHED POST</p>
+        <p className="rp-section-label">THIS IS WHAT YOU GET:</p>
         <ul className="rp-features">{features.map(([title, description]) => <li key={title}><Check size={16} aria-hidden="true" /><div><strong>{title}</strong><span>{description}</span></div></li>)}</ul>
         <div className="rp-byok">
           <span className="rp-key-icon"><KeyRound size={19} aria-hidden="true" /></span>
