@@ -881,6 +881,20 @@ app.get("/v1/auth/config", async () => ({
 const contactInbox = env.CONTACT_TO_EMAIL || "pahlevansina@gmail.com";
 const contactLimitPerHour = Number(env.CONTACT_RATE_LIMIT_PER_HOUR ?? 5);
 
+/**
+ * The visitor's address for the contact form's rate limit. The gateway
+ * (Caddy) does not trust the tunnel in front of it, so `request.ip` is the
+ * Docker host for every visitor; Cloudflare's own header, which the origin
+ * only ever receives through the tunnel, carries the real one.
+ */
+function contactClientAddress(request) {
+  const cloudflare = request.headers["cf-connecting-ip"];
+  if (typeof cloudflare === "string" && cloudflare.trim()) return cloudflare.trim();
+  const forwarded = request.headers["x-forwarded-for"];
+  const first = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(",")[0]?.trim();
+  return first || request.ip;
+}
+
 /** The landing page's "Work with me" form: mailed to the founder through Resend, with the sender as reply-to. */
 app.post(
   "/v1/contact",
@@ -907,8 +921,9 @@ app.post(
     if (!authMailer) {
       return reply.code(503).send({ error: "contact_unavailable" });
     }
+    const address = contactClientAddress(request);
     const hour = Math.floor(Date.now() / 3_600_000);
-    const rateKey = `posterract:contact-rate:${request.ip}:${hour}`;
+    const rateKey = `posterract:contact-rate:${address}:${hour}`;
     const rateCount = await redis.incr(rateKey);
     if (rateCount === 1) await redis.expire(rateKey, 7_200);
     if (rateCount > contactLimitPerHour) {
@@ -921,7 +936,7 @@ app.post(
       name: name.trim(),
       email: email.trim(),
       description: description.trim(),
-      ip: request.ip,
+      ip: address,
     });
     return reply.code(202).send({ ok: true });
   },
