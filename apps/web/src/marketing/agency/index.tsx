@@ -1,4 +1,5 @@
 import { useState, type FormEvent, type ReactNode } from "react";
+import { PLATFORM_MARK_SOURCES } from "@posterract/hyperkit";
 import { Button3D } from "@/components/ui/button-3d";
 import { AGENTS } from "./agents";
 import { OpsWindow } from "./OpsWindow";
@@ -16,10 +17,13 @@ export const AGENCY = {
   bookingUrl: null as string | null,
 };
 
-/** The two ways to work, exactly as offered. */
+/** One set of accounts: the eight platforms. */
+const ACCOUNT_SET: Array<keyof typeof PLATFORM_MARK_SOURCES> = ["instagram", "tiktok", "facebook", "youtube", "threads", "x", "linkedin", "reddit"];
+
+/** The two ways to work, exactly as offered, with the sets of accounts each one runs. */
 const OPTIONS = [
-  { price: "$3,000", line: "to manage one set of accounts" },
-  { price: "$12,000+", line: "Operation Turbo: scaling multiple accounts at once" },
+  { price: "$5,000", line: "to manage one set of accounts", sets: 1 },
+  { price: "$12,000+", line: "Operation Turbo: scaling multiple accounts at once", sets: 3 },
 ];
 
 const DESCRIPTION_LIMIT = 1000;
@@ -82,10 +86,10 @@ type SendState = "idle" | "sending" | "sent" | "mailed";
 /**
  * The brief: one large panel in the lever's material. "Fill out the form
  * below" in the accent over "Two Options:", the two prices (per month) as
- * choosable tiles, then name, email and a description of up to 1000
- * characters, then the 3D Send. It posts to the API, which mails
- * the founder with the sender as reply-to; if the API cannot take it, the
- * mail app opens with the same message, addressed to him.
+ * choosable tiles, each with its sets of platform logos, then name, email
+ * and a description of up to 1000 characters, then the 3D Send. It posts to
+ * the API, which mails the founder with the sender as reply-to; if the API
+ * cannot take it, the mail app opens with the same message, addressed to him.
  */
 export function WorkForm() {
   const [state, setState] = useState<SendState>("idle");
@@ -146,6 +150,15 @@ export function WorkForm() {
               <span className="site-brief-led" aria-hidden="true" />
               <span className="site-brief-price">{entry.price} <span className="site-brief-per">per month</span></span>
               <span className="site-brief-line">{entry.line}</span>
+              <span className="site-brief-sets" aria-hidden="true">
+                {Array.from({ length: entry.sets }, (_, index) => (
+                  <span className="site-brief-set" key={index}>
+                    {ACCOUNT_SET.map((platform) => (
+                      <img src={PLATFORM_MARK_SOURCES[platform]} alt="" data-platform={platform} key={platform} />
+                    ))}
+                  </span>
+                ))}
+              </span>
             </label>
           );
         })}

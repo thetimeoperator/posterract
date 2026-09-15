@@ -1464,11 +1464,12 @@
   line-height: 1;
 }
 
-/* The two options: two tiles, the price huge in neon; the chosen one lights up like the lever's sign. */
+/* The two options: two tiles, the price huge in neon; the chosen one lights up like the lever's sign.
+   Price, line and logos share their rows across the two tiles, so each lines up with its neighbour. */
 .site-brief-options {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: clamp(14px, 2vw, 24px);
+  gap: 8px clamp(14px, 2vw, 24px);
 }
 
 .site-brief-option {
@@ -1476,6 +1477,8 @@
   display: grid;
   padding: clamp(18px, 2vw, 26px) clamp(18px, 2.2vw, 28px);
   align-content: start;
+  grid-row: span 3;
+  grid-template-rows: subgrid;
   gap: 8px;
   border: 1px solid rgba(101, 255, 154, 0.16);
   border-radius: 6px;
@@ -1552,6 +1555,39 @@
   letter-spacing: -0.015em;
   line-height: 1.25;
   text-wrap: balance;
+}
+
+/* The accounts: one set is the eight platform logos in a row; Operation Turbo shows several sets. */
+.site-brief-sets {
+  display: grid;
+  margin-top: 6px;
+  align-self: start;
+  gap: 8px;
+}
+
+.site-brief-set {
+  display: flex;
+  padding: 8px 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid rgba(101, 255, 154, 0.14);
+  border-radius: 5px;
+  background: rgba(4, 13, 9, 0.64);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.055);
+}
+
+.site-brief-set img {
+  display: block;
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
+/* YouTube's icon never renders below 20px tall. */
+.site-brief-set img[data-platform="youtube"] {
+  width: 29px;
 }
 
 /* The fields */
@@ -1669,8 +1705,9 @@
   .site-work-stage { margin-top: 28px; padding-bottom: 64px; }
   .site-brief { padding: 28px 20px 30px; gap: 26px; border-radius: 6px; }
   .site-brief-title { font-size: clamp(34px, 9vw, 44px); }
-  .site-brief-options { grid-template-columns: 1fr; }
-  .site-brief-option { padding: 18px 18px 20px; align-content: start; }
+  .site-brief-options { grid-template-columns: 1fr; row-gap: clamp(14px, 2vw, 24px); }
+  .site-brief-option { padding: 18px 18px 20px; align-content: start; grid-row: auto; grid-template-rows: none; }
   .site-brief-price { font-size: clamp(40px, 12vw, 54px); }
+  .site-brief-set { padding: 8px 10px; gap: 6px; }
   .site-brief-row { grid-template-columns: 1fr; }
 }
