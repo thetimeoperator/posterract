@@ -3692,11 +3692,22 @@
 }
 
 .site[data-palette="cyan"] .site-how-squeeze .text-foreground {
+  display: block;
   color: var(--site-ink);
+  font-size: clamp(28px, 2.6vw, 38px);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
 }
 
 .site[data-palette="cyan"] .site-how-squeeze .text-muted-foreground {
-  color: var(--site-muted);
+  display: block;
+  margin-top: 12px;
+  color: var(--site-ink);
+  font-size: clamp(19px, 1.6vw, 24px);
+  font-weight: 450;
+  letter-spacing: -0.01em;
+  line-height: 1.45;
 }
 
 .site[data-palette="cyan"] .site-how-squeeze button {

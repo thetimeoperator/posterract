@@ -32,44 +32,47 @@ const DESCRIPTION_LIMIT = 1000;
 /** The API the form posts to: same origin in production (`/api`), none in the local Convex setup. */
 const API_BASE = ((import.meta.env.VITE_API_URL as string | undefined) ?? "").replace(/\/$/, "");
 
-/** A photo from Unsplash (free licence), served from its image CDN at the panel's 16:9 block. */
+/** A placeholder photo from Unsplash (free licence), served from its image CDN at the panel's 16:9 block, until generated images replace it. */
 const unsplash = (id: string) => `https://images.unsplash.com/${id}?auto=format&fit=crop&w=1280&h=720&q=80`;
 
-/** How it works: the five steps as the squeeze carousel's panels, each with a photo of the step. */
+/** How it works: a step-by-step list as the squeeze carousel's panels, "Step N" as each title and the step itself under it. */
 const STEPS: SqueezeSlide[] = [
   {
     id: "call",
-    title: "You fill out the form then we hop on a call.",
-    description: "You tell me about your business and what you charge.",
+    title: "Step 1",
+    description: "You fill out the form then we hop on a call. You tell me about your business and what you charge.",
     overlay: <span className="site-how-mark">01</span>,
     image: unsplash("photo-1616587226960-4a03badbe8bf"),
     imageAlt: "A man on a video call at his laptop",
   },
   {
     id: "plan",
-    title: "You send the invoice for the month and I put together a plan.",
+    title: "Step 2",
+    description: "You send the invoice for the month and I put together a plan.",
     overlay: <span className="site-how-mark">02</span>,
     image: unsplash("photo-1454165804606-c3d57bc86b40"),
     imageAlt: "Hands writing a plan on paper beside two laptops",
   },
   {
     id: "post",
-    title: "I start posting across all platforms and execute the plan.",
+    title: "Step 3",
+    description: "I start posting across all platforms and execute the plan.",
     overlay: <span className="site-how-mark">03</span>,
     image: unsplash("photo-1690883793939-f8cca2f28ee0"),
     imageAlt: "A hand holding a phone open to its social media apps",
   },
   {
     id: "results",
-    title: "I check results and analytics daily and feed them to my Agent.",
-    description: "Content improves BY THE DAY. New angles every 24 hours until we see results.",
+    title: "Step 4",
+    description: "I check results and analytics daily and feed them to my Agent. Content improves BY THE DAY. New angles every 24 hours until we see results.",
     overlay: <span className="site-how-mark">04</span>,
     image: unsplash("photo-1551288049-bebda4e38f71"),
     imageAlt: "Analytics charts on a dark dashboard",
   },
   {
     id: "brand",
-    title: "We build a LONG-LASTING, SUSTAINABLE brand with high quality content that you OWN forever.",
+    title: "Step 5",
+    description: "We build a LONG-LASTING, SUSTAINABLE brand with high quality content that you OWN forever.",
     overlay: <span className="site-how-mark">05</span>,
     image: unsplash("photo-1625690303837-654c9666d2d0"),
     imageAlt: "A silhouette filming with a cinema camera in blue and red light",
