@@ -18,8 +18,8 @@ export const AGENCY = {
 
 /** The two ways to work, exactly as offered. */
 const OPTIONS = [
-  { price: "$3,000", line: "per month to manage one set of accounts" },
-  { price: "$12,000+", line: "for Operation Turbo" },
+  { price: "$3,000", line: "to manage one set of accounts" },
+  { price: "$12,000+", line: "Operation Turbo: scaling multiple accounts at once" },
 ];
 
 const DESCRIPTION_LIMIT = 1000;
@@ -80,9 +80,10 @@ export function AgencyHero({ fork }: { fork: ReactNode }) {
 type SendState = "idle" | "sending" | "sent" | "mailed";
 
 /**
- * The brief: one large panel in the lever's material. "Two Options:" with
- * the two prices as choosable tiles, then name, email and a description of
- * up to 1000 characters, then the 3D Send. It posts to the API, which mails
+ * The brief: one large panel in the lever's material. "Fill out the form
+ * below" in the accent over "Two Options:", the two prices (per month) as
+ * choosable tiles, then name, email and a description of up to 1000
+ * characters, then the 3D Send. It posts to the API, which mails
  * the founder with the sender as reply-to; if the API cannot take it, the
  * mail app opens with the same message, addressed to him.
  */
@@ -130,17 +131,20 @@ export function WorkForm() {
 
   return (
     <form className="site-brief" onSubmit={submit} aria-labelledby="brief-title">
-      <h2 className="site-brief-title" id="brief-title">Two Options:</h2>
+      <div className="site-brief-head">
+        <p className="site-brief-cue">Fill out the form below</p>
+        <h2 className="site-brief-title" id="brief-title">Two Options:</h2>
+      </div>
 
       <div className="site-brief-options" role="radiogroup" aria-label="Two options">
         {OPTIONS.map((entry) => {
-          const value = `${entry.price} ${entry.line}`;
+          const value = `${entry.price} per month ${entry.line}`;
           const selected = option === value;
           return (
             <label className="site-brief-option" data-selected={selected} key={entry.price}>
               <input type="radio" name="option" value={value} checked={selected} onChange={() => setOption(value)} />
               <span className="site-brief-led" aria-hidden="true" />
-              <span className="site-brief-price">{entry.price}</span>
+              <span className="site-brief-price">{entry.price} <span className="site-brief-per">per month</span></span>
               <span className="site-brief-line">{entry.line}</span>
             </label>
           );
