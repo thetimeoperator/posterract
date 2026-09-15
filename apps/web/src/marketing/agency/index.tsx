@@ -1,6 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { PLATFORM_MARK_SOURCES } from "@posterract/hyperkit";
 import { Button3D } from "@/components/ui/button-3d";
+import { SqueezeCarousel, type SqueezeSlide } from "@/components/ui/carousel-squeeze";
 import { AGENTS } from "./agents";
 import { OpsWindow } from "./OpsWindow";
 
@@ -31,11 +32,41 @@ const DESCRIPTION_LIMIT = 1000;
 /** The API the form posts to: same origin in production (`/api`), none in the local Convex setup. */
 const API_BASE = ((import.meta.env.VITE_API_URL as string | undefined) ?? "").replace(/\/$/, "");
 
-const STEPS = [
-  { n: "01", title: "Strategy call", text: "We pick the formats, the platforms and the cadence for your page. You bring access and references; I bring the plan.", meta: "45 minutes" },
-  { n: "02", title: "I program the agents", text: "Each agent gets your voice, your brand, its guardrails and the approval rule: every post, or none.", meta: "First week" },
-  { n: "03", title: "They produce and schedule", text: "The calendar fills. Every post is made on the same editor you can see in product mode, then scheduled to your accounts.", meta: "Every week" },
-  { n: "04", title: "We learn", text: "The analytics from what posted flow back to the agents. Hooks that worked get reused; formats that didn't get retired.", meta: "Weekly review" },
+/** Three of the page's own clips side by side, each at the panel's full height. */
+const triptych = (left: string, middle: string, right: string) =>
+  [`url("${left}") left center / auto 100% no-repeat`, `url("${middle}") center / auto 100% no-repeat`, `url("${right}") right center / auto 100% no-repeat`, "#05090b"].join(", ");
+
+/** How it works: the four steps as the squeeze carousel's panels, pictured with the product's own editor and clips. */
+const STEPS: SqueezeSlide[] = [
+  {
+    id: "call",
+    title: "Strategy call.",
+    description: "We pick the formats, the platforms and the cadence for your page. You bring access and references; I bring the plan.",
+    overlay: <span className="site-how-mark">{"01 // 45 minutes"}</span>,
+    background: triptych("/brand/agency/clipping.jpg", "/brand/agency/trending-news.jpg", "/brand/agency/talking-characters.jpg"),
+  },
+  {
+    id: "program",
+    title: "I program the agents.",
+    description: "Each agent gets your voice, your brand, its guardrails and the approval rule: every post, or none.",
+    overlay: <span className="site-how-mark">{"02 // First week"}</span>,
+    image: "/brand/hero/editor.webp",
+    imageAlt: "The Posterract editor with three scenes of a video on its canvas",
+  },
+  {
+    id: "produce",
+    title: "They produce and schedule.",
+    description: "The calendar fills. Every post is made on the same editor you can see in product mode, then scheduled to your accounts.",
+    overlay: <span className="site-how-mark">{"03 // Every week"}</span>,
+    background: triptych("/brand/hero/fomo.jpg", "/brand/hero/multiplier.jpg", "/brand/hero/crypto3d.jpg"),
+  },
+  {
+    id: "learn",
+    title: "We learn.",
+    description: "The analytics from what posted flow back to the agents. Hooks that worked get reused; formats that didn't get retired.",
+    overlay: <span className="site-how-mark">{"04 // Weekly review"}</span>,
+    background: triptych("/brand/hero/postmortem-1.jpg", "/brand/hero/pons.jpg", "/brand/hero/hyperspell.jpg"),
+  },
 ];
 
 const FAQ = [
@@ -236,22 +267,15 @@ export function HowItRuns() {
     <section className="site-agency-section site-how" id="how" aria-labelledby="how-title">
       <div className="site-platforms-heading">
         <div>
-          <p className="site-kicker">HOW IT RUNS // FOUR STEPS</p>
+          <p className="site-kicker">HOW IT WORKS // FOUR STEPS</p>
           <h2 id="how-title">From one call to a page that posts itself.</h2>
         </div>
         <p>The system is the product you can switch to at the top of this page. The service is me running it for you.</p>
       </div>
 
-      <ol className="site-how-rail">
-        {STEPS.map((step) => (
-          <li className="site-how-step" key={step.n}>
-            <span>{step.n}</span>
-            <h3>{step.title}</h3>
-            <p>{step.text}</p>
-            <small>{step.meta}</small>
-          </li>
-        ))}
-      </ol>
+      <div className="site-how-squeeze">
+        <SqueezeCarousel slides={STEPS} label="How it works" accent="var(--site-green)" accentForeground="#021016" style={{ fontFamily: "var(--font-display)" }} />
+      </div>
     </section>
   );
 }

@@ -226,8 +226,8 @@ export function Landing() {
         <motion.div key={`world-${mode}`} {...entrance}>
           {mode === "work" ? (
             <>
-              <Team />
               <HowItRuns />
+              <Team />
             </>
           ) : (
             <PlatformNetwork />

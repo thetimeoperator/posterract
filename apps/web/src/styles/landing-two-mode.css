@@ -726,72 +726,30 @@
   line-height: 1.55;
 }
 
-/* How it runs */
-.site-how-rail {
-  display: grid;
-  margin: 48px 0 0;
-  padding: 0;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 24px;
-  list-style: none;
+/* How it works: the squeeze carousel in the page's type and colours. Its text classes come from
+   shadcn's theme, which this app does not define, so they are mapped here. */
+.site-how-squeeze {
+  margin-top: 48px;
 }
 
-.site-how-step {
-  position: relative;
-  display: grid;
-  padding: 24px 22px 24px;
-  grid-template-rows: auto auto 1fr auto;
-  border: 1px solid var(--site-line);
-  background: rgba(3, 11, 7, 0.68);
-  backdrop-filter: blur(10px);
+.site-how-squeeze .text-foreground {
+  color: var(--site-ink);
 }
 
-.site-how-step::after {
-  position: absolute;
-  top: 50%;
-  right: -24px;
-  width: 24px;
-  height: 1px;
-  background: linear-gradient(90deg, var(--site-green), rgba(101, 255, 154, 0.08));
-  content: "";
-}
-
-.site-how-step:last-child::after {
-  display: none;
-}
-
-.site-how-step > span {
-  color: var(--site-green);
-  font-family: var(--font-mono);
-  font-size: 8px;
-  letter-spacing: 0.12em;
-}
-
-.site-how-step h3 {
-  margin: 14px 0 0;
-  font-family: var(--font-display);
-  font-size: 21px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
-}
-
-.site-how-step p {
-  margin: 10px 0 0;
+.site-how-squeeze .text-muted-foreground {
   color: var(--site-muted);
-  font-size: 13px;
-  line-height: 1.65;
 }
 
-.site-how-step small {
-  display: block;
-  margin-top: 18px;
-  padding-top: 12px;
-  border-top: 1px solid var(--site-line);
-  color: #6d8a79;
+.site-how-squeeze button {
+  --tw-ring-offset-color: var(--site-bg);
+}
+
+.site-how-mark {
+  color: var(--site-ink);
   font-family: var(--font-mono);
-  font-size: 8px;
-  letter-spacing: 0.1em;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 
@@ -1120,8 +1078,6 @@
 /* Responsive ---------------------------------------------------------------- */
 @media (max-width: 1180px) {
   .site-team-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .site-how-rail { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .site-how-step::after { display: none; }
   .site-ops-body { grid-template-columns: 1fr; }
   .site-ops-terminal { min-height: 0; border-right: 0; border-bottom: 1px solid var(--site-line); }
   .site-apply-grid { grid-template-columns: 1fr; gap: 32px; }
@@ -1134,7 +1090,6 @@
   .site .site-shiny-lg { height: 50px; padding: 0 26px; font-size: 15px; }
   .site-team-grid { grid-template-columns: 1fr 1fr; }
   .site-engage-grid { grid-template-columns: 1fr; }
-  .site-how-rail { grid-template-columns: 1fr; }
   .site-apply-row { grid-template-columns: 1fr; }
   .site-ops-terminal { padding: 18px; font-size: 11px; }
   .site-ops-line { grid-template-columns: 14px minmax(0, 1fr); }
