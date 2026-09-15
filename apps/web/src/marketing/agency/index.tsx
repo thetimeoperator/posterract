@@ -32,40 +32,47 @@ const DESCRIPTION_LIMIT = 1000;
 /** The API the form posts to: same origin in production (`/api`), none in the local Convex setup. */
 const API_BASE = ((import.meta.env.VITE_API_URL as string | undefined) ?? "").replace(/\/$/, "");
 
-/** Three of the page's own clips side by side, each at the panel's full height. */
-const triptych = (left: string, middle: string, right: string) =>
-  [`url("${left}") left center / auto 100% no-repeat`, `url("${middle}") center / auto 100% no-repeat`, `url("${right}") right center / auto 100% no-repeat`, "#05090b"].join(", ");
+/** A photo from Unsplash (free licence), served from its image CDN at the panel's 16:9 block. */
+const unsplash = (id: string) => `https://images.unsplash.com/${id}?auto=format&fit=crop&w=1280&h=720&q=80`;
 
-/** How it works: the four steps as the squeeze carousel's panels, pictured with the product's own editor and clips. */
+/** How it works: the five steps as the squeeze carousel's panels, each with a photo of the step. */
 const STEPS: SqueezeSlide[] = [
   {
     id: "call",
-    title: "Strategy call.",
-    description: "We pick the formats, the platforms and the cadence for your page. You bring access and references; I bring the plan.",
-    overlay: <span className="site-how-mark">{"01 // 45 minutes"}</span>,
-    background: triptych("/brand/agency/clipping.jpg", "/brand/agency/trending-news.jpg", "/brand/agency/talking-characters.jpg"),
+    title: "You fill out the form then we hop on a call.",
+    description: "You tell me about your business and what you charge.",
+    overlay: <span className="site-how-mark">01</span>,
+    image: unsplash("photo-1616587226960-4a03badbe8bf"),
+    imageAlt: "A man on a video call at his laptop",
   },
   {
-    id: "program",
-    title: "I program the agents.",
-    description: "Each agent gets your voice, your brand, its guardrails and the approval rule: every post, or none.",
-    overlay: <span className="site-how-mark">{"02 // First week"}</span>,
-    image: "/brand/hero/editor.webp",
-    imageAlt: "The Posterract editor with three scenes of a video on its canvas",
+    id: "plan",
+    title: "You send the invoice for the month and I put together a plan.",
+    overlay: <span className="site-how-mark">02</span>,
+    image: unsplash("photo-1454165804606-c3d57bc86b40"),
+    imageAlt: "Hands writing a plan on paper beside two laptops",
   },
   {
-    id: "produce",
-    title: "They produce and schedule.",
-    description: "The calendar fills. Every post is made on the same editor you can see in product mode, then scheduled to your accounts.",
-    overlay: <span className="site-how-mark">{"03 // Every week"}</span>,
-    background: triptych("/brand/hero/fomo.jpg", "/brand/hero/multiplier.jpg", "/brand/hero/crypto3d.jpg"),
+    id: "post",
+    title: "I start posting across all platforms and execute the plan.",
+    overlay: <span className="site-how-mark">03</span>,
+    image: unsplash("photo-1690883793939-f8cca2f28ee0"),
+    imageAlt: "A hand holding a phone open to its social media apps",
   },
   {
-    id: "learn",
-    title: "We learn.",
-    description: "The analytics from what posted flow back to the agents. Hooks that worked get reused; formats that didn't get retired.",
-    overlay: <span className="site-how-mark">{"04 // Weekly review"}</span>,
-    background: triptych("/brand/hero/postmortem-1.jpg", "/brand/hero/pons.jpg", "/brand/hero/hyperspell.jpg"),
+    id: "results",
+    title: "I check results and analytics daily and feed them to my Agent.",
+    description: "Content improves BY THE DAY. New angles every 24 hours until we see results.",
+    overlay: <span className="site-how-mark">04</span>,
+    image: unsplash("photo-1551288049-bebda4e38f71"),
+    imageAlt: "Analytics charts on a dark dashboard",
+  },
+  {
+    id: "brand",
+    title: "We build a LONG-LASTING, SUSTAINABLE brand with high quality content that you OWN forever.",
+    overlay: <span className="site-how-mark">05</span>,
+    image: unsplash("photo-1625690303837-654c9666d2d0"),
+    imageAlt: "A silhouette filming with a cinema camera in blue and red light",
   },
 ];
 
@@ -267,8 +274,8 @@ export function HowItRuns() {
     <section className="site-agency-section site-how" id="how" aria-labelledby="how-title">
       <div className="site-platforms-heading">
         <div>
-          <p className="site-kicker">HOW IT WORKS // FOUR STEPS</p>
-          <h2 id="how-title">From one call to a page that posts itself.</h2>
+          <p className="site-kicker">the steps we go through</p>
+          <h2 id="how-title">How This Process Works</h2>
         </div>
         <p>The system is the product you can switch to at the top of this page. The service is me running it for you.</p>
       </div>
