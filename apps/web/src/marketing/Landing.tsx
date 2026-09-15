@@ -47,17 +47,6 @@ const SWITCH: Array<{ mode: LandingMode; label: string }> = [
   { mode: "work", label: "Work with me" },
 ];
 
-const SECTIONS: Record<LandingMode, Array<{ n: string; label: string; href: string }>> = {
-  product: [
-    { n: "01", label: "Network", href: "#platforms" },
-    { n: "02", label: "Pricing", href: "#pricing" },
-  ],
-  work: [
-    { n: "01", label: "The team", href: "#team" },
-    { n: "02", label: "How it runs", href: "#how" },
-    { n: "03", label: "Apply", href: "#apply" },
-  ],
-};
 
 type PlatformPhase = "live" | "limited" | "next";
 
@@ -105,14 +94,6 @@ const ENTER = { duration: 0.5, ease: [0.22, 1, 0.36, 1] as const };
 const SWAP = { staggerDuration: 0.022, transition: { type: "spring", duration: 0.55, bounce: 0.18 } as const };
 
 /** A nav link whose letters swap on hover; the whole link is the hover surface. */
-function NavLink({ href, label }: { href: string; label: string }) {
-  const { hovered, handlers } = useHoverIntent();
-  return (
-    <a href={href} {...handlers}>
-      <RandomLetterSwap label={label} hovered={hovered} {...SWAP} />
-    </a>
-  );
-}
 
 function NavButton({ className, label, onClick }: { className: string; label: string; onClick: () => void }) {
   const { hovered, handlers } = useHoverIntent();
@@ -227,11 +208,6 @@ export function Landing() {
           <div className="site-nav-brand">
             <a className="site-wordmark" href="#top" aria-label="Posterract home">POSTER<span>RACT</span></a>
           </div>
-          <nav aria-label="Primary navigation">
-            {SECTIONS[mode].map((section) => (
-              <NavLink href={section.href} label={section.label} key={section.href} />
-            ))}
-          </nav>
           <div className="site-nav-actions">
             <NavButton className="site-nav-ghost" label="Sign in" onClick={() => goAuth("signin")} />
             <ShinyButton size="sm" label="Sign up" onClick={() => goAuth("signup")} />

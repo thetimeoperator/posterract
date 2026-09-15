@@ -23,6 +23,7 @@
   min-height: 52px;
   margin: 0;
   padding: 0 var(--site-edge);
+  grid-template-columns: 1fr auto;
   border: 0;
   background: transparent;
   box-shadow: none;
@@ -1361,7 +1362,6 @@
 @media (max-width: 900px) {
   .site-nav-slim { padding: 0 16px; }
   .site-hero-lever { padding-top: 8px; }
-  .site-nav-slim nav { display: none; }
   .site-stage-section[data-small="true"] .site-stage-head { padding: 60px var(--site-edge) 4px; grid-template-columns: 1fr; gap: 6px; }
   .site-stage-section[data-small="true"] .site-stage-sticky { grid-template-rows: minmax(0, 1fr); }
   .site-stage-section[data-small="true"] .site-stack-card { top: 30%; }

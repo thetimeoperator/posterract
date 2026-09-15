@@ -2997,6 +2997,7 @@
   min-height: 52px;
   margin: 0;
   padding: 0 var(--site-edge);
+  grid-template-columns: 1fr auto;
   border: 0;
   background: transparent;
   box-shadow: none;
@@ -4398,10 +4399,6 @@
 
   .site[data-palette="cyan"] .site-hero-lever {
     padding-top: 8px;
-  }
-
-  .site[data-palette="cyan"] .site-nav-slim nav {
-    display: none;
   }
 
   .site[data-palette="cyan"] .site-stage-section[data-small="true"] .site-stage-head {
