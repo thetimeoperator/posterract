@@ -1557,25 +1557,47 @@
   text-wrap: balance;
 }
 
-/* The accounts: one set is the eight platform logos in a row; Operation Turbo shows several sets. */
+/* The accounts: a set is the eight platform logos packed into one card, three over two over three, in the
+   brief's slab material. Operation Turbo shows three sets; every set is the same size, so the tiles match. */
 .site-brief-sets {
-  display: grid;
-  margin-top: 6px;
+  display: flex;
+  margin-top: 8px;
+  flex-wrap: wrap;
   align-self: start;
-  gap: 8px;
+  gap: clamp(3px, 1vw, 12px);
 }
 
 .site-brief-set {
+  display: grid;
+  padding: clamp(5px, 0.9vw, 10px);
+  gap: clamp(3px, 0.4vw, 5px);
+  border: 1px solid rgba(101, 255, 154, 0.2);
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 50% 30%, rgba(101, 255, 154, 0.1), transparent 70%),
+    linear-gradient(160deg, rgba(20, 52, 34, 0.92) 0%, rgba(6, 18, 11, 0.95) 55%, rgba(3, 10, 6, 0.97) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(160, 255, 196, 0.26),
+    0 3px 0 #0a2e1c,
+    0 4px 0 #041a0f,
+    0 12px 24px rgba(0, 0, 0, 0.45);
+  transition: border-color 160ms ease, box-shadow 200ms ease;
+}
+
+.site-brief-option[data-selected="true"] .site-brief-set {
+  border-color: rgba(101, 255, 154, 0.5);
+  box-shadow:
+    inset 0 1px 0 rgba(160, 255, 196, 0.32),
+    0 3px 0 #0a2e1c,
+    0 4px 0 #041a0f,
+    0 12px 24px rgba(0, 0, 0, 0.45),
+    0 0 22px rgba(101, 255, 154, 0.16);
+}
+
+.site-brief-set-row {
   display: flex;
-  padding: 8px 12px;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  border: 1px solid rgba(101, 255, 154, 0.14);
-  border-radius: 5px;
-  background: rgba(4, 13, 9, 0.64);
-  box-shadow: inset 0 1px rgba(255, 255, 255, 0.055);
+  justify-content: center;
+  gap: inherit;
 }
 
 .site-brief-set img {
@@ -1583,6 +1605,7 @@
   width: 20px;
   height: 20px;
   object-fit: contain;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
 }
 
 /* YouTube's icon never renders below 20px tall. */
@@ -1708,6 +1731,5 @@
   .site-brief-options { grid-template-columns: 1fr; row-gap: clamp(14px, 2vw, 24px); }
   .site-brief-option { padding: 18px 18px 20px; align-content: start; grid-row: auto; grid-template-rows: none; }
   .site-brief-price { font-size: clamp(40px, 12vw, 54px); }
-  .site-brief-set { padding: 8px 10px; gap: 6px; }
   .site-brief-row { grid-template-columns: 1fr; }
 }

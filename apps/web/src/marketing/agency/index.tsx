@@ -17,8 +17,9 @@ export const AGENCY = {
   bookingUrl: null as string | null,
 };
 
-/** One set of accounts: the eight platforms. */
+/** One set of accounts: the eight platforms, packed into one card three over two over three. */
 const ACCOUNT_SET: Array<keyof typeof PLATFORM_MARK_SOURCES> = ["instagram", "tiktok", "facebook", "youtube", "threads", "x", "linkedin", "reddit"];
+const SET_ROWS = [ACCOUNT_SET.slice(0, 3), ACCOUNT_SET.slice(3, 5), ACCOUNT_SET.slice(5)];
 
 /** The two ways to work, exactly as offered, with the sets of accounts each one runs. */
 const OPTIONS = [
@@ -153,8 +154,12 @@ export function WorkForm() {
               <span className="site-brief-sets" aria-hidden="true">
                 {Array.from({ length: entry.sets }, (_, index) => (
                   <span className="site-brief-set" key={index}>
-                    {ACCOUNT_SET.map((platform) => (
-                      <img src={PLATFORM_MARK_SOURCES[platform]} alt="" data-platform={platform} key={platform} />
+                    {SET_ROWS.map((row) => (
+                      <span className="site-brief-set-row" key={row[0]}>
+                        {row.map((platform) => (
+                          <img src={PLATFORM_MARK_SOURCES[platform]} alt="" data-platform={platform} key={platform} />
+                        ))}
+                      </span>
                     ))}
                   </span>
                 ))}
