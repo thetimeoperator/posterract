@@ -1,0 +1,25 @@
+/* Keep calendar density local: no changes to composer or shared card styles. */
+.calendar-month-scroll {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.calendar-month-content { min-width: 900px; }
+.calendar-month-grid { grid-auto-rows: 160px; }
+.calendar-month-day { height: 160px; padding: 6px; overflow: hidden; }
+.calendar-month-day-heading { display: flex; align-items: center; height: 16px; flex: none; }
+.calendar-month-more { flex: none; margin-top: auto; text-align: left; font-size: 10px; line-height: 14px; color: var(--starlight-dim); white-space: nowrap; }
+.calendar-month-more:hover { color: var(--neon); }
+.calendar-month-posts { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; min-width: 0; min-height: 0; overflow-y: auto; }
+
+.calendar-post-block.calendar-post-compact { padding: 6px; min-height: 54px; }
+.calendar-post-block--month.calendar-post-compact { flex: none; }
+.calendar-post-summary { display: flex; flex: 1; flex-direction: column; gap: 4px; min-width: 0; }
+.calendar-post-heading { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.calendar-post-title { display: block; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 500; line-height: 16px; color: var(--starlight); }
+.calendar-post-meta { display: flex; flex: none; align-items: center; gap: 4px; height: 12px; font-size: 9px; line-height: 12px; font-variant-numeric: tabular-nums; color: var(--starlight-dim); white-space: nowrap; }
+.calendar-post-meta [role="img"] { width: 4px; height: 4px; }
+.calendar-post-platforms { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: 4px; min-height: 20px; }
+.calendar-post-compact:focus-visible { outline: 2px solid var(--neon); outline-offset: -2px; }

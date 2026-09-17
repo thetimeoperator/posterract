@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Button3D } from "@/components/ui/button-3d";
+import { AntiMetalButton } from "@/components/ui/anti-metal-button";
 import { motion, useMotionValue, useReducedMotion, useScroll, useSpring, useTransform } from "framer-motion";
 import { StackSpread, type StackCard } from "@/components/ui/stack-spread";
 import { TiltCard, type TiltLayer } from "@/components/ui/tilt-card";
@@ -100,12 +100,12 @@ function Copy({ onLaunch, fork }: { onLaunch: () => void; fork: ReactNode }) {
     <div className="site-stage-copy">
       <div className="site-stage-lever">{fork}</div>
       <h1 id="site-title" aria-label="Create and Schedule Content with your AI Agent">
-        <span className="site-hero-title-line">Create and Schedule Content</span>
+        <span className="site-hero-title-line">Create and Schedule Content</span>{" "}
         <span className="site-hero-title-line">with your AI Agent</span>
       </h1>
       <p className="site-kicker site-stage-kicker">THE AGENT-FIRST SOCIAL MEDIA EDITOR AND SCHEDULER</p>
       <div className="site-stage-actions">
-        <Button3D label="Launch Posterract" onClick={onLaunch} />
+        <AntiMetalButton label="Launch Posterract" className="w-[196px]" onClick={onLaunch} />
       </div>
     </div>
   );

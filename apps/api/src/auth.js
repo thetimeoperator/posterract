@@ -153,11 +153,17 @@ export function authOptions(postgres) {
                 "x",
                 "youtube",
               ]) {
+                // Multiple accounts per provider are supported. The app-user
+                // upsert above serializes provisioning for this user; only add
+                // a placeholder when this workspace has no account to reuse.
                 await client.query(
                   `insert into social_accounts
                     (workspace_id, provider, handle, status)
-                   values ($1, $2, 'not connected', 'disconnected')
-                   on conflict (workspace_id, provider) do nothing`,
+                   select $1, $2, 'not connected', 'disconnected'
+                   where not exists (
+                     select 1 from social_accounts
+                     where workspace_id = $1 and provider = $2
+                   )`,
                   [workspaceId, provider],
                 );
               }

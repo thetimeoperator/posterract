@@ -181,8 +181,7 @@ function parseMultipart(body, boundary) {
  * Two rules, both about protecting the margin rather than the balance:
  *
  * The editor plan grants no credits at all — it is for people bringing their
- * own provider keys — so its refusal is an upgrade prompt, not a balance
- * error.
+ * own provider keys — so its refusal points to the editor's provider settings.
  *
  * 2k video costs twice what 768p does per second, and MiniMax's own
  * pay-as-you-go runs to $0.56 a clip. A plan sized against 768p empties twice
@@ -197,8 +196,7 @@ function planRefusal(plan, kind, params) {
       error: "plan_excludes_generation",
       plan: plan ?? null,
       detail:
-        "This plan includes the editor and publishing, not generation. Upgrade to Allstar to generate images, video and voice, or add your own provider keys.",
-      upgradeTo: "allstar",
+        "Add your own AI provider keys in the desktop editor to generate images, video and voice. Your provider bills AI usage directly.",
     };
   }
 
@@ -207,8 +205,7 @@ function planRefusal(plan, kind, params) {
       error: "plan_excludes_resolution",
       plan,
       resolution: params.resolution,
-      detail: `${params.resolution} video is not included in the ${plan} plan.`,
-      upgradeTo: "superstar",
+      detail: `${params.resolution} video is not included in the ${plan} plan. Use your own provider key in the desktop editor for this resolution.`,
     };
   }
 
@@ -237,8 +234,7 @@ async function consumeTranscribeSeconds(postgres, workspaceId, seconds) {
       error: "plan_excludes_transcription",
       plan,
       detail:
-        "This plan does not include transcription. Upgrade to Allstar for 120 minutes a cycle, or add your own transcription key.",
-      upgradeTo: "allstar",
+        "Add your own transcription provider key in the desktop editor to transcribe audio. Your provider bills usage directly.",
     };
   }
 

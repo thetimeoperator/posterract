@@ -26,6 +26,10 @@ const migrationNames = [
   "004-agent-chats.sql",
   "005-tiktok-draft-status.sql",
   "006-stripe-billing.sql",
+  "011-ai-credits.sql",
+  "013-plan-rename.sql",
+  "014-transcribe-minutes.sql",
+  "015-plan-names.sql",
 ];
 const workspaceId = "00000000-0000-4000-8000-000000000101";
 const userId = "00000000-0000-4000-8000-000000000102";
@@ -87,6 +91,7 @@ function stripeMock() {
     customers: [],
     checkouts: [],
     portals: [],
+    configurations: [],
   };
   const client = {
     products: {
@@ -140,7 +145,12 @@ function stripeMock() {
         },
       },
     },
+    subscriptions: { retrieve: async (id) => ({ ...subscriptionObject(), id, items: { data: [{ id: "si_posterract", quantity: 1, price: { id: environment.STRIPE_PRO_MONTHLY_PRICE_ID } }] } }) },
     billingPortal: {
+      configurations: {
+        list: async () => ({ data: [] }),
+        create: async (settings) => { calls.configurations.push(settings); return { id: `bpc_posterract_${calls.configurations.length}` }; },
+      },
       sessions: {
         create: async (...args) => {
           calls.portals.push(args);
@@ -448,8 +458,8 @@ test("Checkout refuses a tier whose Stripe price does not match the catalogue", 
     prices: {
       retrieve: async (id) => {
         const price = await inner(id);
-        return id === environment.STRIPE_ALLSTAR_MONTHLY_PRICE_ID
-          ? { ...price, unit_amount: 490 }
+        return id === environment.STRIPE_PRO_MONTHLY_PRICE_ID
+          ? { ...price, unit_amount: 200 }
           : price;
       },
     },
@@ -460,7 +470,7 @@ test("Checkout refuses a tier whose Stripe price does not match the catalogue", 
       method: "POST",
       url: "/v1/billing/checkout",
       headers: { "idempotency-key": "checkout-mistyped-0001" },
-      payload: { plan: "allstar", interval: "monthly" },
+      payload: { plan: "pro", interval: "monthly" },
     });
     assert.equal(response.statusCode, 503);
     assert.equal(response.json().error, "stripe_catalog_mismatch");
@@ -481,9 +491,8 @@ test("Checkout validates the live catalog and prevents duplicate subscriptions",
     assert.equal(config.json().plans.yearly.amount, 20_000);
     // The yearly amount must be the one Stripe holds. Deriving it from the
     // monthly figure advertised $49/year for a plan billed $490.
-    assert.equal(config.json().creditPlans.allstar.amount, 4_900);
-    assert.equal(config.json().creditPlans.allstar.yearlyAmount, 49_000);
-    assert.equal(config.json().creditPlans.superstar.yearlyAmount, 99_000);
+    assert.deepEqual(Object.keys(config.json().creditPlans), ["pro"]);
+    assert.equal(config.json().creditPlans.pro.yearlyAmount, 20_000);
 
     const missingKey = await app.inject({
       method: "POST",
@@ -505,7 +514,7 @@ test("Checkout validates the live catalog and prevents duplicate subscriptions",
     assert.equal(calls.checkouts.length, 1);
     assert.equal(
       calls.checkouts[0][0].line_items[0].price,
-      environment.STRIPE_YEARLY_PRICE_ID,
+      environment.STRIPE_PRO_YEARLY_PRICE_ID,
     );
     assert.equal(calls.checkouts[0][0].metadata.workspace_id, workspaceId);
     assert.equal(
@@ -516,6 +525,8 @@ test("Checkout validates the live catalog and prevents duplicate subscriptions",
       calls.checkouts[0][0].success_url,
       "https://posterract.app/settings?billing=success&session_id={CHECKOUT_SESSION_ID}",
     );
+    assert.equal(calls.checkouts[0][0].cancel_url,
+      "https://posterract.app/settings?billing=cancelled&plan=pro&interval=yearly");
 
     const replay = await app.inject({
       method: "POST",
@@ -626,4 +637,140 @@ test("signed non-live events are recorded but cannot change entitlements", async
     await app.close();
     await postgres.close();
   }
+});
+
+test("billing portal isolates configuration and confirms only an owned subscription change", async () => {
+  const { postgres, pool } = await database();
+  const { client, calls } = stripeMock();
+  const { app, service } = await testApp(pool, client);
+  try {
+    await pool.query("insert into billing_customers(workspace_id,stripe_customer_id) values($1,'cus_posterract')", [workspaceId]);
+    await pool.query(`insert into billing_subscriptions(stripe_subscription_id,workspace_id,stripe_customer_id,stripe_price_id,status,recognized_plan)
+      values('sub_posterract',$1,'cus_posterract',$2,'active',true)`, [workspaceId, environment.STRIPE_PRO_MONTHLY_PRICE_ID]);
+    const options = { method: "POST", url: "/v1/billing/portal", headers: { "idempotency-key": "portal-test-owned-001" } };
+    const manage = await app.inject({ ...options, payload: {} });
+    assert.equal(manage.statusCode, 200);
+    assert.equal(calls.portals[0][0].configuration, "bpc_posterract_1");
+    assert.equal(calls.configurations[0].features.subscription_cancel.mode, "at_period_end");
+    assert.equal(calls.configurations[0].features.invoice_history.enabled, true);
+    const review = await app.inject({ ...options, payload: { plan: "pro", interval: "yearly" } });
+    assert.equal(review.statusCode, 200);
+    assert.deepEqual(calls.portals[1][0].flow_data.subscription_update_confirm, {
+      subscription: "sub_posterract", items: [{ id: "si_posterract", price: "price_pro_yearly", quantity: 1 }],
+    });
+    assert.deepEqual(calls.configurations[1].features.subscription_update.products, [{ product: "prod_posterract", prices: ["price_pro", "price_pro_yearly"] }]);
+    assert.equal(calls.configurations[1].features.subscription_update.proration_behavior, "always_invoice");
+    assert.equal(calls.configurations[1].features.subscription_update.schedule_at_period_end.conditions.length, 2);
+    assert.equal(calls.configurations[1].metadata.app, "posterract");
+    await assert.rejects(service.createPortal({ workspaceId, role: "member", key: "member-portal-test" }), { code: "billing_admin_required" });
+    const member = await service.loadSubscription(workspaceId, "member");
+    assert.equal(member.canManageBilling, false);
+    const owner = await service.loadSubscription(workspaceId, "owner");
+    assert.equal(owner.canManageBilling, true);
+    assert.equal(owner.plan.id, "pro");
+    const same = await app.inject({ ...options, payload: { plan: "pro", interval: "monthly" } });
+    assert.equal(same.json().error, "plan_already_selected");
+    const invalid = await app.inject({ ...options, payload: { plan: "unknown", interval: "yearly" } });
+    assert.equal(invalid.statusCode, 400);
+    client.subscriptions.retrieve = async () => ({ ...subscriptionObject(), customer: "cus_another_workspace" });
+    const foreign = await app.inject({ ...options, payload: { plan: "pro", interval: "yearly" } });
+    assert.equal(foreign.json().error, "stripe_customer_workspace_conflict");
+    assert.equal(calls.portals.length, 2);
+  } finally { await app.close(); await postgres.close(); }
+});
+
+test("signed checkout expiration updates status without changing paid access", async () => {
+  const { postgres, pool } = await database();
+  const { client, signatures } = stripeMock();
+  const { app, service } = await testApp(pool, client);
+  try {
+    await service.createCheckout({ workspaceId, userId, role: "owner", interval: "monthly", plan: "pro", key: "checkout-expiration-test" });
+    const payload = eventPayload({ id: "evt_expiration", type: "checkout.session.expired", data: { object: {
+      id: "cs_live_posterract", mode: "subscription", status: "expired", customer: "cus_posterract", payment_status: "unpaid",
+      metadata: { workspace_id: workspaceId, user_id: userId, price_id: "price_pro", billing_interval: "month" },
+    } } });
+    const result = await app.inject({ method: "POST", url: "/v1/webhooks/stripe", headers: signedHeaders(signatures, payload), payload });
+    assert.equal(result.statusCode, 200);
+    assert.equal(result.json().processed, true);
+    assert.equal((await pool.query("select status from billing_checkout_sessions")).rows[0].status, "expired");
+    assert.equal((await service.loadSubscription(workspaceId)).entitled, false);
+  } finally { await app.close(); await postgres.close(); }
+});
+
+test("only Pro can be purchased or selected, even when retired prices remain configured", async () => {
+  const { postgres, pool } = await database();
+  const { client, calls } = stripeMock();
+  const { app } = await testApp(pool, client);
+  try {
+    for (const plan of ["allstar", "superstar"]) {
+      for (const interval of ["monthly", "yearly"]) {
+        for (const path of ["checkout", "portal"]) {
+          const response = await app.inject({ method: "POST", url: `/v1/billing/${path}`, headers: { "idempotency-key": `retired-${path}-${plan}-${interval}` }, payload: { plan, interval } });
+          assert.equal(response.statusCode, 400);
+          assert.equal(response.json().error, "invalid_plan");
+        }
+      }
+    }
+    assert.equal(calls.checkouts.length, 0);
+    assert.equal(calls.portals.length, 0);
+    const onlyPro = { ...environment };
+    for (const key of Object.keys(onlyPro)) if (/STRIPE_(ALLSTAR|SUPERSTAR)_/.test(key)) delete onlyPro[key];
+    const service = createStripeBillingService({ postgres: pool, environment: onlyPro, stripeClient: client });
+    assert.equal(service.config.configured, true);
+    await service.verifyCatalog();
+    assert.deepEqual(Object.keys(service.publicConfig().creditPlans), ["pro"]);
+  } finally { await app.close(); await postgres.close(); }
+});
+
+test("Pro cancellation, resumption, renewal failure and recovery preserve the correct access", async () => {
+  const { postgres, pool } = await database();
+  const { client, signatures, calls } = stripeMock();
+  const { app, service } = await testApp(pool, client);
+  let sequence = 0;
+  const base = subscriptionObject();
+  base.items.data[0].price.id = environment.STRIPE_PRO_MONTHLY_PRICE_ID;
+  async function send(type, object) {
+    const payload = eventPayload({ id: `evt_lifecycle_${++sequence}`, type, data: { object } });
+    const response = await app.inject({ method: "POST", url: "/v1/webhooks/stripe", headers: signedHeaders(signatures, payload), payload });
+    assert.equal(response.statusCode, 200, response.body);
+    assert.equal(response.json().processed, true);
+  }
+  try {
+    await send("customer.subscription.created", base);
+    await send("customer.subscription.updated", { ...base, cancel_at_period_end: true, cancel_at: 1_801_000_000 });
+    let state = await service.loadSubscription(workspaceId, "owner");
+    assert.equal(state.plan.id, "pro");
+    assert.equal(state.entitled, true, "Cancellation preserves access during the paid period");
+    assert.equal(state.cancelAtPeriodEnd, true);
+    assert.equal(state.currentPeriodEnd, 1_801_000_000_000);
+    await assert.rejects(service.createCheckout({ workspaceId, userId, role: "owner", interval: "monthly", plan: "pro", key: "cancelled-still-paid" }), { code: "subscription_already_exists" });
+
+    for (const pending of [{ cancel_at_period_end: true }, { schedule: "sub_sched_test" }, { pending_update: { expires_at: 1_801_000_000 } }]) {
+      client.subscriptions.retrieve = async () => ({ ...base, ...pending, items: { data: [{ ...base.items.data[0], id: "si_posterract", quantity: 1 }] } });
+      await assert.rejects(service.createPortal({ workspaceId, role: "owner", key: `pending-${sequence}`, plan: "pro", interval: "yearly" }), { code: "subscription_change_pending" });
+      await service.createPortal({ workspaceId, role: "owner", key: `manage-${sequence++}` });
+    }
+    assert.equal(calls.portals.length, 3, "Management remains available while changes are pending");
+
+    await send("customer.subscription.updated", base);
+    state = await service.loadSubscription(workspaceId);
+    assert.equal(state.cancelAtPeriodEnd, false);
+    assert.equal(state.entitled, true);
+    const invoice = { id: "in_pro_renewal", object: "invoice", customer: base.customer, subscription: base.id, livemode: true, billing_reason: "subscription_cycle", status_transitions: { paid_at: 1_801_000_010 } };
+    await send("invoice.payment_failed", invoice);
+    assert.equal((await service.loadSubscription(workspaceId)).entitled, false);
+    await send("customer.subscription.updated", { ...base, status: "past_due" });
+    await send("invoice.paid", invoice);
+    assert.equal((await service.loadSubscription(workspaceId)).entitled, false, "Payment waits for Stripe's active subscription state");
+    const renewed = { ...base, items: { data: [{ ...base.items.data[0], current_period_start: 1_801_000_000, current_period_end: 1_803_600_000 }] } };
+    await send("customer.subscription.updated", renewed);
+    state = await service.loadSubscription(workspaceId);
+    assert.equal(state.entitled, true);
+    assert.equal(state.lastPaymentStatus, "paid");
+    assert.equal(state.currentPeriodEnd, 1_803_600_000_000);
+    await send("customer.subscription.deleted", { ...renewed, status: "canceled", ended_at: 1_803_600_000 });
+    assert.equal((await service.loadSubscription(workspaceId)).entitled, false);
+    await service.createCheckout({ workspaceId, userId, role: "owner", interval: "yearly", plan: "pro", key: "resubscribe-pro-yearly" });
+    assert.equal(calls.checkouts[0][0].line_items[0].price, environment.STRIPE_PRO_YEARLY_PRICE_ID);
+  } finally { await app.close(); await postgres.close(); }
 });

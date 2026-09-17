@@ -194,9 +194,7 @@ test("credit plan definitions expose the launch catalog", async () => {
       interval: "month",
       credits: 0,
     });
-    assert.equal(config.json().creditPlans.allstar.yearlyAmount, 49_000);
-    assert.equal(config.json().creditPlans.superstar.yearlyAmount, 99_000);
-    assert.equal(config.json().creditPlans.superstar.credits, 3_000);
+    assert.deepEqual(Object.keys(config.json().creditPlans), ["pro"]);
   } finally {
     await app.close();
     await postgres.close();
@@ -507,4 +505,30 @@ test("credits refill a month from the payment date, even on a yearly invoice", a
     await app.close();
     await postgres.close();
   }
+});
+
+test("paid upgrade uses the new invoice line and preserves credit usage and refill date", async () => {
+  const { postgres, pool } = await database();
+  const { app, send } = await testApp(pool);
+  try {
+    await send({ id: "evt_upgrade_sub", type: "customer.subscription.created", data: { object: creditSubscription() } });
+    await pool.query(`update workspace_credits set plan='allstar', balance=700, allotment=1200,
+      cycle_started_at='2027-01-01', cycle_resets_at='2027-02-01' where workspace_id=$1`, [workspaceId]);
+    const invoice = { ...paidInvoice({ id: "in_upgrade", priceId: "price_superstar", periodStart: 1_800_000_000, periodEnd: 1_801_000_000 }), billing_reason: "subscription_update" };
+    invoice.lines.data = [
+      { amount: -1500, price: { id: "price_allstar" }, proration: true },
+      { amount: 0, price: { id: "price_allstar" }, proration: true },
+      { amount: 3000, pricing: { price_details: { price: "price_superstar" } }, parent: { subscription_item_details: { proration: true } } },
+    ];
+    const response = await send({ id: "evt_upgrade_paid", type: "invoice.paid", data: { object: invoice } });
+    assert.equal(response.statusCode, 200);
+    let result = (await pool.query("select * from workspace_credits where workspace_id=$1", [workspaceId])).rows[0];
+    assert.equal(result.plan, "superstar");
+    assert.equal(Number(result.balance), 2500);
+    assert.equal(Number(result.allotment), 3000);
+    assert.equal(new Date(result.cycle_resets_at).toISOString(), "2027-02-01T00:00:00.000Z");
+    await send({ id: "evt_upgrade_paid_duplicate_invoice", type: "invoice.paid", data: { object: invoice } });
+    result = (await pool.query("select balance from workspace_credits where workspace_id=$1", [workspaceId])).rows[0];
+    assert.equal(Number(result.balance), 2500);
+  } finally { await app.close(); await postgres.close(); }
 });

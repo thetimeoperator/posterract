@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, CheckCircle2, CircleAlert, CircleX, Replace, Send, X as XIcon } from "lucide-react";
 import clsx from "clsx";
@@ -7,7 +7,6 @@ import {
   FieldShell,
   Modal,
   Panel,
-  PlatformChip,
   Segmented,
   Tabs,
   Textarea,
@@ -17,6 +16,9 @@ import type { PlatformId } from "@posterract/contract";
 import { PLATFORM_CAPABILITIES, PUBLISHING_PLATFORM_IDS } from "@posterract/contract";
 import { VideoDropzone } from "@/components/VideoDropzone";
 import { ArtifactThumb } from "@/components/ArtifactThumb";
+import { AccountTargets } from "@/components/AccountTargets";
+import { TikTokDeclaration, TikTokSettings, TikTokHoverHint, TIKTOK_DISCLOSURE_HINT } from "@/components/TikTokSettings";
+import { emptyTikTokOptions, validateTikTokOptions, type TikTokCreatorInfo } from "@posterract/contract/tiktok";
 import {
   artifactUrl,
   computePreflight,
@@ -25,18 +27,30 @@ import {
   useAccountSets,
   useEngineActions,
   usePortals,
+  useTransmissions,
+  useProjections,
+  getTikTokCreatorInfo,
 } from "@/engine/useEngine";
 import { aspectLabel, formatBytes, formatDuration, toDatetimeLocal } from "@/lib/fmt";
+import type { CreateTransmissionInput } from "@/engine/store";
+import { isPosterractDesktop } from "@/lib/desktop";
+import { WebComposer } from "@/components/composer/WebComposer";
 
-type ComposeSearch = { artifact?: string; at?: number };
+type ComposeSearch = { artifact?: string; at?: number; copy?: string };
 
 export const Route = createFileRoute("/_app/compose")({
-  component: Composer,
+  component: ComposerEntry,
   validateSearch: (search: Record<string, unknown>): ComposeSearch => ({
     artifact: typeof search.artifact === "string" ? search.artifact : undefined,
     at: typeof search.at === "number" ? search.at : undefined,
+    copy: typeof search.copy === "string" ? search.copy : undefined,
   }),
 });
+
+function ComposerEntry() {
+  const search = Route.useSearch();
+  return isPosterractDesktop() ? <Composer /> : <WebComposer search={search} />;
+}
 
 function Composer() {
   const navigate = useNavigate();
@@ -44,6 +58,8 @@ function Composer() {
   const artifacts = useArtifacts();
   const portals = usePortals();
   const accountSets = useAccountSets();
+  const transmissions = useTransmissions();
+  const projections = useProjections();
   const { createTransmission } = useEngineActions();
 
   const [artifactId, setArtifactId] = useState<string | undefined>(search.artifact);
@@ -57,6 +73,12 @@ function Composer() {
   const [tagDraft, setTagDraft] = useState("");
   const [platforms, setPlatforms] = useState<PlatformId[]>(["instagram", "tiktok"]);
   const [accountSetId, setAccountSetId] = useState("");
+  const [selectedAccounts, setSelectedAccounts] = useState<Partial<Record<PlatformId, string>>>({});
+  const [tiktok, setTikTok] = useState(emptyTikTokOptions);
+  const [creatorState, setCreatorState] = useState<{ accountId?: string; info?: TikTokCreatorInfo; loading: boolean; error?: string }>({ loading: false });
+  const [creatorRefresh, setCreatorRefresh] = useState(0);
+  const copied = useRef(false);
+  const lastSubmission = useRef<{ fingerprint: string; key: string } | undefined>(undefined);
   const [captionTab, setCaptionTab] = useState<"base" | PlatformId>("base");
   const [mode, setMode] = useState<"now" | "at">(search.at ? "at" : "now");
   const [whenLocal, setWhenLocal] = useState(() => toDatetimeLocal(search.at ?? Date.now() + 3600_000));
@@ -64,6 +86,46 @@ function Composer() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [safeZones, setSafeZones] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    setSelectedAccounts((current) => {
+      const next = { ...current };
+      let changed = false;
+      for (const provider of platforms) {
+        const available = portals.filter((a) => a.provider === provider && a.status === "connected");
+        if (current[provider] === undefined && available.length === 1) { next[provider] = available[0].id; changed = true; }
+      }
+      return changed ? next : current;
+    });
+  }, [portals, platforms]);
+  useEffect(() => {
+    if (!search.copy || copied.current) return;
+    const source = transmissions.find((t) => t.id === search.copy);
+    const targets = projections.filter((p) => p.transmissionId === search.copy);
+    if (!source || !targets.length) return;
+    copied.current = true;
+    setArtifactId(source.artifactId);
+    setBaseCaption(source.baseCaption);
+    // Stored platform captions already include the original hashtags.
+    setHashtags([]);
+    setOverrides(Object.fromEntries(targets.map((p) => [p.provider, p.caption])));
+    setPlatforms(targets.map((p) => p.provider));
+    setSelectedAccounts(Object.fromEntries(targets.map((p) => [p.provider, p.portalId || ""])));
+    setTikTok(emptyTikTokOptions());
+  }, [search.copy, transmissions, projections]);
+
+  const tiktokAccountId = platforms.includes("tiktok") ? selectedAccounts.tiktok : undefined;
+  useEffect(() => { setTikTok(emptyTikTokOptions()); }, [tiktokAccountId]);
+  useEffect(() => {
+    let active = true;
+    setCreatorState({ accountId: tiktokAccountId, loading: !!tiktokAccountId });
+    if (tiktokAccountId) void getTikTokCreatorInfo(tiktokAccountId).then(
+      (info) => { if (active) setCreatorState({ accountId: tiktokAccountId, info, loading: false }); },
+      (error) => { if (active) setCreatorState({ accountId: tiktokAccountId, loading: false, error: error instanceof Error ? error.message : "Could not load TikTok settings." }); },
+    );
+    return () => { active = false; };
+  }, [tiktokAccountId, creatorRefresh]);
+  const creator = creatorState.accountId === tiktokAccountId ? creatorState.info : undefined;
 
   const artifact = artifacts.find((a) => a.id === artifactId);
   const previewUrl = artifactUrl(artifactId);
@@ -81,11 +143,7 @@ function Composer() {
 
   const selectedAccountSet = accountSets.find((set) => set.id === accountSetId);
   const portalStatus = (p: PlatformId) =>
-    selectedAccountSet
-      ? selectedAccountSet.accounts.find((account) => account.provider === p)?.status
-      : portals.some((account) => account.provider === p && account.status === "connected")
-        ? "connected"
-        : portals.find((account) => account.provider === p)?.status;
+    portals.find((account) => account.id === selectedAccounts[p] && account.provider === p)?.status;
 
   const preflight = useMemo(() => {
       const checks = computePreflight({
@@ -93,17 +151,30 @@ function Composer() {
         platforms,
         captionFor: fullCaptionFor,
         portalStatus,
+        durationLimits: { tiktok: creator?.max_video_post_duration_sec },
       });
       return checks;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [artifact, platforms, baseCaption, overrides, hashtags, portals, resolvedTitle],
+    [artifact, platforms, baseCaption, overrides, hashtags, portals, resolvedTitle, selectedAccounts, creator],
   );
   const failing = preflight.filter((c) => c.status === "fail");
-  const canLaunch = failing.length === 0 && !!artifact && platforms.length > 0;
+  const directTikTok = !!tiktokAccountId && tiktok.mode === "direct";
+  const disclosureHint = directTikTok && tiktok.commercialContent && !tiktok.brandOrganic && !tiktok.brandContent
+    ? TIKTOK_DISCLOSURE_HINT : undefined;
+  const tiktokValidation = directTikTok ? validateTikTokOptions(tiktok, creator, artifact?.durationMs) : undefined;
+  const canLaunch = failing.length === 0 && !!artifact && platforms.length > 0
+    && platforms.every((p) => portalStatus(p) === "connected")
+    && (!directTikTok || (!!creator && !creatorState.loading && !tiktokValidation));
+  const destinations = platforms.map((p) => {
+    const account = portals.find((a) => a.id === selectedAccounts[p]);
+    return `${PLATFORM_CAPABILITIES[p].label}: ${p === "tiktok" && creator ? creator.creator_nickname : account?.displayName || account?.handle || "choose account"}`;
+  }).join(" · ");
 
-  const togglePlatform = (p: PlatformId) =>
+  const togglePlatform = (p: PlatformId) => {
+    setAccountSetId("");
     setPlatforms((cur) => (cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p]));
+  };
 
   const addTag = () => {
     const clean = tagDraft.replace(/^#/, "").trim().replace(/\s+/g, "");
@@ -112,15 +183,15 @@ function Composer() {
   };
 
   const launch = async () => {
-    if (!artifact || submitting) return;
+    if (!artifact || submitting || !canLaunch) return;
     const scheduledFor = mode === "now" ? Date.now() : new Date(whenLocal).getTime();
-    if (mode === "at" && scheduledFor <= Date.now()) {
+    if (mode === "at" && (!Number.isFinite(scheduledFor) || scheduledFor <= Date.now())) {
       pushSignal({ tone: "warning", title: "Time is in the past", detail: "Pick a future time, or switch to Now." });
       return;
     }
     setSubmitting(true);
     try {
-      const t = await createTransmission({
+      const input: CreateTransmissionInput = {
         title: resolvedTitle,
         baseCaption,
         hashtags,
@@ -129,11 +200,14 @@ function Composer() {
         perPlatformCaptions: Object.fromEntries(
           platforms.map((p) => [p, fullCaptionFor(p)]),
         ) as Partial<Record<PlatformId, string>>,
-        perPlatformOptions: undefined,
-        accountSetId: accountSetId || undefined,
+        perPlatformOptions: platforms.includes("tiktok") ? { tiktok: tiktok.mode === "direct" ? { ...tiktok, consentAccepted: true } : { mode: "inbox" } } : undefined,
+        accountIds: platforms.map((p) => selectedAccounts[p]!),
         scheduleMode: mode,
         scheduledFor,
-      });
+      };
+      const fingerprint = JSON.stringify({ ...input, scheduledFor: mode === "now" ? 0 : scheduledFor });
+      if (lastSubmission.current?.fingerprint !== fingerprint) lastSubmission.current = { fingerprint, key: crypto.randomUUID() };
+      const t = await createTransmission({ ...input, idempotencyKey: lastSubmission.current.key });
       pushSignal({
         tone: "success",
         title: mode === "now" ? "Transmission initiated" : "Transmission in trajectory",
@@ -146,7 +220,7 @@ function Composer() {
     } catch (error) {
       pushSignal({
         tone: "danger",
-        title: "Post was not submitted",
+        title: "Could not confirm submission",
         detail: error instanceof Error ? error.message.replaceAll("_", " ") : "Posterract could not create the transmission.",
       });
     } finally {
@@ -308,7 +382,7 @@ function Composer() {
 
       {/* ── Right: targets + trajectory + pre-flight ── */}
       <div className="flex flex-col gap-4">
-        <Panel kicker="Projection targets" title="Platforms" brackets>
+        <Panel kicker="Projection targets" title="Accounts" brackets>
           {accountSets.length > 0 && (
             <label className="mb-3 block">
               <span className="kicker mb-1.5 block !text-[8px]">Account set</span>
@@ -320,36 +394,32 @@ function Composer() {
                   const next = accountSets.find((set) => set.id === nextId);
                   if (next) {
                     setPlatforms(next.accounts.map((account) => account.provider).filter((provider) => (PUBLISHING_PLATFORM_IDS as readonly string[]).includes(provider)));
+                    setSelectedAccounts(Object.fromEntries(next.accounts.map((account) => [account.provider, account.id])));
                   }
                 }}
                 className="h-10 w-full rounded-[10px] border border-white/[0.09] bg-void-2 px-3 text-[12px] text-starlight outline-none focus:border-neon/30"
               >
-                <option value="">Automatic account selection</option>
+                <option value="">Custom</option>
                 {accountSets.map((set) => <option key={set.id} value={set.id}>{set.name} · {set.accounts.length} networks</option>)}
               </select>
               <span className="mt-1.5 block text-[9.5px] text-starlight-faint">
-                {selectedAccountSet ? `Posting through the exact accounts saved in ${selectedAccountSet.name}.` : "Uses the most recently connected account on each selected platform."}
+                {selectedAccountSet ? `Using the accounts saved in ${selectedAccountSet.name}.` : "Choose one connected account for each selected platform."}
               </span>
             </label>
           )}
-          <div className="grid grid-cols-2 gap-1.5" role="group" aria-label="Target platforms">
-            {PUBLISHING_PLATFORM_IDS.map((p) => (
-              <PlatformChip
-                key={p}
-                platform={p}
-                selected={platforms.includes(p)}
-                onClick={() => togglePlatform(p)}
-                className="w-full"
-              />
-            ))}
-          </div>
+          <AccountTargets accounts={portals} platforms={platforms} selected={selectedAccounts} creator={creator}
+            onToggle={togglePlatform} onSelect={(provider, id) => { setAccountSetId(""); setSelectedAccounts((previous) => ({ ...previous, [provider]: id })); }} />
           <p className="mt-2.5 text-[10px] text-starlight-faint">YouTube and X are coming soon.</p>
           {platforms.some((p) => portalStatus(p) !== "connected") && (
             <p className="mt-2.5 text-[11px] text-solar">
-              ⚠ Some targeted portals aren’t connected — align them in Portals.
+              Choose a connected account for every selected platform before posting.
             </p>
           )}
         </Panel>
+
+        {tiktokAccountId && <TikTokSettings value={tiktok} onChange={setTikTok} creator={creator}
+          loading={creatorState.loading || creatorState.accountId !== tiktokAccountId} error={creatorState.error}
+          validation={tiktokValidation} onRefresh={() => { setTikTok(emptyTikTokOptions()); setCreatorRefresh((n) => n + 1); }} />}
 
         <Panel kicker="Trajectory" title="When" brackets>
           <div className="space-y-3">
@@ -400,6 +470,13 @@ function Composer() {
           </ul>
         </Panel>
 
+        <div className="space-y-2">
+        <p className="text-[11px] text-starlight-dim" aria-label="Selected destinations">{destinations}</p>
+        {directTikTok && <>
+          <p className="text-[11px] text-starlight-faint">TikTok may take a few minutes to process the video and show it on your profile. {mode === "at" && "Scheduling authorizes this post with the accounts and settings shown above."}</p>
+          <TikTokDeclaration branded={tiktok.brandContent} />
+        </>}
+        <TikTokHoverHint message={disclosureHint} label="Why posting is unavailable">
         <Button
           variant="primary"
           size="lg"
@@ -408,8 +485,10 @@ function Composer() {
           onClick={() => (mode === "now" && platforms.length >= 3 ? setConfirmOpen(true) : void launch())}
           className="w-full"
         >
-          {submitting ? "Submitting…" : mode === "now" ? "Initiate Transmission" : "Lock Trajectory"}
+          {submitting ? "Submitting…" : mode === "now" ? (platforms.length === 1 && tiktokAccountId && tiktok.mode === "inbox" ? "Send to TikTok inbox" : "Publish now") : "Schedule post"}
         </Button>
+        </TikTokHoverHint>
+        </div>
         {!canLaunch && failing.length > 0 && (
           <p className="text-center text-[11px] text-starlight-faint">
             Resolve {failing.length} pre-flight failure{failing.length > 1 ? "s" : ""} to launch
@@ -447,24 +526,27 @@ function Composer() {
             <Button variant="tertiary" onClick={() => setConfirmOpen(false)}>
               Abort
             </Button>
+            <TikTokHoverHint message={disclosureHint} label="Why posting is unavailable" className="w-auto">
             <Button
               variant="primary"
-              disabled={submitting}
+              disabled={submitting || !canLaunch}
               onClick={() => {
                 setConfirmOpen(false);
                 void launch();
               }}
             >
-              Engage
+              Publish now
             </Button>
+            </TikTokHoverHint>
           </>
         }
       >
         <p className="text-[13px] text-starlight-dim">
           This publishes immediately to{" "}
-          <strong className="text-starlight">{platforms.map((p) => PLATFORM_CAPABILITIES[p].label).join(", ")}</strong>. A
+          <strong className="text-starlight">{destinations}</strong>. A
           live transmission can’t be recalled.
         </p>
+        {directTikTok && <TikTokDeclaration branded={tiktok.brandContent} />}
       </Modal>
     </div>
   );

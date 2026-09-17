@@ -61,6 +61,10 @@ import {
 // belong on the VPS.
 import { registerDesktopAuthRoutes } from "./desktopAuth.js";
 import { loadAccountSets, registerAccountSetRoutes } from "./accountSets.js";
+import { registerTikTokRoutes } from "./tiktok.js";
+import { registerTikTokMediaRoute, cleanupTikTokMedia } from "./tiktokMedia.js";
+import { loadExplicitPostAccounts } from "./postTargets.js";
+import { loadVaultMedia, registerMediaDeleteRoute } from "./media.js";
 
 const env = process.env;
 const port = Number(env.PORT ?? 3001);
@@ -787,6 +791,7 @@ function canAccessWorkspace(request, workspaceId) {
 }
 
 async function purgeExpiredMedia() {
+  await cleanupTikTokMedia(postgres, r2, env.R2_BUCKET);
   if (!r2) return;
 
   const client = await postgres.connect();
@@ -1496,6 +1501,8 @@ app.get(
 
 registerOAuthRoutes(app, { postgres, requireScope, requiredWorkspace });
 registerAccountSetRoutes(app, { postgres, requireScope, requiredWorkspace });
+registerTikTokRoutes(app, { postgres, requireScope, requiredWorkspace });
+registerTikTokMediaRoute(app, { postgres, r2 });
 registerMetaRoutes(app, { postgres });
 registerAiRoutes(app, {
   postgres,
@@ -1646,12 +1653,7 @@ app.get(
       statsResult,
     ] =
       await Promise.all([
-        postgres.query(
-          `select * from media_assets
-           where workspace_id = $1 and status <> 'purged'
-           order by created_at desc`,
-          [workspaceId],
-        ),
+        loadVaultMedia(postgres, workspaceId),
         postgres.query(
           `select * from transmissions
            where workspace_id = $1 order by created_at desc`,
@@ -1832,43 +1834,7 @@ app.patch(
   },
 );
 
-app.delete(
-  "/v1/media/:id",
-  { preHandler: requireMediaWrite },
-  async (request, reply) => {
-    const workspaceId = requiredWorkspace(request);
-    const media = await postgres.query(
-      `select m.id, m.r2_key,
-              exists (
-                select 1 from transmissions t
-                where t.media_asset_id = m.id
-                  and t.status in ('scheduled', 'transmitting')
-              ) as in_use
-       from media_assets m
-       where m.id = $1 and m.workspace_id = $2 and m.purged_at is null`,
-      [request.params.id, workspaceId],
-    );
-    if (!media.rows[0]) return reply.code(404).send({ error: "media_not_found" });
-    if (media.rows[0].in_use) {
-      return reply.code(409).send({ error: "media_in_use" });
-    }
-    if (r2) {
-      await r2.send(
-        new DeleteObjectCommand({
-          Bucket: env.R2_BUCKET,
-          Key: media.rows[0].r2_key,
-        }),
-      );
-    }
-    await postgres.query(
-      `update media_assets
-       set status = 'purged', purged_at = now(), updated_at = now()
-       where id = $1`,
-      [request.params.id],
-    );
-    return reply.code(204).send();
-  },
-);
+registerMediaDeleteRoute(app, { postgres, r2, environment: env, requireMediaWrite, requiredWorkspace });
 
 app.post(
   "/v1/posts",
@@ -1974,18 +1940,11 @@ app.post(
           [input.accountSetId, workspaceId, providers],
         );
       } else if (input.accountIds) {
-        accounts = await client.query(
-          `select id, provider, status from social_accounts
-           where workspace_id = $1 and id = any($2::uuid[])`,
-          [workspaceId, input.accountIds],
-        );
-        if (accounts.rows.length !== input.accountIds.length) {
+        try { accounts = await loadExplicitPostAccounts(client, workspaceId, input.accountIds, providers); }
+        catch (error) {
+          if (!error.statusCode) throw error;
           await client.query("rollback");
-          return reply.code(409).send({ error: "account_target_unavailable" });
-        }
-        if (accounts.rows.some((account) => !providers.includes(account.provider))) {
-          await client.query("rollback");
-          return reply.code(400).send({ error: "account_target_platform_mismatch" });
+          return reply.code(error.statusCode).send({ error: error.message });
         }
       } else {
         accounts = await client.query(
@@ -2042,6 +2001,18 @@ app.post(
       const projections = [];
       for (const projection of input.projections) {
         const projectionId = randomUUID();
+        if (projection.provider === "tiktok" && projection.options.mode === "direct") {
+          projection.options = {
+            ...projection.options,
+            authorization: {
+              userId: request.authContext.userId ?? null,
+              actor: actorKey,
+              accountId: accountByProvider.get("tiktok"),
+              authorizedAt: new Date().toISOString(),
+              declarationVersion: "tiktok-direct-v1",
+            },
+          };
+        }
         await client.query(
           `insert into projections
             (id, transmission_id, workspace_id, social_account_id, provider,
@@ -2247,6 +2218,10 @@ app.post(
         `select * from projections where transmission_id = $1 order by created_at asc`,
         [original.id],
       );
+      if (originalProjections.rows.some((row) => row.provider === "tiktok" && row.platform_options?.mode === "direct")) {
+        await client.query("rollback");
+        return reply.code(409).send({ error: "direct_post_review_required", detail: "Open this copy in Create Post to choose privacy and authorize it again." });
+      }
       if (originalProjections.rows.length === 0) {
         await client.query("rollback");
         return reply.code(409).send({ error: "post_has_no_platforms" });

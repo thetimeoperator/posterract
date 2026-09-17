@@ -84,8 +84,9 @@ test.describe("Posterract shell", () => {
     await page.goto("/");
     await page.getByRole("link", { name: "New post", exact: true }).first().click();
     await expect(page).toHaveURL(/\/compose/);
-    await expect(page.getByRole("button", { name: "Back to calendar" })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Initiate Transmission|Lock Trajectory/ })).toBeVisible();
+    // The route is lazy-loaded; its URL updates before Vite finishes the first compile.
+    await expect(page.getByRole("button", { name: "Back to calendar" })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("button", { name: /Publish now|Schedule post/ })).toBeVisible();
     await page.getByRole("button", { name: "Back to calendar" }).click();
     await expect(page).toHaveURL(/\/continuum/);
   });
@@ -96,8 +97,10 @@ test.describe("Posterract shell", () => {
 
     await page.goto("/");
     await expect(page.getByRole("radio", { name: "Month" })).toBeChecked();
-    await expect(page.locator("[data-calendar-day]")).toHaveCount(42);
-    await page.getByRole("button", { name: dayLabel, exact: true }).click();
+    const firstWeekday = (new Date(today.getFullYear(), today.getMonth(), 1).getDay() + 6) % 7;
+    const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+    await expect(page.locator("[data-calendar-day]")).toHaveCount(Math.ceil((firstWeekday + daysInMonth) / 7) * 7);
+    await page.getByRole("button", { name: `View ${dayLabel}`, exact: true }).click();
     await expect(page.getByRole("dialog")).toContainText("Day timeline");
     await expect(page.getByRole("radio", { name: "Month" })).toBeChecked();
     await page.getByRole("button", { name: "Close dialog" }).click();

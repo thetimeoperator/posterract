@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { createFileRoute, useNavigate, useParams } from "@tanstack/react-router";
-import { Button, MiniTesseract, Panel, pushSignal } from "@posterract/hyperkit";
-import { isPlatformId } from "@posterract/contract";
+import { Link, createFileRoute, useNavigate, useParams } from "@tanstack/react-router";
+import { Button, MiniTesseract, Panel, PlatformBrandMark, pushSignal } from "@posterract/hyperkit";
+import { isPlatformId, PLATFORM_CAPABILITIES } from "@posterract/contract";
 import { useOAuth } from "@/engine/useEngine";
 
 type CallbackSearch = { code?: string; state?: string; error?: string; error_description?: string };
@@ -139,6 +139,16 @@ function OAuthCallback() {
   return (
     <main className="chamber flex min-h-screen flex-col items-center justify-center gap-4 px-5">
       <MiniTesseract size={36} state="transmitting" />
+      {isPlatformId(provider) && (
+        <Link
+          to="/portals"
+          aria-label={`Return to ${PLATFORM_CAPABILITIES[provider].label} accounts`}
+          className="flex items-center gap-3 rounded-[10px] px-3 py-2 text-sm text-starlight outline-none focus-visible:ring-2 focus-visible:ring-neon"
+        >
+          <PlatformBrandMark platform={provider} height={24} className="flex-none" />
+          <span>{PLATFORM_CAPABILITIES[provider].label}</span>
+        </Link>
+      )}
       <p className="kicker" aria-live="polite">
         {message}
       </p>

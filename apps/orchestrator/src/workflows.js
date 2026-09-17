@@ -3,7 +3,10 @@ import {
   condition,
   continueAsNew,
   defineSignal,
+  executeChild,
+  patched,
   proxyActivities,
+  sleep,
   setHandler,
 } from "@temporalio/workflow";
 
@@ -101,7 +104,9 @@ export async function publicationWorkflow(input) {
       try {
         return {
           projectionId: projection.id,
-          result: await activities.publishProjection(projection.id),
+          result: patched("tiktok-direct-post-v1") && projection.provider === "tiktok" && projection.platform_options?.mode === "direct"
+            ? await executeChild(tiktokDirectPostWorkflow, { workflowId: `tiktok-direct:${projection.id}`, args: [{ projectionId: projection.id }] })
+            : await activities.publishProjection(projection.id),
         };
       } catch (error) {
         return {
@@ -116,4 +121,40 @@ export async function publicationWorkflow(input) {
   await activities.enqueueAnalyticsIndex(input.transmissionId);
   await activities.enqueueMediaCleanup(input.transmissionId);
   return { status: "completed", results };
+}
+
+const directActivities = proxyActivities({
+  startToCloseTimeout: "90 seconds",
+  retry: { maximumAttempts: 3, initialInterval: "5 seconds", maximumInterval: "30 seconds" },
+});
+const mediaActivities = proxyActivities({
+  startToCloseTimeout: "10 minutes",
+  retry: { maximumAttempts: 3, initialInterval: "15 seconds" },
+});
+
+export async function tiktokDirectPostWorkflow({ projectionId, resume = false }) {
+  try {
+    if (!resume) {
+      const prepared = await mediaActivities.prepareTikTokDirect(projectionId);
+      if (["failed", "live", "canceled"].includes(prepared.status)) return prepared;
+      let initialized;
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        initialized = await directActivities.initializeTikTokDirect(projectionId);
+        if (initialized.status !== "retry") break;
+        await sleep(initialized.delay || 60_000);
+      }
+      if (initialized.status === "retry") return await directActivities.failTikTokDirect(projectionId, "rate_limit_retry_exhausted", "rate_limit");
+      if (initialized.status !== "processing") return initialized;
+    }
+    // No init call during status polling. Continue-as-new keeps history bounded
+    // even when TikTok moderation or an outage lasts for hours.
+    for (let poll = 0; poll < 240; poll += 1) {
+      const result = await directActivities.pollTikTokDirect(projectionId);
+      if (result.status !== "processing") return result;
+      await sleep(result.delay || (poll < 12 ? 5_000 : 30_000));
+    }
+  } catch {
+    return await directActivities.failTikTokDirect(projectionId, "publishing_interrupted_check_status_before_retry");
+  }
+  return continueAsNew({ projectionId, resume: true });
 }

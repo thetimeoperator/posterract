@@ -33,7 +33,10 @@
 }
 
 .site-nav-slim .site-wordmark {
+  font-family: var(--font-display);
   font-size: 15px;
+  font-weight: 720;
+  line-height: 1;
 }
 
 /* The nav's items: display type, letters that swap on hover. The bar itself is the original. */
@@ -1169,7 +1172,8 @@
 }
 
 .site-stage-copy {
-  max-width: 700px;
+  width: 70vw;
+  max-width: 100%;
   text-align: left;
 }
 
@@ -1177,11 +1181,24 @@
   margin: 0;
   color: var(--site-ink);
   font-family: var(--font-display);
-  font-size: clamp(34px, 3.7vw, 54px);
+  font-size: clamp(57.8px, 6.29vw, 91.8px);
   font-weight: 560;
   letter-spacing: -0.055em;
   line-height: 0.98;
   text-wrap: balance;
+}
+
+/* Let the larger desktop heading balance across its wider measure. Keep the
+   original explicit lines and type scale for the smaller-screen layout. */
+@media (min-width: 901px) {
+  .site-stage-copy .site-hero-title-line {
+    display: inline;
+  }
+
+  .site-stage-copy .site-hero-title-line + .site-hero-title-line {
+    margin-top: 0;
+  }
+
 }
 
 .site-stage-copy .site-hero-lede {
@@ -1333,6 +1350,7 @@
   .site-stage-section[data-small="true"] .site-stage-sticky { grid-template-rows: minmax(0, 1fr); }
   .site-stage-section[data-small="true"] .site-stack-card { top: 30%; }
   .site-stage-section[data-small="true"] .site-stage-hint { display: none; }
+  .site-stage-copy { width: 100%; max-width: 700px; }
   .site-stage-copy h1 { font-size: clamp(32px, 9vw, 44px); }
   .site-stage-copy .site-hero-lede { font-size: 14px; }
   .site-tilt-card { width: 92vw; }

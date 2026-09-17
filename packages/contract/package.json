@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./capabilities": "./src/capabilities.ts",
+    "./tiktok": "./src/tiktok.ts",
     "./local-agent": "./src/local-agent.ts"
   },
   "scripts": {

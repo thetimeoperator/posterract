@@ -250,16 +250,6 @@ export function Landing() {
       </motion.div>
 
       <footer className="site-footer" id="footer">
-        <div className="site-footer-platforms" aria-label="Posterract platform network">
-          <p>NETWORK MIRROR // 08</p>
-          <div>
-            {PLATFORMS.map((platform) => (
-              <span className="site-footer-platform" data-platform={platform.id} key={platform.id}>
-                <small>{platform.name}</small>
-              </span>
-            ))}
-          </div>
-        </div>
         <div className="site-footer-main">
           <a className="site-wordmark" href="#top">POSTER<span>RACT</span></a>
           <p>One artifact. Multiple projections. Time is the fourth dimension.</p>
@@ -269,10 +259,6 @@ export function Landing() {
             <a href="https://policies.google.com/privacy" target="_blank" rel="noreferrer">Google Privacy Policy</a>
             <a href="mailto:pahlevansina@gmail.com">Support</a>
           </nav>
-        </div>
-        <div className="site-footer-meta">
-          <p>YouTube uploads and authorized channel analytics use YouTube API Services.</p>
-          <p>Platform names and logos belong to their respective owners. Availability depends on platform API access and approval.</p>
         </div>
       </footer>
 

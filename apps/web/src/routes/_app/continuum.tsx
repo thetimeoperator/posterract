@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DragEvent } from "react";
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { ArrowRight, CalendarDays, CalendarPlus2, ChevronLeft, ChevronRight, Clock3, GripVertical, Plus } from "lucide-react";
+import { ArrowRight, CalendarDays, CalendarPlus2, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import clsx from "clsx";
-import { Button, EmptyState, Modal, Panel, PlatformRuneRow, Segmented, StatusBadge, pushSignal } from "@posterract/hyperkit";
+import { Button, EmptyState, Modal, Panel, PlatformBrandMark, Segmented, StatusBadge, pushSignal } from "@posterract/hyperkit";
 import type { PlatformId, TransmissionStatus } from "@posterract/contract";
 import { CalendarPostDialog } from "@/components/CalendarPostDialog";
 import { addCalendarDays, startOfWeek, scheduleTimeForDay, sameCalendarDay, calendarDayKey } from "@/lib/calendar-date";
 import { ArtifactThumb } from "@/components/ArtifactThumb";
 import { useEngineActions, useProjections, useTransmissions } from "@/engine/useEngine";
+import "@/styles/calendar.css";
 
 export const Route = createFileRoute("/_app/continuum")({
   component: Continuum,
@@ -16,6 +17,32 @@ export const Route = createFileRoute("/_app/continuum")({
 
 function PostStatusDot({ status }: { status: TransmissionStatus }) {
   return <span role="img" aria-label={`Status: ${status}`} title={status} className={clsx("inline-block h-1.5 w-1.5 flex-none rounded-full", status === "live" ? "bg-neon" : status === "scheduled" ? "bg-ice" : status === "failed" || status === "partial" ? "bg-redshift" : status === "canceled" ? "bg-starlight-faint" : "bg-solar")} />;
+}
+
+function CalendarPlatformLogos({ platforms }: { platforms: readonly PlatformId[] }) {
+  const unique = [...new Set(platforms)];
+  return (
+    <span data-calendar-platforms className="calendar-post-platforms">
+      {unique.map((platform) => (
+        <PlatformBrandMark key={platform} platform={platform} height={18} className="flex-none" />
+      ))}
+      {platforms.length === 0 && <span className="text-[9px] text-starlight-faint">No targets</span>}
+    </span>
+  );
+}
+
+function CalendarPostSummary({ title, scheduledFor, status, platforms }: {
+  title: string; scheduledFor: number; status: TransmissionStatus; platforms: readonly PlatformId[];
+}) {
+  return <span className="calendar-post-summary">
+    <span className="calendar-post-heading">
+      <span data-calendar-post-title className="calendar-post-title" title={title}>{title}</span>
+      <span className="calendar-post-meta"><PostStatusDot status={status} /><time data-calendar-post-time dateTime={new Date(scheduledFor).toISOString()}>
+        {new Date(scheduledFor).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+      </time></span>
+    </span>
+    <CalendarPlatformLogos platforms={platforms} />
+  </span>;
 }
 
 function useMediaQuery(query: string): boolean {
@@ -74,6 +101,15 @@ function attachPostDragPreview(event: DragEvent<HTMLElement>) {
 function Continuum() {
   const transmissions = useTransmissions();
   const projections = useProjections();
+  const platformsByPost = useMemo(() => {
+    const grouped = new Map<string, PlatformId[]>();
+    for (const projection of projections) {
+      const platforms = grouped.get(projection.transmissionId) ?? [];
+      if (!platforms.includes(projection.provider)) platforms.push(projection.provider);
+      grouped.set(projection.transmissionId, platforms);
+    }
+    return grouped;
+  }, [projections]);
   const { rescheduleTransmission } = useEngineActions();
   const [periodAnchor, setPeriodAnchor] = useState(() => Date.now());
   const [view, setView] = useState<"week" | "month">("month");
@@ -273,6 +309,7 @@ function Continuum() {
           anchor={periodAnchor}
           now={now}
           transmissions={transmissions}
+          platformsByPost={platformsByPost}
           onPickDay={setSelectedDay}
           onPickPost={openPost}
           draggingId={draggingId}
@@ -317,7 +354,7 @@ function Continuum() {
               <div className="mt-2 space-y-1.5">
                 {items.length === 0 ? <p className="rounded-[10px] border border-dashed border-[var(--glass-border)] px-3 py-3 text-[10px] text-starlight-faint">No posts scheduled.</p> : items.map((t) => {
                   const canDrag = t.status === "scheduled" && reschedulingId !== t.id;
-                  return <div key={t.id} data-draggable-post data-transmission-id={t.id} draggable={canDrag} onDragStart={(event) => beginPostDrag(event, t.id)} onDragEnd={finishPostDrag} title={canDrag ? "Drag to move this scheduled post" : undefined} className={clsx("calendar-post-shell", canDrag && "calendar-post-shell--draggable", draggingId === t.id && "is-dragging", reschedulingId === t.id && "is-rescheduling")}><button type="button" onClick={() => openPost(t.id)} data-calendar-post-surface draggable={false} className="calendar-post-block calendar-post-block--agenda w-full text-left flex items-center gap-2 rounded-[10px] p-2.5"><PostStatusDot status={t.status} /><ArtifactThumb artifactId={t.artifactId} className="h-11 w-8 flex-none" hoverPreview={false} /><div className="min-w-0 flex-1"><p className="telemetry text-[10px] text-neon">{new Date(t.scheduledFor!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p><p className="truncate text-[12px] font-medium text-starlight">{t.title}</p></div>{canDrag && <GripVertical size={14} className="calendar-post-grip flex-none" aria-hidden />}</button></div>;
+                  return <div key={t.id} data-draggable-post data-transmission-id={t.id} draggable={canDrag} onDragStart={(event) => beginPostDrag(event, t.id)} onDragEnd={finishPostDrag} title={canDrag ? "Drag to move this scheduled post" : undefined} className={clsx("calendar-post-shell", canDrag && "calendar-post-shell--draggable", draggingId === t.id && "is-dragging", reschedulingId === t.id && "is-rescheduling")}><button type="button" onClick={() => openPost(t.id)} aria-label={`View post: ${t.title}`} data-calendar-post-surface draggable={false} className="calendar-post-block calendar-post-block--agenda calendar-post-compact w-full text-left flex items-center gap-2 rounded-[8px]"><ArtifactThumb artifactId={t.artifactId} className="h-8 w-6 flex-none" hoverPreview={false} /><CalendarPostSummary title={t.title} scheduledFor={t.scheduledFor!} status={t.status} platforms={platformsByPost.get(t.id) ?? []} /></button></div>;
                 })}
               </div>
             </section>
@@ -338,7 +375,7 @@ function Continuum() {
               onDragOver={(event) => allowDayDrop(event, day)}
               onDrop={(event) => dropPostOnDay(event, day)}
               className={clsx(
-                "calendar-day-drop-zone relative flex min-h-[420px] cursor-pointer flex-col rounded-[var(--radius-card)] border bg-[var(--glass-bg)] p-2 transition-[border-color,background-color,transform]",
+                "calendar-day-drop-zone relative flex h-[320px] min-w-0 cursor-pointer flex-col rounded-[var(--radius-card)] border bg-[var(--glass-bg)] p-2 transition-[border-color,background-color,transform]",
                 isToday ? "border-[rgba(101,255,154,0.45)] shadow-glow-neon-sm" : "border-[var(--glass-border)]",
                 dropDay === day && "calendar-day-drop-zone--active scale-[1.01] !border-ice bg-ice/[0.07] shadow-glow-ice-sm",
                 past && "opacity-60",
@@ -391,21 +428,12 @@ function Continuum() {
                     <button
                       type="button"
                       onClick={() => openPost(t.id)}
+                      aria-label={`View post: ${t.title}`}
                       data-calendar-post-surface
                       draggable={false}
-                      className="calendar-post-block calendar-post-block--week w-full text-left block rounded-[10px] p-2"
+                      className="calendar-post-block calendar-post-block--week calendar-post-compact w-full text-left block rounded-[8px]"
                     >
-                      <div className="flex items-center gap-2">
-                        <PostStatusDot status={t.status} />
-                        <ArtifactThumb artifactId={t.artifactId} className="h-10 w-7 flex-none" hoverPreview={false} />
-                        <div className="min-w-0 flex-1">
-                          <p className="telemetry text-[10px] text-neon">
-                            {new Date(t.scheduledFor!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                          </p>
-                          <p className="truncate text-[11px] text-starlight">{t.title}</p>
-                        </div>
-                        {canDrag && <GripVertical size={13} className="calendar-post-grip flex-none" aria-hidden />}
-                      </div>
+                      <CalendarPostSummary title={t.title} scheduledFor={t.scheduledFor!} status={t.status} platforms={platformsByPost.get(t.id) ?? []} />
                     </button>
                     </div>
                   );
@@ -555,16 +583,9 @@ function DayInspector({
               .filter((projection) => projection.transmissionId === transmission.id)
               .map((projection) => projection.provider) as PlatformId[];
             return (
-              <button type="button" key={transmission.id} onClick={() => onPickPost(transmission.id)} className="day-inspector-post w-full text-left">
-                <ArtifactThumb artifactId={transmission.artifactId} className="h-12 w-9 flex-none" hoverPreview={false} />
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-1.5 telemetry text-[9px] text-neon">
-                    <Clock3 size={10} />
-                    {new Date(transmission.scheduledFor!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                  </span>
-                  <span className="mt-0.5 block truncate text-[11.5px] text-starlight">{transmission.title}</span>
-                  <span className="mt-1 block"><PlatformRuneRow platforms={platforms} /></span>
-                </span>
+              <button type="button" key={transmission.id} onClick={() => onPickPost(transmission.id)} aria-label={`View post: ${transmission.title}`} className="day-inspector-post w-full text-left">
+                <ArtifactThumb artifactId={transmission.artifactId} className="h-9 w-7 flex-none" hoverPreview={false} />
+                <CalendarPostSummary title={transmission.title} scheduledFor={transmission.scheduledFor!} status={transmission.status} platforms={platforms} />
                 <StatusBadge status={transmission.status} size="sm" />
               </button>
             );
@@ -580,6 +601,7 @@ function MonthView({
   anchor,
   now,
   transmissions,
+  platformsByPost,
   onPickDay,
   onPickPost,
   draggingId,
@@ -593,6 +615,7 @@ function MonthView({
   anchor: number;
   now: number;
   transmissions: ReturnType<typeof useTransmissions>;
+  platformsByPost: ReadonlyMap<string, readonly PlatformId[]>;
   onPickDay: (day: number) => void;
   onPickPost: (id: string) => void;
   draggingId: string | null;
@@ -606,7 +629,10 @@ function MonthView({
   const anchorDate = new Date(anchor);
   const first = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1).getTime();
   const gridStart = startOfWeek(first);
-  const cells = useMemo(() => Array.from({ length: 42 }, (_, i) => addCalendarDays(gridStart, i)), [gridStart]);
+  const leadingDays = (new Date(first).getDay() + 6) % 7;
+  const daysInMonth = new Date(anchorDate.getFullYear(), anchorDate.getMonth() + 1, 0).getDate();
+  const cellCount = Math.ceil((leadingDays + daysInMonth) / 7) * 7;
+  const cells = useMemo(() => Array.from({ length: cellCount }, (_, i) => addCalendarDays(gridStart, i)), [gridStart, cellCount]);
   const month = anchorDate.getMonth();
 
   const transmissionsByDay = useMemo(() => {
@@ -623,13 +649,14 @@ function MonthView({
   }, [transmissions]);
 
   return (
-    <div>
+    <div className="calendar-month-scroll" role="region" aria-label="Month calendar" tabIndex={0}>
+      <div className="calendar-month-content">
       <div className="mb-1 grid grid-cols-7 gap-1.5 px-0.5">
         {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
           <p key={d} className="kicker !text-[9px] text-center">{d}</p>
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-1.5">
+      <div className="calendar-month-grid grid grid-cols-7 gap-1.5">
         {cells.map((day) => {
           const inMonth = new Date(day).getMonth() === month;
           const isToday = now >= day && now < addCalendarDays(day, 1);
@@ -643,17 +670,19 @@ function MonthView({
               onDragOver={(event) => onDragOverDay(event, day)}
               onDrop={(event) => onDropDay(event, day)}
               className={clsx(
-                "calendar-day-drop-zone flex min-h-[92px] flex-col rounded-[10px] border p-1.5 text-left transition-[border-color,background-color,transform] hover:border-[var(--glass-border-bright)]",
+                "calendar-day-drop-zone calendar-month-day flex min-w-0 flex-col rounded-[8px] border text-left transition-[border-color,background-color,transform] hover:border-[var(--glass-border-bright)]",
                 isToday ? "border-[rgba(101,255,154,0.45)] shadow-glow-neon-sm" : "border-[var(--glass-border)]",
                 dropDay === day && "calendar-day-drop-zone--active scale-[1.015] !border-ice bg-ice/[0.08] shadow-glow-ice-sm",
                 inMonth ? "bg-[var(--glass-bg)]" : "bg-transparent opacity-40",
               )}
               aria-label={new Date(day).toDateString()}
             >
-              <button type="button" onClick={(event) => { event.stopPropagation(); onPickDay(day); }} aria-label={`View ${new Date(day).toDateString()}`} className={clsx("telemetry text-left text-[11px]", isToday ? "text-neon" : "text-starlight-faint")}>
+              <div className="calendar-month-day-heading">
+              <button type="button" onClick={(event) => { event.stopPropagation(); onPickDay(day); }} aria-label={`View ${new Date(day).toDateString()}`} className={clsx("text-left text-[10px] leading-[14px] tabular-nums", isToday ? "text-neon" : "text-starlight-faint")}>
                 {new Date(day).getDate()}
               </button>
-              <span className="mt-1 flex flex-col gap-0.5">
+              </div>
+              <span className="calendar-month-posts">
                 {items.slice(0, 2).map((t) => {
                   const canDrag = t.status === "scheduled" && reschedulingId !== t.id;
                   return (
@@ -667,33 +696,25 @@ function MonthView({
                     draggable={canDrag}
                     onDragStart={(event) => onDragStart(event, t.id)}
                     onDragEnd={onDragEnd}
-                    title={canDrag ? "Drag to another date" : undefined}
+                    title={t.title}
                     className={clsx(
-                      "calendar-post-block calendar-post-block--month flex min-w-0 items-center gap-1 rounded-[6px] px-1.5 py-1 text-[10px] text-starlight",
+                      "calendar-post-block calendar-post-block--month calendar-post-compact min-w-0 rounded-[6px] text-left text-starlight",
                       canDrag && "calendar-post-shell--draggable",
                       draggingId === t.id && "is-dragging",
                       reschedulingId === t.id && "is-rescheduling",
                     )}
                     data-calendar-post-surface
                   >
-                    <PostStatusDot status={t.status} />
-                    {canDrag && <GripVertical size={9} className="calendar-post-grip flex-none" aria-hidden />}
-                    <span className="min-w-0 truncate">
-                    <span className="telemetry text-neon">
-                      {new Date(t.scheduledFor!).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                    </span>{" "}
-                    {t.title.replace(/^Sample: /, "")}
-                    </span>
+                    <CalendarPostSummary title={t.title} scheduledFor={t.scheduledFor!} status={t.status} platforms={platformsByPost.get(t.id) ?? []} />
                   </button>
                   );
                 })}
-                {items.length > 2 && (
-                  <span className="px-1 text-[9px] text-starlight-faint">+{items.length - 2} more</span>
-                )}
               </span>
+              {items.length > 2 && <button type="button" className="calendar-month-more" onClick={(event) => { event.stopPropagation(); onPickDay(day); }} aria-label={`View ${items.length - 2} more posts on ${new Date(day).toDateString()}`}>+{items.length - 2} more</button>}
             </div>
           );
         })}
+      </div>
       </div>
     </div>
   );

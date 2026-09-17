@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -247,7 +247,9 @@ test("PostgreSQL Better Auth creates a complete Posterract workspace", async () 
   };
 
   try {
-    for (const name of ["001-posterract.sql", "002-postgres-cutover.sql", "003-agent-harness.sql", "004-agent-chats.sql", "005-tiktok-draft-status.sql", "006-stripe-billing.sql", "007-welcome-email.sql"]) {
+    // Signup must run against the same schema as production, including every
+    // later migration that changes constraints used by provisioning.
+    for (const name of (await readdir(migrationDirectory)).filter((name) => name.endsWith(".sql")).sort()) {
       await postgres.exec(await readFile(resolve(migrationDirectory, name), "utf8"));
     }
     const migrations = await getMigrations(authOptions(pool));
@@ -275,6 +277,31 @@ test("PostgreSQL Better Auth creates a complete Posterract workspace", async () 
       [workspace.rows[0].id],
     );
     assert.equal(accounts.rows.length, 6);
+    const membership = await query(
+      `select u.auth_user_id, wm.role from app_users u
+       join workspace_memberships wm on wm.user_id = u.id
+       where wm.workspace_id = $1`,
+      [workspace.rows[0].id],
+    );
+    assert.equal(membership.rows[0].auth_user_id, signup.user.id);
+    assert.equal(membership.rows[0].role, "owner");
+
+    // The multi-account schema must still support multiple connected accounts,
+    // and replaying provisioning must not add duplicate placeholders.
+    await query(
+      `insert into social_accounts (workspace_id, provider, provider_account_id, handle, status)
+       values ($1, 'instagram', 'ig-first', '@first', 'connected'),
+              ($1, 'instagram', 'ig-second', '@second', 'connected')`,
+      [workspace.rows[0].id],
+    );
+    await authOptions(pool).databaseHooks.user.create.after(signup.user);
+    const afterReplay = await query(
+      `select count(*)::int as total,
+              count(*) filter (where status = 'connected')::int as connected
+       from social_accounts where workspace_id = $1`,
+      [workspace.rows[0].id],
+    );
+    assert.deepEqual(afterReplay.rows[0], { total: 8, connected: 2 });
     const signin = await auth.api.signInEmail({
       body: {
         email: "postgres-auth@example.test",

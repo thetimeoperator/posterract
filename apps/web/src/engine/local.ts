@@ -27,7 +27,14 @@ export const useTransmissions = () => useEngineStore((s) => s.transmissions);
 export const useProjections = () => useEngineStore((s) => s.projections);
 export const useEvents = () => useEngineStore((s) => s.events);
 export const usePortals = () => useEngineStore((s) => s.portals);
-export const useAccountSets = (): AccountSetDTO[] => [];
+export async function getTikTokCreatorInfo(accountId: string): Promise<import("@posterract/contract/tiktok").TikTokCreatorInfo> {
+  const account = useEngineStore.getState().portals.find((p) => p.id === accountId && p.provider === "tiktok");
+  if (!account || account.status !== "connected") throw new Error("Reconnect this TikTok account in Portals.");
+  return { creator_nickname: account.displayName || account.handle, creator_username: account.handle.replace(/^@/, ""),
+    creator_avatar_url: account.avatarUrl || "", privacy_level_options: ["PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "SELF_ONLY"],
+    comment_disabled: false, duet_disabled: true, stitch_disabled: false, max_video_post_duration_sec: 600 };
+}
+export const useAccountSets = (): AccountSetDTO[] => useEngineStore((s) => s.accountSets);
 export const usePoints = () => {
   // Select stable refs; derive the summary in a memo (a fresh object from the
   // selector itself would loop the zustand equality check forever).
@@ -217,7 +224,9 @@ export function useOAuth() {
     start: async () => ({ url: "" }),
     complete: async () => ({ ok: false as const, error: "Demo mode" }),
     selectFacebookPage: async () => ({ ok: false as const, error: "Demo mode" }),
-    disconnect: async (_accountId: string) => {},
+    disconnect: async (accountId: string) => {
+      useEngineStore.setState((state) => ({ portals: state.portals.map((account) => account.id === accountId ? { ...account, status: "disconnected" as const } : account) }));
+    },
     refreshProfiles: async () => {},
   };
 }

@@ -18,6 +18,9 @@ import { desktopRequest, isPosterractDesktop } from "@/lib/desktop";
 
 const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "/api";
 
+export const getTikTokCreatorInfo = (accountId: string) =>
+  request<import("@posterract/contract/tiktok").TikTokCreatorInfo>(`/v1/accounts/${encodeURIComponent(accountId)}/tiktok/creator-info`);
+
 type Bootstrap = {
   workspaceId: string;
   artifacts: ArtifactDTO[];
@@ -193,7 +196,7 @@ export function useEngineActions() {
       }
     },
     createTransmission: async (input: CreateTransmissionInput) => {
-      const idempotencyKey = crypto.randomUUID();
+      const idempotencyKey = input.idempotencyKey || crypto.randomUUID();
       const result = await request<{ id: string }>("/v1/posts", {
         method: "POST",
         headers: { "Idempotency-Key": idempotencyKey },
@@ -217,6 +220,7 @@ export function useEngineActions() {
               ? "now"
               : new Date(input.scheduledFor).toISOString(),
           accountSetId: input.accountSetId,
+          accountIds: input.accountIds,
         }),
       });
       await refresh();

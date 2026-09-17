@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Layers3, Pencil, Plus, Trash2, Unplug, Users } from "lucide-react";
 import clsx from "clsx";
@@ -106,6 +106,8 @@ function Portals() {
   const { setPortalStatus } = useEngineActions();
   const oauth = useOAuth();
   const [draft, setDraft] = useState<SetDraft>();
+  // Modal focus initialization depends on onClose; keep it stable while typing.
+  const closeSetEditor = useCallback(() => setDraft(undefined), []);
   const [busy, setBusy] = useState(false);
   const actualAccounts = useMemo(() => portals.filter((account) => Boolean(account.providerAccountId)), [portals]);
   const connectedAccounts = actualAccounts.filter((account) => account.status === "connected");
@@ -199,7 +201,7 @@ function Portals() {
         </div>
       </div>
 
-      <AccountSetEditor draft={draft} accounts={actualAccounts} busy={busy} onChange={setDraft} onClose={() => setDraft(undefined)} onSave={() => void saveSet()} />
+      <AccountSetEditor draft={draft} accounts={actualAccounts} busy={busy} onChange={setDraft} onClose={closeSetEditor} onSave={() => void saveSet()} />
     </div>
   );
 }

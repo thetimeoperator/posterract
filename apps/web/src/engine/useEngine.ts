@@ -34,6 +34,9 @@ export const useEngineActions = impl.useEngineActions;
 export const artifactUrl = impl.artifactUrl;
 export const useOAuth = impl.useOAuth;
 export const useAccountSetActions = impl.useAccountSetActions;
+export const getTikTokCreatorInfo = POSTGRES ? postgresEngine.getTikTokCreatorInfo : CLOUD
+  ? async (): Promise<import("@posterract/contract/tiktok").TikTokCreatorInfo> => { throw new Error("TikTok Direct Post requires the production web API."); }
+  : localEngine.getTikTokCreatorInfo;
 export const OAUTH_SUPPORTED = impl.OAUTH_SUPPORTED;
 
 // ---------------------------------------------------------------------------
@@ -70,6 +73,7 @@ export function computePreflight(args: {
   platforms: PlatformId[];
   captionFor: (p: PlatformId) => string;
   portalStatus: (p: PlatformId) => string | undefined;
+  durationLimits?: Partial<Record<PlatformId, number>>;
 }): Preflight[] {
   const checks: Preflight[] = [];
   const { artifact, platforms, captionFor, portalStatus } = args;
@@ -101,12 +105,13 @@ export function computePreflight(args: {
     }
     if (artifact?.durationMs) {
       const s = artifact.durationMs / 1000;
-      if (s > caps.video.maxDurationS) {
+      const maximumDuration = args.durationLimits?.[p] ?? caps.video.maxDurationS;
+      if (s > maximumDuration) {
         checks.push({
           id: `dur_${p}`,
           label: `${label} duration`,
           status: "fail",
-          detail: `${Math.round(s)}s exceeds ${caps.video.maxDurationS}s limit`,
+          detail: `${Math.round(s)}s exceeds ${maximumDuration}s limit`,
         });
       } else if (s < caps.video.minDurationS) {
         checks.push({ id: `dur_${p}`, label: `${label} duration`, status: "fail", detail: "Too short" });

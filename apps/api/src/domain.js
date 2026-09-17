@@ -1,4 +1,5 @@
 import { PLATFORM_CAPABILITIES } from "@posterract/contract/capabilities";
+import { validateTikTokOptions } from "@posterract/contract/tiktok";
 
 export const PLATFORM_IDS = [
   "instagram",
@@ -151,6 +152,14 @@ export function parseCreatePost(body, now = new Date()) {
       throw new RequestValidationError("invalid_platform_options", {
         provider,
       });
+    }
+    if (provider === "tiktok") {
+      const reason = validateTikTokOptions(options);
+      if (reason) throw new RequestValidationError("invalid_tiktok_options", { reason });
+      if (options.mode === "direct") {
+        if (!accountIds) throw new RequestValidationError("tiktok_explicit_account_required");
+        if (options.consentAccepted !== true) throw new RequestValidationError("tiktok_post_consent_required");
+      }
     }
     return {
       provider,

@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 import Stripe from "stripe";
+import { createPortalConfigurationResolver } from "./billingPortal.js";
 import {
   addOneMonth,
+  adjustPlanAllowance,
   clearWorkspacePlan,
   grantPlanCycle,
   setWorkspacePlan,
@@ -11,24 +13,10 @@ const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /**
- * The subscription plans. Each maps one Stripe monthly price (configured
- * through STRIPE_<PLAN>_MONTHLY_PRICE_ID / STRIPE_<PLAN>_YEARLY_PRICE_ID) to the
- * credits granted every paid cycle. Balances reset to the allotment on each
- * cycle — no rollover, which is what makes the margin predictable.
- *
- * A credit is one cent of provider spend at our cost (see ai/pricing.js), so
- * an allotment reads directly as the most a subscriber can cost us:
- *
- *   pro        $20  →     0 credits  →  $0.00 to serve  →  $19.12 after Stripe
- *   allstar    $49  → 1,200 credits  →  $12.00          →  $35.28
- *   superstar  $99  → 3,000 credits  →  $30.00          →  $65.83
- *
- * Those profits hold at *full* burn, so unused credits are upside rather than
- * the thing holding the number up. Stripe's 2.9% + $0.30 is already deducted.
- *
- * `pro` grants no credits on purpose: it is the plan for people who bring their
- * own provider keys, and generation endpoints refuse it by plan rather than by
- * balance, so the message can say "upgrade" instead of "out of credits".
+ * Pro is the only plan sold: $20 monthly or $200 yearly, with customers using
+ * their own provider keys in the desktop editor. It includes no hosted credits.
+ * Retired credit plans remain here so historical Stripe events and existing
+ * subscriptions can still be processed correctly.
  */
 // Both amounts are declared here, in cents, and every checkout asserts Stripe
 // agrees with them. Yearly is ten months' money for twelve months of service.
@@ -37,6 +25,10 @@ export const CREDIT_PLANS = Object.freeze({
   allstar: Object.freeze({ id: "allstar", monthlyAmount: 4_900, yearlyAmount: 49_000, credits: 1_200, transcribeMinutes: 120 }),
   superstar: Object.freeze({ id: "superstar", monthlyAmount: 9_900, yearlyAmount: 99_000, credits: 3_000, transcribeMinutes: 400 }),
 });
+
+// Only Pro is offered for new purchases or plan changes. Keep retired tier
+// definitions for historical subscriptions and already-paid invoice events.
+const AVAILABLE_PLANS = Object.freeze({ pro: CREDIT_PLANS.pro });
 
 /**
  * Transcription is allowed by the minute rather than charged in credits.
@@ -185,7 +177,7 @@ function safeSiteUrl(value) {
   }
 }
 
-function publicSubscription(row) {
+function publicSubscription(row, config) {
   if (!row) {
     return {
       status: "none",
@@ -208,6 +200,7 @@ function publicSubscription(row) {
     entitled,
     plan: row.recognized_plan
       ? {
+          id: creditPlanForPrice(config, row.stripe_price_id)?.id,
           interval: row.billing_interval,
           currency: row.currency,
           unitAmount: row.unit_amount,
@@ -231,23 +224,21 @@ function configuration(environment) {
     webhookSecret: configuredValue(environment, "STRIPE_WEBHOOK_SECRET"),
     publishableKey: configuredValue(environment, "STRIPE_PUBLISHABLE_KEY"),
     productId: configuredValue(environment, "STRIPE_PRODUCT_ID"),
+    legacyPriceIds: [configuredValue(environment, "STRIPE_MONTHLY_PRICE_ID"), configuredValue(environment, "STRIPE_YEARLY_PRICE_ID")].filter(Boolean),
     // The base subscription is the Pro plan. There is no separate product
     // any more, so these fall back to Pro's own prices rather than demanding
     // a duplicate pair of variables that would have to be kept in step.
     monthlyPriceId:
-      configuredValue(environment, "STRIPE_MONTHLY_PRICE_ID") ??
-      configuredValue(environment, "STRIPE_PRO_MONTHLY_PRICE_ID"),
+      configuredValue(environment, "STRIPE_PRO_MONTHLY_PRICE_ID") ??
+      configuredValue(environment, "STRIPE_MONTHLY_PRICE_ID"),
     yearlyPriceId:
-      configuredValue(environment, "STRIPE_YEARLY_PRICE_ID") ??
-      configuredValue(environment, "STRIPE_PRO_YEARLY_PRICE_ID"),
-    // Every plan is sold monthly and yearly. Credits refill a month from the
-    // payment date either way (see `rollCycleIfDue`), so the interval is
-    // purely a billing choice — a yearly subscriber is charged once and still
-    // gets their allowance every month.
+      configuredValue(environment, "STRIPE_PRO_YEARLY_PRICE_ID") ??
+      configuredValue(environment, "STRIPE_YEARLY_PRICE_ID"),
+    // Retain historical price mappings for invoice and subscription webhooks.
     creditPrices: {
       pro: {
-        monthly: configuredValue(environment, "STRIPE_PRO_MONTHLY_PRICE_ID"),
-        yearly: configuredValue(environment, "STRIPE_PRO_YEARLY_PRICE_ID"),
+        monthly: configuredValue(environment, "STRIPE_PRO_MONTHLY_PRICE_ID") ?? configuredValue(environment, "STRIPE_MONTHLY_PRICE_ID"),
+        yearly: configuredValue(environment, "STRIPE_PRO_YEARLY_PRICE_ID") ?? configuredValue(environment, "STRIPE_YEARLY_PRICE_ID"),
       },
       allstar: {
         monthly: configuredValue(environment, "STRIPE_ALLSTAR_MONTHLY_PRICE_ID"),
@@ -275,11 +266,8 @@ function configuration(environment) {
   if (!config.yearlyPriceId?.startsWith("price_")) {
     errors.push("STRIPE_PRO_YEARLY_PRICE_ID");
   }
-  // Every plan is sold both ways, so every price is required. A missing one
-  // would otherwise fail silently at checkout — the plan would simply refuse
-  // that interval — instead of here, where it is a configuration error anyone
-  // can see and fix.
-  for (const plan of Object.values(CREDIT_PLANS)) {
+  // Retired prices are optional and must not block the current checkout.
+  for (const plan of Object.values(AVAILABLE_PLANS)) {
     const prices = config.creditPrices[plan.id];
     for (const interval of ["monthly", "yearly"]) {
       if (!prices?.[interval]?.startsWith("price_")) {
@@ -303,7 +291,10 @@ function cycleDate(value) {
 }
 
 function invoiceCreditPlan(config, invoice) {
-  for (const line of invoice?.lines?.data ?? []) {
+  const lines = [...(invoice?.lines?.data ?? [])].sort((a, b) => Number(Number(b.amount) > 0) - Number(Number(a.amount) > 0));
+  for (const line of lines) {
+    // A plan-change invoice can begin with a credit for the OLD plan.
+    if (Number(line.amount) < 0) continue;
     const priceId =
       stripeId(line?.price) ?? line?.pricing?.price_details?.price;
     const plan = creditPlanForPrice(config, priceId);
@@ -312,6 +303,7 @@ function invoiceCreditPlan(config, invoice) {
         plan,
         periodStart: unixDate(line?.period?.start),
         periodEnd: unixDate(line?.period?.end),
+        prorated: Boolean(line.proration ?? line.parent?.subscription_item_details?.proration),
       };
     }
   }
@@ -411,7 +403,7 @@ async function upsertSubscription(client, workspaceId, subscription, config) {
   const creditPlan = creditPlanForPrice(config, priceId);
   const recognizedPlan =
     (productId === config.productId &&
-      (priceId === config.monthlyPriceId || priceId === config.yearlyPriceId)) ||
+      (priceId === config.monthlyPriceId || priceId === config.yearlyPriceId || config.legacyPriceIds.includes(priceId))) ||
     Boolean(creditPlan);
   await upsertCustomer(client, workspaceId, customerId);
   await client.query(
@@ -487,6 +479,7 @@ async function applyCheckoutEvent(client, workspaceId, session, config) {
   const recognizedPrice =
     priceId === config.monthlyPriceId ||
     priceId === config.yearlyPriceId ||
+    config.legacyPriceIds.includes(priceId) ||
     Boolean(creditPlanForPrice(config, priceId));
   if (
     session.mode !== "subscription" ||
@@ -592,6 +585,10 @@ async function applyInvoiceEvent(client, workspaceId, invoice, paymentStatus, co
       invoiceCreditPlan(config, invoice) ??
       (await subscriptionCreditPlan(client, config, subscriptionId));
     if (resolved) {
+      if (invoice.billing_reason === "subscription_update" && resolved.prorated) {
+        await adjustPlanAllowance(client, { workspaceId, plan: resolved.plan.id, allotment: resolved.plan.credits });
+        return;
+      }
       const cycleStartedAt = resolved.periodStart ?? paidAt ?? new Date();
       // A month from the payment date, not the invoice period. Stripe bills a
       // yearly plan once; credits still refill monthly, so a yearly
@@ -628,6 +625,7 @@ export function createStripeBillingService({
         })
       : undefined);
   let catalogCache;
+  const ensurePortalConfiguration = createPortalConfigurationResolver(stripe, config);
 
   function requireConfigured() {
     if (!config.configured || !stripe) {
@@ -658,7 +656,7 @@ export function createStripeBillingService({
     };
     want(config.monthlyPriceId, "month", 2_000);
     want(config.yearlyPriceId, "year", 20_000);
-    for (const plan of Object.values(CREDIT_PLANS)) {
+    for (const plan of Object.values(AVAILABLE_PLANS)) {
       const prices = config.creditPrices[plan.id];
       if (!prices) continue;
       want(prices.monthly, "month", plan.monthlyAmount);
@@ -790,8 +788,8 @@ export function createStripeBillingService({
       throw new BillingError(400, "invalid_billing_interval");
     }
     const tier =
-      typeof plan === "string" && Object.hasOwn(CREDIT_PLANS, plan)
-        ? CREDIT_PLANS[plan]
+      typeof plan === "string" && Object.hasOwn(AVAILABLE_PLANS, plan)
+        ? AVAILABLE_PLANS[plan]
         : undefined;
     if (plan !== undefined && plan !== null) {
       if (!tier) throw new BillingError(400, "invalid_plan");
@@ -848,7 +846,7 @@ export function createStripeBillingService({
         allow_promotion_codes: true,
         payment_method_collection: "always",
         success_url: `${config.siteUrl}/settings?billing=success&session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${config.siteUrl}/settings?billing=cancelled`,
+        cancel_url: `${config.siteUrl}/settings?billing=cancelled&plan=pro&interval=${interval}`,
         metadata,
         subscription_data: { metadata },
       },
@@ -890,10 +888,17 @@ export function createStripeBillingService({
     return response;
   }
 
-  async function createPortal({ workspaceId, role, key }) {
+  async function createPortal({ workspaceId, role, key, plan, interval }) {
     requireConfigured();
     if (role !== "owner" && role !== "admin") {
       throw new BillingError(403, "billing_admin_required");
+    }
+    const changingPlan = plan !== undefined || interval !== undefined;
+    if (changingPlan && (typeof plan !== "string" || !Object.hasOwn(AVAILABLE_PLANS, plan))) {
+      throw new BillingError(400, "invalid_plan");
+    }
+    if (changingPlan && interval !== "monthly" && interval !== "yearly") {
+      throw new BillingError(400, "invalid_billing_interval");
     }
     const customer = await postgres.query(
       `select stripe_customer_id from billing_customers
@@ -901,17 +906,47 @@ export function createStripeBillingService({
       [workspaceId],
     );
     if (!customer.rows[0]) throw new BillingError(404, "billing_customer_not_found");
+    const customerId = customer.rows[0].stripe_customer_id;
+    let flow;
+    if (changingPlan) {
+      await verifyCatalog();
+      const targetPrice = config.creditPrices[plan]?.[interval];
+      if (!targetPrice) throw new BillingError(400, "billing_plan_not_configured");
+      const stored = await postgres.query(
+        `select stripe_subscription_id from billing_subscriptions
+         where workspace_id = $1 and stripe_customer_id = $2
+           and recognized_plan = true and status = 'active'
+         order by updated_at desc limit 1`, [workspaceId, customerId],
+      );
+      if (!stored.rows[0]) throw new BillingError(409, "active_subscription_required");
+      const current = await stripe.subscriptions.retrieve(stored.rows[0].stripe_subscription_id);
+      if (stripeId(current.customer) !== customerId) throw new BillingError(409, "stripe_customer_workspace_conflict");
+      const item = firstSubscriptionItem(current);
+      if (current.status !== "active" || current.items.data.length !== 1 || !item?.id || !creditPlanForPrice(config, stripeId(item.price))) {
+        throw new BillingError(409, "subscription_not_updatable");
+      }
+      if (stripeId(item.price) === targetPrice) throw new BillingError(409, "plan_already_selected");
+      if (current.schedule || current.cancel_at_period_end || current.pending_update) throw new BillingError(409, "subscription_change_pending");
+      flow = {
+        type: "subscription_update_confirm",
+        subscription_update_confirm: { subscription: current.id, items: [{ id: item.id, price: targetPrice, quantity: item.quantity ?? 1 }] },
+        after_completion: { type: "redirect", redirect: { return_url: `${config.siteUrl}/settings?billing=updated` } },
+      };
+    }
+    const portalConfiguration = await ensurePortalConfiguration(changingPlan ? plan : undefined);
     const session = await stripe.billingPortal.sessions.create(
       {
-        customer: customer.rows[0].stripe_customer_id,
+        customer: customerId,
+        configuration: portalConfiguration,
         return_url: `${config.siteUrl}/settings`,
+        ...(flow ? { flow_data: flow } : {}),
       },
-      { idempotencyKey: stripeIdempotencyKey("portal", workspaceId, key) },
+      { idempotencyKey: stripeIdempotencyKey(`portal:${plan ?? "manage"}:${interval ?? ""}`, workspaceId, key) },
     );
     return { url: session.url };
   }
 
-  async function loadSubscription(workspaceId) {
+  async function loadSubscription(workspaceId, role) {
     const result = await postgres.query(
       `select * from billing_subscriptions
        where workspace_id = $1
@@ -925,11 +960,16 @@ export function createStripeBillingService({
        limit 1`,
       [workspaceId],
     );
-    return publicSubscription(result.rows[0]);
+    const subscription = publicSubscription(result.rows[0], config);
+    if (role !== undefined) {
+      const customer = await postgres.query("select 1 from billing_customers where workspace_id = $1 limit 1", [workspaceId]);
+      subscription.canManageBilling = ["owner", "admin"].includes(role) && customer.rows.length > 0;
+    }
+    return subscription;
   }
 
   function publicConfig() {
-    const creditPlanEntries = Object.values(CREDIT_PLANS)
+    const creditPlanEntries = Object.values(AVAILABLE_PLANS)
       .filter((plan) => config.creditPrices[plan.id]?.monthly)
       .map((plan) => [
         plan.id,
@@ -971,8 +1011,7 @@ export function createStripeBillingService({
         creditPlanEntries.length > 0
           ? Object.fromEntries(creditPlanEntries)
           : undefined,
-      // Tier catalog for the three-tier checkout interface. Same prices as
-      // creditPlans, nested per interval because tier prices are monthly-only.
+      // Compatibility catalog for older desktop releases; only Pro is sold.
       tiers:
         creditPlanEntries.length > 0
           ? Object.fromEntries(
@@ -1089,6 +1128,7 @@ export function createStripeBillingService({
     config,
     createCheckout,
     createPortal,
+    ensurePortalConfiguration,
     loadSubscription,
     processWebhook,
     publicConfig,
@@ -1114,7 +1154,7 @@ export function registerBillingRoutes(app, { service, requireSession }) {
     { preHandler: requireSession },
     async (request, reply) => {
       try {
-        return await service.loadSubscription(request.authContext.workspaceId);
+        return await service.loadSubscription(request.authContext.workspaceId, request.authContext.role);
       } catch (error) {
         return billingRouteError(request, reply, error);
       }
@@ -1148,6 +1188,8 @@ export function registerBillingRoutes(app, { service, requireSession }) {
           workspaceId: request.authContext.workspaceId,
           role: request.authContext.role,
           key: requireIdempotencyKey(request),
+          plan: request.body?.plan,
+          interval: request.body?.interval,
         });
       } catch (error) {
         return billingRouteError(request, reply, error);

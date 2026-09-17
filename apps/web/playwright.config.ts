@@ -14,7 +14,7 @@ export default defineConfig({
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
     // Demo engine, isolated port: deterministic offline runs for e2e.
-    command: "VITE_CONVEX_URL= npx vite --host 127.0.0.1 --port 5174",
+    command: "VITE_API_URL= VITE_CONVEX_URL= npx vite --host 127.0.0.1 --port 5174",
     url: "http://127.0.0.1:5174",
     reuseExistingServer: false,
     timeout: 30_000,

@@ -62,40 +62,45 @@ test.describe("Posterract product loop", () => {
 
   test("composer pre-flight blocks launch until an artifact is added", async ({ page }) => {
     await page.goto("/compose");
-    const launch = page.getByRole("button", { name: /Initiate Transmission|Lock Trajectory/ });
+    const launch = page.getByRole("button", { name: /Publish now|Schedule post/ });
     await expect(launch).toBeDisabled();
-    await expect(page.getByText("Add a video to transmit.")).toBeVisible();
+    await expect(page.getByText("Add a video to continue.")).toBeVisible();
   });
 
   test("composer exposes only the four approved publishing targets", async ({ page }) => {
     await page.goto("/compose");
-    const targets = page.getByRole("group", { name: "Target platforms" });
+    const targets = page.getByRole("group", { name: "Target accounts" });
     for (const platform of ["Instagram", "TikTok", "Facebook", "Threads"]) {
       await expect(targets.getByRole("button", { name: new RegExp(platform, "i") })).toBeVisible();
     }
     await expect(targets.getByRole("button", { name: /YouTube/i })).toHaveCount(0);
-    await expect(page.getByText("YouTube and X are coming soon.")).toBeVisible();
+    await expect(targets.getByRole("button", { name: /X/, exact: true })).toHaveCount(0);
   });
 
-  test("composer shows every supported caption variant without a title field", async ({ page }) => {
+  test("web composer keeps shared and platform captions in the same editor", async ({ page }) => {
     await page.goto("/compose");
 
     await expect(page.getByLabel("Title (internal)")).toHaveCount(0);
-    const captionTabs = page.getByRole("tablist", { name: "Caption variants" });
-    for (const tab of ["Base", "Instagram", "TikTok", "Facebook", "Threads"]) {
-      await expect(captionTabs.getByRole("tab", { name: tab, exact: true })).toBeVisible();
+    const captions = page.getByRole("tablist", { name: "Caption variants" });
+    await expect(captions.getByRole("tab", { name: "Base", exact: true })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Base caption", exact: true })).toBeVisible();
+    for (const platform of ["Instagram", "TikTok", "Facebook", "Threads"]) {
+      const target = page.getByRole("group", { name: "Target accounts" }).getByRole("button", { name: platform, exact: true });
+      if (await target.getAttribute("aria-pressed") === "false") await target.click();
+      await captions.getByRole("tab", { name: platform, exact: true }).click();
+      await expect(page.getByRole("textbox", { name: `${platform} caption`, exact: true })).toBeVisible();
     }
   });
 
-  test("portals connect and disconnect", async ({ page }) => {
+  test("portals reflect connected and disconnected account identities", async ({ page }) => {
     await page.goto("/portals");
     const instagramCard = page.locator("section", { hasText: "Instagram" }).first();
     await instagramCard.getByRole("button", { name: "Disconnect" }).click();
-    await expect(instagramCard.getByText("○ CLOSED")).toBeVisible();
-    await instagramCard.getByRole("button", { name: /Open portal/ }).click();
-    await expect(instagramCard.getByText("● LINKED")).toBeVisible();
+    await expect(instagramCard.getByText("DISCONNECTED", { exact: true })).toBeVisible();
+    await page.evaluate(() => (window.__engine!.getState() as unknown as { setPortalStatus(provider: string, status: string): void }).setPortalStatus("instagram", "connected"));
+    await expect(instagramCard.getByText("● CONNECTED")).toBeVisible();
 
     const youtubeCard = page.locator("section", { hasText: "YouTube" }).first();
-    await expect(youtubeCard.getByRole("button", { name: "Coming soon" })).toBeDisabled();
+    await expect(youtubeCard.getByText("Connection not available yet")).toBeVisible();
   });
 });

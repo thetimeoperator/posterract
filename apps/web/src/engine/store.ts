@@ -8,6 +8,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type {
   ArtifactDTO,
+  AccountSetDTO,
   EventDTO,
   PlatformId,
   PointsEntryDTO,
@@ -35,6 +36,7 @@ const WS = "ws_local";
 export const artifactUrls = new Map<string, string>();
 
 export type CreateTransmissionInput = {
+  idempotencyKey?: string;
   title: string;
   baseCaption: string;
   hashtags: string[];
@@ -45,6 +47,7 @@ export type CreateTransmissionInput = {
     Record<PlatformId, Record<string, string | boolean | number>>
   >;
   accountSetId?: string;
+  accountIds?: string[];
   scheduleMode: ScheduleMode;
   scheduledFor: number;
 };
@@ -68,6 +71,7 @@ type EngineState = {
   projections: ProjectionDTO[];
   events: EventDTO[];
   portals: PortalDTO[];
+  accountSets: AccountSetDTO[];
   points: LedgerEntry[];
   stats: StatsState;
 
@@ -152,6 +156,7 @@ export const useEngineStore = create<EngineState>()(
       projections: [],
       events: [],
       portals: seedPortals,
+      accountSets: [],
       points: [],
       stats: { lifetimeRP: 0, weekRP: 0, weekStartAt: startOfWeek(Date.now()), streakDays: 0, badges: [] },
 
@@ -235,7 +240,7 @@ export const useEngineStore = create<EngineState>()(
           createdAt: now,
           updatedAt: now,
         };
-        const portalByProvider = new Map(get().portals.map((p) => [p.provider, p]));
+        const portalByProvider = new Map(get().portals.filter((p) => !input.accountIds || input.accountIds.includes(p.id)).map((p) => [p.provider, p]));
         const projections: ProjectionDTO[] = input.platforms.map((provider) => ({
           id: `prj_${crypto.randomUUID().slice(0, 8)}`,
           transmissionId: id,
@@ -303,6 +308,7 @@ export const useEngineStore = create<EngineState>()(
         const t = get().transmissions.find((x) => x.id === id);
         if (!t) return undefined;
         const projections = get().projections.filter((p) => p.transmissionId === id);
+        if (projections.some((p) => p.provider === "tiktok" && p.platformOptions.mode === "direct")) throw new Error("Open this copy in Create Post to authorize it again.");
         return get().createTransmission({
           title: `${t.title} (copy)`,
           baseCaption: t.baseCaption,
@@ -498,6 +504,7 @@ export const useEngineStore = create<EngineState>()(
         projections: s.projections,
         events: s.events.slice(0, 50),
         portals: s.portals,
+        accountSets: s.accountSets,
         points: s.points.slice(0, 100),
         stats: s.stats,
       }),

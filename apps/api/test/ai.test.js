@@ -516,7 +516,8 @@ test("plans gate generation before any credit is reserved", async () => {
     });
     assert.equal(refused.statusCode, 403);
     assert.equal(refused.json().error, "plan_excludes_generation");
-    assert.equal(refused.json().upgradeTo, "allstar");
+    assert.equal(refused.json().upgradeTo, undefined);
+    assert.match(refused.json().detail, /own AI provider keys/);
 
     // 2k video is twice the cost per second of 768p, so studio is gated to
     // 768p and only pro may ask for it.
@@ -532,7 +533,7 @@ test("plans gate generation before any credit is reserved", async () => {
     });
     assert.equal(tooBig.statusCode, 403);
     assert.equal(tooBig.json().error, "plan_excludes_resolution");
-    assert.equal(tooBig.json().upgradeTo, "superstar");
+    assert.equal(tooBig.json().upgradeTo, undefined);
 
     // Nothing was charged and nothing was recorded by either refusal.
     const credits = await pool.query(

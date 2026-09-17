@@ -13,6 +13,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { NativeConnection, Worker } from "@temporalio/worker";
 import { ApplicationFailure } from "@temporalio/common";
 import { Pool } from "pg";
+import { createTikTokDirectActivities } from "./tiktokDirect.js";
 import {
   decryptSecret,
   encryptSecret,
@@ -143,7 +144,7 @@ async function signedMediaUrl(r2Key) {
   );
 }
 
-async function prepareTikTokMedia(videoUrl) {
+async function prepareTikTokMedia(videoUrl, verifyDuration = false) {
   const directory = await mkdtemp(join(tmpdir(), "posterract-tiktok-"));
   const inputPath = join(directory, "source");
   const outputPath = join(directory, "tiktok-ready.mp4");
@@ -176,8 +177,16 @@ async function prepareTikTokMedia(videoUrl) {
     ]);
     const prepared = await stat(outputPath);
     if (prepared.size <= 0) throw new Error("TikTok media preparation produced an empty file");
+    let durationMs;
+    if (verifyDuration) {
+      const probe = await execFileAsync(env.FFPROBE_PATH ?? "ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "json", outputPath]);
+      durationMs = Math.round(Number(JSON.parse(probe.stdout).format?.duration) * 1000);
+      if (!Number.isFinite(durationMs) || durationMs <= 0) throw new Error("TikTok video duration could not be verified");
+    }
 
     return {
+      path: outputPath,
+      durationMs,
       mimeType: "video/mp4",
       sizeBytes: prepared.size,
       readRange: async (start, end) => {
@@ -216,7 +225,7 @@ async function prepareTikTokMedia(videoUrl) {
 async function loadProjectionContext(projectionId) {
   const result = await postgres.query(
     `select p.*, t.title, t.base_caption, t.status as transmission_status,
-            m.r2_key, m.mime_type, m.size_bytes,
+            m.r2_key, m.mime_type, m.size_bytes, m.duration_ms,
             a.provider_account_id, a.handle, a.status as account_status,
             coalesce(tok.provider_user_id, a.provider_account_id) as provider_user_id,
             tok.access_token_ciphertext, tok.refresh_token_ciphertext,
@@ -759,6 +768,9 @@ async function refreshAccountAnalytics(accountId) {
   );
   const runId = started.rows[0]?.id;
   try {
+    // A public ID may arrive after publication/moderation. Reconcile before
+    // selecting the videos for the existing analytics path.
+    await directActivities.refreshTikTokPublicIds(accountId).catch(() => undefined);
     const context = await loadAnalyticsContext(accountId);
     if (!context) {
       if (runId) {
@@ -1205,6 +1217,13 @@ const activities = {
     return undefined;
   },
 };
+
+const directActivities = createTikTokDirectActivities({
+  postgres, r2, loadProjectionContext, signedMediaUrl, prepareMedia: (url) => prepareTikTokMedia(url, true),
+  accessTokenFor: (row) => refreshAccessToken(row, decryptSecret(row.access_token_ciphertext),
+    row.refresh_token_ciphertext ? decryptSecret(row.refresh_token_ciphertext) : undefined),
+});
+Object.assign(activities, directActivities);
 
 const connection = await NativeConnection.connect({
   address: env.TEMPORAL_ADDRESS,

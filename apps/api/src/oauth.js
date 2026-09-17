@@ -215,7 +215,7 @@ async function exchange(provider, code) {
   throw new Error(`${provider} OAuth is not supported`);
 }
 
-async function freshProfileAccessToken(database, row) {
+export async function freshProfileAccessToken(database, row) {
   const accessToken = decryptSecret(row.access_token_ciphertext);
   const refreshToken = decryptSecret(row.refresh_token_ciphertext);
   if (!accessToken) throw new Error("This account has no access token");

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ChevronDown, Copy, ExternalLink, RotateCcw, XCircle } from "lucide-react";
 import clsx from "clsx";
 import { AnimatePresence, motion } from "framer-motion";
@@ -100,6 +100,7 @@ function TransmissionRow({
   const projections = useProjections().filter((p) => p.transmissionId === t.id);
   const events = useEvents().filter((e) => e.transmissionId === t.id);
   const { cancelTransmission, duplicateTransmission, retryProjection } = useEngineActions();
+  const navigate = useNavigate();
 
   const statusDots = Object.fromEntries(
     projections.map((p) => [
@@ -168,9 +169,17 @@ function TransmissionRow({
               size="sm"
               variant="secondary"
               aria-label="Duplicate transmission"
-              onClick={() => {
-                duplicateTransmission(t.id);
-                pushSignal({ tone: "info", title: "Duplicated", detail: "Copy scheduled one hour from now — edit it in the queue." });
+              onClick={async () => {
+                if (projections.some((p) => p.provider === "tiktok" && p.platformOptions.mode === "direct")) {
+                  await navigate({ to: "/compose", search: { copy: t.id } });
+                  return;
+                }
+                try {
+                  await duplicateTransmission(t.id);
+                  pushSignal({ tone: "info", title: "Duplicated", detail: "Copy scheduled one hour from now — edit it in the queue." });
+                } catch (error) {
+                  pushSignal({ tone: "danger", title: "Copy was not scheduled", detail: error instanceof Error ? error.message : "Try again." });
+                }
               }}
             >
               <Copy size={13} />
@@ -202,7 +211,7 @@ function TransmissionRow({
                       </span>
                       <StatusBadge status={p.status} size="sm" />
                       <span className="min-w-0 flex-1 truncate text-[11px] text-starlight-faint">
-                        {p.errorSummary ?? ""}
+                        {p.errorSummary ?? (p.provider === "tiktok" ? p.status === "awaiting_user" ? "Delivered to TikTok inbox — finish posting in TikTok." : p.status === "processing" ? "TikTok is processing your video." : p.status === "live" ? "TikTok confirmed publication." : "" : "")}
                       </span>
                       {p.platformPostUrl && (
                         <a

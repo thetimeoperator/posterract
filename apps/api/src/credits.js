@@ -103,6 +103,28 @@ export async function grantPlanCycle(
   });
 }
 
+/** Adjust a mid-cycle upgrade without granting previously spent credits again. */
+export async function adjustPlanAllowance(client, { workspaceId, plan, allotment }) {
+  const current = await client.query(
+    "select balance, allotment from workspace_credits where workspace_id = $1 for update", [workspaceId],
+  );
+  const previousBalance = Number(current.rows[0]?.balance ?? 0);
+  const previousAllotment = Number(current.rows[0]?.allotment ?? 0);
+  const balance = Math.max(0, previousBalance + allotment - previousAllotment);
+  await client.query(
+    `insert into workspace_credits (workspace_id, plan, balance, allotment)
+     values ($1, $2, $3, $4) on conflict (workspace_id) do update set
+       plan = excluded.plan, balance = excluded.balance,
+       allotment = excluded.allotment, updated_at = now()`,
+    [workspaceId, plan, balance, allotment],
+  );
+  const delta = balance - previousBalance;
+  if (delta) await recordLedgerEntry(client, {
+    workspaceId, delta, kind: delta > 0 ? "grant" : "expire",
+    note: `Adjusted allowance to ${plan}; current cycle usage and renewal date preserved`,
+  });
+}
+
 /** Keep the stored plan in sync with an active credit-plan subscription. */
 export async function setWorkspacePlan(client, workspaceId, plan) {
   await client.query(
