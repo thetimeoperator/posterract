@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { PLATFORM_MARK_SOURCES } from "@posterract/hyperkit";
 import { HeroStage } from "@/marketing/hero/HeroStage";
@@ -163,8 +163,15 @@ export function Landing() {
     previousMode.current = mode;
     setMode(next);
     writeMode(next);
-    window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
   };
+
+  // Throwing the lever lands on the new page's very top. Instant, and only once
+  // that page is in the DOM: a smooth scroll started before the swap was cut
+  // short by it, leaving the visitor partway down the other page.
+  useLayoutEffect(() => {
+    if (previousMode.current === null) return;
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, [mode]);
 
   /**
    * The nav's two buttons: each goes to its own page. A full load, not a
