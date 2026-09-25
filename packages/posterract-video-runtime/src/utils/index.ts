@@ -10,3 +10,6 @@ export * from './text-motion';
 export * from './time';
 export * from './transition';
 export * from './vector';
+export * from './placement';
+export * from './loop';
+export * from './animation-params';

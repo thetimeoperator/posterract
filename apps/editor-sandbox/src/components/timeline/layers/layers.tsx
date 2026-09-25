@@ -190,7 +190,7 @@ export function Layers() {
           <Tooltip placement="top">
             <TooltipTrigger<typeof Button>
               as={(triggerProps) => (
-                <Button {...triggerProps} variant="ghost" size="icon" onClick={handlePlay}>
+                <Button {...triggerProps} variant="ghost" size="icon" onClick={handlePlay} aria-label={playback()?.playing ? 'Pause video' : 'Play video'}>
                   <Show when={playback()?.playing} fallback={<Icon name="play" class="size-6" />}>
                     <Icon name="pause" class="size-6" />
                   </Show>
@@ -206,7 +206,7 @@ export function Layers() {
           <Tooltip placement="top">
             <TooltipTrigger<typeof Button>
               as={(triggerProps) => (
-                <Button {...triggerProps} variant="ghost" size="icon" onClick={toggleLooping}>
+                <Button {...triggerProps} variant="ghost" size="icon" onClick={toggleLooping} aria-label={playback()?.loop ? 'Disable loop' : 'Enable loop'} aria-pressed={!!playback()?.loop}>
                   <Show when={playback()?.loop} fallback={<Icon name="controls-no-loop" />}>
                     <Icon name="controls-loop" />
                   </Show>
@@ -219,11 +219,12 @@ export function Layers() {
               </TooltipContent>
             </TooltipPortal>
           </Tooltip>
+          <Show when={timelineMinimized()}><Button variant="ghost" size="icon" onClick={toggleTimeline} aria-label="Expand timeline" title="Expand timeline"><Icon name="chevron-up" /></Button></Show>
           <Show when={!timelineMinimized()}>
             <Tooltip placement="top">
               <TooltipTrigger<typeof Button>
                 as={(triggerProps) => (
-                  <Button {...triggerProps} variant="ghost" size="icon" onClick={() => splitAtPlayhead(world)}>
+                  <Button {...triggerProps} variant="ghost" size="icon" onClick={() => splitAtPlayhead(world)} aria-label="Split at playhead">
                     <Icon name="split" class="size-6" />
                   </Button>
                 )}

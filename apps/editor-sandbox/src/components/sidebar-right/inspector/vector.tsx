@@ -13,6 +13,7 @@ import { PanelSection } from "@/components/ui/panel-section";
 import { ControlRow } from "@/components/ui/control-group";
 import { Keyframe } from "@/components/ui/keyframe";
 import { ControlledTextField, TextField, TextFieldInput } from "@/components/ui/text-field";
+import { ShapePicker } from "./shape";
 
 import type { AnimatableProperty } from "@posterract/composition";
 import type { Entity } from "koota";
@@ -72,6 +73,10 @@ export function VectorSettings(props: VectorSettingsProps) {
       title="Shape"
       subtitle={<span class="text-xxs text-primary">{KIND_LABELS[kind()] ?? "Path"}</span>}
     >
+      <Show when={kind() === GeometryType.ELLIPSE || kind() === GeometryType.POLYGON}>
+        <ShapePicker entity={entity()} />
+      </Show>
+
       <Show when={kind() === GeometryType.PATH}>
         <ControlRow label="Path">
           <TextField class="w-full min-w-0">

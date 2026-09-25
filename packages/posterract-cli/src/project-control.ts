@@ -8,6 +8,7 @@ import { homedir } from "node:os";
 import { dirname, join, parse, resolve } from "node:path";
 import {
   CLI_PROTOCOL_VERSION,
+  INSTANCE_PROFILE,
   LOCAL_CONTROL_PROTOCOL_VERSION,
   LOCAL_CONTROL_RUNTIME,
   type CliActivityMetadata,
@@ -56,9 +57,10 @@ function looksLikeProject(dir: string): boolean {
  */
 export function activeProjectPointerPath(): string {
   const runtime = process.env.POSTERRACT_RUNTIME_DIR;
-  return runtime
-    ? join(resolve(runtime), "active-project.json")
-    : join(homedir(), ".posterract", "runtime", "active-project.json");
+  if (runtime) return join(resolve(runtime), "active-project.json");
+  // A profiled instance (see cli-socket-path.ts) points at its own project, so
+  // it never redirects the agents that follow the user's own app.
+  return join(homedir(), ".posterract", INSTANCE_PROFILE ? `runtime-${INSTANCE_PROFILE}` : "runtime", "active-project.json");
 }
 
 function readActiveProjectPointer(): string | null {
@@ -100,10 +102,17 @@ export function clearActiveProjectPointer(projectDir?: string): void {
 }
 
 /** Resolve a Posterract project without depending on client-specific roots. */
-export function resolveProjectDir(explicit?: string): string {
+/**
+ * `here` is for the commands that read or edit the folder themselves (see
+ * ./offline): they work on the project the caller is standing in, the way git
+ * does, and only then on anything else. A command that talks to the app acts on
+ * what the app has open, so for those the app's pointer outranks the folder.
+ */
+export function resolveProjectDir(explicit?: string, options: { here?: boolean } = {}): string {
   const candidates = [
     explicit,
     process.env.POSTERRACT_PROJECT_DIR,
+    ...(options.here ? [process.cwd()] : []),
     process.env.CLAUDE_PROJECT_DIR,
     process.env.CURSOR_PROJECT_DIR,
     process.env.VSCODE_CWD,
@@ -134,10 +143,18 @@ export function localControlPaths(projectDir: string) {
   };
 }
 
+/**
+ * Desktop is not there to be asked: it is closed, or it does not have this
+ * project open. Told apart from every other failure because it is the one a
+ * caller can do something about without the person — start the engine (see
+ * cli-client) for what only needs a renderer.
+ */
+export class DesktopUnavailableError extends Error {}
+
 export function readLocalControlSession(projectDir: string): LocalControlSession {
   const { session } = localControlPaths(projectDir);
   if (!existsSync(session)) {
-    throw new Error("Posterract Desktop is not exposing this project. Open the project in Desktop and retry.");
+    throw new DesktopUnavailableError("Posterract Desktop is not exposing this project. Open the project in Desktop and retry.");
   }
   const value = readJson<LocalControlSession>(session);
   if (value.protocolVersion !== LOCAL_CONTROL_PROTOCOL_VERSION) {
@@ -154,10 +171,10 @@ export function readLocalControlSession(projectDir: string): LocalControlSession
     throw new Error("The local-control session belongs to a different project.");
   }
   if (value.expiresAt <= Date.now()) {
-    throw new Error("The Posterract project session expired. Reopen the project in Desktop.");
+    throw new DesktopUnavailableError("The Posterract project session expired. Reopen the project in Desktop.");
   }
   if (typeof value.heartbeatAt === "number" && Date.now() - value.heartbeatAt > HEARTBEAT_STALE_MS) {
-    throw new Error(
+    throw new DesktopUnavailableError(
       "Posterract Desktop is not responding: its project session heartbeat is stale. Start Posterract Desktop and open this project, then retry.",
     );
   }

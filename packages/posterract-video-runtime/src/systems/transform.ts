@@ -8,18 +8,23 @@ import { store } from '../world/store';
 import {
 	ChildOf, Geometry, Group, Hidden, IsMask, Sequential, AdjustmentLayer,
 	Culled, Flip, Anchor, Computed, Cache, LocalTransform, WorldTransform,
-	WorldBounds, RenderSurface, Size,
+	WorldBounds, RenderSurface, Size, Place, Chars, Scale, UniformScale,
 	Root,
 } from '../traits';
-import { getParentNode } from '../queries/hierarchy';
+import { getParentNode, getSceneAncestor } from '../queries/hierarchy';
+import { isText } from '../queries/predicates';
 import { isVectorGeometry, vectorSubPaths } from '../queries/vector';
 import { boundsOf } from '../utils/vector';
+import { elementAnchor, frameAnchor, placedPosition } from '../utils/placement';
+import { measureText } from '../utils/text';
 import { getViewMatrix } from '../queries/camera';
 
 import {
 	multiply2D,
 	aabbFromTransformedRect,
 	aabbsIntersect,
+	invert2D,
+	transformPoint,
 	translate2D,
 	rotate2D,
 	skew2D,
@@ -32,6 +37,76 @@ import type { Entity, World } from 'koota';
 // This system writes derived per-frame data (LocalTransform, WorldTransform,
 // WorldBounds, Computed group bounds) straight into trait stores: no
 // snapshots, no change events.
+
+/**
+ * Works out where an element that was placed by intent is, and writes it where
+ * an authored `x`/`y` would have been — Computed's position — so that
+ * everything downstream (the matrix below, snapping, hit-testing, whoever
+ * measures the layout) reads a placed element like any other.
+ *
+ * Done here rather than when the source is read because the answer depends on
+ * sizes nobody has until the frame is being put together: a text with no width
+ * of its own is as wide as what it says. That is also why a placed text is laid
+ * out first, and from everything it says rather than from what an entrance has
+ * revealed of it so far: a caption appearing word by word is centred as the
+ * caption it will be, not re-centred as each word arrives.
+ *
+ * The point is found in the scene's frame and carried into the parent's space,
+ * so a placed child of a moved or scaled group still lands on the frame's lower
+ * third rather than the group's. The walk is parent-first: both matrices are
+ * this frame's by the time they are read here.
+ */
+export function resolvePlacement(world: World, entity: Entity, parentEntity: Entity | null): void {
+	if (parentEntity === null || !entity.has(Place)) return;
+	const scene = getSceneAncestor(entity);
+	if (scene === null) return;
+
+	const computed = store(world, Computed);
+	const eid = entity.id();
+	const sid = scene.id();
+
+	if (isText(entity)) {
+		const revealed = computed.chars[eid];
+		computed.chars[eid] = store(world, Chars).value[eid] ?? revealed;
+		measureText(world, entity);
+		computed.chars[eid] = revealed;
+	}
+
+	const place = store(world, Place);
+	const fx = place.fx[eid] ?? 0.5;
+	const fy = place.fy[eid] ?? 0.5;
+	let target = frameAnchor(fx, fy, computed.width[sid] ?? 0, computed.height[sid] ?? 0, place.insetX[eid] ?? 0, place.insetY[eid] ?? 0);
+
+	if (parentEntity !== scene) {
+		const worldStore = store(world, WorldTransform);
+		const matrixOf = (id: number): Mat2D => ({
+			a: worldStore.a[id] ?? 1, b: worldStore.b[id] ?? 0,
+			c: worldStore.c[id] ?? 0, d: worldStore.d[id] ?? 1,
+			e: worldStore.e[id] ?? 0, f: worldStore.f[id] ?? 0,
+		});
+		const toParent = multiply2D(invert2D(matrixOf(parentEntity.id())), matrixOf(sid));
+		target = transformPoint(toParent, target.x, target.y);
+	}
+
+	// The scale the source gives the element, not the one an entrance is
+	// animating: a caption that grows in is placed as the size it grows to.
+	const uniform = entity.has(UniformScale) ? store(world, UniformScale).value[eid] : undefined;
+	const scale = store(world, Scale);
+	const position = placedPosition({
+		target,
+		ax: elementAnchor(fx),
+		ay: elementAnchor(fy),
+		width: computed.width[eid] ?? 0,
+		height: computed.height[eid] ?? 0,
+		originX: computed.originX[eid] ?? 0,
+		originY: computed.originY[eid] ?? 0,
+		scaleX: uniform ?? (entity.has(Scale) ? scale.x[eid] : 1) ?? 1,
+		scaleY: uniform ?? (entity.has(Scale) ? scale.y[eid] : 1) ?? 1,
+	});
+
+	computed.positionX[eid] = position.x;
+	computed.positionY[eid] = position.y;
+}
 
 /**
  * Compute the local 2D affine matrix from Offset, Rotation, Scale,
@@ -337,6 +412,7 @@ export function transformSystem(world: World): void {
 	const walk = (entity: Entity, parentEntity: Entity | null) => {
 		computeVectorBounds(world, entity);
 		computeGroupBounds(world, entity);
+		resolvePlacement(world, entity, parentEntity);
 		computeLocalMatrix(world, entity);
 		computeWorldTransform(world, entity, parentEntity);
 		computeWorldBounds(world, entity);

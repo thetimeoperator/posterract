@@ -20,6 +20,7 @@ import {
 	aiRevealKeys,
 	aiSaveKeys,
 	creditState,
+	GROQ_TRANSCRIBE,
 	hasDesktopAi,
 	KEY_FOR_KIND,
 	type CreditState,
@@ -93,7 +94,10 @@ export function AiProvider(props: { dir: () => string | undefined; children: JSX
 	const saveKey = async (provider: AiKeyProvider, value: string): Promise<void> => {
 		const dir = projectDir();
 		if (!dir) return;
-		const next = await aiSaveKeys(dir, { [provider]: value.trim() });
+		// A transcription key saved here is a Groq key, for the voice bar: it
+		// goes with Groq's endpoint and model.
+		const extra = provider === 'transcribe' ? { transcribeUrl: GROQ_TRANSCRIBE.url, transcribeModel: GROQ_TRANSCRIBE.model } : {};
+		const next = await aiSaveKeys(dir, { [provider]: value.trim(), ...extra });
 		if (!disposed) setKeys((current) => ({ ...(current ?? { path: 'api-keys.json' }), ...next }));
 	};
 

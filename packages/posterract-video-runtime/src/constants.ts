@@ -141,6 +141,16 @@ export enum AnimationPhase {
   OUT,
 }
 
+/** What a keyframe track does once it has played through to its last keyframe. */
+export enum TrackLoop {
+  /** Holds the last value: a track plays once. */
+  NONE,
+  /** Plays first → last again, for as long as the element is on screen. */
+  REPEAT,
+  /** Plays first → last, then last → first, and so on. */
+  PINGPONG,
+}
+
 export enum TextAlign {
   LEFT,
   CENTER,

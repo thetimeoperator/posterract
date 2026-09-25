@@ -323,6 +323,29 @@ function updateVisibility(world: World, scene: Entity, entity: Entity): void {
 	}
 }
 
+/**
+ * Puts a scene at `frame` for whoever only wants to *measure* it: every node's
+ * local time and visibility are derived exactly as a tick derives them (it is
+ * the same function), and nothing else happens — no decoder is asked for a
+ * frame, no audio is scheduled, no mount is stepped. Follow it with the motion
+ * and transform systems to get the boxes of that moment.
+ *
+ * Reading a composition across its whole duration means visiting hundreds of
+ * moments; seeking every video decoder to each of them would take seconds and
+ * thrash the media the author is looking at. The caller puts the playhead
+ * back when it is done, and the next tick resyncs the rest.
+ */
+export function placeInTime(world: World, scene: Entity, frame: number): void {
+	const computed = store(world, Computed);
+	const fps = world.get(FrameRate)?.value ?? 30;
+	const sid = scene.id();
+	const clamped = Math.max(0, Math.round(frame));
+
+	computed.localTime[sid] = clamped;
+	computed.localTimeInSeconds[sid] = clamped / fps;
+	updateVisibility(world, scene, scene);
+}
+
 function resetDecoders(world: World, entity: Entity): void {
 	if (entity.has(AudioDecoderHandle)) {
 		entity.get(AudioDecoderHandle)?.reset();

@@ -12,7 +12,7 @@
     "./project-control": "./src/project-control.ts"
   },
   "scripts": {
-    "build": "esbuild src/index.ts --bundle --platform=node --format=cjs --external:bufferutil --external:utf-8-validate --outfile=dist/index.cjs && chmod +x dist/index.cjs",
+    "build": "esbuild src/index.ts --bundle --platform=node --format=cjs --external:bufferutil --external:utf-8-validate --external:./offline.cjs --outfile=dist/index.cjs && esbuild src/offline.ts --bundle --minify --platform=node --format=cjs --outfile=dist/offline.cjs && chmod +x dist/index.cjs",
     "check": "tsc --noEmit",
     "test": "node --import tsx --test src/*.test.ts",
     "symlink:remove": "rm -f /opt/homebrew/bin/posterract",
@@ -28,6 +28,7 @@
     "zod": "^4.5.4"
   },
   "devDependencies": {
+    "@posterract/video-compiler": "workspace:*",
     "@types/node": "^24.10.1",
     "esbuild": "^0.28.1",
     "typescript": "~5.9.3",

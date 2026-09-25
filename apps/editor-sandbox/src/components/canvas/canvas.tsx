@@ -7,11 +7,12 @@ import { findSceneAt, screenToWorld, worldToLocal, Library, Root } from "@poster
 import { CameraController, EngineCanvas } from "@/engine";
 import { insertAsset } from "@/engine/insert-asset";
 import { droppedFiles, importFiles } from "@/engine/asset-actions";
+import { insertMediaAsScenes, insertSounds, isFrameable } from "@/engine/new-scene";
 import { Toolbar } from "./toolbar";
 import { DrawOverlay } from "./draw-overlay";
 import { toast } from "somoto"
-import { SceneInitOverlay } from "./scene-init-overlay";
 import { SkillDeck } from "./skill-deck";
+import { VoiceBar } from "@/components/shell/voice-bar";
 import { ASSET_DRAG_TYPE } from "@/components/sidebar-left/folder-item";
 
 import type { Asset } from "@posterract/video-assets";
@@ -24,9 +25,10 @@ export function Canvas() {
    * they were dropped, in the scene under the pointer; external files are
    * imported into the library first, then land the same way.
    *
-   * With no scene under the pointer they land loose on the stage, like an
-   * element drawn there (see DrawOverlay): the drop says where, so the active
-   * scene — which is somewhere else entirely — is not the answer.
+   * With no scene under the pointer a picture or a video becomes a scene of
+   * its own, sized to it and centered where it was dropped, and sound joins
+   * the scene being worked on; anything else lands loose on the stage, like an
+   * element drawn there (see DrawOverlay).
    */
   const handleDropEvent = async (event: DragEvent) => {
     event.preventDefault();
@@ -51,15 +53,24 @@ export function Canvas() {
       if (!placed) toast("Nothing to insert into", { description: "Open a project first." });
     };
 
+    // Read the transfer before the first await: it is gone by the time an
+    // import resolves.
     const assetIds = event.dataTransfer?.getData(ASSET_DRAG_TYPE)?.split(',').filter(Boolean) ?? [];
-    for (const id of assetIds) {
-      const asset = library.get(id);
-      if (asset) place(asset);
-    }
-
     const files = droppedFiles(event);
-    if (files.length) {
-      for (const asset of await importFiles(library, files, '')) place(asset);
+
+    const assets = assetIds.map((id) => library.get(id)).filter((asset) => asset != null);
+    if (files.length) assets.push(...await importFiles(library, files, ''));
+
+    const media = scene ? [] : assets.filter(isFrameable);
+    const sounds = scene ? [] : assets.filter((asset) => asset.type === 'AUDIO');
+    const handled = new Set<Asset>([...media, ...sounds]);
+    for (const asset of assets) {
+      if (!handled.has(asset)) place(asset);
+    }
+    // The camera stays where the user dropped it.
+    const framed = insertMediaAsScenes(world, media, worldPt, { focus: () => {} });
+    if (framed.length < media.length || !insertSounds(world, sounds)) {
+      toast("Nothing to insert into", { description: "Open a project first." });
     }
   }
 
@@ -79,8 +90,8 @@ export function Canvas() {
         <DrawOverlay />
         <EngineCanvas />
         <CameraController />
-        <SceneInitOverlay />
         <SkillDeck />
+        <VoiceBar />
       </div>
     </div>
   );

@@ -7,6 +7,7 @@ import {
   Group, Hidden, IsMask, Opacity, PaintType, Scene, Sequential, Source,
   SourceError, Workarea, framesToSeconds, getIntrinsicPaint, isText,
 } from "@posterract/video-runtime";
+import { authoredElement } from "@posterract/video-reconciler";
 
 import { resolveNode } from "./nodes";
 
@@ -17,7 +18,18 @@ import type { EditorSession } from "./session";
 // Absolute frames, [start, end).
 type Interval = { start: number; end: number };
 
-function kindOf(entity: Entity): string {
+/**
+ * What to call an element when talking to whoever wrote it: the tag the source
+ * spells it with (`rect`, `text`, `image` — the word they would search the
+ * file for), falling back to what the runtime knows it as for anything that
+ * was not authored as an element.
+ */
+export function labelOf(entity: Entity): string {
+  return authoredElement(entity)?.tag ?? kindOf(entity);
+}
+
+/** What an element is, as the runtime classifies it. */
+export function kindOf(entity: Entity): string {
   if (entity.has(IsMask)) return "mask";
   if (entity.has(Scene)) return "scene";
   if (entity.has(Group)) return entity.has(Sequential) ? "sequence" : "group";

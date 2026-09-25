@@ -2,15 +2,19 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { HashRouter, Route } from "@solidjs/router";
+import { HashRouter, Route, useSearchParams } from "@solidjs/router";
+import { Show } from "solid-js";
 import { ColorModeProvider } from "@kobalte/core";
 import { Toaster } from "@/components/ui/sonner";
 import { DashboardProjectsView } from "@/components/dashboard/projects-view";
+import { ExportsView } from "@/components/dashboard/exports-view";
 import { ProjectPage } from "@/pages/project";
 import { EditorApi } from "@/context/agent-api";
 import { posterractIcon } from "@/assets/brand";
 
 function ProjectsRoot() {
+  const [params, setParams] = useSearchParams();
+  const showingExports = () => params.view === 'exports';
   const backToPosterract = () => {
     window.parent.postMessage({ type: "posterract-editor-navigate", path: "/continuum" }, "*");
   };
@@ -28,8 +32,12 @@ function ProjectsRoot() {
         />
         <div class="min-w-0 flex-1">
           <p class="text-xxs font-semibold tracking-[0.18em] text-primary">POSTERRACT CREATE</p>
-          <h1 class="truncate text-base font-500 text-foreground">Projects</h1>
+          <h1 class="truncate text-base font-500 text-foreground">{showingExports() ? 'Exports' : 'Projects'}</h1>
         </div>
+        <nav aria-label="Project library" class="flex h-8 items-center gap-1 rounded-lg border border-border p-1" style="-webkit-app-region: no-drag;">
+          <button type="button" aria-pressed={!showingExports()} onClick={() => setParams({ view: undefined })} class="h-6 rounded-md px-3 text-xs text-muted-foreground hover:text-foreground aria-pressed:bg-accent aria-pressed:text-foreground">Projects</button>
+          <button type="button" aria-pressed={showingExports()} onClick={() => setParams({ view: 'exports' })} class="h-6 rounded-md px-3 text-xs text-muted-foreground hover:text-foreground aria-pressed:bg-accent aria-pressed:text-foreground">Exports</button>
+        </nav>
         <button
           type="button"
           class="h-8 rounded-md border border-border bg-background px-3 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
@@ -39,7 +47,7 @@ function ProjectsRoot() {
           Back to Posterract
         </button>
       </header>
-      <DashboardProjectsView />
+      <Show when={showingExports()} fallback={<DashboardProjectsView />}><ExportsView /></Show>
     </main>
   );
 }

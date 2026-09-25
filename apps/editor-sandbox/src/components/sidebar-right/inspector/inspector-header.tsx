@@ -3,7 +3,6 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 import { Icon } from "@/components/ui/icon";
-import { SavePill } from "./save-pill";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,7 +27,6 @@ export function InspectorHeader() {
     <div class="shrink-0 flex items-center">
       {/* Status readouts together: save state, then zoom. Lives in the command bar. */}
       <div class="flex items-center gap-3 relative z-30" style="-webkit-app-region: no-drag;">
-      <SavePill />
       <DropdownMenu placement="bottom-end">
         <DropdownMenuTrigger<typeof Button>
           as={(triggerProps) => (
@@ -36,6 +34,7 @@ export function InspectorHeader() {
               {...triggerProps}
               variant="link"
               class="flex items-center gap-0 text-muted-foreground px-0"
+              aria-label={`Preview zoom: ${zoomLabel()}`}
             >
               <span>{zoomLabel()}</span>
               <Icon name="chevron-down" class="size-6 shrink-0" />

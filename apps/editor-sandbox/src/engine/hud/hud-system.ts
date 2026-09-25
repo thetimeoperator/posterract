@@ -20,6 +20,7 @@ import {
 } from '../input/interactions';
 import { getMarqueeQuad } from '../input/snapping';
 import { getMountedNameInput } from './name-input';
+import { placeTextInput } from './text-input';
 
 import type { Entity, World } from 'koota';
 import type { Mat2D } from '@posterract/video-runtime';
@@ -70,6 +71,9 @@ export function hudSystem(world: World): void {
 	}
 
 	drawMarquee(world, ctx, resolution);
+
+	// The text being typed into on the canvas follows its text wherever it goes.
+	placeTextInput(world, resolution);
 }
 
 function drawSnapLines(world: World, ctx: Ctx2D, resolution: number): void {

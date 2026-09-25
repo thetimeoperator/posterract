@@ -18,7 +18,8 @@ export function useSelection() {
 		selected().filter(entity => entity.has(Geometry) || entity.has(Group) || entity.has(AdjustmentLayer)),
 	);
 	const keyframes = createMemo(() => selected().filter(entity => entity.has(Keyframe)));
+	const parts = createMemo(() => selected().filter(entity => !nodes().includes(entity) && !entity.has(Keyframe)));
 	const first = createMemo(() => nodes()[0] ?? null);
 
-	return { nodes, keyframes, first };
+	return { nodes, keyframes, parts, first };
 }

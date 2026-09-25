@@ -7,7 +7,10 @@
 
 import { ALL_FORMATS, BlobSource, Input, UrlSource } from 'mediabunny';
 
-import type { InputTrack } from 'mediabunny';
+import { fetchRange, rangedSource } from './ranges';
+
+import type { InputTrack, Source } from 'mediabunny';
+import type { LocatedFile } from './fs';
 import type { Asset } from './types';
 
 export const DEFAULT_SEQUENCE_FPS = 30;
@@ -34,8 +37,31 @@ const TRANSCRIPT_TYPES = new Set(['application/json', 'application/x-subrip', 't
  * file is not something the library takes.
  */
 export async function detectMimeType(input: Blob | string): Promise<string | null> {
-	const name = typeof input === 'string' ? input.split(/[?#]/)[0]! : (input as File).name ?? '';
-	let mimeType = typeof input === 'string' ? await fetchMimeType(input) : input.type;
+	if (typeof input === 'string') {
+		return detect(input.split(/[?#]/)[0]!, await fetchMimeType(input), null, () => new UrlSource(input));
+	}
+	return detect((input as File).name ?? '', input.type, input, () => new BlobSource(input));
+}
+
+/**
+ * `detectMimeType` for a file the host serves by URL: the same answer, with
+ * the name and type the host gave and only the bytes the checks look at read.
+ */
+export async function detectLocatedMimeType(file: LocatedFile): Promise<string | null> {
+	const head = new Blob([await fetchRange(file.url, 0, Math.min(file.size, SNIFF_BYTES))]);
+	return detect(file.name, file.mimeType, head, () => rangedSource(file.url, file.size));
+}
+
+/** The most `sniffImageType` reads of a file. */
+const SNIFF_BYTES = 4096;
+
+async function detect(
+	name: string,
+	declared: string | null,
+	head: Blob | null,
+	source: () => Source,
+): Promise<string | null> {
+	let mimeType = declared;
 
 	if (/\.srt$/i.test(name) || mimeType === 'application/x-subrip') return 'application/x-subrip';
 	if (/\.vtt$/i.test(name) || mimeType === 'text/vtt') return 'text/vtt';
@@ -44,16 +70,18 @@ export async function detectMimeType(input: Blob | string): Promise<string | nul
 	if (mimeType?.startsWith('image/')) return mimeType;
 	if (mimeType?.startsWith('text/html')) return mimeType;
 
-	if (typeof input !== 'string') {
-		const sniffed = await sniffImageType(input);
+	if (head) {
+		const sniffed = await sniffImageType(head);
 		if (sniffed) return sniffed;
 	}
 
+	const input = new Input({ formats: ALL_FORMATS, source: source() });
 	try {
-		const source = typeof input === 'string' ? new UrlSource(input) : new BlobSource(input);
-		mimeType = await new Input({ formats: ALL_FORMATS, source }).getMimeType();
+		mimeType = await input.getMimeType();
 	} catch {
 		return null;
+	} finally {
+		input.dispose();
 	}
 
 	if (mimeType?.startsWith('audio/') || mimeType?.startsWith('video/')) return mimeType;
@@ -165,34 +193,54 @@ export async function probeMedia(file: Blob, mimeType: string): Promise<ProbeRes
 		return { type: 'TRANSCRIPT' };
 	}
 
-	if (mimeType.startsWith('audio/') || mimeType.startsWith('video/')) {
-		const input = new Input({ formats: ALL_FORMATS, source: new BlobSource(file) });
-		const audioTrack = await input.getPrimaryAudioTrack();
-		const channels = audioTrack?.numberOfChannels;
-		const sampleRate = audioTrack?.sampleRate;
-
-		if (mimeType.startsWith('audio/')) {
-			if (!sampleRate || !channels) throw new Error('Audio track not found');
-			return { type: 'AUDIO', duration: await trackContentDuration(audioTrack), sampleRate, channels };
-		}
-
-		const videoTrack = await input.getPrimaryVideoTrack();
-		if (!videoTrack) throw new Error('Video track not found');
-		const stats = await videoTrack.computePacketStats();
-
-		return {
-			type: 'VIDEO',
-			width: videoTrack.displayWidth,
-			height: videoTrack.displayHeight,
-			frameRate: stats.averagePacketRate,
-			bitRate: stats.averageBitrate,
-			duration: await trackContentDuration(videoTrack),
-			...(sampleRate === undefined ? {} : { sampleRate }),
-			...(channels === undefined ? {} : { channels }),
-		};
+	if (isTimedMedia(mimeType)) {
+		return probeTracks(new Input({ formats: ALL_FORMATS, source: new BlobSource(file) }), mimeType);
 	}
 
 	throw new Error(`Unsupported file type: ${mimeType}`);
+}
+
+/** Audio and video: what `probeLocatedMedia` can read without the whole file. */
+export const isTimedMedia = (mimeType: string): boolean =>
+	mimeType.startsWith('audio/') || mimeType.startsWith('video/');
+
+/**
+ * `probeMedia` for audio or video the host serves by URL: only the parts of
+ * the container that say what is in it are read, never the footage itself.
+ */
+export async function probeLocatedMedia(file: LocatedFile, mimeType: string): Promise<ProbeResult> {
+	const input = new Input({ formats: ALL_FORMATS, source: rangedSource(file.url, file.size) });
+	try {
+		return await probeTracks(input, mimeType);
+	} finally {
+		input.dispose();
+	}
+}
+
+async function probeTracks(input: Input, mimeType: string): Promise<ProbeResult> {
+	const audioTrack = await input.getPrimaryAudioTrack();
+	const channels = audioTrack?.numberOfChannels;
+	const sampleRate = audioTrack?.sampleRate;
+
+	if (mimeType.startsWith('audio/')) {
+		if (!sampleRate || !channels) throw new Error('Audio track not found');
+		return { type: 'AUDIO', duration: await trackContentDuration(audioTrack), sampleRate, channels };
+	}
+
+	const videoTrack = await input.getPrimaryVideoTrack();
+	if (!videoTrack) throw new Error('Video track not found');
+	const stats = await videoTrack.computePacketStats();
+
+	return {
+		type: 'VIDEO',
+		width: videoTrack.displayWidth,
+		height: videoTrack.displayHeight,
+		frameRate: stats.averagePacketRate,
+		bitRate: stats.averageBitrate,
+		duration: await trackContentDuration(videoTrack),
+		...(sampleRate === undefined ? {} : { sampleRate }),
+		...(channels === undefined ? {} : { channels }),
+	};
 }
 
 const FRAME_NAME = /^(.*?)(\d+)\.(png|jpe?g|webp|gif|avif|bmp)$/i;

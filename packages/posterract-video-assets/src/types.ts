@@ -9,10 +9,18 @@
 // the library (`path`). Its `id` is a content hash, so the same bytes imported
 // twice are one asset, and a relinked file keeps its metadata.
 
+import type { LocatedFile } from './fs';
+
 /** Whatever hands out the asset's bytes: a real File on desktop, an OPFS
  *  file on the web, a fetched blob for a URL. */
 export interface AssetFileHandle {
 	getFile(): Promise<File>;
+	/**
+	 * Where the bytes can be read in ranges, when the host serves the file by
+	 * URL (see `ProjectFS.locate`): what decoders read footage through, so a
+	 * clip never has to be held whole.
+	 */
+	locate?(): Promise<LocatedFile>;
 }
 
 /** Directory of numbered frame files backing a SEQUENCE asset. Typed to the
@@ -142,7 +150,8 @@ export const assetName = (asset: Pick<Asset, 'path'>): string => basename(asset.
 export const assetFolder = (asset: Pick<Asset, 'path'>): string => dirname(asset.path);
 
 export function basename(path: string): string {
-	const at = path.lastIndexOf('/');
+	// Imports also pass absolute OS paths, including Windows drives and UNC shares.
+	const at = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
 	return at < 0 ? path : path.slice(at + 1);
 }
 

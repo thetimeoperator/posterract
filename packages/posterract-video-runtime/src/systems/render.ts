@@ -24,13 +24,14 @@ import {
 	Mode, WorkspaceTheme, FrameRate, Camera, Background, RenderSurface,
 	HitRegions,
 	Root,
+	TextEditing,
 } from '../traits';
 import { getParentNode } from '../queries/hierarchy';
 import { getViewMatrix } from '../queries/camera';
 import { colorToHex } from '../utils/color';
 import { FAILED_COLOR, getGeneratingColor, getSourceFailure, isGenerating } from '../utils/generating';
 import { applyStrokeStyle } from '../utils/stroke';
-import { renderText } from '../utils/text';
+import { measureText, renderText } from '../utils/text';
 import { getTransitionWindow } from '../utils/transition';
 import { getIntrinsicPaint } from '../utils/time';
 import { flattenPath, trimPath, type SubPath } from '../utils/vector';
@@ -751,6 +752,13 @@ function drawSubPath(ctx: Ctx2D, subpath: SubPath): void {
 }
 
 function renderTextNode(world: World, entity: Entity): void {
+	// Being typed into over the canvas (see `TextEditing`): laid out still, so
+	// its box follows the words, but the words are the field's to show. Only
+	// in the live preview — an export always draws them.
+	if (entity.has(TextEditing) && world.get(Mode)?.value === 'realtime') {
+		measureText(world, entity);
+		return;
+	}
 	renderText(world, entity);
 }
 

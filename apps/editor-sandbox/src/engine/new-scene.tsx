@@ -6,16 +6,19 @@
 // into a project that has no scene to put it in makes one around it rather
 // than leaving the clips loose at the root, which is what `insertAsset`
 // would otherwise do. The canvas and the timeline share this; they differ
-// only in where the new scene should end up on screen.
+// only in where the new scene should end up on screen. A picture or a video
+// brought onto the canvas outside every scene becomes a scene of its own the
+// same way; sound, which has no picture to make one of, joins the scene being
+// worked on.
 
 import { Scene as SceneElement, SolidPaint } from '@posterract/video-reconciler';
-import { focusRect, getCameraMatrix, getNextName, Root, Source } from '@posterract/video-runtime';
+import { focusRect, getActiveEntity, getCameraMatrix, getNextName, Root, Source } from '@posterract/video-runtime';
 
 import { getDocumentEditor } from './editor';
 import { AUDIO_SIZE, insertAsset } from './insert-asset';
 
-import type { Asset } from '@posterract/video-assets';
-import type { Rect } from '@posterract/video-runtime';
+import type { Asset, ImageAsset, VideoAsset } from '@posterract/video-assets';
+import type { Point, Rect } from '@posterract/video-runtime';
 import type { Entity, World } from 'koota';
 
 export interface Size {
@@ -45,19 +48,25 @@ export interface NewSceneOptions {
 	focus?: (rect: Rect) => void;
 	/** Where on the timeline the assets start, in seconds; the playhead by default. */
 	start?: number;
+	/** Where the middle of the scene goes, in world space; the world origin by default. */
+	at?: Point;
 }
 
+/** The room left between scenes laid out side by side. */
+export const SCENE_GAP = 200;
+
 /**
- * Adds the project's first scene, of `format`, centered on the world origin,
- * makes it the active one, and brings it into view. Returns the scene, or
- * null when there is no project for it to be written under.
+ * Adds a scene of `format` centered on `options.at` (the world origin unless
+ * said otherwise), makes it the active one, and brings it into view. Returns
+ * the scene, or null when there is no project for it to be written under.
  */
 export function createScene(world: World, format: Size, options: NewSceneOptions = {}): Entity | null {
 	const root = world.get(Root)!;
 	if (!root.get(Source)?.value) return null;
 
 	const editor = getDocumentEditor(world);
-	const rect: Rect = { x: Math.round(-format.width / 2), y: Math.round(-format.height / 2), ...format };
+	const at = options.at ?? { x: 0, y: 0 };
+	const rect: Rect = { x: Math.round(at.x - format.width / 2), y: Math.round(at.y - format.height / 2), ...format };
 	const name = options.name ?? getNextName(world, 'Scene');
 
 	// The camera moves first, so the scene is in view the moment it exists.
@@ -109,6 +118,50 @@ export function insertAssetsInNewScene(
 
 	getDocumentEditor(world).select(inserted.length ? inserted : scene);
 	return scene;
+}
+
+/** A picture or a video that knows its own size, so a scene can be made to fit it. */
+export const isFrameable = (asset: Asset): asset is ImageAsset | VideoAsset =>
+	(asset.type === 'IMAGE' || asset.type === 'VIDEO') && asset.width > 0 && asset.height > 0;
+
+/**
+ * Makes each picture or video a scene of its own, sized to it and filled by
+ * it (a video's sound plays with it, as anywhere): the first centered on
+ * `at`, the rest in a row to its right. The last one ends up active and
+ * selected. Returns the scenes made.
+ */
+export function insertMediaAsScenes(
+	world: World,
+	media: ReadonlyArray<ImageAsset | VideoAsset>,
+	at: Point,
+	options: Omit<NewSceneOptions, 'at'> = {},
+): Entity[] {
+	const scenes: Entity[] = [];
+	let left = media.length ? at.x - sizeOf(media[0]!).width / 2 : at.x;
+
+	for (const asset of media) {
+		const { width } = sizeOf(asset);
+		const scene = insertAssetsInNewScene(world, [asset], { ...options, at: { x: left + width / 2, y: at.y } });
+		if (!scene) break;
+		scenes.push(scene);
+		left += width + SCENE_GAP;
+	}
+
+	return scenes;
+}
+
+/**
+ * Puts sound files (music, a voice-over) into the scene being worked on, at
+ * the playhead: there is no picture to make a scene of. With no scene at all
+ * they get one of the default format. Returns whether they went anywhere.
+ */
+export function insertSounds(world: World, sounds: ReadonlyArray<Asset>): boolean {
+	if (!sounds.length) return true;
+	if (!getActiveEntity(world)) return insertAssetsInNewScene(world, sounds) !== null;
+
+	const inserted = sounds.map((sound) => insertAsset(world, sound)).filter((entity) => entity !== null);
+	if (inserted.length) getDocumentEditor(world).select(inserted);
+	return inserted.length > 0;
 }
 
 /** Assets that bring a format with them; the rest are laid out inside one. */

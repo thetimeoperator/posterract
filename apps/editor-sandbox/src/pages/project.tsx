@@ -38,10 +38,20 @@ export function ProjectPage() {
   // before ids, a bookmark from before a rename) is swapped for the canonical
   // one, so the next rename leaves it alone.
   createEffect(() => {
-    const id = project()?.id;
-    if (!id) return;
-    resolvedId = id;
-    if (id !== ref()) navigate(projectRoute(id), { replace: true });
+    // While another project is being looked up, `project()` is still the one
+    // before it. Acting on that was the bug: opening B from A ran this with A,
+    // found that A's id was not the URL, and "corrected" the URL back to A —
+    // under which B then opened. Between two projects with ids the next run put
+    // it right; a folder with no id of its own (a hand-made project, one the
+    // engine was pointed at) has nothing to correct it with, so the URL stayed
+    // A's, and going back to A was then a change to the URL it already had:
+    // nothing happened, and the editor stayed on B.
+    if (project.loading) return;
+    const found = project();
+    if (!found) return;
+    // The id of the project that is open now; a folder without one holds nothing.
+    resolvedId = found.id || '';
+    if (found.id && found.id !== ref()) navigate(projectRoute(found.id), { replace: true });
   });
 
   return (

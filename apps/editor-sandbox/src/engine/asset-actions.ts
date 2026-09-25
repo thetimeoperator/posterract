@@ -36,9 +36,17 @@ export async function importFiles(library: AssetLibrary, files: ReadonlyArray<Fi
     toast("Some files could not be imported", { description: "Only files on this computer can be added to the library." });
   }
   for (const { source, error } of report.failed) {
-    toast.error(`Could not import ${source.split(/[\\/]/).pop()}`, { description: error.message });
+    toast.error(`Could not import ${source.split(/[\\/]/).pop()}`, { description: importFailure(error) });
   }
   return report.assets;
+}
+
+/** Why an import failed, in words the user can act on. */
+function importFailure(error: Error): string {
+  if (/ENOSPC|no space left/i.test(error.message)) {
+    return "There isn't enough free space on this computer. Free up some disk space and try again.";
+  }
+  return error.message;
 }
 
 /** Opens the file picker and imports what the user picks into `folder`. */

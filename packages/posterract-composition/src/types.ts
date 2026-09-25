@@ -187,25 +187,33 @@ type IdentityProps = {
   /** Human-readable node name. */
   name?: string;
   /**
-   * Whether the editor has this element selected. Editor state rather than
-   * part of the composition (nothing rendered or exported depends on it), but
-   * the source is the document, so it lives here for the same reason
-   * `<stage>`'s `camera` does: a click on the canvas has nowhere else to be
-   * written to, and the selection survives a recompile. Absent means not
-   * selected; the editor writes the bare attribute and removes it again.
+   * Protects the element in the editor: a locked layer cannot be dragged on
+   * the timeline and is left alone by a delete — a person's or an agent's.
+   * Set from the timeline's lock toggle. Part of the document, so a lock set
+   * by one author holds for the other; nothing rendered or exported depends
+   * on it.
+   */
+  locked?: boolean;
+  /**
+   * Whether the editor has this element selected.
+   *
+   * @deprecated Editor view state, not part of the composition: nothing
+   * rendered or exported depends on it. The editor no longer writes it into
+   * the source — it is remembered in `.posterract/view.json` beside the
+   * project, and lifted out of an older source the next time that is opened.
+   * Still accepted so such a source keeps compiling; do not author it.
    */
   selected?: boolean;
   /**
-   * Height of the element's row in the timeline, px. Editor state, here for
-   * the same reason `selected` is: the timeline is where a row is resized and
-   * the document is the only place that can remember it. Absent means the
-   * common row height.
+   * Height of the element's row in the timeline, px.
+   *
+   * @deprecated Editor view state, as `selected` is; see there.
    */
   clipHeight?: number;
   /**
    * Whether the timeline shows this element's keyframe rows below its clip.
-   * Editor state, as `clipHeight` is. Absent means collapsed; the editor
-   * writes the bare attribute and removes it again.
+   *
+   * @deprecated Editor view state, as `selected` is; see there.
    */
   expanded?: boolean;
 };
@@ -214,6 +222,44 @@ type PositionProps = {
   /** Position relative to the parent, px. Defaults to 0. */
   x?: number;
   y?: number;
+};
+
+/**
+ * Where an element belongs in the frame, by name: the nine points of the frame
+ * (its corners, the middles of its edges, its centre) and the two thirds lines
+ * a title or a caption usually sits on.
+ */
+export type Placement =
+  | "top-left"
+  | "top"
+  | "top-right"
+  | "left"
+  | "center"
+  | "right"
+  | "bottom-left"
+  | "bottom"
+  | "bottom-right"
+  | "upper-third"
+  | "lower-third";
+
+type PlacementProps = {
+  /**
+   * Where the element belongs in its scene's frame, instead of `x`/`y`:
+   * `place="bottom-right"` puts its bottom right corner on the frame's,
+   * `place="lower-third"` centres it on the line two thirds of the way down.
+   * Worked out from the element's size as it is on each frame, so a text with
+   * no `width` is placed by what it says. While it is set, `x` and `y` are not
+   * read; move the element from there with `offsetX`/`offsetY`, which are also
+   * what the slide animations drive. Dragging the element in the editor
+   * replaces the placement with the `x`/`y` it was dropped at.
+   */
+  place?: Placement;
+  /**
+   * How far in from the frame's edges a `place` sits, px: one number for both
+   * axes, or `[x, y]`. Only the edges the placement touches are inset —
+   * `place="bottom"` is inset from the bottom and centred across. Default 0.
+   */
+  inset?: number | [x: number, y: number];
 };
 
 type OffsetProps = {
@@ -239,7 +285,7 @@ type SizeProps = {
   keepAspectRatio?: boolean;
 };
 
-type TransformProps = PositionProps & OffsetProps & SizeProps & {
+type TransformProps = PositionProps & PlacementProps & OffsetProps & SizeProps & {
   /** Rotation in degrees. */
   rotation?: number;
   /** Uniform scale about the box origin, 1 = natural size. Overrides `scaleX`/`scaleY` while set. */
@@ -456,16 +502,14 @@ export type StageProps = {
   /** Canvas color, any CSS color. */
   background?: string;
   /**
-   * The editor's viewport when the project is opened: `[1, 0, 0, 1, 0, 0]` is
-   * the origin at 100%. Not part of the composition — nothing rendered or
-   * exported depends on it — so a project that never says where to look opens
-   * at the origin, with most of the frame off screen.
+   * The editor's viewport: `[1, 0, 0, 1, 0, 0]` is the origin at 100%.
    *
-   * Give every authored project one, so it opens framed on its composition:
-   * `[s, 0, 0, s, x, y]` for a scene at the origin, `s` sized to fit the frame
-   * in roughly 580×330 screen pixels — `[0.3, 0, 0, 0.3, 85, 150]` for
-   * 1920×1080, `[0.6, 0, 0, 0.6, 85, 150]` for 960×540. The first pan or zoom
-   * overwrites it, so the exact numbers do not matter.
+   * @deprecated Editor view state, not part of the composition: nothing
+   * rendered or exported depends on it. The editor fits the composition into
+   * its window on open and remembers a manual pan or zoom in
+   * `.posterract/view.json` beside the project, so a source has no reason to
+   * carry one; one that still does has it lifted out the next time it is
+   * opened. Still accepted so such a source keeps compiling; do not author it.
    */
   camera?: CameraMatrix;
   children?: SolidJSX.Element;
@@ -477,24 +521,20 @@ export type StageProps = {
  * `width`×`height` and owns the timeline they are placed on, so it takes no
  * timing of its own — nothing outside a scene has a clock to place it against.
  *
- * `x`/`y` are where the frame sits on the infinite canvas, `selected` whether
- * the editor has it selected, and `active` whether the timeline is pointed at
- * it (scenes only, for now). Those are editor concerns rather than
- * part of the composition, but they live here for the same reason `<stage>`'s
- * `camera` does: the source is the document, so a scene dragged or clicked on
- * the canvas has nowhere else to be written back to.
+ * `x`/`y` are where the frame sits on the infinite canvas. Whether the editor
+ * has it selected, and whether the timeline is pointed at it, are where the
+ * author is looking rather than part of the composition; the editor remembers
+ * them in `.posterract/view.json` beside the project, not in the source.
  */
 export type SceneProps = IdentityProps & PositionProps & Required<Pick<SizeProps, "width" | "height">> & Pick<SizeProps, "keepAspectRatio"> & FillProps & {
   /**
    * Whether this element is the one the playhead, timeline, and capture
-   * operate on. Editor state carried by the source like `selected`, with two
-   * rules the runtime holds: at most one element is active, and only a root
-   * (a direct child of `<stage>`) can be; a nested `active` is dropped. When
-   * a file names more than one, the last one rendered wins.
+   * operate on. Two rules the runtime holds: at most one element is active,
+   * and only a root (a direct child of `<stage>`) can be.
    *
-   * Nothing activates on its own: mark one scene of every authored project
-   * `active` — with several, the one it should open on — or it opens on an
-   * empty timeline, with no playhead and no scene to export.
+   * @deprecated Editor view state, as `selected` is; see there. The editor
+   * opens on the scene it remembers, or on the first one; export and capture
+   * name their scene by id and never read this.
    */
   active?: boolean;
   /**
@@ -525,6 +565,11 @@ export type SceneProps = IdentityProps & PositionProps & Required<Pick<SizeProps
   children?: SolidJSX.Element;
 };
 
+/**
+ * `<group>` — a container: its box is the union of its children, and its
+ * transform, opacity, timing and effects apply to all of them. `stagger`
+ * offsets each child's animations from the one before.
+ */
 export type GroupProps = CommonProps & FillProps & {
   /**
    * How far apart the group's children's motion runs, as a `Time`.
@@ -566,6 +611,10 @@ export type AdjustmentLayerProps =
     children?: SolidJSX.Element;
   };
 
+/**
+ * `<rect>` — a box, the basic shape: filled with `fill` (or paint children),
+ * rounded with `cornerRadius`, and the base of a mask (`mask`).
+ */
 export type RectProps = CommonProps & FillProps & {
   /**
    * Makes the rect a mask of its parent: it clips the parent (its fills,
@@ -805,6 +854,26 @@ export type AnimationProps = {
    * before the tail for "out". Any `Time` format. Default 0.
    */
   delay?: Time;
+  /**
+   * How far it travels, px: the length of a slide (default 100), the drift of
+   * a "twist" (default 30). Other presets do not travel.
+   */
+  distance?: number;
+  /**
+   * How strong the preset is, in the preset's own measure: "fade" — how much
+   * of the opacity it covers, 0–1 (default 1); "grow" / "shrink" — how much
+   * smaller / larger it starts, as a scale (default 0.5, so from 50% / 150%);
+   * "blur" — the blur it starts from, px (default 24); the slides — how much
+   * they fade while they travel, 0–1 (default 1, and 0 slides at full
+   * opacity); "spin" / "twist" — the rotation it starts from, degrees
+   * (default 45 / 10). "gain" and the text reveals have none.
+   */
+  amount?: number;
+  /**
+   * The curve it plays with, in place of the preset's own. A spring
+   * ("bouncy", `spring(0.4,500)`) overshoots where the preset moves or scales.
+   */
+  easing?: Easing;
 };
 
 /**
@@ -812,11 +881,20 @@ export type AnimationProps = {
  * as elements, so an editor moving a keyframe has an element to write it to.
  * One track per prop; the prop's static value is what holds when the track
  * is empty. Outside the keyframed range the value holds at the first/last
- * keyframe.
+ * keyframe, unless the track has a `loop`.
  */
 export type KeyframeTrackProps = {
   /** Which prop of the holding element the track animates. */
   property: AnimatableProperty;
+  /**
+   * What the track does after its last keyframe, for as long as the element is
+   * on screen: `loop` (or "repeat") plays first → last again and again,
+   * "pingpong" plays it there and back. Without it the last value holds.
+   * Anything that keeps moving — a bob, a pulse, a wiggle — is its few
+   * keyframes and a `loop`, not a keyframe per change of direction; for a
+   * repeat to be seamless, end on the value it starts from.
+   */
+  loop?: boolean | "repeat" | "pingpong";
   /** `<Keyframe>` children, in any order; they sort by `time`. */
   children?: SolidJSX.Element;
 };
@@ -829,7 +907,7 @@ export type KeyframeTrackProps = {
  * seeking the animation to composition time on every frame — never by playing
  * it — so preview and export are the same frames.
  */
-export type LottieProps = IdentityProps & TimingProps & OffsetProps & {
+export type LottieProps = IdentityProps & PositionProps & TimingProps & OffsetProps & {
   /** Path to a Lottie JSON in the project, or an imported asset. */
   src: string;
   /** Drawing size. Defaults to the animation's own. */
@@ -925,8 +1003,13 @@ export type KeyframeProps = {
   easing?: Easing;
 };
 
+/** `<solidPaint>` — a flat `color` fill of the parent's shape. */
 export type SolidPaintProps = ColorProps & PaintProps & TrackChildren;
 
+/**
+ * `<linearGradientPaint>` / `<radialGradientPaint>` — a gradient fill of the
+ * parent's shape, through its `<colorStop>` children.
+ */
 export type GradientPaintProps = PaintProps & {
   /** Gradient rotation in degrees. Defaults to 0 (left to right). */
   rotation?: number;
@@ -934,6 +1017,7 @@ export type GradientPaintProps = PaintProps & {
   children?: SolidJSX.Element;
 };
 
+/** `<colorStop>` — one color of a gradient, at `offset` 0–1 along it. */
 export type ColorStopProps = ColorProps & OpacityProps & TrackChildren & {
   /** Position along the gradient, 0–1. */
   offset: number;
@@ -950,6 +1034,11 @@ export type ColorStopProps = ColorProps & OpacityProps & TrackChildren & {
  */
 export type MediaPaintProps = PaintProps & MediaProps & FitProps & FrameRateProps & TrackChildren;
 
+/**
+ * `<video>` — a video clip: `src`, placed in time with `start`/`end`, trimmed
+ * with `sourceIn`/`sourceOut`, and fitted into its box with `objectFit`
+ * (`cover` unless said otherwise).
+ */
 export type VideoProps = CommonProps & MediaProps & FitProps & FrameRateProps & AudioTrackProps & UpscaleProps & {
   /**
    * Scores the footage: a generated soundtrack for a clip that has none. See
@@ -962,6 +1051,10 @@ export type VideoProps = CommonProps & MediaProps & FitProps & FrameRateProps & 
     children?: SolidJSX.Element;
   };
 
+/**
+ * `<image>` — a still image (or a directory of frames): `src`, fitted into
+ * its box with `objectFit` (`contain` unless said otherwise).
+ */
 export type ImageProps = CommonProps & MediaProps & FitProps & FrameRateProps & UpscaleProps & {
   /**
    * Cuts the subject out, leaving the rest of the picture transparent. See
@@ -972,6 +1065,7 @@ export type ImageProps = CommonProps & MediaProps & FitProps & FrameRateProps & 
     children?: SolidJSX.Element;
   };
 
+/** `<htmlPaint>` — real DOM children, laid out at the parent's box size and drawn into it. */
 export type HtmlPaintProps = PaintProps & {
   /**
    * HTML children — real DOM elements laid out by the browser at the parent
@@ -1059,6 +1153,11 @@ export type AudioProps = IdentityProps & PositionProps & SizeProps & TimingProps
   children?: SolidJSX.Element;
 };
 
+/**
+ * `<text>` — text: what it says is its children, and its color is `color`
+ * (not `fill`). The box sizes itself to the text unless `width` is given,
+ * which is then the width lines wrap at.
+ */
 export type TextProps = CommonProps & Partial<ColorProps> & FontProps & {
   /** Horizontal alignment of glyphs within the box. Default "left". */
   textAlign?: "left" | "center" | "right";
@@ -1096,10 +1195,18 @@ export type TextRangeProps = Partial<ColorProps> & FontProps & {
   children?: SolidJSX.Element;
 };
 
+/**
+ * `<sequence>` — plays its children back to back in document order; a
+ * child's `transition` blends it into the next.
+ */
 export type SequenceProps = Pick<IdentityProps, "name"> & {
   children?: SolidJSX.Element;
 };
 
+/**
+ * `<captions>` — timed captions drawn in a `preset` style, from a transcript
+ * `src` or from `<cue>` children. The words stay text, so they can be edited.
+ */
 export type CaptionsProps = IdentityProps & TimingProps & OffsetProps & Partial<MediaProps> & {
   /** Caption style preset. Default "classic". */
   preset?: CaptionPreset;

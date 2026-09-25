@@ -1,0 +1,3678 @@
+{
+ "version": 1,
+ "sdk": "0.201.0",
+ "runtimeProps": [
+  "active",
+  "addAudio",
+  "after",
+  "align",
+  "amount",
+  "arrowEnd",
+  "arrowStart",
+  "attack",
+  "background",
+  "blendMode",
+  "blur",
+  "by",
+  "camera",
+  "cap",
+  "clipHeight",
+  "color",
+  "colors",
+  "cornerRadius",
+  "cornerRadiusBottomLeft",
+  "cornerRadiusBottomRight",
+  "cornerRadiusTopLeft",
+  "cornerRadiusTopRight",
+  "d",
+  "delay",
+  "distance",
+  "domain",
+  "duration",
+  "easing",
+  "end",
+  "error",
+  "expanded",
+  "expression",
+  "fill",
+  "fontFamily",
+  "fontSize",
+  "fontStyle",
+  "fontWeight",
+  "frameRate",
+  "grid",
+  "headSize",
+  "height",
+  "hidden",
+  "inset",
+  "join",
+  "keepAspectRatio",
+  "label",
+  "leading",
+  "letterSpacing",
+  "locked",
+  "loop",
+  "markers",
+  "mask",
+  "miterLimit",
+  "morph",
+  "morphTo",
+  "muted",
+  "name",
+  "objectFit",
+  "offset",
+  "offsetX",
+  "offsetY",
+  "opacity",
+  "padding",
+  "phase",
+  "place",
+  "playbackRate",
+  "points",
+  "preset",
+  "progress",
+  "property",
+  "range",
+  "release",
+  "removeBackground",
+  "rotation",
+  "route",
+  "scale",
+  "scaleX",
+  "scaleY",
+  "seed",
+  "selected",
+  "shape",
+  "skill",
+  "smooth",
+  "sourceIn",
+  "sourceOut",
+  "speed",
+  "src",
+  "stagger",
+  "start",
+  "strokeColor",
+  "strokeWidth",
+  "subtitle",
+  "syncTo",
+  "target",
+  "targetX",
+  "targetY",
+  "textAlign",
+  "textBaseline",
+  "textCase",
+  "textColor",
+  "textDecoration",
+  "tickCount",
+  "time",
+  "transition",
+  "trimEnd",
+  "trimOffset",
+  "trimStart",
+  "type",
+  "uniforms",
+  "upscale",
+  "value",
+  "verticalAlign",
+  "volume",
+  "wgsl",
+  "width",
+  "workarea",
+  "x",
+  "xLabel",
+  "y",
+  "yLabel"
+ ],
+ "tags": {
+  "stage": {
+   "doc": "The infinite canvas every project renders into; only allowed as the root element, and holding `<scene>` children.",
+   "props": [
+    "background",
+    "camera",
+    "children",
+    "id"
+   ]
+  },
+  "scene": {
+   "doc": "A scene: the clipped, playable frame a composition is made in, and the only element allowed directly under `<stage>`.",
+   "props": [
+    "active",
+    "children",
+    "clipHeight",
+    "expanded",
+    "fill",
+    "height",
+    "id",
+    "keepAspectRatio",
+    "locked",
+    "name",
+    "selected",
+    "skill",
+    "volume",
+    "width",
+    "workarea",
+    "x",
+    "y"
+   ]
+  },
+  "group": {
+   "doc": "`<group>` — a container: its box is the union of its children, and its transform, opacity, timing and effects apply to all of them.",
+   "props": [
+    "after",
+    "blendMode",
+    "children",
+    "clipHeight",
+    "cornerRadius",
+    "cornerRadiusBottomLeft",
+    "cornerRadiusBottomRight",
+    "cornerRadiusTopLeft",
+    "cornerRadiusTopRight",
+    "end",
+    "expanded",
+    "fill",
+    "height",
+    "hidden",
+    "id",
+    "inset",
+    "keepAspectRatio",
+    "locked",
+    "name",
+    "offsetX",
+    "offsetY",
+    "opacity",
+    "place",
+    "playbackRate",
+    "rotation",
+    "scale",
+    "scaleX",
+    "scaleY",
+    "selected",
+    "sourceIn",
+    "sourceOut",
+    "stagger",
+    "start",
+    "transition",
+    "width",
+    "x",
+    "y"
+   ]
+  },
+  "rect": {
+   "doc": "`<rect>` — a box, the basic shape: filled with `fill` (or paint children), rounded with `cornerRadius`, and the base of a mask (`mask`).",
+   "svgInsideSvg": true,
+   "props": [
+    "after",
+    "blendMode",
+    "children",
+    "clipHeight",
+    "cornerRadius",
+    "cornerRadiusBottomLeft",
+    "cornerRadiusBottomRight",
+    "cornerRadiusTopLeft",
+    "cornerRadiusTopRight",
+    "end",
+    "expanded",
+    "fill",
+    "height",
+    "hidden",
+    "id",
+    "inset",
+    "keepAspectRatio",
+    "locked",
+    "mask",
+    "name",
+    "offsetX",
+    "offsetY",
+    "opacity",
+    "place",
+    "playbackRate",
+    "rotation",
+    "scale",
+    "scaleX",
+    "scaleY",
+    "selected",
+    "sourceIn",
+    "sourceOut",
+    "start",
+    "transition",
+    "width",
+    "x",
+    "y"
+   ]
+  },
+  "video": {
+   "doc": "`<video>` — a video clip: `src`, placed in time with `start`/`end`, trimmed with `sourceIn`/`sourceOut`, and fitted into its box with `objectFit` (`cover` unless said otherwise).",
+   "props": [
+    "addAudio",
+    "after",
+    "blendMode",
+    "children",
+    "clipHeight",
+    "cornerRadius",
+    "cornerRadiusBottomLeft",
+    "cornerRadiusBottomRight",
+    "cornerRadiusTopLeft",
+    "cornerRadiusTopRight",
+    "end",
+    "error",
+    "expanded",
+    "frameRate",
+    "height",
+    "hidden",
+    "id",
+    "inset",
+    "keepAspectRatio",
+    "locked",
+    "muted",
+    "name",
+    "objectFit",
+    "offsetX",
+    "offsetY",
+    "opacity",
+    "place",
+    "playbackRate",
+    "rotation",
+    "scale",
+    "scaleX",
+    "scaleY",
+    "selected",
+    "sourceIn",
+    "sourceOut",
+    "src",
+    "start",
+    "syncTo",
+    "transition",
+    "upscale",
+    "volume",
+    "width",
+    "x",
+    "y"
+   ]
+  },
+  "image": {
+   "doc": "`<image>` — a still image (or a directory of frames): `src`, fitted into its box with `objectFit` (`contain` unless said otherwise).",
+   "svgInsideSvg": true,
+   "props": [
+    "after",
+    "blendMode",
+    "children",
+    "clipHeight",
+    "cornerRadius",
+    "cornerRadiusBottomLeft",
+    "cornerRadiusBottomRight",
+    "cornerRadiusTopLeft",
+    "cornerRadiusTopRight",
+    "end",
+    "error",
+    "expanded",
+    "frameRate",
+    "height",
+    "hidden",
+    "id",
+    "inset",
+    "keepAspectRatio",
+    "locked",
+    "name",
+    "objectFit",
+    "offsetX",
+    "offsetY",
+    "opacity",
+    "place",
+    "playbackRate",
+    "removeBackground",
+    "rotation",
+    "scale",
+    "scaleX",
+    "scaleY",
+    "selected",
+    "sourceIn",
+    "sourceOut",
+    "src",
+    "start",
+    "transition",
+    "upscale",
+    "width",
+    "x",
+    "y"
+   ]
+  },
+  "audio": {
+   "doc": "`<audio>` — a clip with a sound and no picture.",
+   "props": [
+    "after",
+    "children",
+    "clipHeight",
+    "end",
+    "error",
+    "expanded",
+    "height",
+    "id",
+    "keepAspectRatio",
+    "locked",
+    "muted",
+    "name",
+    "playbackRate",
+    "selected",
+    "sourceIn",
+    "sourceOut",
+    "src",
+    "start",
+    "syncTo",
+    "volume",
+    "width",
+    "x",
+    "y"
+   ]
+  },
+  "text": {
+   "doc": "`<text>` — text: what it says is its children, and its color is `color` (not `fill`).",
+   "svgInsideSvg": true,
+   "props": [
+    "after",
+    "blendMode",
+    "children",
+    "clipHeight",
+    "color",
+    "cornerRadius",
+    "cornerRadiusBottomLeft",
+    "cornerRadiusBottomRight",
+    "cornerRadiusTopLeft",
+    "cornerRadiusTopRight",
+    "end",
+    "expanded",
+    "fontFamily",
+    "fontSize",
+    "fontStyle",
+    "fontWeight",
+    "height",
+    "hidden",
+    "id",
+    "inset",
+    "keepAspectRatio",
+    "leading",
+    "letterSpacing",
+    "locked",
+    "name",
+    "offsetX",
+    "offsetY",
+    "opacity",
+    "place",
+    "playbackRate",
+    "rotation",
+    "scale",
+    "scaleX",
+    "scaleY",
+    "selected",
+    "sourceIn",
+    "sourceOut",
+    "start",
+    "textAlign",
+    "textBaseline",
+    "textCase",
+    "textDecoration",
+    "transition",
+    "width",
+    "x",
+    "y"
+   ]
+  },
+  "textRange": {
+   "doc": "`<textRange>` — a style override for a run of the parent `<text>`'s glyphs, a sub-entity like a paint: `start`/`end` address the run by character index into the text as written (before `textCase`), the rest is what ch…",
+   "props": [
+    "children",
+    "color",
+    "end",
+    "fontFamily",
+    "fontSize",
+    "fontStyle",
+    "fontWeight",
+    "id",
+    "letterSpacing",
+    "start",
+    "textCase",
+    "textDecoration"
+   ]
+  },
+  "sequence": {
+   "doc": "`<sequence>` — plays its children back to back in document order; a child's `transition` blends it into the next.",
+   "props": [
+    "children",
+    "id",
+    "name"
+   ]
+  },
+  "captions": {
+   "doc": "`<captions>` — timed captions drawn in a `preset` style, from a transcript `src` or from `<cue>` children.",
+   "props": [
+    "after",
+    "children",
+    "clipHeight",
+    "colors",
+    "end",
+    "error",
+    "expanded",
+    "id",
+    "locked",
+    "name",
+    "offsetX",
+    "offsetY",
+    "playbackRate",
+    "preset",
+    "seed",
+    "selected",
+    "sourceIn",
+    "sourceOut",
+    "src",
+    "start",
+    "verticalAlign"
+   ]
+  },
+  "adjustmentLayer": {
+   "doc": "`<adjustmentLayer>` — a layer that draws nothing of its own and transforms the clip below it: while the layer's own clip lasts, its transform composes onto that of the sibling directly beneath it in the stack.",
+   "props": [
+    "after",
+    "children",
+    "clipHeight",
+    "end",
+    "expanded",
+    "height",
+    "hidden",
+    "id",
+    "inset",
+    "keepAspectRatio",
+    "locked",
+    "name",
+    "offsetX",
+    "offsetY",
+    "place",
+    "playbackRate",
+    "rotation",
+    "scale",
+    "scaleX",
+    "scaleY",
+    "selected",
+    "sourceIn",
+    "sourceOut",
+    "start",
+    "transition",
+    "width",
+    "x",
+    "y"
+   ]
+  },
+  "diagramNode": {
+   "doc": "A selectable diagram node with its label rendered as part of the same source-backed editor entity.",
+   "props": [
+    "after",
+    "blendMode",
+    "children",
+    "clipHeight",
+    "cornerRadius",
+    "cornerRadiusBottomLeft",
+    "cornerRadiusBottomRight",
+    "cornerRadiusTopLeft",
+    "cornerRadiusTopRight",
+    "end",
+    "expanded",
+    "fill",
+    "fontFamily",
+    "fontSize",
+    "fontWeight",
+    "height",
+    "hidden",
+    "id",
+    "inset",
+    "keepAspectRatio",
+    "label",
+    "locked",
+    "name",
+    "offsetX",
+    "offsetY",
+    "opacity",
+    "padding",
+    "place",
+    "playbackRate",
+    "progress",
+    "rotation",
+    "scale",
+    "scaleX",
+    "scaleY",
+    "selected",
+    "shape",
+    "sourceIn",
+    "sourceOut",
+    "start",
+    "strokeColor",
+    "strokeWidth",
+    "subtitle",
+    "textColor",
+    "transition",
+    "width",
+    "x",
+    "y"
+   ]
+  },
+  "diagramArrow": {
+   "doc": "A selectable connector or arrow.",
+   "props": [
+    "after",
+    "arrowEnd",
+    "arrowStart",
+    "blendMode",
+    "children",
+    "clipHeight",
+    "cornerRadius",
+    "cornerRadiusBottomLeft",
+    "cornerRadiusBottomRight",
+    "cornerRadiusTopLeft",
+    "cornerRadiusTopRight",
+    "end",
+    "expanded",
+    "fontFamily",
+    "fontSize",
+    "fontWeight",
+    "headSize",
+    "height",
+    "hidden",
+    "id",
+    "inset",
+    "keepAspectRatio",
+    "label",
+    "locked",
+    "name",
+    "offsetX",
+    "offsetY",
+    "opacity",
+    "place",
+    "playbackRate",
+    "progress",
+    "rotation",
+    "route",
+    "scale",
+    "scaleX",
+    "scaleY",
+    "selected",
+    "sourceIn",
+    "sourceOut",
+    "start",
+    "strokeColor",
+    "strokeWidth",
+    "textColor",
+    "transition",
+    "width",
+    "x",
+    "y"
+   ]
+  },
+  "diagramEquation": {
+   "doc": "A selectable mathematical statement or formula.",
+   "props": [
+    "after",
+    "align",
+    "blendMode",
+    "children",
+    "clipHeight",
+    "cornerRadius",
+    "cornerRadiusBottomLeft",
+    "cornerRadiusBottomRight",
+    "cornerRadiusTopLeft",
+    "cornerRadiusTopRight",
+    "end",
+    "expanded",
+    "expression",
+    "fontFamily",
+    "fontSize",
+    "fontWeight",
+    "height",
+    "hidden",
+    "id",
+    "inset",
+    "keepAspectRatio",
+    "label",
+    "locked",
+    "name",
+    "offsetX",
+    "offsetY",
+    "opacity",
+    "place",
+    "playbackRate",
+    "progress",
+    "rotation",
+    "scale",
+    "scaleX",
+    "scaleY",
+    "selected",
+    "sourceIn",
+    "sourceOut",
+    "start",
+    "strokeColor",
+    "strokeWidth",
+    "textColor",
+    "transition",
+    "width",
+    "x",
+    "y"
+   ]
+  },
+  "diagramAxis": {
+   "doc": "A selectable x/y coordinate system with deterministic ticks and labels.",
+   "props": [
+    "after",
+    "blendMode",
+    "children",
+    "clipHeight",
+    "cornerRadius",
+    "cornerRadiusBottomLeft",
+    "cornerRadiusBottomRight",
+    "cornerRadiusTopLeft",
+    "cornerRadiusTopRight",
+    "domain",
+    "end",
+    "expanded",
+    "fontFamily",
+    "fontSize",
+    "fontWeight",
+    "grid",
+    "height",
+    "hidden",
+    "id",
+    "inset",
+    "keepAspectRatio",
+    "locked",
+    "name",
+    "offsetX",
+    "offsetY",
+    "opacity",
+    "padding",
+    "place",
+    "playbackRate",
+    "progress",
+    "range",
+    "rotation",
+    "scale",
+    "scaleX",
+    "scaleY",
+    "selected",
+    "sourceIn",
+    "sourceOut",
+    "start",
+    "strokeColor",
+    "strokeWidth",
+    "textColor",
+    "tickCount",
+    "transition",
+    "width",
+    "x",
+    "xLabel",
+    "y",
+    "yLabel"
+   ]
+  },
+  "diagramPlot": {
+   "doc": "A selectable plot of explicit data points, mapped through domain and range.",
+   "props": [
+    "after",
+    "blendMode",
+    "children",
+    "clipHeight",
+    "cornerRadius",
+    "cornerRadiusBottomLeft",
+    "cornerRadiusBottomRight",
+    "cornerRadiusTopLeft",
+    "cornerRadiusTopRight",
+    "domain",
+    "end",
+    "expanded",
+    "fontFamily",
+    "fontSize",
+    "fontWeight",
+    "height",
+    "hidden",
+    "id",
+    "inset",
+    "keepAspectRatio",
+    "label",
+    "locked",
+    "markers",
+    "name",
+    "offsetX",
+    "offsetY",
+    "opacity",
+    "padding",
+    "place",
+    "playbackRate",
+    "points",
+    "progress",
+    "range",
+    "rotation",
+    "scale",
+    "scaleX",
+    "scaleY",
+    "selected",
+    "smooth",
+    "sourceIn",
+    "sourceOut",
+    "start",
+    "strokeColor",
+    "strokeWidth",
+    "textColor",
+    "transition",
+    "width",
+    "x",
+    "y"
+   ]
+  },
+  "diagramCallout": {
+   "doc": "A labeled panel with a pointer aimed at a local target coordinate.",
+   "props": [
+    "after",
+    "blendMode",
+    "children",
+    "clipHeight",
+    "cornerRadius",
+    "cornerRadiusBottomLeft",
+    "cornerRadiusBottomRight",
+    "cornerRadiusTopLeft",
+    "cornerRadiusTopRight",
+    "end",
+    "expanded",
+    "fill",
+    "fontFamily",
+    "fontSize",
+    "fontWeight",
+    "height",
+    "hidden",
+    "id",
+    "inset",
+    "keepAspectRatio",
+    "label",
+    "locked",
+    "name",
+    "offsetX",
+    "offsetY",
+    "opacity",
+    "padding",
+    "place",
+    "playbackRate",
+    "progress",
+    "rotation",
+    "scale",
+    "scaleX",
+    "scaleY",
+    "selected",
+    "sourceIn",
+    "sourceOut",
+    "start",
+    "strokeColor",
+    "strokeWidth",
+    "subtitle",
+    "targetX",
+    "targetY",
+    "textColor",
+    "transition",
+    "width",
+    "x",
+    "y"
+   ]
+  },
+  "solidPaint": {
+   "doc": "`<solidPaint>` — a flat `color` fill of the parent's shape.",
+   "props": [
+    "blendMode",
+    "children",
+    "color",
+    "hidden",
+    "id",
+    "opacity"
+   ]
+  },
+  "linearGradientPaint": {
+   "doc": "`<linearGradientPaint>` / `<radialGradientPaint>` — a gradient fill of the parent's shape, through its `<colorStop>` children.",
+   "props": [
+    "blendMode",
+    "children",
+    "hidden",
+    "id",
+    "opacity",
+    "rotation"
+   ]
+  },
+  "radialGradientPaint": {
+   "doc": "`<linearGradientPaint>` / `<radialGradientPaint>` — a gradient fill of the parent's shape, through its `<colorStop>` children.",
+   "props": [
+    "blendMode",
+    "children",
+    "hidden",
+    "id",
+    "opacity",
+    "rotation"
+   ]
+  },
+  "imagePaint": {
+   "doc": "`<imagePaint>` / `<videoPaint>` — an asset painted into the parent geometry's box, a paint child like a solid or a gradient (several stack in document order).",
+   "props": [
+    "blendMode",
+    "children",
+    "error",
+    "frameRate",
+    "hidden",
+    "id",
+    "objectFit",
+    "opacity",
+    "src"
+   ]
+  },
+  "videoPaint": {
+   "doc": "`<imagePaint>` / `<videoPaint>` — an asset painted into the parent geometry's box, a paint child like a solid or a gradient (several stack in document order).",
+   "props": [
+    "blendMode",
+    "children",
+    "error",
+    "frameRate",
+    "hidden",
+    "id",
+    "objectFit",
+    "opacity",
+    "src"
+   ]
+  },
+  "colorStop": {
+   "doc": "`<colorStop>` — one color of a gradient, at `offset` 0–1 along it.",
+   "props": [
+    "children",
+    "color",
+    "id",
+    "offset",
+    "opacity"
+   ]
+  },
+  "stroke": {
+   "doc": "`<stroke>` — an outline of the parent's box (or glyphs), a sub-entity like a paint: `color`/`opacity` are its paint, `width`/`join`/`cap`/`miterLimit` its line style.",
+   "props": [
+    "blendMode",
+    "cap",
+    "children",
+    "color",
+    "hidden",
+    "id",
+    "join",
+    "miterLimit",
+    "opacity",
+    "width"
+   ]
+  },
+  "shadow": {
+   "doc": "`<shadow>` — a drop shadow beneath the parent's box (or glyphs): a blurred, offset copy of its silhouette in `color`.",
+   "props": [
+    "blur",
+    "children",
+    "color",
+    "hidden",
+    "id",
+    "offsetX",
+    "offsetY",
+    "opacity"
+   ]
+  },
+  "effect": {
+   "doc": "`<effect>` — a filter over the parent's rendered pixels (its fills, strokes and children together), a sub-entity like a paint.",
+   "props": [
+    "children",
+    "hidden",
+    "id",
+    "type",
+    "value"
+   ]
+  },
+  "animation": {
+   "doc": "`<animation>` — one preset in/out animation of the node holding it, played over the clip's head or tail.",
+   "props": [
+    "amount",
+    "delay",
+    "distance",
+    "duration",
+    "easing",
+    "id",
+    "phase",
+    "type"
+   ]
+  },
+  "keyframeTrack": {
+   "doc": "`<keyframeTrack>` — the keyframes of one prop of the element holding it, as elements, so an editor moving a keyframe has an element to write it to.",
+   "props": [
+    "children",
+    "id",
+    "loop",
+    "property"
+   ]
+  },
+  "keyframe": {
+   "doc": "`<keyframe>` — one keyframe of the `<keyframeTrack>` holding it.",
+   "props": [
+    "easing",
+    "id",
+    "time",
+    "value"
+   ]
+  },
+  "marker": {
+   "doc": "`<marker>` — a named point on a scene's timeline.",
+   "props": [
+    "color",
+    "id",
+    "name",
+    "time"
+   ]
+  },
+  "cue": {
+   "doc": "`<cue>` — one caption line, valid only inside `<captions>`.",
+   "props": [
+    "children",
+    "end",
+    "id",
+    "start"
+   ]
+  },
+  "duck": {
+   "doc": "`<duck>` — hold one clip's level down while another one plays.",
+   "props": [
+    "amount",
+    "attack",
+    "by",
+    "id",
+    "release",
+    "target"
+   ]
+  },
+  "path": {
+   "doc": "`<path>` — a free vector figure in SVG path syntax.",
+   "svgInsideSvg": true,
+   "props": [
+    "after",
+    "blendMode",
+    "children",
+    "clipHeight",
+    "cornerRadius",
+    "cornerRadiusBottomLeft",
+    "cornerRadiusBottomRight",
+    "cornerRadiusTopLeft",
+    "cornerRadiusTopRight",
+    "d",
+    "end",
+    "expanded",
+    "fill",
+    "height",
+    "hidden",
+    "id",
+    "inset",
+    "keepAspectRatio",
+    "locked",
+    "mask",
+    "morph",
+    "morphTo",
+    "name",
+    "offsetX",
+    "offsetY",
+    "opacity",
+    "place",
+    "playbackRate",
+    "rotation",
+    "scale",
+    "scaleX",
+    "scaleY",
+    "selected",
+    "sourceIn",
+    "sourceOut",
+    "start",
+    "transition",
+    "trimEnd",
+    "trimOffset",
+    "trimStart",
+    "width",
+    "x",
+    "y"
+   ]
+  },
+  "ellipse": {
+   "doc": "`<ellipse>` — an ellipse inscribed in the element's box.",
+   "svgInsideSvg": true,
+   "props": [
+    "after",
+    "blendMode",
+    "children",
+    "clipHeight",
+    "cornerRadius",
+    "cornerRadiusBottomLeft",
+    "cornerRadiusBottomRight",
+    "cornerRadiusTopLeft",
+    "cornerRadiusTopRight",
+    "end",
+    "expanded",
+    "fill",
+    "height",
+    "hidden",
+    "id",
+    "inset",
+    "keepAspectRatio",
+    "locked",
+    "mask",
+    "name",
+    "offsetX",
+    "offsetY",
+    "opacity",
+    "place",
+    "playbackRate",
+    "rotation",
+    "scale",
+    "scaleX",
+    "scaleY",
+    "selected",
+    "sourceIn",
+    "sourceOut",
+    "start",
+    "transition",
+    "trimEnd",
+    "trimOffset",
+    "trimStart",
+    "width",
+    "x",
+    "y"
+   ]
+  },
+  "polygon": {
+   "doc": "`<polygon>` — a closed figure through a list of points.",
+   "svgInsideSvg": true,
+   "props": [
+    "after",
+    "blendMode",
+    "children",
+    "clipHeight",
+    "cornerRadius",
+    "cornerRadiusBottomLeft",
+    "cornerRadiusBottomRight",
+    "cornerRadiusTopLeft",
+    "cornerRadiusTopRight",
+    "end",
+    "expanded",
+    "fill",
+    "height",
+    "hidden",
+    "id",
+    "inset",
+    "keepAspectRatio",
+    "locked",
+    "mask",
+    "name",
+    "offsetX",
+    "offsetY",
+    "opacity",
+    "place",
+    "playbackRate",
+    "points",
+    "rotation",
+    "scale",
+    "scaleX",
+    "scaleY",
+    "selected",
+    "sourceIn",
+    "sourceOut",
+    "start",
+    "transition",
+    "trimEnd",
+    "trimOffset",
+    "trimStart",
+    "width",
+    "x",
+    "y"
+   ]
+  },
+  "lottie": {
+   "doc": "`<lottie>` — a Lottie/Bodymovin animation as a composition element.",
+   "props": [
+    "after",
+    "children",
+    "clipHeight",
+    "end",
+    "expanded",
+    "height",
+    "id",
+    "locked",
+    "loop",
+    "name",
+    "offsetX",
+    "offsetY",
+    "playbackRate",
+    "selected",
+    "sourceIn",
+    "sourceOut",
+    "speed",
+    "src",
+    "start",
+    "width",
+    "x",
+    "y"
+   ]
+  },
+  "lottieSlot": {
+   "doc": "`<lottieSlot>` — one editable value inside a Lottie animation.",
+   "props": [
+    "id",
+    "name",
+    "value"
+   ]
+  },
+  "htmlPaint": {
+   "doc": "`<htmlPaint>` — real DOM children, laid out at the parent's box size and drawn into it.",
+   "props": [
+    "blendMode",
+    "children",
+    "hidden",
+    "id",
+    "opacity"
+   ]
+  },
+  "html": {
+   "doc": "`<Html>` — a rectangle whose intrinsic paint draws the given DOM children.",
+   "props": [
+    "after",
+    "blendMode",
+    "children",
+    "clipHeight",
+    "cornerRadius",
+    "cornerRadiusBottomLeft",
+    "cornerRadiusBottomRight",
+    "cornerRadiusTopLeft",
+    "cornerRadiusTopRight",
+    "end",
+    "expanded",
+    "height",
+    "hidden",
+    "id",
+    "inset",
+    "keepAspectRatio",
+    "locked",
+    "name",
+    "offsetX",
+    "offsetY",
+    "opacity",
+    "place",
+    "playbackRate",
+    "rotation",
+    "scale",
+    "scaleX",
+    "scaleY",
+    "selected",
+    "sourceIn",
+    "sourceOut",
+    "start",
+    "transition",
+    "width",
+    "x",
+    "y"
+   ]
+  },
+  "shaderPaint": {
+   "doc": "`<ShaderPaint>` — transforms the media paint directly below it.",
+   "props": [
+    "blendMode",
+    "hidden",
+    "id",
+    "opacity",
+    "uniforms",
+    "wgsl"
+   ]
+  },
+  "surfacePaint": {
+   "doc": "`<surfacePaint>` — a canvas the element's `ref` draws into (`element` on the received node).",
+   "props": [
+    "blendMode",
+    "hidden",
+    "id",
+    "opacity"
+   ]
+  },
+  "surface": {
+   "doc": "`<Surface>` — a rectangle carrying a `<SurfacePaint>`; its `ref`'s `element` is the canvas.",
+   "props": [
+    "after",
+    "blendMode",
+    "clipHeight",
+    "cornerRadius",
+    "cornerRadiusBottomLeft",
+    "cornerRadiusBottomRight",
+    "cornerRadiusTopLeft",
+    "cornerRadiusTopRight",
+    "end",
+    "expanded",
+    "height",
+    "hidden",
+    "id",
+    "inset",
+    "keepAspectRatio",
+    "locked",
+    "name",
+    "offsetX",
+    "offsetY",
+    "opacity",
+    "place",
+    "playbackRate",
+    "rotation",
+    "scale",
+    "scaleX",
+    "scaleY",
+    "selected",
+    "sourceIn",
+    "sourceOut",
+    "start",
+    "transition",
+    "width",
+    "x",
+    "y"
+   ]
+  }
+ },
+ "props": {
+  "active": [
+   {
+    "tags": [
+     "scene"
+    ],
+    "type": "boolean",
+    "doc": "Whether this element is the one the playhead, timeline, and capture operate on.",
+    "view": true,
+    "deprecated": "Editor view state, as `selected` is; see there."
+   }
+  ],
+  "addAudio": [
+   {
+    "tags": [
+     "video"
+    ],
+    "type": "boolean",
+    "doc": "Scores the footage: a generated soundtrack for a clip that has none."
+   }
+  ],
+  "after": [
+   {
+    "tags": [
+     "group",
+     "rect",
+     "video",
+     "image",
+     "audio",
+     "text",
+     "captions",
+     "adjustmentLayer",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon",
+     "lottie",
+     "html",
+     "surface"
+    ],
+    "type": "string",
+    "doc": "The `id` of an element this one follows: its span begins where that one's ends, and `start` alongside it becomes the gap after it rather than a time in the scene."
+   }
+  ],
+  "align": [
+   {
+    "tags": [
+     "diagramEquation"
+    ],
+    "type": "enum",
+    "values": [
+     "left",
+     "center",
+     "right"
+    ]
+   }
+  ],
+  "amount": [
+   {
+    "tags": [
+     "animation"
+    ],
+    "type": "number",
+    "doc": "How strong the preset is, in the preset's own measure: \"fade\" — how much of the opacity it covers, 0–1 (default 1); \"grow\" / \"shrink\" — how much smaller / larger it starts, as a scale (default 0.5, so from 50% / 150%)…"
+   },
+   {
+    "tags": [
+     "duck"
+    ],
+    "type": "number",
+    "doc": "How far down, in dB."
+   }
+  ],
+  "arrowEnd": [
+   {
+    "tags": [
+     "diagramArrow"
+    ],
+    "type": "boolean",
+    "doc": "Defaults to true."
+   }
+  ],
+  "arrowStart": [
+   {
+    "tags": [
+     "diagramArrow"
+    ],
+    "type": "boolean"
+   }
+  ],
+  "attack": [
+   {
+    "tags": [
+     "duck"
+    ],
+    "type": "time",
+    "doc": "How long the level takes to give way, leading the clip."
+   }
+  ],
+  "background": [
+   {
+    "tags": [
+     "stage"
+    ],
+    "type": "string",
+    "doc": "Canvas color, any CSS color."
+   }
+  ],
+  "blendMode": [
+   {
+    "tags": [
+     "group",
+     "rect",
+     "video",
+     "image",
+     "text",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "solidPaint",
+     "linearGradientPaint",
+     "radialGradientPaint",
+     "imagePaint",
+     "videoPaint",
+     "stroke",
+     "path",
+     "ellipse",
+     "polygon",
+     "htmlPaint",
+     "html",
+     "shaderPaint",
+     "surfacePaint",
+     "surface"
+    ],
+    "type": "enum",
+    "values": [
+     "sourceOver",
+     "multiply",
+     "screen",
+     "overlay",
+     "darken",
+     "lighten",
+     "colorDodge",
+     "colorBurn",
+     "hardLight",
+     "softLight",
+     "difference",
+     "exclusion",
+     "hue",
+     "saturation",
+     "color",
+     "luminosity"
+    ],
+    "doc": "Blend mode over what is below."
+   }
+  ],
+  "blur": [
+   {
+    "tags": [
+     "shadow"
+    ],
+    "type": "number",
+    "doc": "Blur radius, px."
+   }
+  ],
+  "by": [
+   {
+    "tags": [
+     "duck"
+    ],
+    "type": "string",
+    "required": true,
+    "doc": "`id` of the element whose span drives the duck."
+   }
+  ],
+  "camera": [
+   {
+    "tags": [
+     "stage"
+    ],
+    "type": "CameraMatrix",
+    "doc": "The editor's viewport: `[1, 0, 0, 1, 0, 0]` is the origin at 100%.",
+    "view": true,
+    "deprecated": "Editor view state, not part of the composition: nothing rendered or exported depends on it."
+   }
+  ],
+  "cap": [
+   {
+    "tags": [
+     "stroke"
+    ],
+    "type": "enum",
+    "values": [
+     "round",
+     "butt",
+     "square"
+    ],
+    "doc": "How the stroke ends open paths (text glyphs)."
+   }
+  ],
+  "children": [
+   {
+    "tags": [
+     "stage",
+     "scene",
+     "sequence",
+     "ellipse",
+     "polygon"
+    ],
+    "type": "any"
+   },
+   {
+    "tags": [
+     "group"
+    ],
+    "type": "any",
+    "doc": "Element children, plus `<Effect>` (filtering the group as a whole), `<Animation>` and `<KeyframeTrack>` children."
+   },
+   {
+    "tags": [
+     "rect"
+    ],
+    "type": "any",
+    "doc": "Paint children (`<SolidPaint>`, `<LinearGradientPaint>`, `<RadialGradientPaint>`), plus `<Stroke>`, `<Shadow>`, `<Effect>`, `<Animation>` and `<KeyframeTrack>` children."
+   },
+   {
+    "tags": [
+     "video",
+     "image"
+    ],
+    "type": "any",
+    "doc": "Paint children, stacked over the media paint created by `src`; `<Stroke>`, `<Shadow>`, `<Effect>`, `<Animation>` and `<KeyframeTrack>` children."
+   },
+   {
+    "tags": [
+     "audio"
+    ],
+    "type": "any",
+    "doc": "`<KeyframeTrack>` (a `volume` track) and `<Animation>` children."
+   },
+   {
+    "tags": [
+     "text"
+    ],
+    "type": "any",
+    "required": true,
+    "doc": "The text content, required; alongside it, `<TextRange>`, paint, `<Stroke>`, `<Shadow>`, `<Effect>`, `<Animation>` and `<KeyframeTrack>` children."
+   },
+   {
+    "tags": [
+     "textRange"
+    ],
+    "type": "any",
+    "doc": "Paint, `<Stroke>`, `<Shadow>` and `<KeyframeTrack>` (a `color` track) children."
+   },
+   {
+    "tags": [
+     "captions"
+    ],
+    "type": "any",
+    "doc": "`<Animation>` children."
+   },
+   {
+    "tags": [
+     "adjustmentLayer"
+    ],
+    "type": "any",
+    "doc": "`<Animation>` and `<KeyframeTrack>` children — what the layer's transform is animated with."
+   },
+   {
+    "tags": [
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout"
+    ],
+    "type": "any",
+    "doc": "Effects, animations, keyframes, paints, strokes, and other supported children."
+   },
+   {
+    "tags": [
+     "solidPaint",
+     "imagePaint",
+     "videoPaint",
+     "colorStop",
+     "stroke",
+     "shadow",
+     "effect"
+    ],
+    "type": "any",
+    "doc": "`<KeyframeTrack>` children."
+   },
+   {
+    "tags": [
+     "linearGradientPaint",
+     "radialGradientPaint"
+    ],
+    "type": "any",
+    "doc": "`<ColorStop>` children — the gradient's color stops."
+   },
+   {
+    "tags": [
+     "keyframeTrack"
+    ],
+    "type": "any",
+    "doc": "`<Keyframe>` children, in any order; they sort by `time`."
+   },
+   {
+    "tags": [
+     "cue"
+    ],
+    "type": "any",
+    "doc": "The line itself."
+   },
+   {
+    "tags": [
+     "path"
+    ],
+    "type": "any",
+    "doc": "Paint, stroke, shadow, effect, animation and keyframe children."
+   },
+   {
+    "tags": [
+     "lottie"
+    ],
+    "type": "any",
+    "doc": "`<lottieSlot>` children."
+   },
+   {
+    "tags": [
+     "htmlPaint",
+     "html"
+    ],
+    "type": "any",
+    "doc": "HTML children — real DOM elements laid out by the browser at the parent geometry's box size and drawn into it (html-in-canvas)."
+   }
+  ],
+  "clipHeight": [
+   {
+    "tags": [
+     "scene",
+     "group",
+     "rect",
+     "video",
+     "image",
+     "audio",
+     "text",
+     "captions",
+     "adjustmentLayer",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon",
+     "lottie",
+     "html",
+     "surface"
+    ],
+    "type": "number",
+    "doc": "Height of the element's row in the timeline, px.",
+    "view": true,
+    "deprecated": "Editor view state, as `selected` is; see there."
+   }
+  ],
+  "color": [
+   {
+    "tags": [
+     "text",
+     "textRange"
+    ],
+    "type": "string",
+    "doc": "Any CSS color: the glyph color on `<Text>`, the paint color on paints, strokes, shadows and color stops."
+   },
+   {
+    "tags": [
+     "solidPaint",
+     "colorStop",
+     "stroke",
+     "shadow"
+    ],
+    "type": "string",
+    "required": true,
+    "doc": "Any CSS color: the glyph color on `<Text>`, the paint color on paints, strokes, shadows and color stops."
+   },
+   {
+    "tags": [
+     "marker"
+    ],
+    "type": "string",
+    "doc": "Any CSS color; defaults to the editor's accent."
+   }
+  ],
+  "colors": [
+   {
+    "tags": [
+     "captions"
+    ],
+    "type": "string[]",
+    "doc": "Fills the caption preset's color slots in order; any CSS color, alpha is ignored."
+   }
+  ],
+  "cornerRadius": [
+   {
+    "tags": [
+     "group",
+     "rect",
+     "video",
+     "image",
+     "text",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon",
+     "html",
+     "surface"
+    ],
+    "type": "number",
+    "doc": "Uniform corner radius, px."
+   }
+  ],
+  "cornerRadiusBottomLeft": [
+   {
+    "tags": [
+     "group",
+     "rect",
+     "video",
+     "image",
+     "text",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon",
+     "html",
+     "surface"
+    ],
+    "type": "number"
+   }
+  ],
+  "cornerRadiusBottomRight": [
+   {
+    "tags": [
+     "group",
+     "rect",
+     "video",
+     "image",
+     "text",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon",
+     "html",
+     "surface"
+    ],
+    "type": "number"
+   }
+  ],
+  "cornerRadiusTopLeft": [
+   {
+    "tags": [
+     "group",
+     "rect",
+     "video",
+     "image",
+     "text",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon",
+     "html",
+     "surface"
+    ],
+    "type": "number",
+    "doc": "Per-corner radius, px."
+   }
+  ],
+  "cornerRadiusTopRight": [
+   {
+    "tags": [
+     "group",
+     "rect",
+     "video",
+     "image",
+     "text",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon",
+     "html",
+     "surface"
+    ],
+    "type": "number"
+   }
+  ],
+  "d": [
+   {
+    "tags": [
+     "path"
+    ],
+    "type": "string",
+    "required": true,
+    "doc": "SVG path data: `M`, `L`, `H`, `V`, `C`, `S`, `Q`, `T`, `A`, `Z`."
+   }
+  ],
+  "delay": [
+   {
+    "tags": [
+     "animation"
+    ],
+    "type": "time",
+    "doc": "Gap between the clip edge and the animation: after the head for \"in\", before the tail for \"out\"."
+   }
+  ],
+  "distance": [
+   {
+    "tags": [
+     "animation"
+    ],
+    "type": "number",
+    "doc": "How far it travels, px: the length of a slide (default 100), the drift of a \"twist\" (default 30)."
+   }
+  ],
+  "domain": [
+   {
+    "tags": [
+     "diagramAxis",
+     "diagramPlot"
+    ],
+    "type": "readonly [min: number, max: number]"
+   }
+  ],
+  "duration": [
+   {
+    "tags": [
+     "animation"
+    ],
+    "type": "time",
+    "doc": "Length of the animation."
+   }
+  ],
+  "easing": [
+   {
+    "tags": [
+     "animation"
+    ],
+    "type": "enum | other",
+    "values": [
+     "linear",
+     "easeIn",
+     "easeOut",
+     "easeInOut",
+     "gentle",
+     "snappy",
+     "bouncy",
+     "strong"
+    ],
+    "doc": "The curve it plays with, in place of the preset's own."
+   },
+   {
+    "tags": [
+     "keyframe"
+    ],
+    "type": "enum | other",
+    "values": [
+     "linear",
+     "easeIn",
+     "easeOut",
+     "easeInOut",
+     "gentle",
+     "snappy",
+     "bouncy",
+     "strong"
+    ],
+    "doc": "Shapes the segment to the next keyframe; ignored on the last."
+   }
+  ],
+  "end": [
+   {
+    "tags": [
+     "group",
+     "rect",
+     "video",
+     "image",
+     "audio",
+     "text",
+     "captions",
+     "adjustmentLayer",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon",
+     "lottie",
+     "html",
+     "surface"
+    ],
+    "type": "time",
+    "doc": "Parent-timeline time at which the node ends."
+   },
+   {
+    "tags": [
+     "textRange"
+    ],
+    "type": "number",
+    "doc": "One past the last character of the run."
+   },
+   {
+    "tags": [
+     "cue"
+    ],
+    "type": "time",
+    "required": true,
+    "doc": "When it leaves."
+   }
+  ],
+  "error": [
+   {
+    "tags": [
+     "video",
+     "image",
+     "audio",
+     "captions",
+     "imagePaint",
+     "videoPaint"
+    ],
+    "type": "string",
+    "doc": "Why this element's source never became an asset."
+   }
+  ],
+  "expanded": [
+   {
+    "tags": [
+     "scene",
+     "group",
+     "rect",
+     "video",
+     "image",
+     "audio",
+     "text",
+     "captions",
+     "adjustmentLayer",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon",
+     "lottie",
+     "html",
+     "surface"
+    ],
+    "type": "boolean",
+    "doc": "Whether the timeline shows this element's keyframe rows below its clip.",
+    "view": true,
+    "deprecated": "Editor view state, as `selected` is; see there."
+   }
+  ],
+  "expression": [
+   {
+    "tags": [
+     "diagramEquation"
+    ],
+    "type": "string",
+    "required": true
+   }
+  ],
+  "fill": [
+   {
+    "tags": [
+     "scene",
+     "group",
+     "rect",
+     "diagramNode",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon"
+    ],
+    "type": "string",
+    "doc": "Any CSS color, the node's intrinsic solid fill (drawn beneath any paint children); alpha is ignored — use `opacity`."
+   }
+  ],
+  "fontFamily": [
+   {
+    "tags": [
+     "text",
+     "textRange"
+    ],
+    "type": "string",
+    "doc": "A family available on the machine (`posterract fonts`)."
+   },
+   {
+    "tags": [
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout"
+    ],
+    "type": "string",
+    "doc": "Built-in label font family."
+   }
+  ],
+  "fontSize": [
+   {
+    "tags": [
+     "text",
+     "textRange"
+    ],
+    "type": "number",
+    "doc": "Font size, px."
+   },
+   {
+    "tags": [
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout"
+    ],
+    "type": "number",
+    "doc": "Built-in label type size, px."
+   }
+  ],
+  "fontStyle": [
+   {
+    "tags": [
+     "text",
+     "textRange"
+    ],
+    "type": "enum",
+    "values": [
+     "normal",
+     "italic",
+     "oblique"
+    ]
+   }
+  ],
+  "fontWeight": [
+   {
+    "tags": [
+     "text",
+     "textRange"
+    ],
+    "type": "number | \"normal\" | \"bold\"",
+    "values": [
+     "normal",
+     "bold"
+    ],
+    "doc": "CSS weights 100–900, or \"normal\" / \"bold\"."
+   },
+   {
+    "tags": [
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout"
+    ],
+    "type": "number | \"normal\" | \"bold\"",
+    "values": [
+     "normal",
+     "bold"
+    ],
+    "doc": "Built-in label font weight."
+   }
+  ],
+  "frameRate": [
+   {
+    "tags": [
+     "video",
+     "image",
+     "imagePaint",
+     "videoPaint"
+    ],
+    "type": "number",
+    "doc": "Frames per second for a `src` naming a directory of numbered frames — a folder of pictures has a count, not a duration, so this is what says how long the clip runs (600 frames at 24 is 25 seconds, at 60 is 10)."
+   }
+  ],
+  "grid": [
+   {
+    "tags": [
+     "diagramAxis"
+    ],
+    "type": "boolean"
+   }
+  ],
+  "headSize": [
+   {
+    "tags": [
+     "diagramArrow"
+    ],
+    "type": "number"
+   }
+  ],
+  "height": [
+   {
+    "tags": [
+     "scene"
+    ],
+    "type": "number",
+    "required": true
+   },
+   {
+    "tags": [
+     "group",
+     "rect",
+     "video",
+     "image",
+     "audio",
+     "text",
+     "adjustmentLayer",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon",
+     "lottie",
+     "html",
+     "surface"
+    ],
+    "type": "number"
+   }
+  ],
+  "hidden": [
+   {
+    "tags": [
+     "group",
+     "rect",
+     "video",
+     "image",
+     "text",
+     "adjustmentLayer",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "solidPaint",
+     "linearGradientPaint",
+     "radialGradientPaint",
+     "imagePaint",
+     "videoPaint",
+     "stroke",
+     "shadow",
+     "effect",
+     "path",
+     "ellipse",
+     "polygon",
+     "htmlPaint",
+     "html",
+     "shaderPaint",
+     "surfacePaint",
+     "surface"
+    ],
+    "type": "boolean",
+    "doc": "Excludes the element from rendering (and its audio from the mix) without removing it: it keeps its place in the timeline and its children."
+   }
+  ],
+  "id": [
+   {
+    "tags": [
+     "stage",
+     "scene",
+     "group",
+     "rect",
+     "video",
+     "image",
+     "audio",
+     "text",
+     "textRange",
+     "sequence",
+     "captions",
+     "adjustmentLayer",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "solidPaint",
+     "linearGradientPaint",
+     "radialGradientPaint",
+     "imagePaint",
+     "videoPaint",
+     "colorStop",
+     "stroke",
+     "shadow",
+     "effect",
+     "animation",
+     "keyframeTrack",
+     "keyframe",
+     "marker",
+     "cue",
+     "duck",
+     "path",
+     "ellipse",
+     "polygon",
+     "lottie",
+     "lottieSlot",
+     "htmlPaint",
+     "html",
+     "shaderPaint",
+     "surfacePaint",
+     "surface"
+    ],
+    "type": "string"
+   }
+  ],
+  "inset": [
+   {
+    "tags": [
+     "group",
+     "rect",
+     "video",
+     "image",
+     "text",
+     "adjustmentLayer",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon",
+     "html",
+     "surface"
+    ],
+    "type": "number | [x: number, y: number]",
+    "doc": "How far in from the frame's edges a `place` sits, px: one number for both axes, or `[x, y]`."
+   }
+  ],
+  "join": [
+   {
+    "tags": [
+     "stroke"
+    ],
+    "type": "enum",
+    "values": [
+     "miter",
+     "round",
+     "bevel"
+    ],
+    "doc": "How the stroke turns corners."
+   }
+  ],
+  "keepAspectRatio": [
+   {
+    "tags": [
+     "scene",
+     "group",
+     "rect",
+     "video",
+     "image",
+     "audio",
+     "text",
+     "adjustmentLayer",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon",
+     "html",
+     "surface"
+    ],
+    "type": "boolean",
+    "doc": "Locks the box to its authored proportions: a resize of one bound drives the other, so the editor's handles and layout rows keep the ratio `width`:`height` has (or, with neither authored, the ratio the box currently ha…"
+   }
+  ],
+  "label": [
+   {
+    "tags": [
+     "diagramNode",
+     "diagramCallout"
+    ],
+    "type": "string",
+    "required": true
+   },
+   {
+    "tags": [
+     "diagramArrow",
+     "diagramPlot"
+    ],
+    "type": "string"
+   },
+   {
+    "tags": [
+     "diagramEquation"
+    ],
+    "type": "string",
+    "doc": "Optional caption drawn below the expression."
+   }
+  ],
+  "leading": [
+   {
+    "tags": [
+     "text"
+    ],
+    "type": "number",
+    "doc": "Line height as a multiple of each line's natural height."
+   }
+  ],
+  "letterSpacing": [
+   {
+    "tags": [
+     "text",
+     "textRange"
+    ],
+    "type": "number",
+    "doc": "Extra space between glyphs, px (negative tightens)."
+   }
+  ],
+  "locked": [
+   {
+    "tags": [
+     "scene",
+     "group",
+     "rect",
+     "video",
+     "image",
+     "audio",
+     "text",
+     "captions",
+     "adjustmentLayer",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon",
+     "lottie",
+     "html",
+     "surface"
+    ],
+    "type": "boolean",
+    "doc": "Protects the element in the editor: a locked layer cannot be dragged on the timeline and is left alone by a delete — a person's or an agent's."
+   }
+  ],
+  "loop": [
+   {
+    "tags": [
+     "keyframeTrack"
+    ],
+    "type": "boolean | \"repeat\" | \"pingpong\"",
+    "values": [
+     "repeat",
+     "pingpong"
+    ],
+    "doc": "What the track does after its last keyframe, for as long as the element is on screen: `loop` (or \"repeat\") plays first → last again and again, \"pingpong\" plays it there and back."
+   },
+   {
+    "tags": [
+     "lottie"
+    ],
+    "type": "boolean",
+    "doc": "Repeat for the element's whole span rather than holding the last frame."
+   }
+  ],
+  "markers": [
+   {
+    "tags": [
+     "diagramPlot"
+    ],
+    "type": "boolean",
+    "doc": "Draw a dot at every point in addition to the path."
+   }
+  ],
+  "mask": [
+   {
+    "tags": [
+     "rect"
+    ],
+    "type": "boolean",
+    "doc": "Makes the rect a mask of its parent: it clips the parent (its fills, strokes and children show only inside the rect's box) instead of drawing."
+   },
+   {
+    "tags": [
+     "path"
+    ],
+    "type": "boolean",
+    "doc": "Makes the path a mask of its parent — see `RectProps[\"mask\"]`."
+   },
+   {
+    "tags": [
+     "ellipse"
+    ],
+    "type": "boolean",
+    "doc": "Makes the ellipse a mask of its parent — see `RectProps[\"mask\"]`."
+   },
+   {
+    "tags": [
+     "polygon"
+    ],
+    "type": "boolean",
+    "doc": "Makes the polygon a mask of its parent — see `RectProps[\"mask\"]`."
+   }
+  ],
+  "miterLimit": [
+   {
+    "tags": [
+     "stroke"
+    ],
+    "type": "number",
+    "doc": "Miter length limit, as a ratio of the width."
+   }
+  ],
+  "morph": [
+   {
+    "tags": [
+     "path"
+    ],
+    "type": "number",
+    "doc": "How far toward `morphTo`, 0–1."
+   }
+  ],
+  "morphTo": [
+   {
+    "tags": [
+     "path"
+    ],
+    "type": "string",
+    "doc": "A second figure to blend toward, as path data."
+   }
+  ],
+  "muted": [
+   {
+    "tags": [
+     "video",
+     "audio"
+    ],
+    "type": "boolean",
+    "doc": "Excludes the node's audio from the mix; independent of `volume`."
+   }
+  ],
+  "name": [
+   {
+    "tags": [
+     "scene",
+     "group",
+     "rect",
+     "video",
+     "image",
+     "audio",
+     "text",
+     "sequence",
+     "captions",
+     "adjustmentLayer",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon",
+     "lottie",
+     "html",
+     "surface"
+    ],
+    "type": "string",
+    "doc": "Human-readable node name."
+   },
+   {
+    "tags": [
+     "marker"
+    ],
+    "type": "string",
+    "doc": "What the marker is for."
+   },
+   {
+    "tags": [
+     "lottieSlot"
+    ],
+    "type": "string",
+    "required": true,
+    "doc": "The slot's name in the Lottie file."
+   }
+  ],
+  "objectFit": [
+   {
+    "tags": [
+     "video",
+     "image",
+     "imagePaint",
+     "videoPaint"
+    ],
+    "type": "enum",
+    "values": [
+     "cover",
+     "contain",
+     "fill"
+    ],
+    "doc": "How the source maps into the box."
+   }
+  ],
+  "offset": [
+   {
+    "tags": [
+     "colorStop"
+    ],
+    "type": "number",
+    "required": true,
+    "doc": "Position along the gradient, 0–1."
+   }
+  ],
+  "offsetX": [
+   {
+    "tags": [
+     "group",
+     "rect",
+     "video",
+     "image",
+     "text",
+     "captions",
+     "adjustmentLayer",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon",
+     "lottie",
+     "html",
+     "surface"
+    ],
+    "type": "number",
+    "doc": "Render-time translation on top of `x`/`y`, px — moves the drawn content without changing the layout box (the property slide animations drive)."
+   },
+   {
+    "tags": [
+     "shadow"
+    ],
+    "type": "number",
+    "doc": "Where the shadow sits relative to the silhouette, px."
+   }
+  ],
+  "offsetY": [
+   {
+    "tags": [
+     "group",
+     "rect",
+     "video",
+     "image",
+     "text",
+     "captions",
+     "adjustmentLayer",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "shadow",
+     "path",
+     "ellipse",
+     "polygon",
+     "lottie",
+     "html",
+     "surface"
+    ],
+    "type": "number"
+   }
+  ],
+  "opacity": [
+   {
+    "tags": [
+     "group",
+     "rect",
+     "video",
+     "image",
+     "text",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "solidPaint",
+     "linearGradientPaint",
+     "radialGradientPaint",
+     "imagePaint",
+     "videoPaint",
+     "colorStop",
+     "stroke",
+     "shadow",
+     "path",
+     "ellipse",
+     "polygon",
+     "htmlPaint",
+     "html",
+     "shaderPaint",
+     "surfacePaint",
+     "surface"
+    ],
+    "type": "number",
+    "doc": "Opacity, 0–1 (out-of-range values clamp, like CSS)."
+   }
+  ],
+  "padding": [
+   {
+    "tags": [
+     "diagramNode",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout"
+    ],
+    "type": "number"
+   }
+  ],
+  "phase": [
+   {
+    "tags": [
+     "animation"
+    ],
+    "type": "enum",
+    "values": [
+     "in",
+     "out"
+    ],
+    "doc": "\"in\" plays from the clip's head, \"out\" into its tail."
+   }
+  ],
+  "place": [
+   {
+    "tags": [
+     "group",
+     "rect",
+     "video",
+     "image",
+     "text",
+     "adjustmentLayer",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon",
+     "html",
+     "surface"
+    ],
+    "type": "enum",
+    "values": [
+     "top-left",
+     "top",
+     "top-right",
+     "left",
+     "center",
+     "right",
+     "bottom-left",
+     "bottom",
+     "bottom-right",
+     "upper-third",
+     "lower-third"
+    ],
+    "doc": "Where the element belongs in its scene's frame, instead of `x`/`y`: `place=\"bottom-right\"` puts its bottom right corner on the frame's, `place=\"lower-third\"` centres it on the line two thirds of the way down."
+   }
+  ],
+  "playbackRate": [
+   {
+    "tags": [
+     "group",
+     "rect",
+     "video",
+     "image",
+     "audio",
+     "text",
+     "captions",
+     "adjustmentLayer",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon",
+     "lottie",
+     "html",
+     "surface"
+    ],
+    "type": "number",
+    "doc": "Speed multiplier for the node's local time, 1 = normal: at 2, twice the source plays in the same stretch of timeline."
+   }
+  ],
+  "points": [
+   {
+    "tags": [
+     "diagramPlot"
+    ],
+    "type": "readonly DiagramPoint[]",
+    "required": true
+   },
+   {
+    "tags": [
+     "polygon"
+    ],
+    "type": "string",
+    "required": true,
+    "doc": "`\"x,y x,y …\"` in the element's own coordinates."
+   }
+  ],
+  "preset": [
+   {
+    "tags": [
+     "captions"
+    ],
+    "type": "enum",
+    "values": [
+     "classic",
+     "cascade",
+     "spotlight",
+     "whisper",
+     "paper",
+     "guinea",
+     "stark",
+     "pop",
+     "karaoke",
+     "typewriter",
+     "banner",
+     "punch",
+     "marquee"
+    ],
+    "doc": "Caption style preset."
+   }
+  ],
+  "progress": [
+   {
+    "tags": [
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout"
+    ],
+    "type": "number",
+    "doc": "0–1 reveal amount used for agent-authored draw-on animation, clamped to that range."
+   }
+  ],
+  "property": [
+   {
+    "tags": [
+     "keyframeTrack"
+    ],
+    "type": "enum",
+    "values": [
+     "width",
+     "height",
+     "color",
+     "opacity",
+     "cornerRadius",
+     "cornerRadiusTopLeft",
+     "cornerRadiusTopRight",
+     "cornerRadiusBottomRight",
+     "cornerRadiusBottomLeft",
+     "x",
+     "y",
+     "offsetX",
+     "offsetY",
+     "rotation",
+     "scale",
+     "scaleX",
+     "scaleY",
+     "blur",
+     "volume",
+     "offset",
+     "value",
+     "morph",
+     "trimStart",
+     "trimEnd",
+     "trimOffset",
+     "progress"
+    ],
+    "required": true,
+    "doc": "Which prop of the holding element the track animates."
+   }
+  ],
+  "range": [
+   {
+    "tags": [
+     "diagramAxis",
+     "diagramPlot"
+    ],
+    "type": "readonly [min: number, max: number]"
+   }
+  ],
+  "release": [
+   {
+    "tags": [
+     "duck"
+    ],
+    "type": "time",
+    "doc": "How long it takes to come back."
+   }
+  ],
+  "removeBackground": [
+   {
+    "tags": [
+     "image"
+    ],
+    "type": "boolean",
+    "doc": "Cuts the subject out, leaving the rest of the picture transparent."
+   }
+  ],
+  "rotation": [
+   {
+    "tags": [
+     "group",
+     "rect",
+     "video",
+     "image",
+     "text",
+     "adjustmentLayer",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon",
+     "html",
+     "surface"
+    ],
+    "type": "number",
+    "doc": "Rotation in degrees."
+   },
+   {
+    "tags": [
+     "linearGradientPaint",
+     "radialGradientPaint"
+    ],
+    "type": "number",
+    "doc": "Gradient rotation in degrees."
+   }
+  ],
+  "route": [
+   {
+    "tags": [
+     "diagramArrow"
+    ],
+    "type": "enum",
+    "values": [
+     "straight",
+     "elbow",
+     "curve"
+    ]
+   }
+  ],
+  "scale": [
+   {
+    "tags": [
+     "group",
+     "rect",
+     "video",
+     "image",
+     "text",
+     "adjustmentLayer",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon",
+     "html",
+     "surface"
+    ],
+    "type": "number",
+    "doc": "Uniform scale about the box origin, 1 = natural size."
+   }
+  ],
+  "scaleX": [
+   {
+    "tags": [
+     "group",
+     "rect",
+     "video",
+     "image",
+     "text",
+     "adjustmentLayer",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon",
+     "html",
+     "surface"
+    ],
+    "type": "number",
+    "doc": "Per-axis scale, 1 = natural size."
+   }
+  ],
+  "scaleY": [
+   {
+    "tags": [
+     "group",
+     "rect",
+     "video",
+     "image",
+     "text",
+     "adjustmentLayer",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon",
+     "html",
+     "surface"
+    ],
+    "type": "number"
+   }
+  ],
+  "seed": [
+   {
+    "tags": [
+     "captions"
+    ],
+    "type": "number",
+    "doc": "Transcription seed."
+   }
+  ],
+  "selected": [
+   {
+    "tags": [
+     "scene",
+     "group",
+     "rect",
+     "video",
+     "image",
+     "audio",
+     "text",
+     "captions",
+     "adjustmentLayer",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon",
+     "lottie",
+     "html",
+     "surface"
+    ],
+    "type": "boolean",
+    "doc": "Whether the editor has this element selected.",
+    "view": true,
+    "deprecated": "Editor view state, not part of the composition: nothing rendered or exported depends on it."
+   }
+  ],
+  "shape": [
+   {
+    "tags": [
+     "diagramNode"
+    ],
+    "type": "enum",
+    "values": [
+     "rounded",
+     "pill",
+     "circle",
+     "diamond",
+     "hexagon"
+    ]
+   }
+  ],
+  "skill": [
+   {
+    "tags": [
+     "scene"
+    ],
+    "type": "string",
+    "doc": "The skill this scene is made with: the `name` of a skill folder (a SKILL.md with its assets), chosen from the editor's Skill Deck or set by an agent."
+   }
+  ],
+  "smooth": [
+   {
+    "tags": [
+     "diagramPlot"
+    ],
+    "type": "boolean",
+    "doc": "Smooth the path with a curve rather than straight segments."
+   }
+  ],
+  "sourceIn": [
+   {
+    "tags": [
+     "group",
+     "rect",
+     "video",
+     "image",
+     "audio",
+     "text",
+     "captions",
+     "adjustmentLayer",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon",
+     "lottie",
+     "html",
+     "surface"
+    ],
+    "type": "time",
+    "doc": "Source in point: where playback begins within the source, trimming the head."
+   }
+  ],
+  "sourceOut": [
+   {
+    "tags": [
+     "group",
+     "rect",
+     "video",
+     "image",
+     "audio",
+     "text",
+     "captions",
+     "adjustmentLayer",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon",
+     "lottie",
+     "html",
+     "surface"
+    ],
+    "type": "time",
+    "doc": "Source out point: where playback ends within the source."
+   }
+  ],
+  "speed": [
+   {
+    "tags": [
+     "lottie"
+    ],
+    "type": "number",
+    "doc": "Multiplies the animation's own clock; 1 is real time."
+   }
+  ],
+  "src": [
+   {
+    "tags": [
+     "video",
+     "image",
+     "audio",
+     "imagePaint",
+     "videoPaint"
+    ],
+    "type": "string | AssetRef",
+    "required": true,
+    "doc": "Path, URL, asset id, or a `generate.*` declaration."
+   },
+   {
+    "tags": [
+     "captions"
+    ],
+    "type": "string | AssetRef",
+    "doc": "Path, URL, asset id, or a `generate.*` declaration."
+   },
+   {
+    "tags": [
+     "lottie"
+    ],
+    "type": "string",
+    "required": true,
+    "doc": "Path to a Lottie JSON in the project, or an imported asset."
+   }
+  ],
+  "stagger": [
+   {
+    "tags": [
+     "group"
+    ],
+    "type": "time",
+    "doc": "How far apart the group's children's motion runs, as a `Time`."
+   }
+  ],
+  "start": [
+   {
+    "tags": [
+     "group",
+     "rect",
+     "video",
+     "image",
+     "audio",
+     "text",
+     "captions",
+     "adjustmentLayer",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon",
+     "lottie",
+     "html",
+     "surface"
+    ],
+    "type": "time",
+    "doc": "Parent-timeline time at which the node begins."
+   },
+   {
+    "tags": [
+     "textRange"
+    ],
+    "type": "number",
+    "required": true,
+    "doc": "First character of the run, 0-based."
+   },
+   {
+    "tags": [
+     "cue"
+    ],
+    "type": "time",
+    "required": true,
+    "doc": "When the line appears, in scene-local time."
+   }
+  ],
+  "strokeColor": [
+   {
+    "tags": [
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout"
+    ],
+    "type": "string",
+    "doc": "Primary diagram stroke."
+   }
+  ],
+  "strokeWidth": [
+   {
+    "tags": [
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout"
+    ],
+    "type": "number",
+    "doc": "Primary diagram stroke width, px."
+   }
+  ],
+  "subtitle": [
+   {
+    "tags": [
+     "diagramNode",
+     "diagramCallout"
+    ],
+    "type": "string"
+   }
+  ],
+  "syncTo": [
+   {
+    "tags": [
+     "video",
+     "audio"
+    ],
+    "type": "string",
+    "doc": "`id` of another element carrying an audio track."
+   }
+  ],
+  "target": [
+   {
+    "tags": [
+     "duck"
+    ],
+    "type": "string",
+    "required": true,
+    "doc": "`id` of the element that gets quieter."
+   }
+  ],
+  "targetX": [
+   {
+    "tags": [
+     "diagramCallout"
+    ],
+    "type": "number"
+   }
+  ],
+  "targetY": [
+   {
+    "tags": [
+     "diagramCallout"
+    ],
+    "type": "number"
+   }
+  ],
+  "textAlign": [
+   {
+    "tags": [
+     "text"
+    ],
+    "type": "enum",
+    "values": [
+     "left",
+     "center",
+     "right"
+    ],
+    "doc": "Horizontal alignment of glyphs within the box."
+   }
+  ],
+  "textBaseline": [
+   {
+    "tags": [
+     "text"
+    ],
+    "type": "enum",
+    "values": [
+     "top",
+     "bottom",
+     "middle",
+     "alphabetic"
+    ],
+    "doc": "Vertical alignment within the box: the block anchored to the top or bottom of the box or centered, or (\"alphabetic\") the first line's baseline at the top of the box."
+   }
+  ],
+  "textCase": [
+   {
+    "tags": [
+     "text",
+     "textRange"
+    ],
+    "type": "enum",
+    "values": [
+     "original",
+     "upper",
+     "lower"
+    ],
+    "doc": "Casing applied when drawing; the text itself is left as written."
+   }
+  ],
+  "textColor": [
+   {
+    "tags": [
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout"
+    ],
+    "type": "string",
+    "doc": "Text color used by built-in diagram labels."
+   }
+  ],
+  "textDecoration": [
+   {
+    "tags": [
+     "text",
+     "textRange"
+    ],
+    "type": "enum",
+    "values": [
+     "none",
+     "underline",
+     "lineThrough",
+     "underline lineThrough"
+    ],
+    "doc": "Rules drawn along the text."
+   }
+  ],
+  "tickCount": [
+   {
+    "tags": [
+     "diagramAxis"
+    ],
+    "type": "number"
+   }
+  ],
+  "time": [
+   {
+    "tags": [
+     "keyframe"
+    ],
+    "type": "time",
+    "required": true,
+    "doc": "Node-local time: 0 is where the clip begins (its `start`)."
+   },
+   {
+    "tags": [
+     "marker"
+    ],
+    "type": "time",
+    "required": true,
+    "doc": "Where the marker sits, in scene-local time."
+   }
+  ],
+  "transition": [
+   {
+    "tags": [
+     "group",
+     "rect",
+     "video",
+     "image",
+     "text",
+     "adjustmentLayer",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon",
+     "html",
+     "surface"
+    ],
+    "type": "TransitionSpec | null",
+    "doc": "Transition into the next clip, rendered centered on the cut, set on the outgoing clip."
+   }
+  ],
+  "trimEnd": [
+   {
+    "tags": [
+     "path",
+     "ellipse",
+     "polygon"
+    ],
+    "type": "number",
+    "doc": "Where it ends, 0–1."
+   }
+  ],
+  "trimOffset": [
+   {
+    "tags": [
+     "path",
+     "ellipse",
+     "polygon"
+    ],
+    "type": "number",
+    "doc": "Rotates the window around the figure, in turns."
+   }
+  ],
+  "trimStart": [
+   {
+    "tags": [
+     "path",
+     "ellipse",
+     "polygon"
+    ],
+    "type": "number",
+    "doc": "Where the drawn part begins, 0–1 of the whole figure."
+   }
+  ],
+  "type": [
+   {
+    "tags": [
+     "effect"
+    ],
+    "type": "enum",
+    "values": [
+     "blur",
+     "brightness",
+     "contrast",
+     "grayscale",
+     "hueRotate",
+     "invert",
+     "saturate",
+     "sepia"
+    ],
+    "required": true,
+    "doc": "Which filter to apply."
+   },
+   {
+    "tags": [
+     "animation"
+    ],
+    "type": "enum",
+    "values": [
+     "blur",
+     "fade",
+     "gain",
+     "grow",
+     "shrink",
+     "slideLeft",
+     "slideRight",
+     "slideUp",
+     "slideDown",
+     "spin",
+     "twist",
+     "appearWord",
+     "appearChar",
+     "scramble"
+    ],
+    "required": true,
+    "doc": "Which preset plays."
+   }
+  ],
+  "uniforms": [
+   {
+    "tags": [
+     "shaderPaint"
+    ],
+    "type": "Record<string, string | number | number[]>",
+    "doc": "Values for the shader's `@group(1)` uniform declarations, matched by name: numbers bind to `f32`, arrays of 2-4 to `vec2f`-`vec4f`, CSS color strings to `vec3f`/`vec4f`."
+   }
+  ],
+  "upscale": [
+   {
+    "tags": [
+     "video",
+     "image"
+    ],
+    "type": "number",
+    "doc": "Resolution multiplier: 2 asks for twice the pixels."
+   }
+  ],
+  "value": [
+   {
+    "tags": [
+     "effect"
+    ],
+    "type": "number",
+    "required": true,
+    "doc": "The amount: px for \"blur\", degrees for \"hueRotate\", 0–1 otherwise."
+   },
+   {
+    "tags": [
+     "keyframe"
+    ],
+    "type": "string | number",
+    "required": true,
+    "doc": "The value at `time`: a number, or any CSS color on a `color` track."
+   },
+   {
+    "tags": [
+     "lottieSlot"
+    ],
+    "type": "string | number",
+    "required": true,
+    "doc": "Its value: a CSS color, a string for a text slot, or a number."
+   }
+  ],
+  "verticalAlign": [
+   {
+    "tags": [
+     "captions"
+    ],
+    "type": "enum",
+    "values": [
+     "top",
+     "center",
+     "bottom"
+    ],
+    "doc": "Vertical placement of the caption block: anchored to the top or bottom safe margin, or centered."
+   }
+  ],
+  "volume": [
+   {
+    "tags": [
+     "scene"
+    ],
+    "type": "number",
+    "doc": "Decibels on the scene's own bus, which everything in it mixes into: the master fader."
+   },
+   {
+    "tags": [
+     "video",
+     "audio"
+    ],
+    "type": "number",
+    "doc": "Decibels: 0 = unity gain, negative attenuates (-6 ≈ half as loud), -Infinity = silence."
+   }
+  ],
+  "wgsl": [
+   {
+    "tags": [
+     "shaderPaint"
+    ],
+    "type": "string",
+    "required": true,
+    "doc": "Fragment-stage WGSL, applied to the video/image paint directly below it in the paint stack, or run procedurally (over a transparent source) when there is none."
+   }
+  ],
+  "width": [
+   {
+    "tags": [
+     "scene"
+    ],
+    "type": "number",
+    "required": true,
+    "doc": "Box size, px."
+   },
+   {
+    "tags": [
+     "group",
+     "rect",
+     "video",
+     "image",
+     "audio",
+     "text",
+     "adjustmentLayer",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon",
+     "html",
+     "surface"
+    ],
+    "type": "number",
+    "doc": "Box size, px."
+   },
+   {
+    "tags": [
+     "stroke"
+    ],
+    "type": "number",
+    "doc": "Line width, px."
+   },
+   {
+    "tags": [
+     "lottie"
+    ],
+    "type": "number",
+    "doc": "Drawing size."
+   }
+  ],
+  "workarea": [
+   {
+    "tags": [
+     "scene"
+    ],
+    "type": "[inPoint: Time, outPoint: Time] | null",
+    "doc": "The stretch of the scene that plays and exports, as `[in, out]`: playback loops within it, and an export is of it and nothing else — so this is where a render is trimmed."
+   }
+  ],
+  "x": [
+   {
+    "tags": [
+     "scene",
+     "group",
+     "rect",
+     "video",
+     "image",
+     "audio",
+     "text",
+     "adjustmentLayer",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon",
+     "lottie",
+     "html",
+     "surface"
+    ],
+    "type": "number",
+    "doc": "Position relative to the parent, px."
+   }
+  ],
+  "xLabel": [
+   {
+    "tags": [
+     "diagramAxis"
+    ],
+    "type": "string"
+   }
+  ],
+  "y": [
+   {
+    "tags": [
+     "scene",
+     "group",
+     "rect",
+     "video",
+     "image",
+     "audio",
+     "text",
+     "adjustmentLayer",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon",
+     "lottie",
+     "html",
+     "surface"
+    ],
+    "type": "number"
+   }
+  ],
+  "yLabel": [
+   {
+    "tags": [
+     "diagramAxis"
+    ],
+    "type": "string"
+   }
+  ]
+ }
+}

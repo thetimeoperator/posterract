@@ -16,13 +16,25 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { Keyframe } from "@/components/ui/keyframe";
-import { useWorld } from "@posterract/koota-solid";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectPortal,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useTrait, useWorld } from "@posterract/koota-solid";
 import {
   Computed,
+  PLACEMENTS,
+  Place,
   getParentEntity,
+  getSceneAncestor,
   isAdjustmentLayer,
   isScene,
   isSequence,
+  type Placement,
 } from "@posterract/video-runtime";
 import { useDerived, useEditor } from "@/engine/hooks";
 import { syncKeyframe } from "@/engine/keyframes";
@@ -40,6 +52,24 @@ import type { Entity } from "koota";
 type TransformSettingsProps = {
   selection: Entity[];
 };
+
+/** "Where it belongs" as a choice: no placement (the numbers decide), or one of the frame's named places. */
+type PlaceOption = { value: Placement | null; label: string };
+
+const PLACE_OPTIONS: PlaceOption[] = [
+  { value: null, label: "By X / Y" },
+  { value: "top-left", label: "Top left" },
+  { value: "top", label: "Top" },
+  { value: "top-right", label: "Top right" },
+  { value: "upper-third", label: "Upper third" },
+  { value: "left", label: "Left" },
+  { value: "center", label: "Center" },
+  { value: "right", label: "Right" },
+  { value: "lower-third", label: "Lower third" },
+  { value: "bottom-left", label: "Bottom left" },
+  { value: "bottom", label: "Bottom" },
+  { value: "bottom-right", label: "Bottom right" },
+];
 
 type TransformAddon = 'rotate' | 'anchor' | 'offset' | 'scale' | 'skew' | 'constraints';
 type TransformAddons = Partial<Record<TransformAddon, boolean>>;
@@ -75,6 +105,42 @@ export function TransformSettings(props: TransformSettingsProps) {
   const updatePositionY = (y: number) => {
     editor.editProperty(entity(), 'y', y);
     syncKeyframe(world, editor, entity(), 'y', y);
+  };
+
+  /**
+   * Where the element belongs in the frame, when the source says that rather
+   * than `x`/`y` (`place="lower-third"`). The fields above show where that
+   * comes to; typing into them — like dragging the element — replaces the
+   * placement with those numbers (see `DocumentEditor.editProperty`), and
+   * choosing a place here puts it back. Only something inside a scene has a
+   * frame to be placed in.
+   */
+  const placement = useTrait(entity, Place);
+  const placeable = createMemo(() => !isScene(entity()) && !isSequence(entity()) && getSceneAncestor(entity()) !== null);
+  const place = createMemo<PlaceOption>(() => {
+    const current = placement();
+    if (!current) return PLACE_OPTIONS[0]!;
+    const name = (Object.keys(PLACEMENTS) as Placement[]).find(
+      (key) => PLACEMENTS[key][0] === current.fx && PLACEMENTS[key][1] === current.fy,
+    );
+    return PLACE_OPTIONS.find((option) => option.value === name) ?? PLACE_OPTIONS[0]!;
+  });
+  // One number in the panel: the inset of both axes, or of the horizontal one when they differ.
+  const inset = () => placement()?.insetX ?? 0;
+
+  const updatePlace = (next: PlaceOption | null) => {
+    if (next === null || next.value === place().value) return;
+    if (next.value !== null) {
+      editor.editProperty(entity(), 'place', next.value);
+      return;
+    }
+    // Back to numbers: the ones it is showing, so it does not jump.
+    editor.editProperty(entity(), 'x', Math.round(positionX()));
+  };
+
+  const updateInset = (value: number) => {
+    const next = Math.round(value);
+    editor.editProperty(entity(), 'inset', next === 0 ? false : next);
   };
 
   // Mirrors the runtime's own rule (see resolveConstraintOffsets): a sequence
@@ -178,6 +244,42 @@ export function TransformSettings(props: TransformSettingsProps) {
           />
         </div>
       </ControlRow>
+
+      <Show when={placeable()}>
+        <ControlRow label="Place">
+          <div class="grid grid-cols-2 gap-2">
+            <Select<PlaceOption>
+              value={place()}
+              onChange={updatePlace}
+              options={PLACE_OPTIONS}
+              optionValue="label"
+              optionTextValue="label"
+              itemComponent={(itemProps) => (
+                <SelectItem item={itemProps.item}>{itemProps.item.rawValue.label}</SelectItem>
+              )}
+            >
+              <SelectTrigger>
+                <SelectValue class="text-xs">{place().label}</SelectValue>
+              </SelectTrigger>
+              <SelectPortal>
+                <SelectContent />
+              </SelectPortal>
+            </Select>
+            <Show when={place().value !== null}>
+              <ControlledTextField
+                icon={<span class="text-[10px] text-muted-foreground">in</span>}
+                value={inset()}
+                onNumber={updateInset}
+                step={1}
+                min={0}
+                autoSelect
+                sliderEnabled
+                limitEvents
+              />
+            </Show>
+          </div>
+        </ControlRow>
+      </Show>
 
       <Show when={showAddon('constraints') && supportsConstraints()}>
         <ConstraintsRow node={entity()} />

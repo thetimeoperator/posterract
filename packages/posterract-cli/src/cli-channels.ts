@@ -126,13 +126,40 @@ export type LocalControlResponse =
 
 export type AssetRef = { path: string };
 
-export type ContextRequest = { tree?: boolean };
+export type ContextRequest = {
+  tree?: boolean;
+  /** Limit the tree to one scene, by id. Every scene when omitted. */
+  scene?: string;
+  /** How many levels below the stage to descend. Everything when omitted. */
+  depth?: number;
+  /**
+   * List every keyframe, track and animation as a node of its own. Off by
+   * default: a composition is mostly keyframes by count, and an element says
+   * what moves it in one line (`motion`) instead.
+   */
+  motion?: boolean;
+};
 
 export type RuntimeTreeNode = {
   id: string | null;
   source: string | null;
   name: string | null;
   kind: string;
+  /**
+   * What the source says about the element, for the props an edit usually
+   * starts from: where it is, how big, when it plays, what it shows. Literals
+   * only — a prop the code computes is named in `live` instead.
+   */
+  props?: Record<string, unknown>;
+  /** What a `<text>` says. */
+  text?: string;
+  /**
+   * What moves the element, when its motion nodes are not listed: keyframes
+   * per animated property, and its animation presets as `type phase`.
+   */
+  motion?: { keyframes?: Record<string, number>; animations?: string[] };
+  /** Children a `depth` limit left out. */
+  more?: number;
   /**
    * The project's own component this element was written inside, when it was
    * written inside one. A component compiles away, so this is the only trace
@@ -207,7 +234,26 @@ export type ExportRequest = {
   id: string;
   output: string;
   format?: "mp4" | "webm" | "ogg" | "mov";
+  /**
+   * Render only this stretch of the scene, in seconds of scene time: a look at
+   * three seconds of a two minute video costs three seconds of rendering.
+   * Without them the scene's work area decides, as it does in the app.
+   */
+  from?: number;
+  to?: number;
+  /** Output size as a fraction of the scene's own, 0–1: `0.5` renders a 1080×1920 scene at 540×960. */
+  scale?: number;
 };
+
+/** How far the render in flight has got; null when none is. */
+export type ExportProgress = {
+  /** 0–100. */
+  progress: number;
+  /** Seconds of video being rendered. */
+  duration: number;
+  /** The encoder's own estimate of what is left, in seconds. */
+  remainingSeconds?: number;
+} | null;
 
 export type ExportResult = {
   path: string;
@@ -319,12 +365,29 @@ export type LogEntry = { ts: number; level: LogLevel; message: string; source: s
 
 export type LogsRequest = { tail?: number; level?: LogLevel };
 
-export type ProjectSourceReadRequest = { path: string };
+export type ProjectSourceReadRequest = {
+  path: string;
+  /** One element, children included, by its stable id. */
+  id?: string;
+  /** 1-based, inclusive line range. */
+  lines?: [from: number, to: number];
+  /** One line per element, with the lines each spans, instead of the text. */
+  outline?: boolean;
+  /** The whole file however large. Without it a very large file answers with its outline. */
+  full?: boolean;
+};
 
 export type ProjectSourceReadResult = {
   path: string;
+  /** Empty when the answer is an outline. */
   content: string;
+  /** Revision of the whole file, whatever part of it was read. */
   revisionId: string;
+  totalLines: number;
+  totalChars: number;
+  range?: { from: number; to: number };
+  outline?: string[];
+  note?: string;
 };
 
 export type ProjectSourceWriteRequest = {
@@ -333,9 +396,23 @@ export type ProjectSourceWriteRequest = {
   expectedRevisionId: string;
 };
 
+/** Replace one string of a source with another: what a file tool's edit does, for an agent that has none. */
+export type ProjectSourceEditRequest = {
+  path: string;
+  oldString: string;
+  newString: string;
+  /** Replace every occurrence; without it `oldString` has to be there exactly once. */
+  replaceAll?: boolean;
+};
+
+export type ProjectSourceEditResult = ProjectSourceWriteResult & {
+  replaced: number;
+  /** The line the (first) replacement starts on. */
+  line: number;
+};
+
 export type ProjectSourceWriteResult = {
   revisionId: string;
-  content: string;
   diagnostics: Array<{ message: string; line?: number; column?: number }>;
 };
 
@@ -346,6 +423,30 @@ export type CanvasStateResult = {
   frameRate: number;
   canUndo: boolean;
   canRedo: boolean;
+};
+
+/**
+ * What a tool that changes the document answers with: the canvas state, and
+ * what became of the change on disk. The canvas shows a value the moment it is
+ * set; the source has it only after the write, and a caller that cannot see the
+ * canvas needs to know which of the two it is looking at.
+ */
+export type CanvasWriteResult = CanvasStateResult & {
+  /** Revision of the entry source once the change was written (the id `read_source` hands out). */
+  revisionId: string | null;
+  /**
+   * Edits the source could not take, as `source` or `source (prop)`: a prop the
+   * code computes rather than spells, an element inside a loop. The canvas shows
+   * them until the next reload; the file does not have them.
+   */
+  skipped?: string[];
+  note?: string;
+  /**
+   * The edit was applied, and these are worth knowing: a prop the runtime
+   * accepts that the element does not document (`fill` on a `<text>` works as
+   * `color` does), with the documented name to prefer.
+   */
+  warnings?: string[];
 };
 
 export type CanvasSelectRequest = { ids: string[]; extend?: boolean };
@@ -370,6 +471,26 @@ export type CanvasCreateRequest = {
   element: CanvasElementTree;
 };
 export type CanvasVariableRequest = { file: string; name: string; value: string | number | boolean };
+
+/**
+ * What an edit of named elements may say about when its author last looked:
+ * the revision a read or an earlier edit handed out. With it, the edit is
+ * refused if someone has changed one of those elements since — and only then;
+ * a change anywhere else in the file is no conflict, and the edit lands on top
+ * of it.
+ */
+export type ExpectedRevision = { expectedRevisionId?: string };
+
+/** One of several edits applied together: one undo step, one write, all or nothing. */
+export type CanvasEdit =
+  | ({ op: "set" } & CanvasSetPropertiesRequest)
+  | ({ op: "text" } & CanvasSetTextRequest)
+  | ({ op: "create" } & CanvasCreateRequest)
+  | ({ op: "move" } & CanvasMoveRequest)
+  | ({ op: "delete" } & CanvasIdsRequest)
+  | ({ op: "duplicate" } & CanvasIdsRequest);
+
+export type CanvasApplyRequest = ExpectedRevision & { edits: CanvasEdit[] };
 
 export type CanvasBakeRequest = {
   id: string;

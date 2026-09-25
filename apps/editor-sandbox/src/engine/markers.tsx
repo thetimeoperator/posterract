@@ -46,6 +46,20 @@ export function toggleMarkerAtPlayhead(world: World): void {
 	editor.insertElement(scene, () => <MarkerElement time={frame / frameRateOf(world)} />);
 }
 
+/**
+ * Adds a named marker at the playhead — a note on the timeline, such as one
+ * the voice bar leaves for the agent (`@agent …`) — and returns where it went,
+ * in scene seconds; null with no scene open.
+ */
+export function addMarkerAtPlayhead(world: World, name: string): number | null {
+	const scene = getActiveEntity(world);
+	if (!scene) return null;
+
+	const time = Math.round(store(world, Computed).localTime[scene.id()] ?? 0) / frameRateOf(world);
+	getDocumentEditor(world).insertElement(scene, () => <MarkerElement time={time} name={name} />);
+	return time;
+}
+
 function frameRateOf(world: World): number {
 	return world.get(FrameRate)?.value ?? 30;
 }

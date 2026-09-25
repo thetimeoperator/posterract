@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { Caption, CaptionType, Chars, ClipDragOrigin, Computed, Hidden, Hovering, Name, Selected, TrimDragOrigin, fitsChildren, getGeneratingColor, getSourceFailure, isCaption, isGenerating, isGroup, isText, store } from '@posterract/video-runtime';
+import { Caption, CaptionType, Chars, ClipDragOrigin, Computed, Hidden, Hovering, Name, PlaybackRate, Selected, TrimDragOrigin, fitsChildren, getGeneratingColor, getSourceFailure, isCaption, isGenerating, isGroup, isText, store } from '@posterract/video-runtime';
 
 import { getDocumentEditor } from '../../editor';
 import {
@@ -102,6 +102,11 @@ export function renderClip(
 		if (isCaption(entity)) label = label || `${CAPTION_PRESETS[entity.get(Caption)?.type ?? CaptionType.CLASSIC]} Captions`;
 		else if (isText(entity)) label = entity.get(Chars)?.value ?? label ?? '';
 		if (!label) label = getClipFallbackName(world, entity);
+
+		// A clip playing at another speed says so first, where truncation cannot hide it.
+		const rate = entity.get(PlaybackRate)?.value || 1;
+		if (rate !== 1) label = `${Math.round(rate * 100) / 100}× · ${label}`;
+
 		if (generating) label = 'Generating...';
 		if (error) label = error;
 

@@ -21,6 +21,7 @@ import { getResolution, getViewport, pixelsToFrames } from '../view';
 import { isDragging } from '../drag';
 import { getClipAlpha, renderClip } from './clip';
 import { renderKeyframeTrack } from './keyframes';
+import { renderPart } from './part';
 
 import type { Entity, World } from 'koota';
 import type { TimelineNode } from '@posterract/video-runtime';
@@ -65,6 +66,14 @@ export function renderLayers(world: World, scene: Entity, surface: TimelineSurfa
 			if (node.kind === 'sub-item') {
 				row.top += getNodeHeight(node);
 				walk(node.children, parent);
+				continue;
+			}
+
+			if (node.kind !== 'geometry') {
+				row.height = getNodeHeight(node);
+				renderPart(world, scene, surface, node, row);
+				row.top += row.height;
+				walk(node.children, node.entity);
 				continue;
 			}
 

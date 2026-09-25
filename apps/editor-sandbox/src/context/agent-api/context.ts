@@ -9,11 +9,12 @@ import {
   PaintType, Scene, SceneSkill, Sequential, Shadow, Source, Stage, Stroke, getActiveEntity,
   getEntityChildren, getIntrinsicPaint, isText,
 } from "@posterract/video-runtime";
-import { ANIMATION_TYPES, trackProperty } from "@posterract/video-reconciler";
+import { ANIMATION_TYPES, authoredElement, trackProperty } from "@posterract/video-reconciler";
 import { parseSource } from "@posterract/composition";
 
 import { getProject, getProjectsRoot } from "@/projects";
 import { readProjectSource } from "@/projects/host";
+import { shownRevision } from "@/projects/shown";
 import { getInspectEntries } from "@/engine/inspect";
 
 import type { Accessor } from "solid-js";
@@ -159,8 +160,60 @@ function detailOf(entity: Entity, frameRate: number): RuntimeTreeNode["detail"] 
   return undefined;
 }
 
-function runtimeTree(world: World, entity: Entity, frameRate: number): RuntimeTreeNode {
-  const detail = detailOf(entity, frameRate);
+/**
+ * The props an edit usually starts from, as the source spells them. Everything
+ * else is one `read_source` away; listing every prop of every element is how a
+ * tree stops fitting in the reader's head.
+ */
+const CORE_PROPS = [
+  "x", "y", "width", "height", "start", "end", "after", "src", "sourceIn", "sourceOut",
+  "rotation", "scale", "opacity", "hidden", "fill", "color", "fontFamily", "fontSize", "fontWeight",
+  "textAlign", "objectFit", "volume", "muted", "workarea", "skill", "preset", "type", "phase", "duration", "delay",
+] as const;
+
+function coreProps(entity: Entity): Record<string, unknown> | undefined {
+  const authored = authoredElement(entity)?.props;
+  if (!authored) return undefined;
+  const props: Record<string, unknown> = {};
+  for (const name of CORE_PROPS) {
+    const value = authored[name];
+    const literal = typeof value === "string" || typeof value === "number" || typeof value === "boolean" || Array.isArray(value);
+    if (literal) props[name] = value;
+  }
+  return Object.keys(props).length ? props : undefined;
+}
+
+/** Nodes that say how an element moves rather than being something on screen. */
+const isMotionNode = (entity: Entity): boolean =>
+  entity.has(KeyframeTrack) || entity.has(Keyframe) || entity.has(Animation);
+
+/** An element's motion in one line: keyframes per property, presets as `type phase`. */
+function motionOf(world: World, entity: Entity): RuntimeTreeNode["motion"] {
+  const keyframes: Record<string, number> = {};
+  const animations: string[] = [];
+  for (const child of getEntityChildren(world, entity)) {
+    const track = child.get(KeyframeTrack);
+    if (track) {
+      const property = trackProperty(track.property) ?? String(track.property);
+      keyframes[property] = getEntityChildren(world, child).filter((node) => node.has(Keyframe)).length;
+    }
+    const animation = child.get(Animation);
+    if (animation) {
+      const type = ANIMATION_NAMES.get(animation.type) ?? String(animation.type);
+      animations.push(`${type} ${animation.phase === AnimationPhase.OUT ? "out" : "in"}`);
+    }
+  }
+  if (!Object.keys(keyframes).length && !animations.length) return undefined;
+  return {
+    ...(Object.keys(keyframes).length ? { keyframes } : {}),
+    ...(animations.length ? { animations } : {}),
+  };
+}
+
+type TreeOptions = { frameRate: number; motion: boolean; depth: number; scene?: string };
+
+function runtimeTree(world: World, entity: Entity, options: TreeOptions, level = 0): RuntimeTreeNode {
+  const detail = detailOf(entity, options.frameRate);
   // The project's own component this came from, when it came from one. A
   // component compiles away, so an agent reading the tree would otherwise see
   // the pieces and never the `<Panel>` the author wrote.
@@ -170,29 +223,46 @@ function runtimeTree(world: World, entity: Entity, frameRate: number): RuntimeTr
   // will be overwritten on the next tick — the source expression is what to
   // change, or the prop should be baked first.
   const live = entity.get(Live)?.props;
+  const props = coreProps(entity);
+  const text = isText(entity) ? authoredElement(entity)?.text : undefined;
+  const motion = options.motion ? undefined : motionOf(world, entity);
+
+  let children = getEntityChildren(world, entity);
+  if (!options.motion) children = children.filter((child) => !isMotionNode(child));
+  // One scene of several: the others are other videos, not context for this one.
+  if (entity.has(Stage) && options.scene !== undefined) {
+    children = children.filter((child) => !child.has(Scene) || sourceId(child) === options.scene);
+  }
+  const cut = level >= options.depth;
+
   return {
     id: sourceId(entity),
     source: entity.get(Source)?.value ?? null,
     name: entity.get(Name)?.value || null,
     kind: kindOf(entity),
+    ...(props ? { props } : {}),
+    ...(text ? { text } : {}),
+    ...(motion ? { motion } : {}),
     ...(component ? { component } : {}),
     ...(live ? { live: live.split(',') } : {}),
     ...(detail ? { detail } : {}),
-    children: getEntityChildren(world, entity).map((child) => runtimeTree(world, child, frameRate)),
+    ...(cut && children.length ? { more: children.length } : {}),
+    children: cut ? [] : children.map((child) => runtimeTree(world, child, options, level + 1)),
   };
 }
 
 /**
  * What `posterract context` reports: what the project's source cannot say. The JSX is
- * the composition — its scenes, what is selected, which scene is active, the
- * work area are all in the file, and a caller that wants them reads it. What is
- * left over is which folder projects live under, which project folder the app
- * has open, where its playhead sits, which font families are actually
- * registered in the world drawing it. With no project open only the root is
- * left to report, and the report says so.
+ * the composition — its scenes and their work areas are in the file, and a
+ * caller that wants them reads it. Where the author is looking (selection,
+ * active scene, camera) is in `.posterract/view.json` beside it. What is left
+ * over is which folder projects live under, which project folder the app has
+ * open, where its playhead sits, which font families are actually registered
+ * in the world drawing it. With no project open only the root is left to
+ * report, and the report says so.
  */
 export function handleContextGet(session: Accessor<EditorSession | null>) {
-  return async ({ tree = false }: ContextRequest = {}) => {
+  return async ({ tree = false, scene, depth, motion = false }: ContextRequest = {}) => {
     const rootDir = await getProjectsRoot();
 
     const open = session();
@@ -232,6 +302,11 @@ export function handleContextGet(session: Accessor<EditorSession | null>) {
       // `readProjectSource`), so agents get one revision namespace that only
       // changes when the file changes.
       sourceRevision,
+      // The revision of the entry source the *canvas* is showing. For a moment
+      // after the file changes on disk the two differ — the change is written
+      // and not yet on screen; equal means the canvas has caught up, and what
+      // `inspect`, `geometry` and `capture` say is about that revision.
+      shownRevision: projectInfo ? shownRevision(projectInfo.dir, projectInfo.entry) : null,
       // The compile pipeline lives in the editor page's load closures (see
       // pages/editor.tsx) and exposes no state this handler can read cheaply.
       // "unknown" is honest; do not report "ready" without evidence.
@@ -250,7 +325,16 @@ export function handleContextGet(session: Accessor<EditorSession | null>) {
         options: entry.options,
         value: entry.get(),
       })),
-      ...(tree && { tree: stage ? runtimeTree(world, stage, frameRate) : null }),
+      ...(tree && {
+        tree: stage
+          ? runtimeTree(world, stage, {
+            frameRate,
+            motion,
+            depth: typeof depth === "number" && depth >= 0 ? depth : Number.POSITIVE_INFINITY,
+            ...(scene === undefined ? {} : { scene }),
+          })
+          : null,
+      }),
     };
   }
 }

@@ -11,7 +11,7 @@ itself.
     <stroke color="#5DFF9D" width={18} cap="round" />
     <keyframeTrack property="trimEnd">
       <keyframe time={0} value={0} />
-      <keyframe time="2s" value={1} />
+      <keyframe time={2} value={1} />
     </keyframeTrack>
   </path>
 
@@ -58,7 +58,7 @@ keyframeable.
 <path id="badge" d="M0 0 L240 0 L240 240 L0 240 Z" morphTo="M120 0 L240 120 L120 240 L0 120 Z" morph={0}>
   <keyframeTrack property="morph">
     <keyframe time={0} value={0} />
-    <keyframe time="1s" value={1} />
+    <keyframe time={1} value={1} />
   </keyframeTrack>
 </path>
 ```

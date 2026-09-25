@@ -37,6 +37,11 @@ export const MAIN_CHANNELS = {
   AI_KEYS_REVEAL: "ai:keys-reveal",
   AI_GENERATE: "ai:generate",
   AI_TRANSCRIBE: "ai:transcribe",
+  AI_TRANSCRIBE_COMMAND: "ai:transcribe-command",
+  AI_DECIDE: "ai:decide",
+  VOICE_LOG: "voice:log",
+  AI_DECIDE_CANCEL: "ai:decide-cancel",
+  VOICE_MIC_ACCESS: "voice:mic-access",
   CLOUD_REQUEST: "cloud:request",
   APP_OPEN_EXTERNAL: "app:open-external",
   APP_OPEN_PROJECT_EDITOR: "app:open-project-editor",
@@ -97,6 +102,11 @@ export const MAIN_CHANNELS = {
   PROJECTS_TRASH_REMOVE: "projects:trash-remove",
   PROJECTS_HISTORY_READ: "projects:history-read",
   PROJECTS_HISTORY_WRITE: "projects:history-write",
+  PROJECTS_VIEW_READ: "projects:view-read",
+  PROJECTS_VIEW_WRITE: "projects:view-write",
+  PROJECTS_SOURCE_PATCH: "projects:source-patch",
+  PROJECTS_SOURCE_EDIT: "projects:source-edit",
+  PROJECTS_SOURCE_TOUCHED: "projects:source-touched",
   PROJECTS_SOURCE_LOCATE: "projects:source-locate",
   EXPORTS_RECORD: "exports:record",
   EXPORTS_LIST: "exports:list",
@@ -151,8 +161,22 @@ export type ProjectInfo = {
 };
 
 export type CompileResult =
-  | { ok: true; code: string }
+  /** `revisions`: what each source said when this was compiled — what a canvas mounting `code` is showing. */
+  | { ok: true; code: string; revisions?: Record<string, string> }
   | { ok: false; error: string };
+
+/** A value a source spells out rather than computes. */
+export type LiteralValue = string | number | boolean | null | LiteralValue[] | { [key: string]: LiteralValue };
+
+/** One thing a live canvas does to show a change made to the file (see the compiler's patch.ts). */
+export type PatchOp =
+  | { kind: "prop"; source: string; name: string; value: LiteralValue }
+  | { kind: "text"; source: string; value: string };
+
+export type SourcePatch =
+  | { ok: true; ops: PatchOp[] }
+  /** `renames`: where the elements addressed by position went, when both versions parsed (see the compiler's `patchSources`). */
+  | { ok: false; reason: string; renames?: Record<string, string> };
 
 export type { SourceEdit, WriteResult };
 
@@ -234,7 +258,16 @@ export type ListedExport = ExportEntry & { bytes: number | null; missing: boolea
 export type MainRequestMap = {
   [MAIN_CHANNELS.AI_KEYS_STATUS]: {
     request: { dir: string };
-    response: { minimax: boolean; fish: boolean; gemini: boolean; transcribe: boolean; path: string };
+    response: {
+      minimax: boolean;
+      fish: boolean;
+      gemini: boolean;
+      transcribe: boolean;
+      openrouter: boolean;
+      xai: boolean;
+      voiceProvider: "openai-compatible" | "xai";
+      path: string;
+    };
   };
   [MAIN_CHANNELS.AI_KEYS_SAVE]: {
     request: {
@@ -246,14 +279,39 @@ export type MainRequestMap = {
         transcribe?: string;
         transcribeUrl?: string;
         transcribeModel?: string;
+        voiceProvider?: "openai-compatible" | "xai";
+        xai?: string;
+        openrouter?: string;
       };
     };
-    response: { minimax: boolean; fish: boolean; gemini: boolean; transcribe: boolean };
+    response: {
+      minimax: boolean;
+      fish: boolean;
+      gemini: boolean;
+      transcribe: boolean;
+      openrouter: boolean;
+      xai: boolean;
+      voiceProvider: "openai-compatible" | "xai";
+    };
   };
   [MAIN_CHANNELS.AI_KEYS_REVEAL]: { request: { dir: string }; response: { path: string } };
   [MAIN_CHANNELS.AI_GENERATE]: {
     request: { dir: string; generation: AiLocalGeneration };
     response: { path: string; mimeType: string; previewDataUrl?: string };
+  };
+  [MAIN_CHANNELS.AI_TRANSCRIBE_COMMAND]: {
+    request: { dir: string; audio: Uint8Array; mime: string; prompt?: string };
+    response: { text: string; ms: number };
+  };
+  [MAIN_CHANNELS.AI_DECIDE]: {
+    request: { dir: string; state: unknown; questions: Record<string, unknown>; requestId?: string };
+    response: { answers: Record<string, unknown>; usage?: unknown; ms: number };
+  };
+  [MAIN_CHANNELS.AI_DECIDE_CANCEL]: { request: { requestId: string }; response: void };
+  [MAIN_CHANNELS.VOICE_LOG]: { request: { dir: string; entry: Record<string, unknown> }; response: void };
+  [MAIN_CHANNELS.VOICE_MIC_ACCESS]: {
+    request: void;
+    response: { status: "granted" | "denied" | "restricted" };
   };
   [MAIN_CHANNELS.AI_TRANSCRIBE]: {
     request: { dir: string; path: string };
@@ -360,7 +418,8 @@ export type MainRequestMap = {
   [MAIN_CHANNELS.PROJECTS_DELETE]: { request: { dir: string }; response: void };
   [MAIN_CHANNELS.PROJECTS_COMPILE]: { request: { dir: string }; response: CompileResult };
   [MAIN_CHANNELS.PROJECTS_WRITE]: {
-    request: { dir: string; edits: SourceEdit[] };
+    /** `note`: what the edits came from, for the journal (the voice bar's `typed "split"`). */
+    request: { dir: string; edits: SourceEdit[]; actor?: "canvas" | "agent"; note?: string };
     response: WriteResult;
   };
   [MAIN_CHANNELS.PROJECTS_WATCH]: { request: { dir: string }; response: void };
@@ -374,11 +433,27 @@ export type MainRequestMap = {
   [MAIN_CHANNELS.PROJECTS_CONFIG_READ]: { request: { dir: string }; response: unknown };
   [MAIN_CHANNELS.PROJECTS_CONFIG_WRITE]: { request: { dir: string; config: unknown }; response: void };
   [MAIN_CHANNELS.PROJECTS_SOURCE_READ]: {
-    request: { dir: string; path: string };
-    response: { path: string; content: string; revisionId: string };
+    // `select` asks for a part of the file (one element, a line range, the
+    // outline) rather than all of it; see the desktop's `SourceSelect`.
+    request: {
+      dir: string;
+      path: string;
+      select?: { id?: string; lines?: [number, number]; outline?: boolean; bounded?: boolean };
+    };
+    response: {
+      path: string;
+      content: string;
+      revisionId: string;
+      totalLines: number;
+      totalChars: number;
+      range?: { from: number; to: number };
+      outline?: string[];
+      note?: string;
+    };
   };
   [MAIN_CHANNELS.PROJECTS_SOURCE_WRITE]: {
-    request: { dir: string; path: string; content: string; expectedRevisionId: string };
+    // `actor` is for the journal of who wrote each revision; the person, unless an agent's tool asked.
+    request: { dir: string; path: string; content: string; expectedRevisionId: string; actor?: "canvas" | "agent" };
     response: { revisionId: string; content: string; diagnostics: Array<{ message: string; line?: number; column?: number }> };
   };
   // Version history and trash. The revision store lives outside the project
@@ -412,6 +487,26 @@ export type MainRequestMap = {
   // reload. `value: null` clears it.
   [MAIN_CHANNELS.PROJECTS_HISTORY_READ]: { request: { dir: string }; response: unknown };
   [MAIN_CHANNELS.PROJECTS_HISTORY_WRITE]: { request: { dir: string; value: unknown }; response: void };
+  // Where the author is looking (selection, active scene, camera, timeline
+  // rows), kept in `.posterract/view.json` rather than in the project source.
+  [MAIN_CHANNELS.PROJECTS_VIEW_READ]: { request: { dir: string }; response: unknown };
+  [MAIN_CHANNELS.PROJECTS_VIEW_WRITE]: { request: { dir: string; value: unknown }; response: void };
+  // What a canvas showing `fromRevision` of a source has to do to show what is
+  // on disk now — or why it has to remount instead.
+  [MAIN_CHANNELS.PROJECTS_SOURCE_PATCH]: {
+    request: { dir: string; path: string; fromRevision: string };
+    response: { revisionId: string; patch: SourcePatch };
+  };
+  // One string of a source replaced by another, through the same write as any other.
+  [MAIN_CHANNELS.PROJECTS_SOURCE_EDIT]: {
+    request: { dir: string; path: string; oldString: string; newString: string; replaceAll?: boolean; actor?: "canvas" | "agent" };
+    response: { revisionId: string; replaced: number; line: number; diagnostics: Array<{ message: string; line?: number; column?: number }> };
+  };
+  // Which of `ids` someone changed since `fromRevision`; `known: false` when that cannot be said.
+  [MAIN_CHANNELS.PROJECTS_SOURCE_TOUCHED]: {
+    request: { dir: string; path: string; fromRevision: string; ids: string[] };
+    response: { revisionId: string; known: boolean; touched: Array<{ id: string; changes: string[] }> };
+  };
   // Opens the project source in the user's own editor and reports where the
   // element sits; null when the id is not in the file.
   [MAIN_CHANNELS.PROJECTS_SOURCE_LOCATE]: {

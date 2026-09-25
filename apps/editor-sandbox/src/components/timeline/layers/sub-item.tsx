@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { createMemo, Show } from 'solid-js';
+import { Show } from 'solid-js';
 import { useTag, useTrait, useWorld } from '@posterract/koota-solid';
 import {
   Animation,
@@ -21,7 +21,8 @@ import {
   Stroke,
 } from '@posterract/video-runtime';
 import { Icon } from '@/components/ui/icon';
-import { useEditor } from '@/engine/hooks';
+import { useDerived, useEditor } from '@/engine/hooks';
+import { useLayout } from '@/context/layout';
 import { KEYFRAME_TRACK_HEIGHT } from '@/engine/timeline';
 import { effectOption } from '@/components/sidebar-right/inspector/effect-types';
 import { animationOption } from '@/components/sidebar-right/inspector/animation-types';
@@ -51,6 +52,7 @@ const PAINT_NAMES: Partial<Record<PaintType, string>> = {
 export function SubItemLayer(props: LayerRowProps) {
   const world = useWorld();
   const editor = useEditor();
+  const layout = useLayout();
 
   const entity = () => props.layer.entity;
 
@@ -59,7 +61,11 @@ export function SubItemLayer(props: LayerRowProps) {
   // Animation rows spell their duration in seconds, which needs the world's
   // frame rate; everything else ignores it.
   const frameRate = useTrait(world, FrameRate);
-  const name = createMemo(() => describe(entity(), frameRate()?.value ?? 30));
+  const name = useDerived(() => describe(entity(), frameRate()?.value ?? 30));
+  const select = () => {
+    editor.select(entity());
+    layout.setInspectorTab(entity().has(Animation) ? 'motion' : 'design');
+  };
 
   const toggleExpanded = () => {
     editor.editProperty(entity(), 'expanded', !entity().has(Expanded));
@@ -68,6 +74,8 @@ export function SubItemLayer(props: LayerRowProps) {
   return (
     <div
       class="w-full pl-0.5 pr-2 flex items-center text-muted-foreground justify-between"
+      data-layer-row
+      data-source-id={entity().id()}
       classList={{
         'bg-accent': selected(),
         'bg-accent/70': !selected() && hovering(),
@@ -87,6 +95,8 @@ export function SubItemLayer(props: LayerRowProps) {
         >
           <div class="size-4 shrink-0" />
           <button
+            type="button"
+            aria-label={`${props.expanded ? 'Collapse' : 'Expand'} ${name()}`}
             disabled={!props.layer.expandable}
             onClick={toggleExpanded}
             class="size-4 shrink-0 flex items-center justify-center overflow-clip focus-ring rounded-sm mr-0.5"
@@ -96,9 +106,9 @@ export function SubItemLayer(props: LayerRowProps) {
               <Icon name={props.expanded ? "chevron-down" : "chevron-right"} class="size-6 hover:text-foreground" />
             </Show>
           </button>
-          <span class="text-xs px-0.5 shrink-0 whitespace-nowrap text-foreground">
+          <button type="button" class="text-xs px-0.5 shrink-0 whitespace-nowrap text-foreground focus-ring rounded-sm" onClick={select} aria-pressed={selected()} title={`Edit ${name()}`}>
             {name()}
-          </span>
+          </button>
         </div>
       </div>
     </div>

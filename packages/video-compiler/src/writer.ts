@@ -157,6 +157,34 @@ export interface WriteResult {
   error?: string;
 }
 
+/**
+ * Editor view state a source still carried: where the author was looking, not
+ * what the video is. It used to be written into the JSX (`selected`, `active`,
+ * `expanded`, `clipHeight` on an element, `camera` on the stage), which made
+ * every click a revision of the document. It now lives beside the project (see
+ * the desktop's view-state sidecar); `prepareProject` lifts whatever an older
+ * file still holds so it can be carried over once. Elements are named by their
+ * source (`file:id`).
+ */
+export interface SourceViewState {
+  camera?: number[];
+  active?: string;
+  selected: string[];
+  expanded: string[];
+  clipHeight: Record<string, number>;
+}
+
+/** The attributes `prepareProject` lifts out of the source. */
+export const VIEW_STATE_ATTRS = ["selected", "active", "expanded", "clipHeight", "camera"] as const;
+
+/** Whether a lifted view state holds anything worth carrying over. */
+export const hasViewState = (view: SourceViewState): boolean =>
+  view.camera !== undefined ||
+  view.active !== undefined ||
+  view.selected.length > 0 ||
+  view.expanded.length > 0 ||
+  Object.keys(view.clipHeight).length > 0;
+
 /** The opening half of a JSX element — where its attributes live. */
 type JsxTag = JsxOpeningElement | JsxSelfClosingElement;
 
@@ -606,6 +634,42 @@ function isWritable(attribute: JsxAttribute): boolean {
   return expression !== undefined && (isLiteral(expression) || isGenerateCall(expression));
 }
 
+/** A numeric literal as the editor spells one (`12`, `-0.5`), or undefined. */
+function literalNumber(node: Node | undefined): number | undefined {
+  if (!node) return undefined;
+  if (node.isKind(SyntaxKind.NumericLiteral)) return node.getLiteralValue();
+
+  const unary = node.asKind(SyntaxKind.PrefixUnaryExpression);
+  if (!unary) return undefined;
+  const operand = literalNumber(unary.getOperand());
+  if (operand === undefined) return undefined;
+  if (unary.getOperatorToken() === SyntaxKind.MinusToken) return -operand;
+  return unary.getOperatorToken() === SyntaxKind.PlusToken ? operand : undefined;
+}
+
+/**
+ * What a view-state attribute says, as the editor wrote it: a bare attribute
+ * or `{true}` is true, `{false}` false, `{64}` a number, `{[…]}` a list of
+ * numbers. Undefined for anything else, which is left to whoever wrote it.
+ */
+function viewAttrValue(attribute: JsxAttribute): boolean | number | number[] | undefined {
+  const initializer = attribute.getInitializer();
+  if (!initializer) return true;
+
+  const expression = initializer.asKind(SyntaxKind.JsxExpression)?.getExpression();
+  if (!expression) return undefined;
+  if (expression.isKind(SyntaxKind.TrueKeyword)) return true;
+  if (expression.isKind(SyntaxKind.FalseKeyword)) return false;
+
+  const number = literalNumber(expression);
+  if (number !== undefined) return number;
+
+  const list = expression.asKind(SyntaxKind.ArrayLiteralExpression);
+  if (!list) return undefined;
+  const numbers = list.getElements().map(literalNumber);
+  return numbers.includes(undefined) ? undefined : (numbers as number[]);
+}
+
 // ---------------------------------------------------------------------------
 // Files
 
@@ -752,6 +816,83 @@ class SourceWriter {
       const at = (tag.getAttributes().at(-1) ?? tag.getTagNameNode()).getEnd();
       return [{ span: { start: at, length: 0 }, newText: ` ${ID_ATTR}="${nextId()}"` }];
     });
+
+    if (!changes.length) return;
+
+    try {
+      sourceFile.applyTextChanges(changes);
+    } catch {
+      this.discard(path);
+    }
+  }
+
+  /**
+   * `stampProject`, and in the same write the editor view state an older file
+   * still carries is lifted out of it (see `SourceViewState`). Ids go first, so
+   * every element a view attribute sat on has a name to be remembered by.
+   * Idempotent like the stamping: a project with nothing to lift and nothing
+   * to name is not written to.
+   */
+  public async prepareProject(paths: string[]): Promise<SourceViewState> {
+    for (const path of paths) await this.load(path);
+    this.dropUnparsed();
+
+    for (const path of [...this.files.keys()]) this.stampFile(path);
+    this.dropUnparsed();
+
+    const view: SourceViewState = { selected: [], expanded: [], clipHeight: {} };
+    for (const path of [...this.files.keys()]) this.liftViewState(path, view);
+
+    // Nothing ts-morph will not vouch for reaches the disk.
+    this.dropUnparsed();
+    await this.save();
+    return view;
+  }
+
+  /**
+   * Cuts the view-state attributes out of one file and records what they
+   * said. Only what the editor itself would have written is touched: a
+   * literal on a composition element outside any loop (selection never
+   * reached into a loop body). An attribute someone computes — `selected={
+   * picked()}` — is authored reactivity and stays.
+   */
+  private liftViewState(path: string, view: SourceViewState): void {
+    const sourceFile = this.files.get(path)!.sourceFile;
+    const text = sourceFile.getFullText();
+    const changes: Array<{ span: { start: number; length: number }; newText: string }> = [];
+
+    for (const tag of tags(sourceFile)) {
+      const name = tagName(tag);
+      if (!isCompositionTag(name) || inLoop(tag)) continue;
+      const id = idOf(tag);
+      const source = id === undefined ? undefined : formatSource(path, id);
+
+      for (const attr of VIEW_STATE_ATTRS) {
+        // The camera is the stage's; anywhere else the name means nothing here.
+        if (attr === "camera" && name !== "stage") continue;
+        const attribute = attributeOf(tag, attr);
+        if (!attribute) continue;
+        const value = viewAttrValue(attribute);
+        if (value === undefined) continue;
+
+        if (attr === "camera") {
+          if (Array.isArray(value) && value.length === 6) view.camera = value;
+        } else if (source !== undefined) {
+          if (attr === "clipHeight") {
+            if (typeof value === "number") view.clipHeight[source] = value;
+          } else if (value === true) {
+            if (attr === "active") view.active = source;
+            else view[attr].push(source);
+          }
+        }
+
+        // The attribute goes with the whitespace in front of it, so the tag
+        // reads as if it had never been there.
+        let start = attribute.getStart();
+        while (start > 0 && /\s/.test(text[start - 1]!)) start -= 1;
+        changes.push({ span: { start, length: attribute.getEnd() - start }, newText: "" });
+      }
+    }
 
     if (!changes.length) return;
 
@@ -1264,6 +1405,15 @@ class SourceWriter {
 /** Stamps every source file of the project. Writes nothing to a fully named project. */
 export async function stampProject(context: SourceContext): Promise<void> {
   await new SourceWriter(context).stampProject(sourceFiles(context));
+}
+
+/**
+ * What the editor runs before it compiles a project it is about to mount:
+ * `stampProject`, plus lifting any editor view state an older file still
+ * carries out of the source (returned, so the caller can carry it over).
+ */
+export function prepareProject(context: SourceContext): Promise<SourceViewState> {
+  return new SourceWriter(context).prepareProject(sourceFiles(context));
 }
 
 /** Writes values the editor arrived at back into the JSX that produced them. */

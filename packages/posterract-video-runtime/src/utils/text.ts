@@ -437,6 +437,17 @@ function renderTokens(ctx: Ctx, world: World, entity: Entity): void {
 	}
 }
 
+/**
+ * Lays a text out without drawing it: the half of `renderText` that decides
+ * how big the text is. A text's size otherwise exists only once it has been
+ * painted, so one that has not been on screen yet — it plays later, or the
+ * window is hidden — has no box for anyone measuring the layout to read.
+ */
+export function measureText(world: World, entity: Entity): void {
+	tokenizeText(world, entity);
+	shapeTokens(world, entity);
+}
+
 /** Render text tokens directly to the world's render surface. */
 export function renderText(world: World, entity: Entity) {
 	const ctx = world.get(RenderSurface)?.ctx;

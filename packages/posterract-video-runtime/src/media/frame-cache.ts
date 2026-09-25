@@ -25,8 +25,6 @@ export class FrameCache {
   public readonly config: FrameCacheConfig;
   public readonly atlas = new OffscreenCanvas(0, 0);
   public readonly atlasCtx = this.atlas.getContext('2d')!;
-  public readonly source = new OffscreenCanvas(0, 0);
-  public readonly sourceCtx = this.source.getContext('2d')!;
 
   private tileWidth: number = 0;
   private tileHeight: number = 0;
@@ -78,40 +76,28 @@ export class FrameCache {
     }
   }
 
-  private drawRotated(frame: Frame) {
-    const ctx = this.sourceCtx;
-    const rotation = this.rotation;
-
-    const [displayWidth, displayHeight] = getDisplaySize(frame);
-
-    const width = rotation === 90 || rotation === 270
-      ? displayHeight
-      : displayWidth;
-
-    const height = rotation === 90 || rotation === 270
-      ? displayWidth
-      : displayHeight;
-
-    if (this.source.width !== width || this.source.height !== height) {
-      this.source.width = width;
-      this.source.height = height;
-      ctx.imageSmoothingEnabled = false;
-    }
-
-    ctx.resetTransform();
-    ctx.clearRect(0, 0, width, height);
-    ctx.translate(width / 2, height / 2);
-    ctx.rotate((rotation * Math.PI) / 180);
-    ctx.drawImage(frame, -displayWidth / 2, -displayHeight / 2, displayWidth, displayHeight);
-  }
-
-  private evictTiles() {
+  private evictTiles(frameIndex: number) {
     if (this.tiles.length < this.config.count) return;
 
     this.tiles = this.tiles.filter(t => t.frameIndex >= this.leftFrameIndex && t.frameIndex <= this.rightFrameIndex);
+
+    // Still full: the window holds more than there is room for. The tile
+    // furthest from the new frame is the one least likely to be shown next.
+    if (this.tiles.length >= this.config.count) {
+      const furthest = this.tiles.reduce((a, b) => (
+        Math.abs(b.frameIndex - frameIndex) > Math.abs(a.frameIndex - frameIndex) ? b : a
+      ));
+      this.tiles = this.tiles.filter(t => t !== furthest);
+    }
   }
 
-  private insertTile(frameIndex: number) {
+  /**
+   * Draws `frame` into a free tile, rotated as the track says and scaled down to
+   * the tile in the same stroke. It used to be copied at full size first and the
+   * copy scaled into the tile — a whole-frame copy per decoded frame (five
+   * megapixels for a Retina screen recording) that only rotation ever needed.
+   */
+  private insertTile(frame: Frame, frameIndex: number) {
     let tileIndex = 0;
     while (this.tiles.some(t => t.tileIndex === tileIndex)) {
       tileIndex++;
@@ -123,8 +109,17 @@ export class FrameCache {
     const x = (tileIndex % this.columns) * this.tileWidth;
     const y = Math.floor(tileIndex / this.columns) * this.tileHeight;
 
+    // The tile is laid out upright; a quarter turn draws the frame across it.
+    const quarterTurn = this.rotation === 90 || this.rotation === 270;
+    const width = quarterTurn ? this.tileHeight : this.tileWidth;
+    const height = quarterTurn ? this.tileWidth : this.tileHeight;
+
     ctx.clearRect(x, y, this.tileWidth, this.tileHeight);
-    ctx.drawImage(this.source, x, y, this.tileWidth, this.tileHeight);
+    ctx.save();
+    ctx.translate(x + this.tileWidth / 2, y + this.tileHeight / 2);
+    ctx.rotate((this.rotation * Math.PI) / 180);
+    ctx.drawImage(frame, -width / 2, -height / 2, width, height);
+    ctx.restore();
   }
 
   public has(frameIndex: number) {
@@ -154,10 +149,9 @@ export class FrameCache {
   public insert(frame: VideoFrame | ImageBitmap, index: number) {
     if (this.has(index)) return;
 
-    this.evictTiles();
+    this.evictTiles(index);
     this.resizeCaches(frame);
-    this.drawRotated(frame);
-    this.insertTile(index);
+    this.insertTile(frame, index);
     this.lastInserted = index;
   }
 
@@ -175,8 +169,6 @@ export class FrameCache {
   public dispose() {
     this.atlas.width = 0;
     this.atlas.height = 0;
-    this.source.width = 0;
-    this.source.height = 0;
     this.tileWidth = 0;
     this.tileHeight = 0;
     this.columns = 0;

@@ -18,16 +18,21 @@
 
 import {
 	Cache,
+	ChildOf,
 	Computed,
 	FrameRate,
 	Host,
 	Locked,
+	PlaybackRate,
+	Sequential,
 	findAssetDuration,
 	framesToSeconds,
+	getParentEntity,
 	getParentNode,
 	getSourceFrameAt,
 	getTimelineOrigin,
 	secondsToFrames,
+	store,
 } from '@posterract/video-runtime';
 import { parseTime } from '@posterract/composition';
 
@@ -110,6 +115,52 @@ export function trimOut(world: World, entity: Entity, frame: number): void {
 		editTime(world, entity, 'sourceOut', getSourceFrameAt(entity, frame));
 	}
 	editTime(world, entity, 'end', frame - getTimelineOrigin(entity));
+}
+
+/** The slowest and fastest a clip can be set to play. */
+export const MIN_PLAYBACK_RATE = 0.1;
+export const MAX_PLAYBACK_RATE = 16;
+
+/**
+ * Plays the node at `rate` times its own speed (1 is normal), as the speed
+ * control in any editor does: the same stretch of footage plays, so the clip
+ * gets shorter when it speeds up and longer when it slows down, and its start
+ * stays where it is.
+ *
+ * A node whose length the file pins with `end` has that end moved to match;
+ * left alone, a faster rate would play further into the source in the same
+ * slot instead. One whose length comes from its source (or `sourceOut`)
+ * changes length by itself. In a sequence the clips after it move by as much
+ * as its length changed, so the cut is left with no gap and no overlap.
+ */
+export function setPlaybackRate(world: World, entity: Entity, rate: number): void {
+	const next = Math.min(MAX_PLAYBACK_RATE, Math.max(MIN_PLAYBACK_RATE, rate));
+	const previous = entity.get(PlaybackRate)?.value || 1;
+	if (!Number.isFinite(next) || Math.abs(next - previous) < 1e-6) return;
+
+	const computed = store(world, Computed);
+	const spanStart = computed.start[entity.id()] ?? 0;
+	const spanEnd = computed.end[entity.id()] ?? spanStart;
+	const length = Math.round(((spanEnd - spanStart) * previous) / next);
+	const delta = length - (spanEnd - spanStart);
+
+	// Where the clips after it in its sequence stand now, before anything moves.
+	const parent = getParentEntity(entity);
+	const later = parent?.has(Sequential) && delta !== 0
+		? [...world.query(ChildOf(parent))]
+			.filter((sibling) => sibling !== entity && (computed.start[sibling.id()] ?? -Infinity) >= spanEnd)
+			.map((sibling) => ({ sibling, start: computed.start[sibling.id()]! }))
+		: [];
+
+	const end = authoredTime(world, entity, 'end');
+	const sourceOut = authoredTime(world, entity, 'sourceOut');
+
+	getDocumentEditor(world).editProperty(entity, 'playbackRate', next === 1 ? false : next);
+	if (end !== undefined && sourceOut === undefined) {
+		editTime(world, entity, 'end', (authoredTime(world, entity, 'start') ?? 0) + length);
+	}
+
+	for (const { sibling, start } of later) moveEntityTo(world, sibling, start + delta);
 }
 
 /**

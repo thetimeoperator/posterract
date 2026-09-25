@@ -4,7 +4,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { createMemo, Show } from "solid-js";
+import { createMemo, For, Show } from "solid-js";
 import { ControlRow } from "@/components/ui/control-group";
 import { Icon } from "@/components/ui/icon";
 import { IncrementDecrementControl } from "@/components/ui/increment-decrement-control";
@@ -46,12 +46,20 @@ import {
   secondsToFrames,
 } from "@posterract/video-runtime";
 import { useDerived, useEditor } from "@/engine/hooks";
-import { editTime, trimIn, trimOut } from "@/engine/timing";
+import { MAX_PLAYBACK_RATE, MIN_PLAYBACK_RATE, editTime, setPlaybackRate, trimIn, trimOut } from "@/engine/timing";
 
 import type { Entity } from "koota";
 
-type TimeAddon = "inOut" | "playbackRate";
+type TimeAddon = "inOut";
 type TimeAddons = Partial<Record<TimeAddon, boolean>>;
+
+/** The speeds the Speed menu offers; any other is typed as a percentage. */
+const SPEED_PRESETS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
+
+/** 1.5 → "1.5×", 0.25 → "0.25×". */
+function formatSpeed(rate: number): string {
+  return `${Math.round(rate * 100) / 100}×`;
+}
 
 function formatAsTimecode(seconds: number) {
   if (!Number.isFinite(seconds)) return "00:00:00";
@@ -123,7 +131,8 @@ export function TimeSettings(props: TimeSettingsProps) {
   // A container whose trim closes spans that rather than fitting its children.
   const hasTrim = () => (trim()?.end ?? null) !== null;
 
-  const playbackRatePercent = createMemo(() => Math.round((playbackRate()?.value ?? 1) * 100));
+  const rate = createMemo(() => playbackRate()?.value || 1);
+  const playbackRatePercent = createMemo(() => Math.round(rate() * 100));
 
   const startSeconds = createMemo(() => start() / fps());
   const endSeconds = createMemo(() => end() / fps());
@@ -152,10 +161,10 @@ export function TimeSettings(props: TimeSettingsProps) {
   const handleAddAddon = (addon: TimeAddon) => setAddons({ ...addons(), [addon]: true });
   const handleRemoveAddon = (addon: TimeAddon) => setAddons({ ...addons(), [addon]: false });
 
-  // The rate scales the source window onto the timeline around the node's
-  // start, so the start stays put on its own; 1 is the default, so it is unset.
-  const assignPlaybackRate = (rate: number) => {
-    editor.editProperty(entity(), 'playbackRate', rate === 1 ? false : rate);
+  // The same footage at another speed: the clip's length follows (see
+  // `setPlaybackRate`), and 1 is the default, so it is unset.
+  const assignPlaybackRate = (value: number) => {
+    setPlaybackRate(world, entity(), value);
   };
 
   const handleInChange = (event: Event & { currentTarget: HTMLInputElement }) => {
@@ -195,7 +204,7 @@ export function TimeSettings(props: TimeSettingsProps) {
     <PanelSection
       title="Time"
       actions={
-        <Show when={!addons().inOut || !addons().playbackRate}>
+        <Show when={!addons().inOut}>
           <DropdownMenu placement="bottom-end">
             <Tooltip>
               <TooltipTrigger<typeof DropdownMenuTrigger>
@@ -213,16 +222,9 @@ export function TimeSettings(props: TimeSettingsProps) {
               <TooltipContent>Add option</TooltipContent>
             </Tooltip>
             <DropdownMenuContent>
-              <Show when={!addons().inOut}>
-                <DropdownMenuItem onSelect={() => handleAddAddon("inOut")}>
-                  In &amp; Out
-                </DropdownMenuItem>
-              </Show>
-              <Show when={!addons().playbackRate && supportsPlaybackRate()}>
-                <DropdownMenuItem onSelect={() => handleAddAddon("playbackRate")}>
-                  Playback rate
-                </DropdownMenuItem>
-              </Show>
+              <DropdownMenuItem onSelect={() => handleAddAddon("inOut")}>
+                In &amp; Out
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </Show>
@@ -249,35 +251,41 @@ export function TimeSettings(props: TimeSettingsProps) {
         />
       </ControlRow>
 
-      <Show when={supportsPlaybackRate() && addons().playbackRate}>
-        <ContextMenu>
-          <ContextMenuTrigger<typeof ControlRow>
-            as={ControlRow}
-            label="Speed"
-            contentClass="grid grid-cols-2 gap-2 min-w-0"
-          >
-            <ControlledTextField
-              value={playbackRatePercent()}
-              min={1}
-              step={5}
-              unit="%"
-              autoSelect
-              limitEvents
-              onNumber={(value) => assignPlaybackRate(value / 100)}
+      <Show when={supportsPlaybackRate()}>
+        <ControlRow
+          label="Speed"
+          contentClass="grid grid-cols-2 gap-2 min-w-0"
+        >
+          <ControlledTextField
+            value={playbackRatePercent()}
+            min={MIN_PLAYBACK_RATE * 100}
+            max={MAX_PLAYBACK_RATE * 100}
+            step={5}
+            unit="%"
+            autoSelect
+            limitEvents
+            onNumber={(value) => assignPlaybackRate(value / 100)}
+          />
+          <DropdownMenu placement="bottom-end">
+            <DropdownMenuTrigger<typeof Button>
+              as={(buttonProps) => (
+                <Button variant="outline" class="w-full min-w-0 justify-between gap-1" aria-label="Speed presets" {...buttonProps}>
+                  <span class="truncate">{formatSpeed(rate())}</span>
+                  <Icon name="chevron-down" />
+                </Button>
+              )}
             />
-            <IncrementDecrementControl
-              decrementLabel="Decrease speed"
-              incrementLabel="Increase speed"
-              onDecrement={() => assignPlaybackRate(Math.max(1, Math.round(playbackRatePercent() - 10)) / 100)}
-              onIncrement={() => assignPlaybackRate(Math.round(playbackRatePercent() + 10) / 100)}
-            />
-          </ContextMenuTrigger>
-          <ContextMenuContent>
-            <ContextMenuItem onSelect={() => handleRemoveAddon("playbackRate")}>
-              Remove row
-            </ContextMenuItem>
-          </ContextMenuContent>
-        </ContextMenu>
+            <DropdownMenuContent>
+              <For each={SPEED_PRESETS}>
+                {(preset) => (
+                  <DropdownMenuItem onSelect={() => assignPlaybackRate(preset)}>
+                    {preset === 1 ? '1× (normal)' : formatSpeed(preset)}
+                  </DropdownMenuItem>
+                )}
+              </For>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </ControlRow>
       </Show>
 
       <Show when={addons().inOut}>

@@ -4,7 +4,7 @@
 
 /**
  * The Generate panel: prompt-to-media with the user's OWN provider keys,
- * opened from the sidebar's brand slot. Three tabs (image, video, voice)
+ * opened from the sidebar's Generate control. Three tabs (image, video, voice)
  * share one footer. There are no credits and no middleman: keys live in the
  * project's api-keys.json, generation runs through the desktop main process,
  * and results land in the project's assets/generated — then on the canvas
@@ -29,14 +29,12 @@ import {
 	SelectValue,
 } from '@/components/ui/select';
 import { SliderInput } from '@/components/ui/slider-input';
-import { TextField, TextFieldInput, TextFieldTextArea } from '@/components/ui/text-field';
+import { TextField, TextFieldTextArea } from '@/components/ui/text-field';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useAi } from '@/context/ai';
 import {
 	IMAGE_RESOLUTIONS,
 	KEY_FOR_KIND,
-	openExternal,
-	PROVIDER_LABELS,
 	VIDEO_ASPECTS,
 	VIDEO_DURATION,
 	VIDEO_QUALITIES,
@@ -45,6 +43,7 @@ import {
 import { ReferenceImageError, toReferenceImage } from '@/lib/reference-image';
 import { useEditor } from '@/engine/hooks';
 import { insertGeneration } from './insert-generation';
+import { KeysCard } from './keys-card';
 
 import type { AiGenerationRow } from '@/context/ai';
 import type {
@@ -60,7 +59,7 @@ import type { Entity } from 'koota';
  * Voice choices. The default sends no id and lets Fish speak with its stock
  * voice; the named ids are placeholders users can swap for their own.
  */
-const FISH_VOICES: ReadonlyArray<{ id: string; label: string }> = [
+export const FISH_VOICES: ReadonlyArray<{ id: string; label: string }> = [
 	{ id: '', label: 'Studio default' },
 	{ id: 'b545c585f631496c914815bd8a0dffe1', label: 'Aria — bright narrator' },
 	{ id: '728f6ff2240d49308e8593ffdb8b21bd', label: 'Marlow — calm and low' },
@@ -149,8 +148,8 @@ export async function animateImage(
 	}
 }
 
-/** The sidebar's Generate entry: the brand toggle plus the panel it opens. */
-export function GenerateLauncher() {
+/** One Generate entry, with its panel anchored to the visible toolbar control. */
+export function GenerateLauncher(props: { compact?: boolean } = {}) {
 	const ai = useAi();
 	const [open, setOpen] = createSignal(false);
 
@@ -166,17 +165,20 @@ export function GenerateLauncher() {
 	return (
 		<Popover open={open()} onOpenChange={handleOpenChange} placement="right-start" gutter={12}>
 			<PopoverTrigger
-				class="posterract-code-toggle posterract-generate-toggle"
+				class={props.compact ? 'posterract-rail-button' : 'posterract-code-toggle posterract-generate-toggle'}
 				classList={{ 'is-active': open() }}
 				aria-label="Generate media with AI"
+				title="Generate images, video or voice"
 			>
-				<span>AI</span>
-				Generate
-				<Icon name="ai-generate" class="ml-auto size-4 shrink-0 opacity-70" />
+				<Show when={!props.compact} fallback={<Icon name="workspace-generate" class="size-5" />}>
+					<span>AI</span>
+					Generate
+					<Icon name="ai-generate" class="ml-auto size-4 shrink-0 opacity-70" />
+				</Show>
 			</PopoverTrigger>
 			{/* Portaled: the sidebar clips overflow, and this panel opens past its edge. */}
 			<PopoverPortal>
-				<PopoverContent class="w-[380px] p-0 overflow-hidden">
+				<PopoverContent class="posterract-generate-popover w-[380px] p-0" aria-label="Generate media">
 					<GeneratePanel />
 				</PopoverContent>
 			</PopoverPortal>
@@ -425,69 +427,6 @@ function GeneratePanel() {
  * saved into the project's api-keys.json (gitignored, never leaves the
  * machine) and the panel unlocks the moment it lands.
  */
-function KeysCard(props: { provider: keyof typeof PROVIDER_LABELS }) {
-	const ai = useAi();
-	const label = () => PROVIDER_LABELS[props.provider];
-	const [value, setValue] = createSignal('');
-	const [saving, setSaving] = createSignal(false);
-
-	const save = async () => {
-		const key = value().trim();
-		if (!key || saving()) return;
-		setSaving(true);
-		try {
-			await ai.saveKey(props.provider, key);
-			setValue('');
-			toast.success(`${label().name} key saved`);
-		} catch (error) {
-			toast.error('Could not save the key', {
-				description: error instanceof Error ? error.message : String(error),
-			});
-		} finally {
-			setSaving(false);
-		}
-	};
-
-	return (
-		<div class="flex flex-col gap-2 rounded-md bg-input px-3 py-2.5">
-			<div class="flex items-center gap-2 text-xs text-foreground">
-				<Icon name="lock-closed" class="size-4 shrink-0 text-muted-foreground" />
-				<span>
-					Add your <span class="font-strong">{label().name}</span> API key
-				</span>
-			</div>
-			<div class="text-xxs leading-relaxed text-muted-foreground">
-				Get one at{' '}
-				<button
-					type="button"
-					class="underline hover:text-foreground"
-					onClick={() => void openExternal(`https://${label().site}`)}
-					title={`Open ${label().site}`}
-				>
-					{label().site}
-				</button>
-				, paste it below. Stored on this computer only.
-			</div>
-			<div class="flex items-center gap-1.5">
-				<TextField value={value()} onChange={setValue} class="flex-1">
-					<TextFieldInput
-						type="password"
-						placeholder="Paste your API key…"
-						class="h-8 text-xs select-text"
-						autocomplete="off"
-						onKeyDown={(event: KeyboardEvent) => {
-							if (event.key === 'Enter') void save();
-						}}
-					/>
-				</TextField>
-				<Button size="small" disabled={value().trim().length === 0 || saving()} onClick={() => void save()}>
-					<Show when={!saving()} fallback={<>Saving…</>}>Save</Show>
-				</Button>
-			</div>
-		</div>
-	);
-}
-
 function PromptField(props: { value: string; onInput: (value: string) => void; placeholder: string }) {
 	return (
 		<TextField value={props.value} onChange={props.onInput}>

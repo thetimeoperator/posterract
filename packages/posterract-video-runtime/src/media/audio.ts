@@ -2,12 +2,12 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { Input, ALL_FORMATS, BlobSource, AudioBufferSink, type WrappedAudioBuffer, type InputAudioTrack } from 'mediabunny';
+import { Input, ALL_FORMATS, AudioBufferSink, type WrappedAudioBuffer, type InputAudioTrack } from 'mediabunny';
 
 import { AssetId, AudioDecoderHandle } from '../traits';
 import { AsyncMutex } from '../utils/async';
 import { assert } from '../utils/assert';
-import { getAsset, getAssetFile } from '../actions/assets';
+import { getAsset, getAssetSource } from '../actions/assets';
 import { TimeStretcher } from './time-stretcher';
 
 import type { Entity, World } from 'koota';
@@ -30,10 +30,9 @@ export function getAudioTrack(source: AudioAsset | VideoAsset) {
 
 	promise = (async () => {
 		try {
-			const blob = await getAssetFile(source);
 			const input = new Input({
 				formats: ALL_FORMATS,
-				source: new BlobSource(blob),
+				source: await getAssetSource(source),
 			});
 			return await input.getPrimaryAudioTrack();
 		} catch {

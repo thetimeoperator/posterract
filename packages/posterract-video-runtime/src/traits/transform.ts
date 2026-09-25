@@ -30,6 +30,14 @@ export const Constraint = trait({
 	vertical: ConstraintType.MIN as ConstraintType,
 });
 
+// Where the element belongs in its scene's frame, for a source that says that
+// (`place="lower-third"`) instead of `x`/`y`: the point of the frame as
+// fractions of it, and the inset from the edges that point touches. The
+// transform system turns it into a position on every frame, from the sizes as
+// they then are (see utils/placement); while it is set, the authored Position
+// is not read.
+export const Place = trait({ fx: 0.5, fy: 0.5, insetX: 0, insetY: 0 });
+
 // Aspect ratio lock: captures the dimensions at the moment the trait is set.
 export const KeepAspectRatio = trait({ width: 0, height: 0 });
 

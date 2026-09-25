@@ -10,7 +10,7 @@
  * where the commands live.
  */
 
-import { Active, Background, Chars, colorToHex, Computed, DEFAULT_BACKGROUND, FrameRate, framesToSeconds, getActiveEntity, getEntityChildren, getEntityTree, getIntrinsicPaint, getParentEntity, getTimelineOrigin, isText, Loop, PaintType, Selected, Sequential, setActive, Size, Source, Stage } from '@posterract/video-runtime';
+import { Active, Background, Chars, colorToHex, Computed, DEFAULT_BACKGROUND, FrameRate, framesToSeconds, getActiveEntity, getEntityChildren, getEntityTree, getIntrinsicPaint, getParentEntity, getTimelineOrigin, isPlacement, isText, Loop, PaintType, Place, Selected, Sequential, setActive, Size, Source, Stage, store } from '@posterract/video-runtime';
 import { isAssetRef, isPropValue, serializeAssetRef, SOURCE_ATTR } from '@posterract/composition';
 import { createRoot } from 'solid-js';
 
@@ -318,9 +318,56 @@ export class DocumentEditor {
 		for (const sink of [...this.sinks]) sink(edit);
 	}
 
-	/** Writes a prop to the document and reports it. */
-	public editProperty(entity: Entity, name: string, value: PropValue): void {
+	/**
+	 * Writes a prop to the document and reports it.
+	 *
+	 * Where an element is can be said two ways — `place="lower-third"`, or
+	 * `x`/`y` — and the source should only ever say one of them, because only
+	 * one is read (the placement). So an edit of either keeps the other out of
+	 * the way:
+	 *
+	 * - A position given to a placed element replaces the placement. That is
+	 *   what a drag is: the person has put the caption *there*, in pixels, and
+	 *   "lower third" is no longer true of it. The placement (and its inset) is
+	 *   taken out, the axis the edit did not mention is pinned to where the
+	 *   placement had it, and the edit lands as the plain `x`/`y` it is. In the
+	 *   file that reads as `place` gone and `x`, `y` there: a deliberate choice
+	 *   anyone reading the diff can see. The same precedent as a loop being
+	 *   unrolled the first time one of its iterations is edited (see `settle`).
+	 * - A placement given to a positioned element takes the `x`/`y` out.
+	 *
+	 * `asWritten` applies the prop and nothing else: for a change that comes
+	 * from the file (what it says is what the canvas has to show, contradictions
+	 * included) and for a history step, whose every consequence was recorded as
+	 * a step of its own the first time round.
+	 */
+	public editProperty(entity: Entity, name: string, value: PropValue, options: { asWritten?: boolean } = {}): void {
 		const node = this.document.node(entity);
+
+		if (!options.asWritten) {
+			if ((name === 'x' || name === 'y') && typeof value === 'number' && entity.has(Place)) {
+				const computed = store(this.world, Computed);
+				const eid = entity.id();
+				const shown = { x: Math.round(computed.positionX[eid] ?? 0), y: Math.round(computed.positionY[eid] ?? 0) };
+				// The placement goes first: played again in this order (a redo),
+				// nothing after it meets a placed element.
+				this.editProperty(entity, 'place', false, { asWritten: true });
+				if (node.props.inset !== undefined && node.props.inset !== false) this.editProperty(entity, 'inset', false, { asWritten: true });
+				// `x` then `y`, whichever of them the edit was about: that is the
+				// order anyone would have written them in.
+				this.editProperty(entity, 'x', name === 'x' ? value : shown.x, { asWritten: true });
+				this.editProperty(entity, 'y', name === 'y' ? value : shown.y, { asWritten: true });
+				return;
+			}
+			if (name === 'place' && isPlacement(value)) {
+				// `y` then `x`, so that taking this back (the steps played in
+				// reverse) puts them back as `x` then `y`.
+				for (const axis of ['y', 'x'] as const) {
+					if (typeof node.props[axis] === 'number') this.editProperty(entity, axis, false, { asWritten: true });
+				}
+			}
+		}
+
 		let previous = node.props[name];
 		// The stage keeps no authored record (see RuntimeDocument.setProperty),
 		// so its one editable prop reads its previous value off the trait; the
@@ -378,11 +425,13 @@ export class DocumentEditor {
 
 	/**
 	 * Selects `entities`, replacing the current selection unless `extend` is
-	 * set. Selection is a document property (`selected` on the element), so it
-	 * goes the way every editor change goes: the trait for
-	 * the canvas, an edit for the file. Deselection reports `false`, which the
-	 * writer spells as the attribute's absence. Entities without a source
-	 * (nothing mounted yet) only get the trait; the stage is not selectable.
+	 * set. It goes the way every editor change goes — the trait for the
+	 * canvas, an edit for whoever listens — but selection is where the author
+	 * is looking, not part of the video: whoever mounted the project takes it
+	 * out of what reaches the file and remembers it beside the project (see
+	 * `splitViewEdit`). The same holds for `active`, `camera`, `expanded` and
+	 * `clipHeight`. Entities without a source (nothing mounted yet) only get
+	 * the trait; the stage is not selectable.
 	 */
 	public select(entities: Entity | Entity[], options: { extend?: boolean } = {}): void {
 		const next = new Set(Array.isArray(entities) ? entities : [entities]);
@@ -412,7 +461,7 @@ export class DocumentEditor {
 	/**
 	 * Points the timeline at `entity` (or at nothing). Same route as
 	 * `select`: `setActive` enforces the runtime's rules and writes the trait,
-	 * and the file learns `active` moved, `false` for the one it left.
+	 * and listeners learn `active` moved, `false` for the one it left.
 	 */
 	public activate(entity: Entity | null): void {
 		const current = getActiveEntity(this.world);
@@ -786,6 +835,45 @@ export class DocumentEditor {
 		const wasActive = node.has(Active);
 
 		const [next] = this.insertElement(parent, () => renderAuthored(rect), node);
+		if (!next) return null;
+		this.remove(node);
+
+		if (wasSelected) this.select(next);
+		if (wasActive) this.activate(next);
+
+		return next;
+	}
+
+	/**
+	 * Rewrites `node` as a `<tag>`: the same props and the same children
+	 * (fills, strokes, animations), with `edit` making of the props what the
+	 * new element needs. The box it measures is pinned, so it stays where it
+	 * was whatever size the old element only implied. Goes to the file the way
+	 * `removeIntrinsicPaint` does — the insert of the new element, then the
+	 * removal of the old — and the selection and the timeline's active pointer
+	 * move with it. Returns the new element, or null when there is nowhere to
+	 * write it.
+	 */
+	public retag(node: Entity, tag: string, edit: (props: Record<string, unknown>) => void = () => {}): Entity | null {
+		const parent = getParentEntity(node);
+		if (!parent) return null;
+
+		// Spelled as its own element, not every iteration's of a loop.
+		this.settle(node);
+		const tree = this.spell(node);
+		if (!tree) return null;
+
+		const props = { ...tree.props };
+		const size = node.get(Size);
+		const computed = node.get(Computed);
+		props.width ??= size?.width || computed?.width;
+		props.height ??= size?.height || computed?.height;
+		edit(props);
+
+		const wasSelected = node.has(Selected);
+		const wasActive = node.has(Active);
+
+		const [next] = this.insertElement(parent, () => renderAuthored({ tag, props, children: tree.children }), node);
 		if (!next) return null;
 		this.remove(node);
 

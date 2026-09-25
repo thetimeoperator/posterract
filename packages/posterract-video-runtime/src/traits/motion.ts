@@ -4,7 +4,7 @@
 
 import { trait, type Entity } from 'koota';
 
-import { AnimationType, AnimationPhase } from '../constants';
+import { AnimationType, AnimationPhase, TrackLoop } from '../constants';
 
 // KeyframeTrack entity: one per (target, property) pair. ChildOf its target
 // (geometry, paint, color stop, ...) and owns the Keyframe entities as
@@ -14,6 +14,9 @@ import { AnimationType, AnimationPhase } from '../constants';
 export const KeyframeTrack = trait({
 	property: '',
 	target: null as Entity | null,
+	// What happens after the last keyframe: hold, repeat, or ping-pong (see
+	// `loopedFrame`). A loop is what keeps a wiggle five keyframes long.
+	loop: TrackLoop.NONE as TrackLoop,
 });
 
 // Keyframe entity: ChildOf its KeyframeTrack. Easing applies to the segment
@@ -26,4 +29,12 @@ export const Animation = trait({
 	duration: 0, // frames
 	delay: 0, // frames
 	phase: AnimationPhase.IN as AnimationPhase,
+	// How far and how much, where the preset has a say in it; null is the
+	// preset's own (see `animationDefaults`). Without these a slide was always
+	// 100 px, and any entrance that was not had to be written as keyframes.
+	distance: null as number | null,
+	amount: null as number | null,
+	// An easing descriptor ('cubicBezier(…)', 'spring(…)', 'steps(…)',
+	// 'linear'); empty is the preset's own curve.
+	easing: '',
 });

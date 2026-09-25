@@ -7,6 +7,7 @@ export * from './manifest';
 export * from './fs';
 export * from './hash';
 export * from './probe';
+export { locatedSource } from './ranges';
 export * from './library';
 export * from './browser';
 export * from './cache';

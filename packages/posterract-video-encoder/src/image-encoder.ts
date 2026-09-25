@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+import { outputSize } from './output-size';
 import {
 	setActive, framesToSeconds, formatTimecode, assert, store, getEntityTree,
 	assetSystem, playbackSystem, motionSystem, transformSystem, renderSystem,
@@ -88,7 +89,10 @@ export async function createImageEncoder(world: World, config: ImageEncoderConfi
 		world.set(RenderSurface, { resolution: scale });
 	};
 
-	resize(config.resolution);
+	// Asked for by resolution, a capture is the size an export at that
+	// resolution is — the shorter side, not always the height (see `outputSize`).
+	// `resize` itself stays a height: it is what a contact sheet lays its cells out by.
+	resize(config.resolution === undefined ? undefined : outputSize(sceneWidth, sceneHeight, config.resolution).height);
 
 	let canceled = false;
 	const cancel = () => (canceled = true);

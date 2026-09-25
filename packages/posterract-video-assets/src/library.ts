@@ -23,19 +23,33 @@
 import { createSignal, type Accessor } from 'solid-js';
 
 import { AssetCache } from './cache';
-import { hashBlob, hashSequence } from './hash';
+import { hashBlob, hashSequence, hashUrl } from './hash';
 import {
 	ASSETS_DIR, isAbsoluteSource, isProjectSource, isUrlSource, normalizeManifest, toRecord,
 } from './manifest';
-import { detectMimeType, DEFAULT_SEQUENCE_FPS, isSequenceListing, probeMedia, sortFrames } from './probe';
+import {
+	detectLocatedMimeType, detectMimeType, DEFAULT_SEQUENCE_FPS, isSequenceListing, isTimedMedia, probeLocatedMedia,
+	probeMedia, sortFrames,
+} from './probe';
 import { assetFolder, assetName, basename, dirname, joinPath, normalizePath } from './types';
 
 import type { FsEntry, ProjectFS } from './fs';
 import type { AssetRecord, Manifest } from './manifest';
-import type { Asset, AssetDirectoryHandle, AssetFileHandle, AssetGeneration, SequenceAsset } from './types';
+import type { ProbeResult } from './probe';
+import type {
+	Asset, AssetDirectoryHandle, AssetFileHandle, AssetGeneration, AssetStat, SequenceAsset,
+} from './types';
 
 /** How long changes pile up before the manifest is written. */
 const SAVE_DEBOUNCE = 200;
+
+/** What a file is, as describing it finds out. */
+interface Inspection {
+	mimeType: string;
+	id: string;
+	probe: ProbeResult;
+	stat: AssetStat;
+}
 
 export interface LibraryOptions {
 	/**
@@ -92,6 +106,14 @@ export class AssetLibrary {
 	private readonly onRename: LibraryOptions['onRename'];
 	private readonly onRelink: LibraryOptions['onRelink'];
 	private inflight = new Map<string, Promise<Asset>>();
+	/**
+	 * Files an import or a store is putting under `assets/` right now. Their
+	 * arrival sets off a reload (see `load`), whose scan would take each in on
+	 * its own, filed under the folder it sits in; each is its writer's to add.
+	 */
+	private readonly arriving = new Set<string>();
+	/** Assets taken in since the manifest was last written: a reload keeps them. */
+	private readonly unsaved = new Set<string>();
 	private saveTimer: ReturnType<typeof setTimeout> | undefined;
 	private saving: Promise<void> = Promise.resolve();
 	private dirty = false;
@@ -190,9 +212,11 @@ export class AssetLibrary {
 			next.set(asset.id, asset);
 		}));
 
-		// Keep transient assets and the same-id instances entities already hold.
+		// Keep transient assets and the same-id instances entities already hold,
+		// and what was taken in since the manifest was last written — a reload
+		// set off by an import's own file must not lose the asset it adds.
 		for (const [id, asset] of this.map) {
-			if (asset.transient && !next.has(id)) next.set(id, asset);
+			if ((asset.transient || this.unsaved.has(id)) && !next.has(id)) next.set(id, asset);
 		}
 		this.map.clear();
 		for (const [id, asset] of next) {
@@ -238,7 +262,7 @@ export class AssetLibrary {
 	 * that holds `assets/` itself is never entered at all.
 	 */
 	private async scanAssetsDir(): Promise<void> {
-		const known = new Set(this.listNow().map((asset) => asset.source));
+		const known = new Set([...this.listNow().map((asset) => asset.source), ...this.arriving]);
 		const entered = new Set<string>();
 		// The library's own place, resolved on the first link that asks for it.
 		let root: string | null | undefined;
@@ -257,7 +281,17 @@ export class AssetLibrary {
 		};
 
 		const walk = async (dir: string): Promise<void> => {
-			const entries = await this.fs.list(dir);
+			let entries: Awaited<ReturnType<typeof this.fs.list>>;
+			try {
+				entries = await this.fs.list(dir);
+			} catch (error) {
+				// A project is a folder with a composition in it; an `assets/`
+				// beside it is where its media goes, not something it has to
+				// have. One without it has no loose files to find — which is
+				// not a reason for the project not to open.
+				if (dir === ASSETS_DIR) return;
+				throw error;
+			}
 			if (dir !== ASSETS_DIR && isSequenceListing(entries.map((entry) => entry.name))) {
 				if (!known.has(dir)) await this.link(dir, { folder: dirname(dir.slice(ASSETS_DIR.length + 1)) }).catch(() => { });
 				return;
@@ -381,11 +415,16 @@ export class AssetLibrary {
 
 		const desiredSource = joinPath(ASSETS_DIR, storageFolder(described), path);
 		const projectSource = await this.uniqueProjectSource(desiredSource);
-		if (this.fs.copy) await this.fs.copy(source, projectSource);
-		else await this.fs.write(projectSource, await described.handle.getFile());
+		this.arriving.add(projectSource);
+		try {
+			if (this.fs.copy) await this.fs.copy(source, projectSource);
+			else await this.fs.write(projectSource, await described.handle.getFile());
 
-		const asset = await this.describeFile(projectSource, { path, generation: options.generation });
-		return this.add(asset);
+			const asset = await this.describeFile(projectSource, { path, generation: options.generation });
+			return this.add(asset);
+		} finally {
+			this.arriving.delete(projectSource);
+		}
 	}
 
 	/** A project storage path free even when an unmanifested file already exists. */
@@ -422,9 +461,14 @@ export class AssetLibrary {
 	public async store(blob: Blob, options: ImportOptions & { name: string }): Promise<Asset> {
 		const path = this.uniquePath(joinPath(options.folder ?? '', options.name));
 		const source = joinPath(ASSETS_DIR, path);
-		await this.fs.write(source, blob);
-		const asset = await this.describeFile(source, { path, generation: options.generation });
-		return this.add(asset);
+		this.arriving.add(source);
+		try {
+			await this.fs.write(source, blob);
+			const asset = await this.describeFile(source, { path, generation: options.generation });
+			return this.add(asset);
+		} finally {
+			this.arriving.delete(source);
+		}
 	}
 
 	/** Puts an asset into the library, deduplicating by content. */
@@ -436,10 +480,12 @@ export class AssetLibrary {
 		if (existing) {
 			Object.assign(existing, asset);
 			delete existing.transient;
+			this.unsaved.add(existing.id);
 			this.reorder(existing);
 			this.changed();
 			return existing;
 		}
+		this.unsaved.add(asset.id);
 		this.reorder(asset);
 		this.changed();
 		return asset;
@@ -614,8 +660,10 @@ export class AssetLibrary {
 		clearTimeout(this.saveTimer);
 		if (!this.dirty) return this.saving;
 		this.dirty = false;
+		const written = [...this.unsaved];
 		this.saving = this.saving
 			.then(() => this.fs.writeManifest(this.manifest()))
+			.then(() => { for (const id of written) this.unsaved.delete(id); })
 			.catch((error: unknown) => console.error('[assets] could not write the manifest:', error));
 		return this.saving;
 	}
@@ -664,10 +712,7 @@ export class AssetLibrary {
 
 	private async describeFile(source: string, meta: DescribeMeta): Promise<Asset> {
 		const handle = this.fileHandle(source);
-		const file = await handle.getFile();
-		const mimeType = await detectMimeType(file);
-		if (!mimeType) throw new Error(`Unsupported file: ${basename(source)}`);
-		const [id, probe] = await Promise.all([hashBlob(file), probeMedia(file, mimeType)]);
+		const { mimeType, id, probe, stat } = await this.inspectLocated(source) ?? await this.inspectFile(source, handle);
 
 		return {
 			id,
@@ -675,11 +720,36 @@ export class AssetLibrary {
 			source,
 			createdAt: meta.createdAt ?? new Date().toISOString(),
 			mimeType,
-			stat: { size: file.size, mtime: file.lastModified },
+			stat,
 			...(meta.generation ? { generation: meta.generation } : {}),
 			handle,
 			...probe,
 		};
+	}
+
+	/** What a file is, and its content id, from the whole of it. */
+	private async inspectFile(source: string, handle: AssetFileHandle): Promise<Inspection> {
+		const file = await handle.getFile();
+		const mimeType = await detectMimeType(file);
+		if (!mimeType) throw new Error(`Unsupported file: ${basename(source)}`);
+		const [id, probe] = await Promise.all([hashBlob(file), probeMedia(file, mimeType)]);
+		return { mimeType, id, probe, stat: { size: file.size, mtime: file.lastModified } };
+	}
+
+	/**
+	 * `inspectFile` for audio and video the host serves by URL, read in ranges:
+	 * the id takes three megabytes and the probe the container's index, so an
+	 * import never loads footage whole — a long recording would otherwise need
+	 * its full size in memory, or free disk to page it to, twice over. Null
+	 * for anything else, which is small enough to read as a File.
+	 */
+	private async inspectLocated(source: string): Promise<Inspection | null> {
+		if (!this.fs.locate) return null;
+		const file = await this.fs.locate(source);
+		const mimeType = await detectLocatedMimeType(file);
+		if (!mimeType || !isTimedMedia(mimeType)) return null;
+		const [id, probe] = await Promise.all([hashUrl(file.url, file.size), probeLocatedMedia(file, mimeType)]);
+		return { mimeType, id, probe, stat: { size: file.size, mtime: file.mtime } };
 	}
 
 	private async describeUrl(url: string, meta: DescribeMeta): Promise<Asset> {
@@ -743,7 +813,11 @@ export class AssetLibrary {
 	}
 
 	private fileHandle(source: string): AssetFileHandle {
-		return { getFile: () => this.fs.file(source) };
+		const { fs } = this;
+		return {
+			getFile: () => fs.file(source),
+			...(fs.locate ? { locate: () => fs.locate!(source) } : {}),
+		};
 	}
 
 	private urlHandle(url: string): AssetFileHandle {

@@ -198,8 +198,8 @@ export function compileProject(dir: string): Promise<CompileResult> {
  * canvas is already showing these values, and main keeps the write from
  * reaching the watcher (see `markSelfWrite` in the desktop's projects.ts).
  */
-export function writeProject(dir: string, edits: SourceEdit[]): Promise<WriteResult> {
-	return mainBridge.call(MAIN_CHANNELS.PROJECTS_WRITE, { dir, edits });
+export function writeProject(dir: string, edits: SourceEdit[], actor: 'canvas' | 'agent' = 'canvas', note?: string): Promise<WriteResult> {
+	return mainBridge.call(MAIN_CHANNELS.PROJECTS_WRITE, { dir, edits, actor, ...(note ? { note } : {}) });
 }
 
 /** The project's config (the `posterract` field of its package.json), unparsed; null when absent. */
@@ -207,9 +207,17 @@ export function readProjectConfig(dir: string): Promise<unknown> {
 	return mainBridge.call(MAIN_CHANNELS.PROJECTS_CONFIG_READ, { dir });
 }
 
-/** Reads a source file together with the revision used for conflict-safe writes. */
-export function readProjectSource(dir: string, path: string) {
-	return mainBridge.call(MAIN_CHANNELS.PROJECTS_SOURCE_READ, { dir, path });
+/**
+ * Reads a source file together with the revision used for conflict-safe
+ * writes. `select` asks for a part of it — one element, a line range, the
+ * outline — and the revision is the whole file's either way.
+ */
+export function readProjectSource(
+	dir: string,
+	path: string,
+	select?: { id?: string; lines?: [number, number]; outline?: boolean; bounded?: boolean },
+) {
+	return mainBridge.call(MAIN_CHANNELS.PROJECTS_SOURCE_READ, { dir, path, ...(select ? { select } : {}) });
 }
 
 /**
@@ -223,13 +231,38 @@ export function writeProjectSource(
 	path: string,
 	content: string,
 	expectedRevisionId: string,
+	actor: 'canvas' | 'agent' = 'canvas',
 ) {
 	return mainBridge.call(MAIN_CHANNELS.PROJECTS_SOURCE_WRITE, {
 		dir,
 		path,
 		content,
 		expectedRevisionId,
+		actor,
 	});
+}
+
+/** Replaces one string of a source with another (see the desktop's `editProjectSource`). */
+export function editProjectSource(
+	dir: string,
+	path: string,
+	edit: { oldString: string; newString: string; replaceAll?: boolean },
+	actor: 'canvas' | 'agent' = 'canvas',
+) {
+	return mainBridge.call(MAIN_CHANNELS.PROJECTS_SOURCE_EDIT, { dir, path, ...edit, actor });
+}
+
+/** Which of `ids` someone has changed in `path` since `fromRevision` (see the desktop's `projectSourceTouched`). */
+export function requestSourceTouched(dir: string, path: string, fromRevision: string, ids: string[]) {
+	return mainBridge.call(MAIN_CHANNELS.PROJECTS_SOURCE_TOUCHED, { dir, path, fromRevision, ids });
+}
+
+/**
+ * What a canvas showing `fromRevision` of `path` has to do to show what is on
+ * disk now, or why it has to remount instead (see @/projects/hot-reload).
+ */
+export function requestSourcePatch(dir: string, path: string, fromRevision: string) {
+	return mainBridge.call(MAIN_CHANNELS.PROJECTS_SOURCE_PATCH, { dir, path, fromRevision });
 }
 
 /** Replaces the project's config (null removes the field). Kept from the watcher like `writeProject`. */

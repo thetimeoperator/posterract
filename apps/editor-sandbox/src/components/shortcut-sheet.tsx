@@ -2,97 +2,52 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+import { createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Kbd } from '@/components/ui/kbd';
+import { talkKeyName, voiceTalkKey } from '@/engine/input/shortcuts';
+import { barCommands } from '@/engine/voice';
+import { displayKeys } from '@/lib/command-match';
+
+import type { CommandGroup } from '@/engine/input/shortcuts';
 
 type Entry = { keys: string[]; label: string };
 type Group = { title: string; entries: Entry[] };
 
+/** The groups in the order an editor thinks: moving through time, cutting, arranging. */
+const GROUP_ORDER: CommandGroup[] = ['Transport', 'Range', 'Editing', 'Canvas', 'Timeline', 'Export', 'Agent'];
+
+/** The voice bar's own keys, which a table of key presses cannot spell (the talk key is held, not pressed). */
+const voiceBar = (): Group => ({
+  title: 'Voice bar',
+  entries: [
+    { keys: [`Hold ${talkKeyName(voiceTalkKey())}`], label: 'Talk to the editor' },
+    { keys: ['⌘', 'K'], label: 'Type a command' },
+  ],
+});
+
 /**
- * Every shortcut the editor answers to, in one place.
- *
- * A key that only exists in the source is a key nobody uses, and Phase 3 adds
- * a dozen of them. Grouped the way an editor thinks — moving through time,
- * cutting, arranging — rather than by which module implements them.
+ * Every command the editor answers to, in one place — built from the same
+ * list the voice bar matches against, so a command that exists is a command
+ * listed here. Commands with no key are listed too: they can be typed or said.
  */
-const GROUPS: Group[] = [
-  {
-    title: 'Transport',
-    entries: [
-      { keys: ['Space'], label: 'Play / pause' },
-      { keys: ['J'], label: 'Shuttle back — press again for 2× and 4×' },
-      { keys: ['K'], label: 'Pause the shuttle' },
-      { keys: ['L'], label: 'Shuttle forward — press again for 2× and 4×' },
-      { keys: ['A'], label: 'Back one frame' },
-      { keys: ['D'], label: 'Forward one frame' },
-      { keys: ['S'], label: 'Back one second' },
-      { keys: ['W'], label: 'Forward one second' },
-      { keys: ['Home'], label: 'Go to the start, or the in point' },
-      { keys: ['End'], label: 'Go to the end, or the out point' },
-      { keys: ['⌥', '↑'], label: 'Previous cut' },
-      { keys: ['⌥', '↓'], label: 'Next cut' },
-    ],
-  },
-  {
-    title: 'Range',
-    entries: [
-      { keys: ['I'], label: 'Mark in — sets the work area an export renders' },
-      { keys: ['O'], label: 'Mark out' },
-      { keys: ['⌥', 'X'], label: 'Clear the range' },
-      { keys: ['M'], label: 'Marker at the playhead — press again to remove it' },
-    ],
-  },
-  {
-    title: 'Editing',
-    entries: [
-      { keys: ['⌘', 'B'], label: 'Split at the playhead' },
-      { keys: ['Delete'], label: 'Delete — a scene with content asks first' },
-      { keys: ['⇧', 'Delete'], label: 'Ripple delete — closes the gap' },
-      { keys: ['⌘', 'D'], label: 'Duplicate' },
-      { keys: ['⌘', 'G'], label: 'Group' },
-      { keys: ['⇧', '⌘', 'G'], label: 'Ungroup' },
-      { keys: ['⌘', 'Z'], label: 'Undo — survives a reload' },
-      { keys: ['⇧', '⌘', 'Z'], label: 'Redo' },
-      { keys: ['⌥', '←'], label: 'Nudge the selection one frame' },
-      { keys: ['⌥', '⇧', '←'], label: 'Nudge ten frames' },
-      { keys: ['N'], label: 'Snapping on or off — hold ⌘ while dragging to invert' },
-      { keys: [']'], label: 'Bring to front' },
-      { keys: ['['], label: 'Send to back' },
-    ],
-  },
-  {
-    title: 'Canvas',
-    entries: [
-      { keys: ['V'], label: 'Move tool' },
-      { keys: ['H'], label: 'Hand tool' },
-      { keys: ['T'], label: 'Text' },
-      { keys: ['R'], label: 'Rectangle' },
-      { keys: ['F'], label: 'Scene' },
-      { keys: ['⌘', '1'], label: 'Zoom to fit' },
-      { keys: ['⌘', '2'], label: 'Zoom to selection' },
-      { keys: ['⌘', '0'], label: 'Actual size' },
-      { keys: ['←', '→', '↑', '↓'], label: 'Nudge on the canvas' },
-    ],
-  },
-  {
-    title: 'Timeline',
-    entries: [
-      { keys: ['⌥', '+'], label: 'Zoom the timeline in' },
-      { keys: ['⌥', '−'], label: 'Zoom the timeline out' },
-      { keys: ['⇧', 'Z'], label: 'Fit the whole video' },
-      { keys: ['⌥', 'Z'], label: 'Zoom to the selection' },
-    ],
-  },
-  {
-    title: 'Agent',
-    entries: [{ keys: ['⇧', '⌘', 'O'], label: 'Open this project in your agent' }],
-  },
-];
+function groups(): Group[] {
+  const commands = barCommands();
+  return [
+    ...GROUP_ORDER.map((title) => ({
+      title,
+      entries: commands
+        .filter((command) => command.group === title)
+        .map((command) => ({ keys: displayKeys(command.keys), label: command.label })),
+    })).filter((group) => group.entries.length > 0),
+    voiceBar(),
+  ];
+}
 
 export function ShortcutSheet() {
   const [open, setOpen] = createSignal(false);
+  const sheet = createMemo(groups);
 
   onMount(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -117,7 +72,7 @@ export function ShortcutSheet() {
         </DialogHeader>
         <div class="max-h-[60vh] overflow-y-auto pr-1">
           <div class="columns-1 sm:columns-2 gap-6">
-            <For each={GROUPS}>
+            <For each={sheet()}>
               {(group) => (
                 <section class="mb-5 break-inside-avoid">
                   <p class="mb-1.5 text-xxs font-450 uppercase tracking-wider text-muted-foreground">
@@ -127,9 +82,11 @@ export function ShortcutSheet() {
                     {(entry) => (
                       <div class="flex items-baseline justify-between gap-3 py-1">
                         <span class="text-xxs text-foreground">{entry.label}</span>
-                        <span class="flex shrink-0 items-center gap-0.5">
-                          <For each={entry.keys}>{(key) => <Kbd>{key}</Kbd>}</For>
-                        </span>
+                        <Show when={entry.keys.length > 0} fallback={<span class="shrink-0 text-xxs text-muted-foreground">Type or say it</span>}>
+                          <span class="flex shrink-0 items-center gap-0.5">
+                            <For each={entry.keys}>{(key) => <Kbd>{key}</Kbd>}</For>
+                          </span>
+                        </Show>
                       </div>
                     )}
                   </For>

@@ -30,17 +30,22 @@ import { Animation as AnimationElement } from "@posterract/video-reconciler";
 import {
   Animation,
   AnimationPhase,
+  AnimationType,
+  animationDefaults,
   Cache,
   FrameRate,
   Paint,
   PaintType,
   framesToSeconds,
+  Expanded,
   getIntrinsicPaint,
   isAudio,
   isText,
 } from "@posterract/video-runtime";
 import { useDerived, useEditor } from "@/engine/hooks";
+import { setTimelineDetail } from "@/engine/timeline/detail";
 import { ANIMATION_GROUPS, DEFAULT_ANIMATION, animationOption } from "./animation-types";
+import { EASE_PRESETS, SPRING_PRESETS, type EasingPreset } from "./easing-types";
 import { locateEntity, renameLocator, resolveEntity, type EntityLocator } from "./entity-locator";
 
 import type { AnimationGroup, AnimationOption } from "./animation-types";
@@ -49,6 +54,38 @@ import type { Entity } from "koota";
 /** `<animation>`'s defaults; a control left at one of these unsets its prop. */
 const DEFAULT_DURATION = 1;
 const DEFAULT_DELAY = 0;
+
+/**
+ * What `amount` is for each preset that has one, as a control: the presets do
+ * different things, so the same prop is an opacity for one and degrees for
+ * another (see the runtime's `animationDefaults`, which holds the defaults).
+ */
+const AMOUNT_CONTROLS: Partial<Record<AnimationType, { label: string; max: number; step: number; format(value: number): string }>> = {
+  [AnimationType.FADE]: { label: "Fade", max: 1, step: 0.05, format: (value) => `${Math.round(value * 100)}%` },
+  [AnimationType.GROW]: { label: "From", max: 1, step: 0.05, format: (value) => `${Math.round((1 - value) * 100)}%` },
+  [AnimationType.SHRINK]: { label: "From", max: 2, step: 0.05, format: (value) => `${Math.round((1 + value) * 100)}%` },
+  [AnimationType.BLUR]: { label: "Blur", max: 100, step: 1, format: (value) => `${Math.round(value)}px` },
+  [AnimationType.SLIDE_LEFT]: { label: "Fade", max: 1, step: 0.05, format: (value) => `${Math.round(value * 100)}%` },
+  [AnimationType.SLIDE_RIGHT]: { label: "Fade", max: 1, step: 0.05, format: (value) => `${Math.round(value * 100)}%` },
+  [AnimationType.SLIDE_UP]: { label: "Fade", max: 1, step: 0.05, format: (value) => `${Math.round(value * 100)}%` },
+  [AnimationType.SLIDE_DOWN]: { label: "Fade", max: 1, step: 0.05, format: (value) => `${Math.round(value * 100)}%` },
+  [AnimationType.SPIN]: { label: "Rotation", max: 360, step: 1, format: (value) => `${Math.round(value)}°` },
+  [AnimationType.TWIST]: { label: "Rotation", max: 90, step: 1, format: (value) => `${Math.round(value)}°` },
+};
+
+/** The presets that travel, and so have a `distance`. */
+const TRAVELS: ReadonlySet<AnimationType> = new Set([
+  AnimationType.SLIDE_LEFT, AnimationType.SLIDE_RIGHT, AnimationType.SLIDE_UP, AnimationType.SLIDE_DOWN, AnimationType.TWIST,
+]);
+
+/** "The preset's own curve" — `easing` absent — then the easings the JSX has a word for. */
+const OWN_CURVE: EasingPreset = { name: "linear", label: "Preset", descriptor: "" };
+const ANIMATION_EASINGS: EasingPreset[] = [
+  OWN_CURVE,
+  // For a preset the empty descriptor is its own curve, so linear is stored spelled out.
+  ...EASE_PRESETS.map((option) => (option.name === "linear" ? { ...option, descriptor: "linear" } : option)),
+  ...SPRING_PRESETS,
+];
 
 // Stable identity, so a node without animations does not resample every tick.
 const NO_ANIMATIONS: Entity[] = [];
@@ -88,13 +125,17 @@ export function AnimationsSettings(props: AnimationsSettingsProps) {
     return list.length < 2 ? list : [...list].sort((a, b) => phaseRank(a) - phaseRank(b));
   }, sameOrder);
 
-  const handleAppendAnimation = () => {
+  const handleAppendAnimation = (phase: 'in' | 'out' = 'in') => {
     const [animation] = editor.insertElement(entity(), () => (
-      <AnimationElement type={DEFAULT_ANIMATION.name} />
+      <AnimationElement type={DEFAULT_ANIMATION.name} phase={phase} />
     ));
     // Which preset it is, is the one thing the default cannot answer, so the
     // inspector opens on the new animation for it to be said.
-    if (animation) setPicked(locateEntity(animation, animations()));
+    if (animation) {
+      if (!entity().has(Expanded)) editor.editProperty(entity(), 'expanded', true);
+      setTimelineDetail('animation');
+      setPicked(locateEntity(animation, animations()));
+    }
   };
 
   const stopRename = editor.onRename((ids) => setPicked((current) => renameLocator(current, ids)));
@@ -117,7 +158,8 @@ export function AnimationsSettings(props: AnimationsSettingsProps) {
               size="icon"
               variant="ghost"
               class="text-muted-foreground"
-              onClick={handleAppendAnimation}
+              onClick={() => handleAppendAnimation()}
+              aria-label="Add entrance animation"
             >
               <Icon name="plus-add" />
             </TooltipTrigger>
@@ -125,6 +167,11 @@ export function AnimationsSettings(props: AnimationsSettingsProps) {
           </Tooltip>
         }
       >
+        <div class="posterract-motion-add">
+          <Button variant="outline" size="small" onClick={() => handleAppendAnimation('in')}>+ Entrance</Button>
+          <Button variant="outline" size="small" onClick={() => handleAppendAnimation('out')}>+ Exit</Button>
+        </div>
+        <Show when={!animations().length}><p class="text-xs text-muted-foreground leading-relaxed">Add an entrance or exit, then adjust its timing. Each animation stays editable in your timeline.</p></Show>
         <For each={animations()}>
           {(animation) => (
             <AnimationRow
@@ -174,6 +221,7 @@ function AnimationRow(props: AnimationRowProps) {
           variant="ghost"
           class="text-muted-foreground"
           onClick={props.onRemove}
+          aria-label={`Remove ${label()} animation`}
         >
           <Icon name="close-remove-small" />
         </TooltipTrigger>
@@ -192,7 +240,7 @@ function hasAudio(node: Entity): boolean {
 type AnimationInspectorProps = {
   animation: Entity;
   node: Entity;
-  anchorRef: HTMLElement;
+  anchorRef?: HTMLElement;
   onClose(): void;
 };
 
@@ -202,7 +250,7 @@ type AnimationInspectorProps = {
  * long after the clip edge it starts. `type` is required and always written;
  * the other three unset at their defaults.
  */
-function AnimationInspector(props: AnimationInspectorProps) {
+export function AnimationInspector(props: AnimationInspectorProps & { inline?: boolean }) {
   const world = useWorld();
   const editor = useEditor();
 
@@ -239,17 +287,45 @@ function AnimationInspector(props: AnimationInspectorProps) {
   };
 
   const handleDurationChange = (seconds: number) => {
-    const next = Math.round(seconds * 10) / 10;
+    const next = Math.round(seconds * fps()) / fps();
     editor.editProperty(props.animation, "duration", next === DEFAULT_DURATION ? false : next);
   };
 
   const handleDelayChange = (seconds: number) => {
-    const next = Math.round(seconds * 10) / 10;
+    const next = Math.round(seconds * fps()) / fps();
     editor.editProperty(props.animation, "delay", next === DEFAULT_DELAY ? false : next);
   };
 
-  return (
-    <FloatingInspector open anchorRef={props.anchorRef} width={248}>
+  // How far and how much: the preset's own until someone says otherwise, and
+  // unset again when put back there, so the file only spells what was chosen.
+  const type = () => animation()?.type ?? AnimationType.FADE;
+  const own = createMemo(() => animationDefaults(type()));
+  const distance = createMemo(() => animation()?.distance ?? own().distance);
+  const amount = createMemo(() => animation()?.amount ?? own().amount);
+  const amountControl = createMemo(() => AMOUNT_CONTROLS[type()]);
+  const easing = createMemo(() => {
+    const descriptor = animation()?.easing ?? "";
+    return ANIMATION_EASINGS.find((option) => option.descriptor === descriptor)
+      ?? { name: "linear" as const, label: "Custom", descriptor };
+  });
+
+  const handleDistanceChange = (value: number) => {
+    const next = Math.round(value);
+    editor.editProperty(props.animation, "distance", next === own().distance ? false : next);
+  };
+
+  const handleAmountChange = (value: number) => {
+    const next = Math.round(value * 100) / 100;
+    editor.editProperty(props.animation, "amount", next === own().amount ? false : next);
+  };
+
+  const handleEasingChange = (next: EasingPreset | null) => {
+    if (next === null || next.descriptor === easing().descriptor) return;
+    editor.editProperty(props.animation, "easing", next === OWN_CURVE ? false : next.name);
+  };
+
+  const controls = () => (
+    <>
       <FloatingInspectorHeader class="items-center justify-between px-2">
         <Select<AnimationOption, AnimationGroup>
           value={option()}
@@ -279,6 +355,7 @@ function AnimationInspector(props: AnimationInspectorProps) {
             as={Button}
             size="icon"
             variant="ghost"
+            aria-label={props.inline ? 'Select owning layer' : 'Close animation controls'}
             class="text-muted-foreground"
             onClick={props.onClose}
           >
@@ -313,10 +390,10 @@ function AnimationInspector(props: AnimationInspectorProps) {
           <SliderInput
             value={duration()}
             onChange={handleDurationChange}
-            min={0.1}
-            max={5}
-            step={0.1}
-            format={(value) => `${value.toFixed(1)}s`}
+            min={1 / fps()}
+            max={Math.max(5, duration())}
+            step={1 / fps()}
+            format={(value) => `${value.toFixed(2)}s`}
           />
         </ControlRow>
 
@@ -325,12 +402,63 @@ function AnimationInspector(props: AnimationInspectorProps) {
             value={delay()}
             onChange={handleDelayChange}
             min={0}
-            max={5}
-            step={0.1}
-            format={(value) => `${value.toFixed(1)}s`}
+            max={Math.max(5, delay())}
+            step={1 / fps()}
+            format={(value) => `${value.toFixed(2)}s`}
           />
         </ControlRow>
+
+        <Show when={TRAVELS.has(type())}>
+          <ControlRow label="Distance">
+            <SliderInput
+              value={distance()}
+              onChange={handleDistanceChange}
+              min={0}
+              max={Math.max(400, distance())}
+              step={1}
+              format={(value) => `${Math.round(value)}px`}
+            />
+          </ControlRow>
+        </Show>
+
+        <Show when={amountControl()}>
+          {(control) => (
+            <ControlRow label={control().label}>
+              <SliderInput
+                value={amount()}
+                onChange={handleAmountChange}
+                min={0}
+                max={Math.max(control().max, amount())}
+                step={control().step}
+                format={control().format}
+              />
+            </ControlRow>
+          )}
+        </Show>
+
+        <ControlRow label="Easing">
+          <Select<EasingPreset>
+            value={easing()}
+            onChange={handleEasingChange}
+            options={easing().label === "Custom" ? [...ANIMATION_EASINGS, easing()] : ANIMATION_EASINGS}
+            optionValue="descriptor"
+            optionTextValue="label"
+            itemComponent={(itemProps) => (
+              <SelectItem item={itemProps.item}>{itemProps.item.rawValue.label}</SelectItem>
+            )}
+          >
+            <SelectTrigger>
+              <SelectValue class="text-xs">{easing().label}</SelectValue>
+            </SelectTrigger>
+            <SelectPortal>
+              <SelectContent />
+            </SelectPortal>
+          </Select>
+        </ControlRow>
       </FloatingInspectorContent>
-    </FloatingInspector>
+    </>
   );
+  return <Show when={!props.inline} fallback={<div class="posterract-inline-motion">{controls()}</div>}>
+    <FloatingInspector open anchorRef={props.anchorRef} width={280}>{controls()}</FloatingInspector>
+  </Show>;
 }

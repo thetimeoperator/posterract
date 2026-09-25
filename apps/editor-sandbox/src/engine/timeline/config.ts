@@ -9,6 +9,9 @@ export const TARGET_MAJOR_TICK_DISTANCE = 160;
 
 export const TIMELINE_RESOLUTION_RANGE = [0.03, 120] as const;
 export const DEFAULT_TIMELINE_RESOLUTION = 1 / 0.7;
+export const TIMELINE_ZOOM_STEP = 1.4;
+export const MIN_RESOLUTION = 0.02;
+export const MAX_RESOLUTION = 40;
 export const DEFAULT_CLIP_HEIGHT = 40;
 
 export const TIMELINE_PADDING_LEFT = 8;

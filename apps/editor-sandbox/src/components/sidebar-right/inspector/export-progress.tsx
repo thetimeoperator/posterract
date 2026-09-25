@@ -19,6 +19,8 @@ type ExportProgressProps = {
   progress: number;
   remaining?: { minutes: number; seconds: number };
   config?: ExportConfig;
+  /** The size the file will have. Without it the overlay can only guess at the shape. */
+  size?: { width: number; height: number };
   duration: number;
   onCancel: () => void;
 };
@@ -26,12 +28,15 @@ type ExportProgressProps = {
 export function ExportProgress(props: ExportProgressProps) {
   const cfg = () => props.config;
 
+  // The real size when the render says it (a vertical video is 1080 x 1920,
+  // not the 16:9 this used to assume); the old guess only when it does not.
   const width = () => {
+    if (props.size) return props.size.width;
     const resolution = cfg()?.video?.resolution ?? 1080;
     return Math.round((resolution * 16) / 9 / 2) * 2;
   };
 
-  const height = () => cfg()?.video?.resolution ?? 1080;
+  const height = () => props.size?.height ?? cfg()?.video?.resolution ?? 1080;
   const format = () => (cfg()?.format ?? "mp4").toUpperCase();
   const fps = () => cfg()?.video?.fps ?? 30;
   const videoCodec = () => cfg()?.video?.codec ?? "avc";

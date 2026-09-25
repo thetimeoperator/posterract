@@ -17,9 +17,13 @@
  * the history pairs them with the ones it recorded and rewrites itself, the
  * same rename it hears from `restamp` when a write answers with real names.
  *
- * The history is cleared whenever a bundle is (re)mounted: a mount comes
- * from the file, and edits recorded against a document that is gone cannot
- * be replayed against the one that replaced it.
+ * The history is cleared when a bundle is (re)mounted: a mount comes from the
+ * file, and edits recorded against a document that is gone cannot be replayed
+ * against the one that replaced it — unless the mount is the same document
+ * with someone else's change in it (an agent edited the file) and the elements
+ * can be followed into it: then the steps are carried over (`serialize`,
+ * `restore`, `follow`), and undo stays what it was, the person's own edits
+ * taken back one by one.
  */
 
 import { Source, getEntityChildren } from '@posterract/video-runtime';
@@ -35,9 +39,10 @@ import type { CapturedNode, DocumentEditor, EntityEdit } from './editor';
 
 /**
  * Props that are pointing and viewing rather than composition: undoing them
- * is not what anyone means by undo, so they pass through to the file without
- * entering the history. `error` is the runtime speaking (see source-errors),
- * not the user.
+ * is not what anyone means by undo, so they never enter the history. The
+ * view props among them do not reach the file either (see
+ * `@/projects/view-state`). `error` is the runtime speaking (see
+ * source-errors), not the user.
  */
 const EXCLUDED_PROPS: ReadonlySet<string> = new Set(['selected', 'active', 'camera', 'expanded', 'clipHeight', 'error']);
 
@@ -201,10 +206,46 @@ export class EditHistory {
 		if (!undos.every(valid) || !redos.every(valid)) return false;
 		this.undos = undos as Transaction[];
 		this.redos = redos as Transaction[];
+		// A step from another session was committed on another clock
+		// (`performance.now()` starts over with the page), so its time says
+		// nothing here — and read as if it did, it can look like a moment ago
+		// and swallow the first new edit of the same prop into itself, whose
+		// undo then jumps to a value from the last session. An adopted step is
+		// finished: nothing coalesces into it.
+		for (const step of this.undos) step.committedAt = Number.NEGATIVE_INFINITY;
 		this.open = null;
 		this.gesture = false;
 		this.changed();
 		return true;
+	}
+
+	/**
+	 * Runs `change` without recording it, for showing what is already a step of
+	 * this history: the person's last edits, written to the file by a render
+	 * that has since been replaced, shown again on the one that replaced it.
+	 */
+	public unrecorded(change: () => void): void {
+		const was = this.applying;
+		this.applying = true;
+		try {
+			change();
+		} finally {
+			this.applying = was;
+		}
+	}
+
+	/**
+	 * Follows elements to new addresses: every recorded step naming a key of
+	 * `ids` names its value from here on. For a mount that replaced the one the
+	 * steps were recorded against, when someone can say where each element of
+	 * the old one is in the new (see the compiler's `patchSources`): an element
+	 * with an id is where it was, one addressed by position may have moved, and
+	 * one that is gone is given an address nothing answers to, so a step about
+	 * it replays as nothing rather than landing on whatever took its place.
+	 */
+	public follow(ids: Record<string, string>): void {
+		this.rename(ids);
+		this.changed();
 	}
 
 	/**
@@ -229,10 +270,23 @@ export class EditHistory {
 		this.gesture = true;
 	}
 
-	public endGesture(): void {
-		if (!this.gesture) return;
+	/**
+	 * How many edits the step being recorded holds so far. A caller that runs
+	 * several changes in one gesture reads it before and after each, to know
+	 * which of them changed anything.
+	 */
+	public recordedSoFar(): number {
+		return this.open?.ops.length ?? 0;
+	}
+
+	/** Whether the gesture became a step: false when nothing in it was recorded. */
+	public endGesture(): boolean {
+		if (!this.gesture) return false;
 		this.gesture = false;
-		if (this.open) this.commit();
+		if (!this.open) return false;
+		const recorded = this.open.ops.length > 0 && !this.open.broken;
+		this.commit();
+		return recorded;
 	}
 
 	/** Takes back the last step, and hands it to redo. */
@@ -475,7 +529,7 @@ export class EditHistory {
 		switch (op.kind) {
 			case 'prop': {
 				const entity = this.resolve(op.source);
-				if (entity) this.editor.editProperty(entity, op.name, op.before as PropValue);
+				if (entity) this.editor.editProperty(entity, op.name, op.before as PropValue, { asWritten: true });
 				return;
 			}
 			case 'text': {
@@ -511,7 +565,7 @@ export class EditHistory {
 		switch (op.kind) {
 			case 'prop': {
 				const entity = this.resolve(op.source);
-				if (entity) this.editor.editProperty(entity, op.name, op.after as PropValue);
+				if (entity) this.editor.editProperty(entity, op.name, op.after as PropValue, { asWritten: true });
 				return;
 			}
 			case 'text': {

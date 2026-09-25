@@ -11,13 +11,27 @@ import { MAIN_CHANNELS } from '@desktop/main-channels';
 import { mainBridge } from '@/lib/ipc';
 import { isAbsoluteSource } from '@posterract/video-assets';
 
-import type { Manifest, ProjectFS } from '@posterract/video-assets';
+import type { LocatedFile, Manifest, ProjectFS } from '@posterract/video-assets';
+
+/** A file's media URL, which serves ranges, and what main knows of the file. */
+async function locateFile(dir: string, source: string): Promise<LocatedFile> {
+	const [file, stat] = await Promise.all([
+		mainBridge.call(MAIN_CHANNELS.PROJECTS_FS_FILE, { dir, source }),
+		mainBridge.call(MAIN_CHANNELS.PROJECTS_FS_STAT, { dir, source }),
+	]);
+	if (!file.url || !stat) throw new Error(`Could not load ${source}`);
+	return { url: file.url, name: file.name, mimeType: file.mimeType, size: stat.size, mtime: stat.mtime };
+}
 
 async function readFile(dir: string, source: string): Promise<File> {
 	const result = await mainBridge.call(MAIN_CHANNELS.PROJECTS_FS_FILE, { dir, source });
 	const blob = result.blob ?? (result.url ? await fetch(result.url).then((response) => {
 		if (!response.ok) throw new Error(`Could not load ${source}: ${response.status}`);
-		return response.blob();
+		// A large file is held on disk while it is open here, so a full disk
+		// fails it with nothing more to go on than "Failed to fetch".
+		return response.blob().catch(() => {
+			throw new Error(`Could not open ${result.name}. If this computer is low on disk space, free some up and try again.`);
+		});
 	}) : undefined);
 	if (!blob) throw new Error(`Could not load ${source}`);
 	return new File([blob], result.name, {
@@ -39,6 +53,7 @@ export function createProjectFS(dir: string): ProjectFS {
 		list: (source) => mainBridge.call(MAIN_CHANNELS.PROJECTS_FS_LIST, { dir, source }),
 		stat: (source) => mainBridge.call(MAIN_CHANNELS.PROJECTS_FS_STAT, { dir, source }),
 		file: (source) => readFile(dir, source),
+		locate: (source) => locateFile(dir, source),
 		write: (path, blob) => mainBridge.call(MAIN_CHANNELS.PROJECTS_FS_WRITE, { dir, path, blob }),
 		copy: (source, path) => mainBridge.call(MAIN_CHANNELS.PROJECTS_FS_COPY, { dir, source, path }),
 		remove: (path) => mainBridge.call(MAIN_CHANNELS.PROJECTS_FS_REMOVE, { dir, path }),

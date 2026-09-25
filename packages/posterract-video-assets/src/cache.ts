@@ -4,7 +4,8 @@
 
 
 import { PEAK_BARS } from './derive/peaks';
-import { deriveThumbnail, DEFAULT_THUMBNAIL_WIDTH } from './derive/thumbnail';
+import { deriveThumbnail, deriveVideoThumbnail, DEFAULT_THUMBNAIL_WIDTH } from './derive/thumbnail';
+import { rangedSource } from './ranges';
 import { deriveWaveform, downsamplePeaks } from './derive/waveform';
 
 import type { ProjectFS } from './fs';
@@ -86,7 +87,7 @@ export class AssetCache {
 	 */
 	public thumbnail(asset: Asset, width = DEFAULT_THUMBNAIL_WIDTH): Promise<Blob | null> {
 		const variant = width === DEFAULT_THUMBNAIL_WIDTH ? undefined : `${width}`;
-		return this.get(THUMBNAIL, asset, async () => deriveThumbnail(await asset.handle.getFile(), asset.mimeType, width), variant);
+		return this.get(THUMBNAIL, asset, () => thumbnailOf(asset, width), variant);
 	}
 
 	/**
@@ -260,4 +261,17 @@ export class AssetCache {
 			console.warn(`[assets] could not write cache entry ${key}:`, error);
 		}
 	}
+}
+
+/**
+ * A video the host serves in ranges is read that way — its opening frames are
+ * all a thumbnail needs, and loading a long recording whole for them fails
+ * outright once the disk is too full to page it to. Anything else, as a File.
+ */
+async function thumbnailOf(asset: Asset, width: number): Promise<Blob | null> {
+	if (asset.mimeType.startsWith('video/') && asset.handle.locate) {
+		const file = await asset.handle.locate();
+		return deriveVideoThumbnail(rangedSource(file.url, file.size), width);
+	}
+	return deriveThumbnail(await asset.handle.getFile(), asset.mimeType, width);
 }

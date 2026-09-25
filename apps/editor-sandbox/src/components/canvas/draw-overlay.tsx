@@ -4,10 +4,11 @@
 
 import { Show } from "solid-js";
 import { useWorld } from "@posterract/koota-solid";
-import { Rect, Scene, SolidPaint, Text } from "@posterract/video-reconciler";
+import { Scene, SolidPaint } from "@posterract/video-reconciler";
 import {
   Computed,
   findSceneAt,
+  FrameRate,
   getNextName,
   Root,
   screenToWorld,
@@ -18,9 +19,26 @@ import {
   worldToLocal,
 } from "@posterract/video-runtime";
 import { useEditor, useTool } from "@/engine";
+import { insertShape, insertText, textSizeIn } from "@/engine/create";
+import { getEditHistory } from "@/engine/history";
+import { mountTextInput } from "@/engine/hud/text-input";
+import { drawnShape, shapeOfKind } from "@/engine/shapes";
 
-import type { Entity } from "koota";
+import type { Entity, World } from "koota";
 import type { Point } from "@posterract/video-runtime";
+
+/**
+ * Where the playhead stands in `scene`, in seconds, or undefined at its very
+ * start. What is drawn begins there: left to start at 0:00 with the default
+ * length, a text drawn at 0:24 ended at 0:16 and was never on screen where it
+ * was drawn, so it could not be seen or clicked there either.
+ */
+function playheadIn(world: World, scene: Entity): number | undefined {
+  const frame = store(world, Computed).localTime[scene.id()] ?? 0;
+  if (!(frame > 0)) return undefined;
+  const fps = world.get(FrameRate)?.value ?? 30;
+  return Math.round((frame / fps) * 100) / 100;
+}
 
 type ToolConfig = {
   isScene?: boolean;
@@ -36,6 +54,7 @@ const TOOL_CONFIG: Partial<Record<ToolType, ToolConfig>> = {
   [ToolType.RECT]: {
     fillColor: '#E0E0E0',
     previewColor: '#E0E0E0',
+    // A shape other than a rectangle is named for what it is (see `handlePointerUp`).
     namePrefix: 'Rect',
     label: 'Create shape',
     defaultWidth: 300,
@@ -108,6 +127,14 @@ export function DrawOverlay() {
     previewRef.style.outline = '2px solid #008CFF';
     previewRef.style.outlineOffset = '0px';
 
+    // The shape being drawn, not just its box: a polygon's outline clips the
+    // preview (its outline with it, so it goes), an ellipse rounds it.
+    const shape = selectedTool() === ToolType.RECT ? shapeOfKind(drawnShape()) : null;
+    const outline = shape?.outline;
+    previewRef.style.clipPath = outline ? `polygon(${outline.map(([x, y]) => `${x * 100}% ${y * 100}%`).join(', ')})` : '';
+    previewRef.style.borderRadius = shape?.kind === 'ellipse' ? '50%' : '';
+    if (outline) previewRef.style.outline = 'none';
+
     const worldTopLeft = screenToWorld(world, rect.x, rect.y);
     const worldBottomRight = screenToWorld(world, rect.x + rect.width, rect.y + rect.height);
     const worldWidth = Math.round(worldBottomRight.x - worldTopLeft.x);
@@ -168,11 +195,7 @@ export function DrawOverlay() {
     const worldBottomRight = screenToWorld(world, rect.x + rect.width, rect.y + rect.height);
 
     // Approximate text size from the parent scene's height.
-    let fontSize = 16;
-    if (tool === ToolType.TEXT && targetScene !== null) {
-      const sceneHeight = store(world, Computed).height[targetScene.id()] ?? 0;
-      fontSize = Math.max(8, Math.round(sceneHeight / 22.5));
-    }
+    const fontSize = tool === ToolType.TEXT ? textSizeIn(world, targetScene) : 16;
 
     let width: number;
     let height: number;
@@ -207,29 +230,35 @@ export function DrawOverlay() {
       return;
     }
 
-    const name = getNextName(world, cfg.namePrefix);
     const x = Math.round(posX);
     const y = Math.round(posY);
     // A clicked-in text sizes itself to its glyphs, so it takes no size.
     const size = tool !== ToolType.TEXT || !isClick ? { width, height } : {};
 
-    const [entity] = editor.insertElement(parent, () => {
+    const start = parentScene !== null ? playheadIn(world, parentScene) : undefined;
+
+    // The same functions the voice bar and the agent add a shape or a text
+    // with, so what is drawn and what is said come out identical. One undo
+    // step: the element and the time it starts at go together.
+    let entity: Entity | undefined;
+    const history = getEditHistory(world);
+    history.beginGesture();
+    try {
       if (cfg.isScene) {
-        return (
+        const name = getNextName(world, cfg.namePrefix);
+        [entity] = editor.insertElement(parent, () => (
           <Scene name={name} x={x} y={y} width={width} height={height}>
             <SolidPaint color={cfg.fillColor} />
           </Scene>
-        );
+        ));
+      } else if (tool === ToolType.TEXT) {
+        entity = insertText(world, editor, { parent, x, y, ...size, fontSize, color: cfg.fillColor, start }) ?? undefined;
+      } else {
+        entity = insertShape(world, editor, { parent, kind: drawnShape(), x, y, width, height, color: cfg.fillColor, start }) ?? undefined;
       }
-      if (tool === ToolType.TEXT) {
-        return <Text name={name} x={x} y={y} {...size} fontSize={fontSize} color={cfg.fillColor}>Text</Text>;
-      }
-      return (
-        <Rect name={name} x={x} y={y} {...size}>
-          <SolidPaint color={cfg.fillColor} />
-        </Rect>
-      );
-    });
+    } finally {
+      history.endGesture();
+    }
 
     if (entity) {
       if (tool === ToolType.SCENE) {
@@ -239,8 +268,12 @@ export function DrawOverlay() {
       editor.select(entity);
     }
 
-    world.set(Tool, { value: tool === ToolType.TEXT ? ToolType.TEXT_EDIT : ToolType.MOVE });
+    world.set(Tool, { value: ToolType.MOVE });
     reset();
+
+    // A new text is typed into where it was drawn, its placeholder selected so
+    // the first keystroke replaces it.
+    if (entity && tool === ToolType.TEXT) mountTextInput(world, entity);
   };
 
   return (

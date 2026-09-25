@@ -109,7 +109,7 @@ export function buildTimelineLayers(
 		// Inside a sequence the clips are drawn inline, so only the ones with
 		// motion earn a row of their own — unless the caller asked to see
 		// everything, where the point is that nothing is left out.
-		if (sequence && detail !== 'everything' && !hasKeyframes(world, child)) continue;
+		if (sequence && detail !== 'everything' && !hasMotion(world, child, detail)) continue;
 
 		if (child.has(KeyframeTrack)) {
 			tracks.push(child);
@@ -258,7 +258,7 @@ function isExpandable(world: World, parent: Entity, detail: TimelineDetail = 'cl
 
 	for (const child of world.query(ChildOf(parent))) {
 		if (child.has(Keyframe)) continue;
-		if (sequence && detail !== 'everything' && !hasKeyframes(world, child)) continue;
+		if (sequence && detail !== 'everything' && !hasMotion(world, child, detail)) continue;
 		if (
 			child.has(IsMask) ||
 			child.has(Geometry) ||
@@ -276,13 +276,14 @@ function isExpandable(world: World, parent: Entity, detail: TimelineDetail = 'cl
 }
 
 /**
- * Deep probe: does the subtree contain a live KeyframeTrack? Tracks are
- * deleted with their last keyframe, so track presence implies keyframes.
+ * Include a sequence child when it contains motion admitted by this view.
+ * Presets and live props need rows even when they have no keyframe tracks.
  */
-function hasKeyframes(world: World, entity: Entity): boolean {
+function hasMotion(world: World, entity: Entity, detail: TimelineDetail): boolean {
+	if (entity.has(KeyframeTrack)) return true;
+	if (detail !== 'clips' && (entity.has(Animation) || entity.has(Live))) return true;
 	for (const child of world.query(ChildOf(entity))) {
-		if (child.has(KeyframeTrack)) return true;
-		if (hasKeyframes(world, child)) return true;
+		if (hasMotion(world, child, detail)) return true;
 	}
 
 	return false;

@@ -9,6 +9,8 @@
 
 import { ALL_FORMATS, BlobSource, CanvasSink, Input } from 'mediabunny';
 
+import type { Source } from 'mediabunny';
+
 /** The width the asset bar shows; what the cache stores without a variant. */
 export const DEFAULT_THUMBNAIL_WIDTH = 300;
 
@@ -20,8 +22,13 @@ const WEBP_QUALITY = 0.7;
 /** A WebP thumbnail of `file`, `width` wide, or null when it is neither an image nor a video with a picture. */
 export async function deriveThumbnail(file: Blob, mimeType: string, width = DEFAULT_THUMBNAIL_WIDTH): Promise<Blob | null> {
 	if (mimeType.startsWith('image/')) return imageThumbnail(file, width);
-	if (mimeType.startsWith('video/')) return videoThumbnail(file, width);
+	if (mimeType.startsWith('video/')) return videoThumbnail(new BlobSource(file), width);
 	return null;
+}
+
+/** The thumbnail of a video read through `source`: only its opening frames are read. */
+export function deriveVideoThumbnail(source: Source, width = DEFAULT_THUMBNAIL_WIDTH): Promise<Blob | null> {
+	return videoThumbnail(source, width);
 }
 
 async function imageThumbnail(file: Blob, width: number): Promise<Blob | null> {
@@ -37,8 +44,8 @@ async function imageThumbnail(file: Blob, width: number): Promise<Blob | null> {
 	}
 }
 
-async function videoThumbnail(file: Blob, width: number): Promise<Blob | null> {
-	const input = new Input({ formats: ALL_FORMATS, source: new BlobSource(file) });
+async function videoThumbnail(source: Source, width: number): Promise<Blob | null> {
+	const input = new Input({ formats: ALL_FORMATS, source });
 	try {
 		const track = await input.getPrimaryVideoTrack();
 		if (!track) return null;

@@ -8,7 +8,7 @@ one thing does not leave every number after it wrong.
 `after="<id>"` puts an element's span where another element's span ends.
 
 ```tsx
-<rect id="first" start={0} end="1s" … />
+<rect id="first" start={0} end={1} … />
 <rect id="second" after="first" … />
 ```
 
@@ -17,7 +17,7 @@ file being touched. `start` alongside `after` becomes the **gap** after the
 target rather than a time in the scene:
 
 ```tsx
-<rect id="third" after="second" start="0.5s" … />
+<rect id="third" after="second" start={0.5} … />
 ```
 
 It is resolved against the target's *resolved* span, so it is right even when
@@ -34,10 +34,10 @@ Every timed element takes it, not only vectors.
 `stagger` on a `<group>` is how far apart its children's motion runs.
 
 ```tsx
-<group id="cascade" stagger="0.35s">
-  <rect id="c1" …><animation type="fade" duration="0.4s" /></rect>
-  <rect id="c2" …><animation type="fade" duration="0.4s" /></rect>
-  <rect id="c3" …><animation type="fade" duration="0.4s" /></rect>
+<group id="cascade" stagger={0.35}>
+  <rect id="c1" …><animation type="fade" duration={0.4} /></rect>
+  <rect id="c2" …><animation type="fade" duration={0.4} /></rect>
+  <rect id="c3" …><animation type="fade" duration={0.4} /></rect>
 </group>
 ```
 
@@ -57,8 +57,8 @@ a voiceover, stated once instead of drawn as a volume track.
 ```tsx
 <scene id="main" width={1080} height={1920}>
   <audio id="music" src="audio/bed.mp3" />
-  <audio id="vo" src="audio/voice.mp3" start="2s" />
-  <duck target="music" by="vo" amount={-14} attack="0.12s" release="0.5s" />
+  <audio id="vo" src="audio/voice.mp3" start={2} />
+  <duck target="music" by="vo" amount={-14} attack={0.12} release={0.5} />
 </scene>
 ```
 

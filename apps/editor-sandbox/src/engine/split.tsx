@@ -60,12 +60,15 @@ function splitTargets(world: World, scene: Entity): Entity[] {
  * transition is not one the playhead is inside, and cutting it would leave a
  * half of nothing.
  */
-function splitUnits(world: World, targets: Entity[], frame: number): Entity[] {
+function splitUnits(world: World, targets: Entity[], frame: number, live: boolean): Entity[] {
 	const computed = store(world, Computed);
 	const units = new Set<Entity>();
 
 	const walk = (entity: Entity): void => {
-		if (computed.visibility[entity.id()] !== 1) return;
+		// Visibility is worked out for where the playhead is now. A cut at a
+		// time the command named happens before the next frame is drawn, so
+		// there the clip's own bounds are what says the cut is inside it.
+		if (live && computed.visibility[entity.id()] !== 1) return;
 
 		if (isSequence(entity)) {
 			for (const child of world.query(NODES, ChildOf(entity))) walk(child);
@@ -85,16 +88,21 @@ function splitUnits(world: World, targets: Entity[], frame: number): Entity[] {
 }
 
 /**
- * Cuts every clip the playhead is over in two. Returns the tail halves, which
- * are what the selection is left on: they are the new elements, and carrying
- * on from the cut is the usual next thing to do to them.
+ * Cuts every clip the playhead is over in two — or every clip over `atFrame`,
+ * for a cut at a moment a command named. Returns the tail halves, which are
+ * what the selection is left on: they are the new elements, and carrying on
+ * from the cut is the usual next thing to do to them.
  */
-export function splitAtPlayhead(world: World): Entity[] {
+export function splitAtPlayhead(world: World, atFrame?: number): Entity[] {
 	const scene = getActiveEntity(world);
 	if (scene === null) return [];
 
-	const frame = store(world, Computed).localTime[scene.id()] ?? 0;
-	const units = splitUnits(world, splitTargets(world, scene), frame);
+	// `atFrame` is a moment the command named ("split at 9 seconds"): the
+	// playhead is moved there too, but the trait it writes is only read back
+	// on the next frame, so the cut is made at the frame itself.
+	const live = atFrame === undefined;
+	const frame = atFrame ?? store(world, Computed).localTime[scene.id()] ?? 0;
+	const units = splitUnits(world, splitTargets(world, scene), frame, live);
 	if (units.length === 0) return [];
 
 	const editor = getDocumentEditor(world);

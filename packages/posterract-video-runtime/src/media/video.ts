@@ -2,11 +2,11 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { BlobSource, ALL_FORMATS, Input, InputVideoTrack, EncodedPacketSink, EncodedPacket, CanvasSink, type WrappedCanvas } from 'mediabunny';
+import { ALL_FORMATS, Input, InputVideoTrack, EncodedPacketSink, EncodedPacket, CanvasSink, type WrappedCanvas } from 'mediabunny';
 
 import { AssetId, VideoDecoderHandle, Mode } from '../traits';
 import { assert } from '../utils/assert';
-import { getAsset, getAssetFile, getSequenceFrameRate } from '../actions/assets';
+import { getAsset, getAssetSource, getSequenceFrameRate } from '../actions/assets';
 import { FrameCache } from './frame-cache';
 import { getKeyframeIndex } from './keyframe-index';
 import { SequenceDecoder } from './sequence';
@@ -31,10 +31,22 @@ const IDLE_TIMEOUT_MS = 10_000;
 const FORWARD_BIAS_FRAMES = 24;
 
 /**
- * Frames used to drain the decoder in case of a backward seek to
- * ensure the target frame is surfaced.
+ * Frames decoded past the target of a backward seek, so the target is pushed out
+ * of the decoder. H.264 lets a decoder hold up to 16 frames back to put them in
+ * presentation order, and one that isn't told how many the file needs holds that
+ * many: macOS screen recordings measured nine.
  */
-const DRAIN_FRAMES = 8;
+const DRAIN_FRAMES = 16;
+
+/** Packets let wait in the decoder's queue before a fill holds the next one back. */
+const MAX_DECODE_QUEUE = 2;
+
+/**
+ * How long the decoder may go without taking a packet or finishing a flush before
+ * it counts as stuck and is restarted. Fills run one at a time, so a decoder that
+ * stopped would otherwise hold every seek after it and freeze the preview for good.
+ */
+const STALL_TIMEOUT_MS = 2_000;
 
 /**
  * How far the preview may drift from the requested frame. A neighbour this close
@@ -97,6 +109,17 @@ export class VideoBuffer {
 	 */
 	private readonly pendingScrub = new Set<number>();
 
+	/** The project's frame rate, as the last seek gave it: what decides which frames are ever shown. */
+	private displayRate = 0;
+
+	/**
+	 * The decoder's current run: the keyframe it was started from and the last frame
+	 * it has put out since (-1 for none). Output comes in presentation order, so every
+	 * frame in between has come out already or is one the file does not have.
+	 */
+	private runStart: number = -1;
+	private lastOutput: number = -1;
+
 	private lastFrameIndex: number = 0;
 	private seekGeneration = 0;
 	private seekLock: Promise<void> = Promise.resolve();
@@ -139,6 +162,12 @@ export class VideoBuffer {
 	private frameCallback(frame: VideoFrame) {
 		const timestampSeconds = frame.timestamp / 1e6;
 		const frameIndex = this.secondsToFrames(timestampSeconds);
+		if (frameIndex >= this.runStart) {
+			this.lastOutput = Math.max(this.lastOutput, frameIndex);
+		}
+		// Decoded, since the frames after it are built from it, but never drawn: the
+		// project shows none of it. A keyframe a scrub is waiting on is shown regardless.
+		if (!this.isShown(frameIndex) && !this.pendingScrub.has(frameIndex)) return;
 		this.cache.insert(frame, frameIndex);
 		this.isDirty = true;
 
@@ -150,6 +179,7 @@ export class VideoBuffer {
 	}
 
 	public seekTo(frame: number, frameRate: number): undefined {
+		this.displayRate = frameRate;
 		const targetFrame = Math.round((frame / frameRate) * this.asset.frameRate);
 
 		const isEmpty = !this.packetSink;
@@ -222,21 +252,29 @@ export class VideoBuffer {
 		const keyPacket = await this.packetSink?.getKeyPacket(keyTimestamp);
 		if (!keyPacket || generation !== this.seekGeneration) return;
 
-		// Seed the iterator here as well, so the settle pass continues forward from this
-		// keyframe instead of reseeding the decoder a second time.
+		// Whatever the decoder still holds is for a position the drag has already left.
 		await this.iterator?.return();
-		const iterator = this.packetSink?.packets(keyPacket) ?? null;
-		this.iterator = iterator;
-		if (!iterator) return;
+		this.iterator = null;
+		this.startRun(keyPacket);
 
-		if (!this.queue.isAlive) {
-			this.queue.reseed();
-		}
+		await this.queue.decode(keyPacket);
+		// A decoder holds frames back to put them in presentation order, so a keyframe on
+		// its own would only come out once the next one pushed it: a whole step behind the
+		// drag, and the last one never. Flushing puts it on screen now; the settle pass
+		// decodes forward from it again.
+		await this.queue.flush();
+	}
 
-		const { value: packet } = await iterator.next();
-		if (packet) {
-			await this.queue.decode(packet);
-		}
+	/**
+	 * Points the decoder at a keyframe to decode forward from. Resets it first, dropping
+	 * what it still has queued for the old position — left in, that work is decoded
+	 * ahead of the frames now wanted, and repeated jumps stack it up until the preview
+	 * stops for seconds.
+	 */
+	private startRun(keyPacket: EncodedPacket) {
+		this.queue.reseed();
+		this.runStart = this.secondsToFrames(keyPacket.timestamp);
+		this.lastOutput = -1;
 	}
 
 	/**
@@ -301,7 +339,14 @@ export class VideoBuffer {
 	 * Whether `frame` is already taken care of — decoded into the cache, or still in-flight.
 	 */
 	private isBlockedFrame(frame: number) {
+		// Nothing will ever ask for it, so nothing is waiting on it either.
+		if (!this.isShown(frame)) return true;
 		if (this.cache.has(frame)) return true;
+
+		// The decoder has already put out a later frame of this run, so this one came out
+		// before it or the file does not have it: a variable-rate recording skips frame
+		// numbers wherever it dropped a frame. Asking again only decodes the run twice.
+		if (this.runStart >= 0 && frame >= this.runStart && frame <= this.lastOutput) return true;
 
 		for (const micros of this.queue.inFlight) {
 			if (this.secondsToFrames(micros / 1e6) === frame) {
@@ -312,8 +357,34 @@ export class VideoBuffer {
 		return false;
 	}
 
+	/**
+	 * Whether the project ever shows frame `frameIndex` of the video. The playhead
+	 * only asks for whole project frames (see `forwardVideoDecoder`), whatever the
+	 * clip's speed, and each maps to one frame of the video — so a 60fps clip in a
+	 * 30fps project shows every other frame and never the rest. Every frame is
+	 * shown when the video's rate is no higher than the project's.
+	 */
+	private isShown(frameIndex: number): boolean {
+		const rate = this.displayRate;
+		const source = this.asset.frameRate;
+		if (!(rate > 0) || !(source > rate)) return true;
+		const nearest = Math.round((frameIndex / source) * rate);
+		return Math.round((nearest / rate) * source) === frameIndex;
+	}
+
+	/** How many of the video's frames go by per frame the project shows; 1 at most one each. */
+	private frameStride(): number {
+		const rate = this.displayRate;
+		const source = this.asset.frameRate;
+		return rate > 0 && source > rate ? source / rate : 1;
+	}
+
 	private computeWindow(targetFrame: number, forward: boolean): [number, number] {
-		const span = this.cache.config.count - 2;
+		// Only shown frames are kept (see `isShown`), so the window spans as many of
+		// the video's frames as it takes to hold as many of those as the cache fits,
+		// less one for rounding: a 60fps clip in a 30fps project is buffered twice
+		// as far ahead as it was. The whole video fits when it is short enough.
+		const span = Math.floor((this.cache.config.count - 3) * this.frameStride()) + 1;
 
 		// Whole video fits in the cache — keep all of it.
 		if (this.lastFrameIndex <= span) {
@@ -348,7 +419,11 @@ export class VideoBuffer {
 		const cursor = this.queue.lastSubmitted;
 		const live = !!(this.iterator && this.queue.isAlive && cursor);
 
-		let reuse = live && cursor!.timestamp < untilSecs;
+		// Carry on from where the decoder is whenever the range starts past what this run
+		// has put out: what lies in between is on its way, held back for ordering. Going
+		// back to the keyframe instead, as a cursor that had merely run past the end of the
+		// range once did, decoded the run again on top of everything still queued.
+		let reuse = live && range[0] >= this.runStart && range[0] > this.lastOutput;
 		let keyTimestamp = this.keyframes?.floor(fromSecs) ?? null;
 
 		// If the cursor lags far behind the range start, skip forward to the nearest
@@ -365,24 +440,30 @@ export class VideoBuffer {
 		// and get create a new iterator
 		if (!reuse) {
 			const keyPacket = (await this.packetSink?.getKeyPacket(keyTimestamp ?? fromSecs)) ?? null;
-			if (!keyPacket) return;
+			if (!keyPacket || generation !== this.seekGeneration) return;
 			await this.iterator?.return();
 			this.iterator = this.packetSink?.packets(keyPacket) ?? null;
+			this.startRun(keyPacket);
 		}
 
-		if (!this.queue.isAlive) {
-			this.queue.reseed();
-		}
-
-		if (generation !== this.seekGeneration || !this.iterator) return;
+		const iterator = this.iterator;
+		if (generation !== this.seekGeneration || !iterator) return;
 
 		while (true) {
-			const { value: packet, done } = await this.iterator.next();
-			if (done || !packet) break;
+			const { value: packet, done } = await iterator.next();
+			if (done || !packet) {
+				// The end of the file: push out the frames the decoder was holding back, or the
+				// last of them never show. Every frame of the run has come out after this.
+				await this.queue.flush();
+				this.lastOutput = Infinity;
+				break;
+			}
 
 			await this.queue.decode(packet);
 
-			if (generation !== this.seekGeneration || packet.timestamp >= untilSecs) break;
+			// No packet in flight means the decoder was restarted under the fill (see
+			// `VideoDecoderQueue.decode`), and it takes nothing but a keyframe now.
+			if (generation !== this.seekGeneration || packet.timestamp >= untilSecs || !this.queue.lastSubmitted) break;
 		}
 	}
 
@@ -449,6 +530,8 @@ export class VideoBuffer {
 		this.queue.dispose();
 		this.iterator?.return();
 		this.iterator = null;
+		this.runStart = -1;
+		this.lastOutput = -1;
 	}
 
 	public dispose() {
@@ -470,6 +553,8 @@ export class VideoBuffer {
 		this.queue.dispose();
 		this.iterator?.return();
 		this.iterator = null;
+		this.runStart = -1;
+		this.lastOutput = -1;
 
 		// Release the display canvas backing store.
 		this.canvas.width = 0;
@@ -555,7 +640,8 @@ class VideoDecoderQueue {
 	public async decode(packet: EncodedPacket) {
 		this.ensureDecoder(packet);
 
-		if (this.decoder?.state !== 'configured') {
+		const decoder = this.decoder;
+		if (decoder?.state !== 'configured') {
 			this.lastSubmitted = null;
 			this.resolver?.resolve(null);
 			this.resolver = null;
@@ -563,15 +649,53 @@ class VideoDecoderQueue {
 			return;
 		}
 
-		if (this.decoder.decodeQueueSize > 2) {
-			this.resolver = Promise.withResolvers();
-		}
-
-		this.decoder.decode(packet.toEncodedVideoChunk());
+		decoder.decode(packet.toEncodedVideoChunk());
 		this.lastSubmitted = packet;
 		this.inFlight.add(packet.microsecondTimestamp);
 
-		await this.resolver?.promise;
+		// Hand over the next packet only once the queue is back down. An output wakes the
+		// wait as well as a dequeue, so it checks again rather than taking every wake as
+		// room: that let a fill queue two packets for each one the decoder took.
+		const since = performance.now();
+		while (this.decoder === decoder && decoder.decodeQueueSize > MAX_DECODE_QUEUE) {
+			if (performance.now() - since > STALL_TIMEOUT_MS) {
+				console.warn('[video] the decoder stopped taking packets; restarting it');
+				this.reseed();
+				return;
+			}
+
+			const wake = Promise.withResolvers();
+			this.resolver = wake;
+			const poll = setTimeout(() => wake.resolve(null), STALL_TIMEOUT_MS / 4);
+			await wake.promise;
+			clearTimeout(poll);
+		}
+	}
+
+	/**
+	 * Pushes out the frames the decoder is holding back to put them in order. It takes
+	 * nothing but a keyframe afterwards, so whatever it was decoding forward ends here.
+	 */
+	public async flush() {
+		const decoder = this.decoder;
+		if (decoder?.state !== 'configured') return;
+
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const finished = await Promise.race([
+			// A reset while flushing rejects it; that one was ours.
+			decoder.flush().then(() => true, () => true),
+			new Promise<boolean>((resolve) => {
+				timer = setTimeout(() => resolve(false), STALL_TIMEOUT_MS);
+			}),
+		]);
+		clearTimeout(timer);
+
+		if (this.decoder !== decoder) return;
+		if (!finished) {
+			console.warn('[video] the decoder did not finish flushing; restarting it');
+			this.reseed();
+		}
+		this.lastSubmitted = null;
 	}
 
 	public dispose() {
@@ -607,8 +731,7 @@ export class VideoExporter {
 
 	private async initialize() {
 		try {
-			const blob = await getAssetFile(this.asset);
-			this.input = new Input({ formats: ALL_FORMATS, source: new BlobSource(blob) });
+			this.input = new Input({ formats: ALL_FORMATS, source: await getAssetSource(this.asset) });
 			const track = await this.input.getPrimaryVideoTrack();
 			assert(track, 'Video track not found');
 			// See VideoBuffer.initialize: clamp so an edit-list head trim (negative first
@@ -699,10 +822,9 @@ export function getVideoTrack(source: VideoAsset) {
 
 	promise = (async () => {
 		try {
-			const blob = await getAssetFile(source);
 			const input = new Input({
 				formats: ALL_FORMATS,
-				source: new BlobSource(blob)
+				source: await getAssetSource(source),
 			});
 			return await input.getPrimaryVideoTrack();
 		} catch {

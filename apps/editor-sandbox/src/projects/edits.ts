@@ -31,11 +31,49 @@ export type SaveState =
 	| { status: 'saved'; at: number }
 	| { status: 'failed'; message: string };
 
+/** The writer of whatever project is mounted in a world (see `getEditWriter`). */
+const writers = new WeakMap<World, EditWriter>();
+
+/**
+ * Whose hand is on the editor right now. Every change goes through the one
+ * `DocumentEditor`, whoever asked for it, so by the time an edit reaches the
+ * writer nothing about it says whether a person dragged something or an
+ * agent's tool set a prop — and the journal of who wrote each revision (the
+ * desktop's journal.ts) needs to know. The agent API raises this around each of
+ * its edits; everything else is the person.
+ */
+let actor: 'canvas' | 'agent' = 'canvas';
+
+/** Runs an edit an agent's tool asked for, so what it changes is journalled as the agent's. */
+export async function asAgent<T>(run: () => T | Promise<T>): Promise<T> {
+	const previous = actor;
+	actor = 'agent';
+	try {
+		return await run();
+	} finally {
+		actor = previous;
+	}
+}
+
+/**
+ * What became of the edits that were owed to the file when `settled` was
+ * asked: the sources (or `source (prop)`) a write declined — a prop the source
+ * computes, an element inside a loop — and the error of a write that failed
+ * outright. Both empty means everything that was asked for is on disk.
+ */
+export interface WriteOutcome {
+	skipped: string[];
+	error?: string;
+}
+
 class EditWriter {
 	private readonly dir: string;
 	private readonly world: World;
 	private state: SaveState = { status: 'idle' };
 	private readonly watchers = new Set<(state: SaveState) => void>();
+	// Writes that are out, and who is waiting for the file to be caught up.
+	private writing = 0;
+	private readonly waiters = new Set<{ outcome: WriteOutcome; resolve: (outcome: WriteOutcome) => void }>();
 
 	// Unrolls first: everything else addressed to what a loop rendered is
 	// addressed to the copies the unroll makes. Then inserts, in the order
@@ -62,11 +100,19 @@ class EditWriter {
 	// insert: the loop still renders them, it just cannot be written to.
 	private sent: UnrollEdit[] = [];
 	private timer: ReturnType<typeof setTimeout> | undefined;
+	// Who made the edits waiting to be written (see `asAgent`).
+	private readonly actors = new Set<'canvas' | 'agent'>();
+	// What the journal says the next write came from (see `noteNextWrite`).
+	private note: string | undefined;
 	private disposed = false;
 
-	public constructor(dir: string, world: World) {
+	/** Told what every write came to, for whoever keeps track of which revision the canvas is showing. */
+	private readonly onWritten: ((result: WriteResult) => void) | undefined;
+
+	public constructor(dir: string, world: World, onWritten?: (result: WriteResult) => void) {
 		this.dir = dir;
 		this.world = world;
+		this.onWritten = onWritten;
 	}
 
 	public get saveState(): SaveState {
@@ -85,9 +131,53 @@ class EditWriter {
 		for (const listener of this.watchers) listener(state);
 	}
 
+	/**
+	 * Resolves once nothing is owed to the file any more — no edit queued, no
+	 * write out — with what the writes in between declined or failed at. This is
+	 * how a caller that is not looking at the canvas (an agent) learns whether
+	 * its edit actually reached the source: the canvas shows a value the moment
+	 * it is set, the file only after the debounce and the write. Resolves at
+	 * once when the file is already caught up.
+	 */
+	public settled(timeoutMs = 8_000): Promise<WriteOutcome> {
+		if (this.disposed || (!this.writing && !this.hasQueuedEdits())) return Promise.resolve({ skipped: [] });
+		return new Promise((resolve) => {
+			const waiter = { outcome: { skipped: [] } as WriteOutcome, resolve };
+			this.waiters.add(waiter);
+			setTimeout(() => {
+				if (!this.waiters.delete(waiter)) return;
+				resolve({ ...waiter.outcome, error: waiter.outcome.error ?? 'The edit was applied to the canvas but had not been written to the source after 8 seconds.' });
+			}, timeoutMs);
+		});
+	}
+
+	/** Tells whoever is waiting what a write came to, and lets them go once the file is caught up. */
+	private settle(result: { skipped?: string[]; error?: string }): void {
+		for (const waiter of this.waiters) {
+			if (result.skipped?.length) waiter.outcome.skipped.push(...result.skipped);
+			if (result.error && !waiter.outcome.error) waiter.outcome.error = result.error;
+		}
+		if (this.writing || this.hasQueuedEdits()) return;
+		for (const waiter of [...this.waiters]) {
+			this.waiters.delete(waiter);
+			waiter.resolve({ ...waiter.outcome, skipped: [...new Set(waiter.outcome.skipped)] });
+		}
+	}
+
+	/**
+	 * Says in the project's journal what the edits waiting to be written came
+	 * from — `typed "split"`, from the voice bar — so `posterract changes`
+	 * shows it beside them. Nothing waiting, nothing to say: a command that
+	 * changed no source leaves no note for whatever is written next.
+	 */
+	public noteNextWrite(note: string): void {
+		if (this.hasQueuedEdits()) this.note = note.slice(0, 300);
+	}
+
 	/** Records an edit; the write follows once edits stop arriving. */
 	public push(edit: EntityEdit): void {
 		if (this.disposed) return;
+		this.actors.add(actor);
 		if (this.state.status !== 'saving') this.setState({ status: 'saving' });
 
 		if (edit.kind === 'unroll') {
@@ -135,6 +225,7 @@ class EditWriter {
 		// they came from are on their way out.
 		this.flush();
 		this.disposed = true;
+		if (writers.get(this.world) === this) writers.delete(this.world);
 	}
 
 	/**
@@ -269,11 +360,25 @@ class EditWriter {
 		this.texts = heldTexts;
 		this.removes = heldRemoves;
 
-		writeProject(this.dir, edits)
-			.then((result) => this.report(result))
+		// A write is the agent's only when nothing of the person's is in it: a
+		// drag that lands in the same 120 ms as a tool call is still their edit.
+		const writer = this.actors.size === 1 && this.actors.has('agent') ? 'agent' : 'canvas';
+		this.actors.clear();
+		const note = this.note;
+		this.note = undefined;
+
+		this.writing += 1;
+		writeProject(this.dir, edits, writer, note)
+			.then((result) => {
+				this.writing -= 1;
+				this.report(result);
+				this.settle(result);
+			})
 			.catch((error: unknown) => {
+				this.writing -= 1;
 				this.setState({ status: 'failed', message: message(error) });
 				toast.error('Could not write to the project', { description: message(error) });
+				this.settle({ error: message(error) });
 			});
 	}
 
@@ -320,6 +425,7 @@ class EditWriter {
 	}
 
 	private report(result: WriteResult): void {
+		this.onWritten?.(result);
 		if (result.error) {
 			this.setState({ status: 'failed', message: result.error });
 			toast.error('Could not write to the project', { description: result.error });
@@ -425,8 +531,18 @@ const pendingsOf = (unroll: UnrollEdit): string[] => {
  * next edit to the same element would still address it by a position the
  * write itself may have invalidated.
  */
-export function createEditWriter(dir: string, world: World): EditWriter {
-	return new EditWriter(dir, world);
+export function createEditWriter(dir: string, world: World, onWritten?: (result: WriteResult) => void): EditWriter {
+	const writer = new EditWriter(dir, world, onWritten);
+	writers.set(world, writer);
+	return writer;
 }
+
+/**
+ * The writer of the project mounted in `world`, for a caller that changed the
+ * document through the editor and needs to know when — and whether — the file
+ * has it (see `EditWriter.settled`). A remount replaces it; undefined while
+ * nothing is mounted.
+ */
+export const getEditWriter = (world: World): EditWriter | undefined => writers.get(world);
 
 export type { EditWriter };

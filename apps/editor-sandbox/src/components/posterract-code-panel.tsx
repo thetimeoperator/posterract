@@ -14,13 +14,14 @@ import {
 } from "@posterract/contract/local-agent";
 import { MAIN_CHANNELS } from "@desktop/main-channels";
 import { Icon } from "@/components/ui/icon";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverPortal, PopoverTrigger } from "@/components/ui/popover";
 import { mainBridge } from "@/lib/ipc";
 import { useProject } from "@/context/project";
 import { AGENT_RECIPES, type AgentRecipe } from "@/engine/agent-recipes";
 import { useWorld } from "@posterract/koota-solid";
 import { getDocumentEditor } from "@/engine/editor";
 import { resolveNode } from "@/context/agent-api/nodes";
+import { registerCommand } from "@/engine/voice";
 
 import type { Entity } from "koota";
 
@@ -42,7 +43,7 @@ function ago(at: number): string {
  * always "open this project in that client", and the one-time registration is
  * folded into the first click rather than given a step of its own.
  */
-export function PosterractCodePanel() {
+export function PosterractCodePanel(props: { compact?: boolean } = {}) {
   const project = useProject();
   const world = useWorld();
   const [busy, setBusy] = createSignal<LocalAgentKind | null>(null);
@@ -141,26 +142,34 @@ export function PosterractCodePanel() {
       void openIn(lastUsed());
     };
     window.addEventListener("keydown", onKey);
+    // The same command, by name, for the voice bar.
+    const unregister = registerCommand({
+      id: "agent.open", label: "Open this project in your agent", group: "Agent", keys: ["o", "mod", "shift"],
+      aliases: ["open in agent", "open in my agent", "open this in claude", "hand it to my agent"],
+      action: () => void openIn(lastUsed()),
+    });
     onCleanup(() => {
       stopStatus();
+      unregister();
       window.removeEventListener("keydown", onKey);
     });
   });
 
   return (
-    <Popover open={open()} onOpenChange={setOpen} placement="top-start">
+    <Popover open={open()} onOpenChange={setOpen} placement={props.compact ? 'bottom-end' : 'top-start'}>
       <PopoverTrigger
         class="posterract-code-toggle"
-        classList={{ "is-active": connected() }}
+        classList={{ "is-active": connected(), "posterract-agent-compact": props.compact }}
         title={`${project.name()} · ${connected() ? "agent connected" : "connect an agent"}`}
         aria-label="Open this project in a coding agent"
       >
-        <span>AI</span>
-        {connected() ? "Agent · Connected" : "Agent"}
-        <kbd>⇧⌘O</kbd>
+        <Icon name="ai-generate" class="size-4" />
+        {connected() && !props.compact ? "Agent · Connected" : "Agent"}
+        <Show when={!props.compact}><kbd>⇧⌘O</kbd></Show>
       </PopoverTrigger>
 
-      <PopoverContent class="w-80 p-0">
+      <PopoverPortal>
+      <PopoverContent class="posterract-agent-popover w-80 p-0" aria-label="Coding agent connection and actions">
         <Show when={connected()}>
           <div class="flex items-center gap-2 border-b px-3 py-2.5 text-xs">
             <span class="size-1.5 rounded-full bg-emerald-400" />
@@ -286,6 +295,7 @@ export function PosterractCodePanel() {
           </div>
         </Show>
       </PopoverContent>
+      </PopoverPortal>
     </Popover>
   );
 }

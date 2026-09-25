@@ -12,6 +12,7 @@ import {
   Keyframe as KeyframeTrait,
   KeyframeTrack,
   Selected,
+  TrackLoop,
   findClosestParentGeometry,
   getActiveEntity,
   setPlayhead,
@@ -20,7 +21,7 @@ import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Keyframe } from '@/components/ui/keyframe';
 import { Tooltip, TooltipContent, TooltipPortal, TooltipTrigger } from '@/components/ui/tooltip';
-import { useDerived } from '@/engine/hooks';
+import { useDerived, useEditor } from '@/engine/hooks';
 import { KEYFRAME_TRACK_HEIGHT } from '@/engine/timeline';
 import { NESTED_INDENT_PX } from './config';
 import { setRowHover } from './hover';
@@ -81,6 +82,23 @@ export function KeyframeLayer(props: LayerRowProps) {
     setPlayhead(world, scene, frame);
   };
 
+  /**
+   * What the track does after its last keyframe: hold, play again, or play
+   * there and back. One button that steps through the three, because that is
+   * all there is to say about it — and it is what keeps a wiggle the handful
+   * of keyframes it is, rather than one per change of direction.
+   */
+  const editor = useEditor();
+  const loop = () => track()?.loop ?? TrackLoop.NONE;
+  const cycleLoop = () => {
+    const next = loop() === TrackLoop.NONE ? true : loop() === TrackLoop.REPEAT ? 'pingpong' : false;
+    editor.editProperty(entity(), 'loop', next);
+  };
+  const loopLabel = () =>
+    loop() === TrackLoop.REPEAT ? 'Repeats — click for there and back'
+      : loop() === TrackLoop.PINGPONG ? 'There and back — click to play once'
+        : 'Plays once — click to repeat';
+
   return (
     <div
       class="w-full flex items-center text-muted-foreground justify-between pl-0.5 pr-2"
@@ -111,6 +129,23 @@ export function KeyframeLayer(props: LayerRowProps) {
         </div>
       </div>
       <div class="flex items-center gap-0.5 shrink-0">
+        <Tooltip placement="top">
+          <TooltipTrigger
+            as={Button}
+            variant="ghost"
+            size="icon"
+            aria-label={loopLabel()}
+            classList={{ 'text-foreground': loop() !== TrackLoop.NONE, 'opacity-40': loop() === TrackLoop.NONE }}
+            onClick={cycleLoop}
+          >
+            <Show when={loop() === TrackLoop.PINGPONG} fallback={<Icon name={loop() === TrackLoop.NONE ? 'no-loop' : 'loop'} class="size-6" />}>
+              <span class="text-[11px] leading-none" aria-hidden="true">⇄</span>
+            </Show>
+          </TooltipTrigger>
+          <TooltipPortal>
+            <TooltipContent>{loopLabel()}</TooltipContent>
+          </TooltipPortal>
+        </Tooltip>
         <Tooltip placement="top">
           <TooltipTrigger
             as={Button}

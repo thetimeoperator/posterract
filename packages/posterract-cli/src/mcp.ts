@@ -6,7 +6,11 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import * as z from "zod/v4";
 import { version } from "../package.json";
-import { readLocalControlSession, requestProjectControl, resolveProjectDir } from "./project-control";
+import { formatInspect, formatLook, type InspectResult, type LookResult } from "./format";
+import { createEditFeedback, memoryStore } from "./edit-feedback";
+import { offline } from "./offline-loader";
+import { canRunOnEngine, engineRequest } from "./cli-client";
+import { DesktopUnavailableError, readLocalControlSession, requestProjectControl, resolveProjectDir } from "./project-control";
 import { fetchVideo } from "./ytdlp";
 import { join as joinPath } from "node:path";
 
@@ -35,10 +39,25 @@ function record(value: unknown): Record<string, unknown> {
     : { result: value };
 }
 
-function jsonResult(value: unknown): ToolResult {
+/**
+ * No tool answers with more than this. An agent reads a result into its
+ * context whole — it cannot page or filter it the way a shell pipeline can —
+ * so a result past this size is not a bigger answer, it is no answer: the
+ * client rejects it or the agent's context is spent on it. Roughly fifteen
+ * thousand tokens; every tool that can exceed it has a way to ask for less.
+ */
+const MAX_RESULT_CHARS = 60_000;
+
+function jsonResult(value: unknown, narrowWith = "Ask for less: name the ids, scene, time or lines you need."): ToolResult {
+  const text = JSON.stringify(value, null, 2);
+  if (text.length <= MAX_RESULT_CHARS) {
+    return { content: [{ type: "text", text }], structuredContent: record(value) };
+  }
+
+  const note = `Result was ${text.length.toLocaleString("en-US")} characters; only the first ${MAX_RESULT_CHARS.toLocaleString("en-US")} are shown. ${narrowWith}`;
   return {
-    content: [{ type: "text", text: JSON.stringify(value, null, 2) }],
-    structuredContent: record(value),
+    content: [{ type: "text", text: `${note}\n\n${text.slice(0, MAX_RESULT_CHARS)}\n… [truncated]` }],
+    structuredContent: { truncated: true, totalChars: text.length, note },
   };
 }
 
@@ -104,24 +123,72 @@ export async function servePosterractMcp(explicitProjectDir?: string): Promise<v
   const projectDir = () => resolveProjectDir(explicitProjectDir);
   const call = async (tool: string, path: string, input: unknown = undefined, timeoutMs = DEFAULT_TIMEOUT_MS) => {
     const activeProjectDir = projectDir();
-    return requestProjectControl(
-      activeProjectDir,
-      { path, input },
-      timeoutMs,
-      {
-        cliVersion: version,
-        command: `mcp:${tool}`,
-        projectDir: activeProjectDir,
-        invokedAt: Date.now(),
-        targets: targetsOf(input),
-      },
-    );
+    try {
+      return await requestProjectControl(
+        activeProjectDir,
+        { path, input },
+        timeoutMs,
+        {
+          cliVersion: version,
+          command: `mcp:${tool}`,
+          projectDir: activeProjectDir,
+          invokedAt: Date.now(),
+          targets: targetsOf(input),
+        },
+      );
+    } catch (error) {
+      // Desktop is closed. What only needs a renderer — a frame, an export, an
+      // inspection — is answered by the engine, which this starts for itself
+      // (see cli-client); what needs the person's editor still says so.
+      if (!(error instanceof DesktopUnavailableError) || !canRunOnEngine(path)) throw error;
+      return engineRequest(activeProjectDir, { path, input }, timeoutMs);
+    }
   };
-  const safely = (fn: () => Promise<ToolResult>) => async () => {
-    try { return await fn(); } catch (error) { return errorResult(error); }
+  // What is newly wrong with the video, attached to whatever the agent asked
+  // for next (see ./edit-feedback): every agent gets it, because every agent
+  // that is connected talks to this server. The layout half goes through `call`,
+  // so it is answered by Desktop when it is open and by the engine when not.
+  const feedback = createEditFeedback({
+    projectDir,
+    store: memoryStore(),
+    lint: (dir) => offline().lint(dir, dir).lines,
+    inspect: async (dir) => {
+      // The canvas shows a file change a moment after it is made; measuring before that is measuring the old video.
+      for (let waited = 0; waited < 3_000; waited += 150) {
+        const context = await call("feedback", "context", { tree: false }) as { sourceRevision?: string | null; shownRevision?: string | null };
+        if (!context.shownRevision || context.shownRevision === context.sourceRevision) break;
+        await new Promise((done) => setTimeout(done, 150));
+      }
+      const scenes = offline().outline(dir, dir).entries.filter((entry) => entry.tag === "scene" && entry.id && entry.depth <= 1);
+      const results: InspectResult[] = [];
+      for (const scene of scenes) results.push(await call("feedback", "inspect", { id: scene.id }, RENDER_TIMEOUT_MS) as InspectResult);
+      return results;
+    },
+  });
+  // The server starts with the agent's session: what is wrong already is not news, what goes wrong from here on is.
+  feedback.baseline();
+
+  /** `result` with what is newly wrong attached. A tool that *is* a check says its own findings, so they are only recorded as heard. */
+  const withFeedback = async (result: ToolResult, checksItself?: "lint" | "inspect"): Promise<ToolResult> => {
+    try {
+      if (checksItself) {
+        // (A lint that found errors answers as an error, and is heard all the same.)
+        feedback.heard(result.content.flatMap((item) => (item.type === "text" ? item.text.split("\n") : [])), checksItself);
+        return result;
+      }
+      if (result.isError) return result;
+      const note = await feedback.since();
+      return note ? { ...result, content: [...result.content, { type: "text", text: note }] } : result;
+    } catch {
+      return result;
+    }
   };
-  const safelyWith = <T>(fn: (value: T) => Promise<ToolResult>) => async (value: T) => {
-    try { return await fn(value); } catch (error) { return errorResult(error); }
+
+  const safely = (fn: () => Promise<ToolResult>, checksItself?: "lint" | "inspect") => async () => {
+    try { return await withFeedback(await fn(), checksItself); } catch (error) { return errorResult(error); }
+  };
+  const safelyWith = <T>(fn: (value: T) => Promise<ToolResult>, checksItself?: "lint" | "inspect") => async (value: T) => {
+    try { return await withFeedback(await fn(value), checksItself); } catch (error) { return errorResult(error); }
   };
 
   const handle = serveStdio(() => {
@@ -129,10 +196,17 @@ export async function servePosterractMcp(explicitProjectDir?: string): Promise<v
       { name: "posterract", version },
       {
         instructions:
-          "Posterract canvas. Canvas-first: while Desktop has the project open, make composition edits through these tools " +
-          "(posterract_write_source with the revisionId from posterract_read_source, or the semantic set/create/move tools), never by rewriting index.tsx with file tools; " +
-          "tool edits show on the canvas instantly and keep undo. Start with posterract_connection_status and posterract_get_context; a scene's `skill` names the SKILL.md folder to follow for it; " +
-          "validate and inspect captures before claiming success; export only when asked. Cannot post, schedule, or access credentials.",
+          "Posterract canvas. File-first: the project's TSX is the document, so edit it with your own file tools (read a range, search, replace a string) like any code. " +
+          "Desktop watches the file and shows the change on the canvas: a change to values or text in place, as one step of the user's undo history (Cmd+Z takes it back); " +
+          "adding, removing or moving elements by reloading the canvas, which keeps the user's own undo steps and records yours in Version History. " +
+          "Before you write, posterract_changes with the revisionId you last saw shows what the user changed since: work around it, not over it. " +
+          "Start a turn with posterract_look (what the author has selected, their playhead, their `@agent` notes); " +
+          "read with posterract_outline, then posterract_read_source by `id` or `lines`, never a whole large file; ask posterract_describe instead of guessing an element or prop name. " +
+          "After you edit, your next call to any of these tools comes back with what is newly wrong attached (unknown props, text off the frame, with the fix), each problem once: fix it when you hear it. " +
+          "posterract_inspect reports facts and every open problem across the whole video: fix every error before looking at a capture, and capture only to judge taste. " +
+          "Say where things go with `place` (\"lower-third\", \"bottom-right\" + `inset`) rather than computing x/y; keep anything that repeats a few keyframes and a `loop`; tune a preset with `distance`/`amount`/`easing` before writing keyframes. " +
+          "With Desktop closed, inspect, geometry, validate, capture and export still answer: the engine (the app with no window) is started for them. " +
+          "A scene's `skill` names the SKILL.md folder to follow for it; export only when asked. Cannot post, schedule, or access credentials.",
       },
     );
 
@@ -203,26 +277,52 @@ export async function servePosterractMcp(explicitProjectDir?: string): Promise<v
 
     server.registerTool("posterract_get_context", {
       title: "Get Posterract project context",
-      description: "Read active video, playhead, source revision, variables, fonts, and optionally the complete runtime node tree.",
-      inputSchema: z.object({ tree: z.boolean().optional().default(true) }),
+      description:
+        "Read active video, playhead, source revision, variables and fonts. Small by default. " +
+        "`tree: true` adds the runtime node tree: each element with its id, kind, the props that place it " +
+        "(x, y, width, height, start, end, src, ...), its text, and its motion in one line (keyframes per property, animation presets). " +
+        "Narrow a large tree with `scene` (one scene id) and `depth`; `motion: true` lists every keyframe as a node, which is rarely needed.",
+      inputSchema: z.object({
+        tree: z.boolean().optional().default(false),
+        scene: z.string().min(1).optional(),
+        depth: z.number().int().min(0).max(32).optional(),
+        motion: z.boolean().optional(),
+      }),
       annotations: { readOnlyHint: true },
-    }, safelyWith(async ({ tree }: { tree: boolean }) => jsonResult(await call("get_context", "context", { tree }))));
+    }, safelyWith(async (input: { tree: boolean; scene?: string; depth?: number; motion?: boolean }) =>
+      jsonResult(
+        await call("get_context", "context", input),
+        "Narrow the tree: pass `scene` (one scene id) and/or `depth`, and leave `motion` off.",
+      )));
 
     server.registerTool("posterract_read_source", {
       title: "Read composition source",
       description:
         "Read a local Posterract TSX source file and its conflict-safe revision ID. " +
         "The default path \"auto\" resolves to the project's actual entry file (src/index.tsx, index.tsx, ...), " +
-        "which some migrated projects keep at the project root; the result reports the resolved path.",
-      inputSchema: z.object({ path: z.string().min(1).default("auto") }),
+        "which some migrated projects keep at the project root; the result reports the resolved path. " +
+        "Read a part instead of the whole file: `outline: true` gives one line per element with the lines it spans " +
+        "(keyframes folded to counts); `id` gives one element with its children; `lines: [from, to]` gives a range. " +
+        "A very large file answers with its outline unless `full: true`. The revision is always the whole file's.",
+      inputSchema: z.object({
+        path: z.string().min(1).default("auto"),
+        id: z.string().min(1).optional(),
+        lines: z.tuple([z.number().int().min(1), z.number().int().min(1)]).optional(),
+        outline: z.boolean().optional(),
+        full: z.boolean().optional(),
+      }),
       annotations: { readOnlyHint: true },
-    }, safelyWith(async ({ path }: { path: string }) => jsonResult(await call("read_source", "source.read", { path }))));
+    }, safelyWith(async (input: { path: string; id?: string; lines?: [number, number]; outline?: boolean; full?: boolean }) =>
+      jsonResult(
+        await call("read_source", "source.read", input),
+        "Read a part: `outline: true`, `id`, or `lines: [from, to]`.",
+      )));
 
     server.registerTool("posterract_write_source", {
       title: "Write composition source",
       description: "Atomically replace a Posterract TSX source file only if its revision still matches. Returns compiler diagnostics.",
       inputSchema: z.object({
-        path: z.string().min(1).default("src/index.tsx"),
+        path: z.string().min(1).default("auto"),
         content: z.string(),
         expectedRevisionId: z.string().min(1),
       }),
@@ -230,14 +330,106 @@ export async function servePosterractMcp(explicitProjectDir?: string): Promise<v
     }, safelyWith(async (input: { path: string; content: string; expectedRevisionId: string }) =>
       jsonResult(await call("write_source", "source.write", input))));
 
+    server.registerTool("posterract_edit_source", {
+      title: "Edit composition source",
+      description:
+        "Replace one string of a TSX source with another — the edit a file tool makes. If you have file tools of your own (Edit, apply_patch, an IDE), " +
+        "use those on the file instead: Desktop shows the change either way. This is for a client that has only these tools. `old_string` has to match the file " +
+        "exactly (read it first with posterract_read_source by `id` or `lines`) and be there once, unless `replace_all`. Costs the two strings, where " +
+        "posterract_write_source costs the whole file. Answers with the new revisionId and what the compiler and the vocabulary lint say about the result.",
+      inputSchema: z.object({
+        path: z.string().min(1).default("auto"),
+        old_string: z.string().min(1),
+        new_string: z.string(),
+        replace_all: z.boolean().optional(),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true },
+    }, safelyWith(async (input: { path: string; old_string: string; new_string: string; replace_all?: boolean }) =>
+      jsonResult(await call("edit_source", "source.edit", {
+        path: input.path,
+        oldString: input.old_string,
+        newString: input.new_string,
+        ...(input.replace_all ? { replaceAll: true } : {}),
+      }))));
+
+    // The three below read the project folder themselves (see ./offline): they
+    // answer with Desktop closed, the way `ffprobe` needs no player running.
+    server.registerTool("posterract_describe", {
+      title: "Describe the composition vocabulary",
+      description:
+        "What can be written in a composition. With no `element`: every element in one line, led by the common tasks and the element " +
+        "that does each. With an `element` (e.g. \"text\"): the props it takes, their types and allowed values. Generated from the SDK's " +
+        "types, so it is never out of date. Ask this instead of guessing a prop name. Works with Desktop closed.",
+      inputSchema: z.object({ element: z.string().min(1).optional() }),
+      annotations: { readOnlyHint: true },
+    }, safelyWith(async ({ element }: { element?: string }) => {
+      const report = offline().describe(element);
+      return { content: [{ type: "text", text: report.lines.join("\n") }] };
+    }));
+
+    server.registerTool("posterract_outline", {
+      title: "Outline composition source",
+      description:
+        "One line per element of the composition source: id, name, when it plays, where it sits, what it shows, and the lines it spans " +
+        "in the file — keyframes folded to a count per property, long runs of look-alike siblings to one line. Start here instead of " +
+        "reading a large source whole, then read only the lines (or the `id`) you need. Works with Desktop closed.",
+      inputSchema: z.object({ path: z.string().min(1).optional() }),
+      annotations: { readOnlyHint: true },
+    }, safelyWith(async ({ path }: { path?: string }) => {
+      const dir = projectDir();
+      const report = offline().outline(path ?? dir, dir);
+      const header = `${report.path} · ${report.totalLines} lines · ${report.totalChars.toLocaleString("en-US")} chars · ${report.entries.length} elements`;
+      return { content: [{ type: "text", text: [header, ...report.lines].join("\n") }] };
+    }));
+
+    server.registerTool("posterract_lint", {
+      title: "Lint composition source",
+      description:
+        "Check the composition source against the vocabulary: a prop an element does not take (with what was probably meant — `fill` on " +
+        "a <text> is `color`), a value an enumeration does not name, a required prop left out. The runtime silently ignores what it does " +
+        "not know, so without this such a mistake shows up only as a render that looks wrong. Works with Desktop closed.",
+      inputSchema: z.object({ path: z.string().min(1).optional() }),
+      annotations: { readOnlyHint: true },
+    }, safelyWith(async ({ path }: { path?: string }) => {
+      const dir = projectDir();
+      const report = offline().lint(path ?? dir, dir);
+      const errors = report.diagnostics.filter((entry) => entry.severity === "error").length;
+      const text = report.diagnostics.length
+        ? [...report.lines, `${errors} error(s), ${report.diagnostics.length - errors} warning(s)`].join("\n")
+        : `✓ ${report.path}: every prop and value is one the editor understands`;
+      return {
+        content: [{ type: "text", text }],
+        structuredContent: { path: report.path, ok: errors === 0, diagnostics: report.diagnostics },
+        ...(errors ? { isError: true } : {}),
+      };
+    }, "lint"));
+
+    server.registerTool("posterract_changes", {
+      title: "See what changed, and who changed it",
+      description:
+        "What changed in the project's source, element by element, and who changed it: the person on the canvas, an agent's tool, a direct " +
+        "edit of the file, or the app's own housekeeping — `person  text#hook  y  1480 → 1200`. Pass `since` (a revisionId an earlier read or " +
+        "edit handed you) to see everything written after the source last stood there. Run it before you write, so you work around what your " +
+        "collaborator decided instead of over it. Works with Desktop closed.",
+      inputSchema: z.object({ since: z.string().min(6).optional(), limit: z.number().int().min(1).max(50).optional() }),
+      annotations: { readOnlyHint: true },
+    }, safelyWith(async (input: { since?: string; limit?: number }) => {
+      const report = offline().changes(projectDir(), input);
+      return {
+        content: [{ type: "text", text: report.lines.join("\n") }],
+        structuredContent: { path: report.path, revisionId: report.revisionId, since: report.since },
+      };
+    }));
+
     server.registerTool("posterract_validate", {
       title: "Validate composition",
       description:
-        "Compile and evaluate the project's composition sources in memory and report diagnostics. " +
+        "Compile and evaluate the project's composition sources in memory and report diagnostics — compiler errors, and the vocabulary " +
+        "lint's findings (props an element does not take, values an enumeration does not name). `ok` is false when either has an error. " +
         "Genuinely read-only: stable-ID stamping runs on an in-memory copy, nothing is written to disk, and the live canvas is untouched.",
       inputSchema: z.object({}),
       annotations: { readOnlyHint: true },
-    }, safely(async () => jsonResult(await call("validate", "validate"))));
+    }, safely(async () => jsonResult(await call("validate", "validate")), "lint"));
 
     server.registerTool("posterract_get_canvas_state", {
       title: "Get live canvas state",
@@ -267,10 +459,23 @@ export async function servePosterractMcp(explicitProjectDir?: string): Promise<v
       annotations: { readOnlyHint: false },
     }, safelyWith(async (input: { time: number }) => jsonResult(await call("seek", "canvas.seek", input))));
 
+    // Every edit of named elements takes this. It is a conflict check about those
+    // elements only: a change anywhere else in the file does not refuse the edit.
+    const expectedRevisionId = z.string().min(1).optional().describe(
+      "The revisionId you last saw (from a read or an earlier edit). If someone changed the element(s) this edit names since then, " +
+        "nothing is changed and the answer says what they changed. A change elsewhere in the file is no conflict.",
+    );
+    const elementTree = z.object({
+      tag: z.string().regex(/^[a-z][a-zA-Z0-9]*$/),
+      props: z.record(z.string(), z.any()).optional(),
+      text: z.string().optional(),
+      children: z.array(z.any()).optional(),
+    });
+
     server.registerTool("posterract_set_properties", {
       title: "Set element properties",
       description: "Apply source-backed properties such as position, size, timing, opacity, rotation, volume, and styles to a stable element ID.",
-      inputSchema: z.object({ id: z.string().min(1), properties: z.record(z.string(), z.any()) }),
+      inputSchema: z.object({ id: z.string().min(1), properties: z.record(z.string(), z.any()), expectedRevisionId }),
       annotations: { readOnlyHint: false, destructiveHint: true },
     }, safelyWith(async (input: { id: string; properties: Record<string, unknown> }) =>
       jsonResult(await call("set_properties", "canvas.setProperties", input))));
@@ -278,23 +483,36 @@ export async function servePosterractMcp(explicitProjectDir?: string): Promise<v
     server.registerTool("posterract_set_text", {
       title: "Set text content",
       description: "Replace the source-backed text content of a text element.",
-      inputSchema: z.object({ id: z.string().min(1), text: z.string() }),
+      inputSchema: z.object({ id: z.string().min(1), text: z.string(), expectedRevisionId }),
       annotations: { readOnlyHint: false, destructiveHint: true },
     }, safelyWith(async (input: { id: string; text: string }) => jsonResult(await call("set_text", "canvas.setText", input))));
+
+    server.registerTool("posterract_apply_edits", {
+      title: "Apply several edits as one",
+      description:
+        "Several element edits in one call: one step of the user's undo history, one write of the source, and all of them or none " +
+        "(everything is checked before anything changes). Each edit is `{op, ...}` with the same fields as the single tools: " +
+        "`set` {id, properties} · `text` {id, text} · `create` {parentId, beforeId?, element} · `move` {id, parentId, beforeId?} · " +
+        "`delete` {ids} · `duplicate` {ids}. A later edit may name an element an earlier `create` of the same call makes, by the `id` in its props. " +
+        "Use this instead of a run of single calls whenever a change is more than one edit: a caption that is a group, a shape and a text is one thing to the user.",
+      inputSchema: z.object({
+        edits: z.array(z.discriminatedUnion("op", [
+          z.object({ op: z.literal("set"), id: z.string().min(1), properties: z.record(z.string(), z.any()) }),
+          z.object({ op: z.literal("text"), id: z.string().min(1), text: z.string() }),
+          z.object({ op: z.literal("create"), parentId: z.string().min(1), beforeId: z.string().optional(), element: elementTree }),
+          z.object({ op: z.literal("move"), id: z.string().min(1), parentId: z.string().min(1), beforeId: z.string().optional() }),
+          z.object({ op: z.literal("delete"), ids: z.array(z.string()).min(1) }),
+          z.object({ op: z.literal("duplicate"), ids: z.array(z.string()).min(1) }),
+        ])).min(1).max(200),
+        expectedRevisionId,
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true },
+    }, safelyWith(async (input: Record<string, unknown>) => jsonResult(await call("apply_edits", "canvas.batch", input))));
 
     server.registerTool("posterract_create_element", {
       title: "Create composition element",
       description: "Insert a new Posterract element tree under a source-backed parent and select it on the live canvas.",
-      inputSchema: z.object({
-        parentId: z.string().min(1),
-        beforeId: z.string().optional(),
-        element: z.object({
-          tag: z.string().regex(/^[a-z][a-zA-Z0-9]*$/),
-          props: z.record(z.string(), z.any()).optional(),
-          text: z.string().optional(),
-          children: z.array(z.any()).optional(),
-        }),
-      }),
+      inputSchema: z.object({ parentId: z.string().min(1), beforeId: z.string().optional(), element: elementTree }),
       annotations: { readOnlyHint: false, destructiveHint: true },
     }, safelyWith(async (input: Record<string, unknown>) => jsonResult(await call("create_element", "canvas.create", input))));
 
@@ -344,14 +562,14 @@ export async function servePosterractMcp(explicitProjectDir?: string): Promise<v
     server.registerTool("posterract_delete", {
       title: "Delete elements",
       description: "Delete source-backed elements by stable ID. This can be undone in the editor.",
-      inputSchema: z.object({ ids: z.array(z.string()).min(1) }),
+      inputSchema: z.object({ ids: z.array(z.string()).min(1), expectedRevisionId }),
       annotations: { readOnlyHint: false, destructiveHint: true },
     }, safelyWith(async (input: { ids: string[] }) => jsonResult(await call("delete", "canvas.remove", input))));
 
     server.registerTool("posterract_move", {
       title: "Move element",
       description: "Move an element under another source-backed parent, optionally before a sibling.",
-      inputSchema: z.object({ id: z.string(), parentId: z.string(), beforeId: z.string().optional() }),
+      inputSchema: z.object({ id: z.string(), parentId: z.string(), beforeId: z.string().optional(), expectedRevisionId }),
       annotations: { readOnlyHint: false, destructiveHint: true },
     }, safelyWith(async (input: { id: string; parentId: string; beforeId?: string }) =>
       jsonResult(await call("move", "canvas.move", input))));
@@ -373,16 +591,59 @@ export async function servePosterractMcp(explicitProjectDir?: string): Promise<v
     server.registerTool("posterract_get_geometry", {
       title: "Measure rendered layout",
       description:
-        "Read post-transform bounding boxes, draw order, opacity, and text content for elements in the active video, " +
-        "with the pairs that overlap and the ones that fall off or cross the frame. Use this to check layout from data " +
-        "instead of inferring it from a capture. Boxes are in the same scene space as the source's x/y/width/height.",
+        "Read post-transform bounding boxes, draw order, opacity, and text content for the elements on screen at `time` " +
+        "(the current playhead when omitted) in the active video, with the pairs that partly overlap and the ones that fall off " +
+        "or cross the frame. Use this to check layout from data instead of inferring it from a capture. Boxes are in the same " +
+        "scene space as the source's x/y/width/height. Elements that are not playing at that time are left out unless named in " +
+        "`ids` or `all` is set (they come back with `visible: false`). Reading does not move the author's playhead.",
       inputSchema: z.object({
         ids: z.array(z.string()).optional(),
         time: z.number().nonnegative().optional(),
+        all: z.boolean().optional(),
       }),
       annotations: { readOnlyHint: true },
-    }, safelyWith(async (input: { ids?: string[]; time?: number }) =>
-      jsonResult(await call("get_geometry", "geometry", input))));
+    }, safelyWith(async (input: { ids?: string[]; time?: number; all?: boolean }) =>
+      jsonResult(await call("get_geometry", "geometry", input), "Pass `ids`, or a `time` when fewer elements are on screen.")));
+
+    server.registerTool("posterract_inspect", {
+      title: "Inspect a video",
+      description:
+        "What is in a video and what is wrong with it, as text — the `ffprobe` of a composition. Visits the whole duration and reports the " +
+        "timeline (when each element plays, where it sits, what it says), the markers, and ranked problems with the element, the numbers and " +
+        "the fix: text running off the frame, an element never in frame or never opaque, something on screen too briefly to read, text " +
+        "overlapping text or hidden under a later layer, spans where nothing draws, sources that failed. Nothing is rendered and the author's " +
+        "playhead does not move. Use this to check your work before looking at a capture; run it before and after an edit to see what changed.",
+      inputSchema: z.object({ scene: z.string().min(1).optional() }),
+      annotations: { readOnlyHint: true },
+    }, safelyWith(async ({ scene }: { scene?: string }) => {
+      const result = await call("inspect", "inspect", scene === undefined ? {} : { id: scene }, RENDER_TIMEOUT_MS) as InspectResult;
+      return {
+        content: [{ type: "text", text: formatInspect(result).join("\n") }],
+        structuredContent: { scene: result.scene, problems: result.problems },
+      };
+    }, "inspect"));
+
+    server.registerTool("posterract_look", {
+      title: "See what the author is looking at",
+      description:
+        "What your collaborator is looking at right now: the active scene, where the playhead is parked, what is selected (with the props an " +
+        "edit starts from), and the markers on the timeline — those starting `@agent` are notes addressed to you. Call it at the start of a " +
+        "turn: \"make this bigger\" means the selected element at that playhead.",
+      inputSchema: z.object({}),
+      annotations: { readOnlyHint: true },
+    }, safely(async () => {
+      const result = await call("look", "look") as LookResult;
+      return { content: [{ type: "text", text: formatLook(result).join("\n") }], structuredContent: record(result) };
+    }));
+
+    server.registerTool("posterract_show", {
+      title: "Show the author an element",
+      description:
+        "Bring the editor to an element: activate its scene, move the playhead to `at` seconds (default: the middle of the element's span), " +
+        "select it and frame it in the canvas. View only — nothing in the source changes. Use it to show your collaborator what you changed.",
+      inputSchema: z.object({ id: z.string().min(1), at: z.number().nonnegative().optional() }),
+      annotations: { readOnlyHint: false },
+    }, safelyWith(async (input: { id: string; at?: number }) => jsonResult(await call("show", "show", input))));
 
     server.registerTool("posterract_check", {
       title: "Check video structure",

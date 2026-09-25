@@ -7,7 +7,7 @@ import { store } from './store';
 import {
 	ChildOf, Culled, Sequential, Group, Scene, Audio, Paint, AssetId,
 	Delay, Trim, PlaybackRate, SourceFrameRate, Keyframe, ItemIndex,
-	Position, Offset, Rotation, Scale, UniformScale, Skew, Anchor, Flip,
+	Position, Offset, Rotation, Scale, UniformScale, Skew, Anchor, Flip, Place,
 	Opacity, Color, Blur, Volume, Effect, LottieSlot, Path, PathTrim, CornerRadius, MixedCornerRadius,
 	ColorStop, StrokeStyle, Size, Computed, Active, Stage, IsMask, Diagram,
 	ImageDecoderHandle, VideoDecoderHandle,
@@ -198,6 +198,12 @@ export function observeWorld(world: World): () => void {
 		computed.positionX[entity.id()] = x;
 		computed.positionY[entity.id()] = y;
 	});
+
+	// A placement writes Computed's position itself, every frame (see the
+	// transform system). When it goes — the element was dragged, the prop was
+	// taken out — the position is the authored one again, at once rather than
+	// at whatever the last placement left there.
+	subs.push(world.onRemove(Place, (entity) => resetAnimatedValues(world, entity, Place)));
 
 	mirror(Offset, (entity) => {
 		const computed = store(world, Computed);

@@ -18,13 +18,13 @@
 
 import { openSkillDeck } from '../skill-deck';
 import {
-	ChildOf, Computed, Culled, Geometry, Group, Hovering,
-	Interactive, KeepAspectRatio, RenderSurface, Root, Scene,
+	ChildOf, Computed, Culled, Geometry, GeometryType, Group, Hovering,
+	Interactive, KeepAspectRatio, Polygon, RenderSurface, Root, Scene,
 	Selected, Skew, Time,
 	computeGroupBounds, computeLocalMatrix, decompose2D, entityAnchor,
 	entityOffset, entityQuad, entityWorldMat, enterEntity,
 	findKeyframeTrackEntity, getParentEntity, getParentNode, getSceneAncestor,
-	getSelection, getSelectionMask, identity2D, invert2D, isPointerInEntity,
+	getSelection, getSelectionMask, identity2D, invert2D, isPointerInEntity, isText,
 	multiply2D, quadCenter, quadContainsQuad, quadsIntersect, rectToQuad,
 	rotate2D, scale2D,
 	store, syncInteractiveState, togglePlayback, transformPoint, translate2D,
@@ -32,10 +32,12 @@ import {
 import { Not, Or } from 'koota';
 
 import { getDocumentEditor } from '../editor';
+import { scalePoints } from '../shapes';
 import { syncKeyframe } from '../keyframes';
 import { AssetSelection, Hud, Keys, Pointer, SnapLines } from '../traits';
 import { getToolCursor, updateCursor, type CursorType } from './cursor';
 import { mountNameInput } from '../hud/name-input';
+import { mountTextInput } from '../hud/text-input';
 import {
 	buildSnapCandidatesFromCorners, buildSnapCandidatesFromQuad, findSnapTarget,
 	getMarqueeQuad, getSelectionMaskSnapshot, getSnapCandidatesSnapshot,
@@ -194,11 +196,17 @@ export function handleGeometryInteraction(world: World, event: DispatchedPointer
 		handleMaskInteraction(world, event);
 	}
 
-	// Double-click drills into a container: its children become the things the
-	// canvas can hit, and the one under the pointer takes the selection.
+	// Double-click types into a text, where it stands; on a container it drills
+	// in: its children become the things the canvas can hit, and the one under
+	// the pointer takes the selection.
 	if (event.type === 'dblclick' && event.target.kind === 'entity') {
-		const child = enterEntity(world, event.target.id, { x: event.clientX, y: event.clientY });
-		if (child !== null) editor.select(child);
+		if (isText(event.target.id)) {
+			editor.select(event.target.id);
+			mountTextInput(world, event.target.id);
+		} else {
+			const child = enterEntity(world, event.target.id, { x: event.clientX, y: event.clientY });
+			if (child !== null) editor.select(child);
+		}
 	}
 
 	if (world.get(Pointer)!.phase === 'lifted') {
@@ -354,6 +362,7 @@ export function handleResizeInteraction(world: World, event: DispatchedPointerEv
 		snapshotSelectionMask(world);
 		snapshotSelectionTransforms(world);
 		snapshotSnapCandidates(world);
+		snapshotPolygonPoints(world);
 		world.get(SnapLines)!.list.length = 0;
 	}
 
@@ -523,10 +532,30 @@ export function handleResizeInteraction(world: World, event: DispatchedPointerEv
 
 	if (event.type === 'dragend') {
 		world.get(SnapLines)!.list.length = 0;
+		pointsAtDragStart.clear();
 	}
 
 	if (world.get(Pointer)!.phase === 'lifted') {
 		updateResizeCursor(world, handle);
+	}
+}
+
+/**
+ * The points of each polygon a resize is about to stretch, as they were when
+ * it began. A polygon's outline is in its own coordinates rather than its
+ * box's, so a new size alone would leave the shape as it was; each move
+ * scales these, not the last move's, so rounding never builds up.
+ */
+const pointsAtDragStart = new Map<Entity, string>();
+
+function snapshotPolygonPoints(world: World): void {
+	pointsAtDragStart.clear();
+	for (const selected of getSelection(world)) {
+		const targets = selected.has(Group) ? [...world.query(Or(Geometry, Group), ChildOf(selected))] : [selected];
+		for (const entity of targets) {
+			if (entity.get(Geometry)?.value !== GeometryType.POLYGON) continue;
+			pointsAtDragStart.set(entity, store(world, Polygon).points[entity.id()] ?? '');
+		}
 	}
 }
 
@@ -565,6 +594,11 @@ function resizeNode(world: World, entity: Entity, oldTr: Mat2D, localScale: Mat2
 	];
 	if (writeAngles) writes.push(['rotation', Math.round(decomposed.rotation * 100) / 100]);
 	editTransform(world, editor, entity, writes);
+
+	const points = pointsAtDragStart.get(entity);
+	if (points && snapshot.width > 0 && snapshot.height > 0) {
+		editor.editProperty(entity, 'points', scalePoints(points, width / snapshot.width, height / snapshot.height));
+	}
 
 	if (writeAngles) {
 		// Skew has no JSX spelling, so it is written to the trait alone and
@@ -696,6 +730,11 @@ export function handleMaskInteraction(world: World, event: DispatchedPointerEven
 	if (event.type === 'dblclick') {
 		const selection = getSelection(world);
 		if (selection.length !== 1) return;
+		// A selected text is opened for typing rather than drilled into.
+		if (isText(selection[0]!)) {
+			mountTextInput(world, selection[0]!);
+			return;
+		}
 		const child = enterEntity(world, selection[0]!, { x: event.clientX, y: event.clientY });
 		if (child !== null) editor.select(child);
 		return;

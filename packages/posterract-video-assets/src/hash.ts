@@ -10,6 +10,8 @@
 // Truncated to 16 hex characters: plenty for one project's library, short
 // enough to read in a manifest.
 
+import { fetchRange } from './ranges';
+
 /** Bytes hashed from each of the head, middle and tail of a file. */
 const SAMPLE_BYTES = 1024 * 1024;
 
@@ -32,6 +34,30 @@ export async function hashBlob(blob: Blob): Promise<string> {
 	}
 
 	const bytes = await new Blob(parts).arrayBuffer();
+	return hexOf(await crypto.subtle.digest('SHA-256', bytes)).slice(0, ID_LENGTH);
+}
+
+/**
+ * The content id of the `size`-byte file served at `url`: the id `hashBlob`
+ * gives the same file, from the same samples, read in ranges so the file is
+ * never loaded whole.
+ */
+export async function hashUrl(url: string, size: number): Promise<string> {
+	const middle = Math.floor(size / 2 - SAMPLE_BYTES / 2);
+	const ranges: Array<[start: number, end: number]> = size <= SAMPLE_BYTES * 3
+		? [[0, size]]
+		: [[0, SAMPLE_BYTES], [middle, middle + SAMPLE_BYTES], [size - SAMPLE_BYTES, size]];
+
+	const parts = [
+		new TextEncoder().encode(String(size)),
+		...await Promise.all(ranges.map(([start, end]) => fetchRange(url, start, end))),
+	];
+	const bytes = new Uint8Array(parts.reduce((total, part) => total + part.length, 0));
+	let offset = 0;
+	for (const part of parts) {
+		bytes.set(part, offset);
+		offset += part.length;
+	}
 	return hexOf(await crypto.subtle.digest('SHA-256', bytes)).slice(0, ID_LENGTH);
 }
 

@@ -69,7 +69,21 @@ const computed = makeColor();\n`,
 });
 
 test("a canvas edit writes back to TSX and the new revision still compiles", async () => {
-  const files = { "index.tsx": POSTERRACT_STARTER_SOURCE };
+  const files = {
+    "index.tsx": `/* @jsxImportSource @posterract/composition */
+export default function Project() {
+  return (
+    <stage id="stage">
+      <scene id="main" width={1080} height={1920}>
+        <text id="headline" x={142} y={490} width={790} height={500} fontSize={104}>
+          Create with Posterract.
+        </text>
+      </scene>
+    </stage>
+  );
+}
+`,
+  };
   const write = await applyEdits(
     { files },
     [

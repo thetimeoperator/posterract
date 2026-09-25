@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+import { outputSize } from './output-size';
 import {
 	CanvasSource,
 	Output,
@@ -98,10 +99,8 @@ export async function createEncoder(world: World, config: EncoderConfig) {
 	const audioCodec = config.audio?.codec ?? 'aac';
 	const videoCodec = config.video?.codec ?? 'avc';
 	const containerFormat = config.format ?? 'mp4';
-	const resolution = config.video?.resolution ?? 1080;
-	const scale = Math.round(resolution * 1e6 / sceneHeight) / 1e6;
-	const width = Math.round(sceneWidth * scale / 2) * 2;
-	const height = Math.round(sceneHeight * scale / 2) * 2;
+	// "1080p" is the shorter side: see `outputSize` for why that is not always the height.
+	const { scale, width, height } = outputSize(sceneWidth, sceneHeight, config.video?.resolution ?? 1080);
 	const frameDuration = 1 / frameRate;
 
 	const canvas = world.get(RenderSurface)?.canvas;

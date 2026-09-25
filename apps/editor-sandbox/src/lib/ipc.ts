@@ -12,6 +12,7 @@ import type {
   MainRequestChannel,
   MainRequestMap,
 } from "@desktop/main-channels";
+import { wakeEngine } from "@/engine/wake";
 import { CLI_WIRE } from "@posterract/cli/channels";
 import { CLI_PROTOCOL_VERSION } from "@posterract/cli/channels";
 import type { CliRendererReply, CliRendererRequest, CliReply } from "@posterract/cli/channels";
@@ -157,6 +158,9 @@ class CliBridge {
       this.pending.push(pending);
       return;
     }
+    // An agent's request can change what the canvas shows (a seek, a selection),
+    // and an idle canvas only draws again when something wakes it.
+    wakeEngine();
     let reply: CliReply;
     try {
       const data = await proc(req.input);
@@ -164,6 +168,7 @@ class CliBridge {
     } catch (err) {
       reply = { ok: false, error: (err as Error).message };
     }
+    wakeEngine();
     try {
       // Preserve the CLI's JSON output contract and fail cleanly before
       // crossing Electron IPC if a procedure returned a non-serializable value.

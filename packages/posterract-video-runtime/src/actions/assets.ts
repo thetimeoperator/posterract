@@ -6,10 +6,14 @@
 // goes through the AssetLibrary (@posterract/video-assets); these are the
 // lookups the decoders and hosts share.
 
+import { BlobSource } from 'mediabunny';
+import { locatedSource } from '@posterract/video-assets';
+
 import { Ai, AssetId, Library, Paint, SourceFrameRate, SourceModifiers } from '../traits';
 import { PaintType } from '../constants';
 
 import type { Entity, World } from 'koota';
+import type { Source } from 'mediabunny';
 import type { Asset, AssetLibrary, SequenceAsset } from '@posterract/video-assets';
 import type { GenAi } from '../ai';
 
@@ -123,6 +127,22 @@ export function getAssetFile(asset: Pick<Asset, 'handle'>): Promise<File> {
 		}
 	});
 	return promise;
+}
+
+/**
+ * What a decoder reads an asset's bytes through. Where the host serves the
+ * file in ranges (the desktop), it is read that way, a piece at a time as
+ * playback needs it, so footage never has to be held whole — which a long
+ * recording could not be once the disk is too full to page it to. Elsewhere,
+ * the asset's File.
+ */
+export async function getAssetSource(asset: Pick<Asset, 'handle'>): Promise<Source> {
+	const { handle } = asset;
+	if (handle.locate) {
+		const locate = handle.locate.bind(handle);
+		return locatedSource(await locate(), locate);
+	}
+	return new BlobSource(await getAssetFile(asset));
 }
 
 /** Returns the File/Blob backing an asset, or null if the asset is missing. */

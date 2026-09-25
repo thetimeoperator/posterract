@@ -26,6 +26,18 @@ export interface FsEntry {
 	link?: boolean;
 }
 
+/** A file the host serves by URL, with what it knows of it. */
+export interface LocatedFile {
+	/** Where the bytes are, readable in ranges. */
+	url: string;
+	name: string;
+	/** The type the host declares, from the name; '' when it has none. */
+	mimeType: string;
+	size: number;
+	/** Modification time in ms since the epoch. */
+	mtime: number;
+}
+
 export interface ProjectFS {
 	/** The manifest as plain data, or null when the project has none yet. */
 	readManifest(): Promise<unknown>;
@@ -36,6 +48,13 @@ export interface ProjectFS {
 	stat(source: string): Promise<AssetStat | null>;
 	/** The bytes of a file (project-relative or absolute). */
 	file(source: string): Promise<File>;
+	/**
+	 * Where a file's bytes can be read in ranges. Optional: a host that serves
+	 * files by URL (the desktop's media scheme) provides it, and describing
+	 * audio or video then reads the few megabytes it needs rather than loading
+	 * a whole piece of footage.
+	 */
+	locate?(source: string): Promise<LocatedFile>;
 	/** Writes a file inside the project, creating parent directories. */
 	write(path: string, data: Blob): Promise<void>;
 	/**

@@ -11,12 +11,13 @@ import {
 	Computed, Cache, Animation, KeyframeTrack, Keyframe, Chars,
 	UniformScale, Position, Offset, Rotation, Scale, Skew, Size, Opacity,
 	Color, Blur, Volume, Effect, StrokeStyle, CornerRadius, MixedCornerRadius,
-	ColorStop, Diagram, LottieSlot, Path, PathTrim, Stagger, ItemIndex,
+	ColorStop, Diagram, LottieSlot, Path, PathTrim,
 } from '../traits';
-import { AnimationType, AnimationPhase } from '../constants';
+import { AnimationType, AnimationPhase, TrackLoop } from '../constants';
+import { animationParams } from '../utils/animation-params';
+import { loopedFrame } from '../utils/loop';
 import { revealChars, revealWords, scrambleChars } from '../utils/text-motion';
-import { getLocalWindow } from '../utils/time';
-import { getParentNode } from '../queries/hierarchy';
+import { getLocalWindow, getStaggerOffset } from '../utils/time';
 
 import type { Entity, Trait, TraitRecord, World } from 'koota';
 
@@ -78,8 +79,32 @@ export function resetAnimatedValues(world: World, entity: Entity | null, ignore?
 	}
 }
 
+// The presets' own curves, as they have always been. Built once: a curve is
+// asked for on every frame of every animated node.
+const EASE_OUT_SOFT = cubicBezier(0.1, 0.7, 0.5, 1);
+const EASE_GAIN = cubicBezier(0.4, 0.095, 0.546, 0.875);
+const EASE_BLUR_OUT = cubicBezier(0.4, 0, 1, 1);
+const EASE_BLUR_IN = cubicBezier(0.33, 0, 0.2, 1);
+const EASE_SPIN = cubicBezier(0.44, 0.02, 0.252, 0.992);
+const LINEAR: EasingFunction = (t) => t;
+
+/**
+ * The curve an animation plays with: the one it was given, or the preset's
+ * own. "linear" has to be said in full here — for a keyframe the empty
+ * descriptor means linear, for a preset it means "yours".
+ */
+function animationEasing(descriptor: string | undefined, own: EasingFunction): EasingFunction {
+	if (!descriptor) return own;
+	if (descriptor === 'linear') return LINEAR;
+	return resolveEasing(descriptor) ?? own;
+}
+
 /**
  * Apply a preset animation to a node at the given normalized progress.
+ *
+ * `distance` and `amount` are the preset's magnitudes (see
+ * `animationDefaults` for what each means per preset); left unset they are
+ * what the presets always did.
  */
 function applyAnimation(world: World, entity: Entity, anim: Entity, progress: number) {
 	const computed = store(world, Computed);
@@ -88,111 +113,104 @@ function applyAnimation(world: World, entity: Entity, anim: Entity, progress: nu
 	const eid = entity.id();
 	const aid = anim.id();
 
-	switch (animation.type[aid]) {
+	const type = animation.type[aid]!;
+	const phase = animation.phase[aid];
+	const isOut = phase === AnimationPhase.OUT;
+	const { distance, amount } = animationParams(type, animation.distance[aid], animation.amount[aid]);
+	const given = animation.easing[aid];
+
+	switch (type) {
 		case AnimationType.FADE: {
-			const phase = animation.phase[aid];
-			const func = cubicBezier(0.1, 0.7, 0.5, 1);
-			const eased = clamp01(func(progress));
-			computed.opacity[eid] = phase === AnimationPhase.OUT ? 1 - eased : eased;
+			const eased = clamp01(animationEasing(given, EASE_OUT_SOFT)(progress));
+			// How far from fully shown: 1 at the hidden end, 0 at the shown one.
+			const t = isOut ? eased : 1 - eased;
+			computed.opacity[eid] = 1 - clamp01(amount) * t;
 			break;
 		}
 		case AnimationType.GAIN: {
-			const phase = animation.phase[aid];
-			const func = cubicBezier(0.4, 0.095, 0.546, 0.875);
-			const eased = clamp01(func(progress));
-			const amplitude = phase === AnimationPhase.OUT ? 1 - eased : eased;
+			const eased = clamp01(animationEasing(given, EASE_GAIN)(progress));
+			const amplitude = isOut ? 1 - eased : eased;
 			computed.volume[eid] = (computed.volume[eid] ?? 0) + amplitudeToDecibels(amplitude);
 			break;
 		}
 		case AnimationType.GROW: {
-			const phase = animation.phase[aid];
-			const func = cubicBezier(0.1, 0.7, 0.5, 1);
-			const eased = clamp01(func(progress));
-			const t = phase === AnimationPhase.OUT ? eased : 1 - eased;
-			const scale = 1 - 0.5 * t;
+			// Not clamped past 1: an overshooting curve (a spring) is the point of giving one.
+			const eased = Math.max(0, animationEasing(given, EASE_OUT_SOFT)(progress));
+			const t = isOut ? eased : 1 - eased;
+			const scale = 1 - amount * t;
 			computed.scaleX[eid] = scale;
 			computed.scaleY[eid] = scale;
 			break;
 		}
 		case AnimationType.SHRINK: {
-			const phase = animation.phase[aid];
-			const func = cubicBezier(0.1, 0.7, 0.5, 1);
-			const eased = clamp01(func(progress));
-			const t = phase === AnimationPhase.OUT ? eased : 1 - eased;
-			const scale = 1 + 0.5 * t;
+			const eased = Math.max(0, animationEasing(given, EASE_OUT_SOFT)(progress));
+			const t = isOut ? eased : 1 - eased;
+			const scale = 1 + amount * t;
 			computed.scaleX[eid] = scale;
 			computed.scaleY[eid] = scale;
 			break;
 		}
 		case AnimationType.BLUR: {
-			const phase = animation.phase[aid];
-			const func = phase === AnimationPhase.OUT ? cubicBezier(0.4, 0, 1, 1) : cubicBezier(0.33, 0, 0.2, 1);
-			const eased = clamp01(func(progress));
-			computed.blur[eid] = phase === AnimationPhase.OUT ? lerp(0, 24, eased) : lerp(24, 0, eased);
+			const eased = clamp01(animationEasing(given, isOut ? EASE_BLUR_OUT : EASE_BLUR_IN)(progress));
+			computed.blur[eid] = isOut ? lerp(0, amount, eased) : lerp(amount, 0, eased);
 			break;
 		}
 		case AnimationType.SLIDE_LEFT:
 		case AnimationType.SLIDE_RIGHT:
 		case AnimationType.SLIDE_UP:
 		case AnimationType.SLIDE_DOWN: {
-			const phase = animation.phase[aid];
-			const type = animation.type[aid];
-			const func = cubicBezier(0.1, 0.7, 0.5, 1);
-			const eased = clamp01(func(progress));
-			const t = phase === AnimationPhase.OUT ? eased : 1 - eased;
+			const eased = Math.max(0, animationEasing(given, EASE_OUT_SOFT)(progress));
+			const t = isOut ? eased : 1 - eased;
 
-			const sign = phase === AnimationPhase.OUT ? -1 : 1;
+			const sign = isOut ? -1 : 1;
 			if (type === AnimationType.SLIDE_LEFT) {
-				computed.offsetX[eid] = sign * 100 * t;
+				computed.offsetX[eid] = sign * distance * t;
 			} else if (type === AnimationType.SLIDE_RIGHT) {
-				computed.offsetX[eid] = sign * -100 * t;
+				computed.offsetX[eid] = sign * -distance * t;
 			} else if (type === AnimationType.SLIDE_UP) {
-				computed.offsetY[eid] = sign * 100 * t;
+				computed.offsetY[eid] = sign * distance * t;
 			} else if (type === AnimationType.SLIDE_DOWN) {
-				computed.offsetY[eid] = sign * -100 * t;
+				computed.offsetY[eid] = sign * -distance * t;
 			}
-			computed.opacity[eid] = 1 - t;
+			// The fade that travels with it; `amount` 0 slides at full opacity.
+			computed.opacity[eid] = 1 - clamp01(amount) * clamp01(t);
 			break;
 		}
 		case AnimationType.SPIN: {
-			const phase = animation.phase[aid];
-			const func = cubicBezier(0.44, 0.02, 0.252, 0.992);
-			const eased = clamp01(func(progress));
-			const t = phase === AnimationPhase.OUT ? eased : 1 - eased;
+			const eased = clamp01(animationEasing(given, EASE_SPIN)(progress));
+			const t = isOut ? eased : 1 - eased;
 			const scale = 1 - t;
 			computed.scaleX[eid] = scale;
 			computed.scaleY[eid] = scale;
-			computed.rotation[eid] = -45 * t;
+			computed.rotation[eid] = -amount * t;
 			break;
 		}
 		case AnimationType.TWIST: {
-			const phase = animation.phase[aid];
-			const func = cubicBezier(0.1, 0.7, 0.5, 1);
-			const eased = clamp01(func(progress));
-			const t = phase === AnimationPhase.OUT ? eased : 1 - eased;
+			const eased = clamp01(animationEasing(given, EASE_OUT_SOFT)(progress));
+			const t = isOut ? eased : 1 - eased;
 			const scale = 1 + t;
 			computed.scaleX[eid] = scale;
 			computed.scaleY[eid] = scale;
-			computed.rotation[eid] = -10 * t;
-			computed.offsetX[eid] = -30 * t;
-			computed.offsetY[eid] = -30 * t;
+			computed.rotation[eid] = -amount * t;
+			computed.offsetX[eid] = -distance * t;
+			computed.offsetY[eid] = -distance * t;
 			break;
 		}
 		case AnimationType.APPEAR_WORD: {
-			const phase = animation.phase[aid];
-			const t = phase === AnimationPhase.OUT ? progress : 1 - progress;
+			const eased = clamp01(animationEasing(given, LINEAR)(progress));
+			const t = isOut ? eased : 1 - eased;
 			computed.chars[eid] = revealWords(chars.value[eid] ?? '', 1 - t);
 			break;
 		}
 		case AnimationType.APPEAR_CHAR: {
-			const phase = animation.phase[aid];
-			const t = phase === AnimationPhase.OUT ? progress : 1 - progress;
+			const eased = clamp01(animationEasing(given, LINEAR)(progress));
+			const t = isOut ? eased : 1 - eased;
 			computed.chars[eid] = revealChars(chars.value[eid] ?? '', 1 - t);
 			break;
 		}
 		case AnimationType.SCRAMBLE: {
-			const phase = animation.phase[aid];
-			const t = phase === AnimationPhase.OUT ? progress : 1 - progress;
+			const eased = clamp01(animationEasing(given, LINEAR)(progress));
+			const t = isOut ? eased : 1 - eased;
 			computed.chars[eid] = scrambleChars(chars.value[eid] ?? '', 1 - t);
 			break;
 		}
@@ -205,25 +223,6 @@ function applyAnimation(world: World, entity: Entity, anim: Entity, progress: nu
  * more than drawn.
  */
 const RATIO_PROPERTIES = new Set<PropertyPath>(['diagram.progress', 'trim.start', 'trim.end', 'path.morph']);
-
-/**
- * How far behind its siblings a node's motion runs, in frames.
- *
- * Walks up rather than out: nested staggers add, so a stagger over rows and
- * another over the cells in each row cascades in both directions from one
- * pair of numbers.
- */
-function staggerOffset(world: World, entity: Entity): number {
-	let offset = 0;
-	let current: Entity | null = entity;
-	for (let parent = getParentNode(current); parent !== null; current = parent, parent = getParentNode(parent)) {
-		if (!parent.has(Stagger)) continue;
-		const step = store(world, Stagger).value[parent.id()] ?? 0;
-		if (step === 0) continue;
-		offset += step * (store(world, ItemIndex).value[current.id()] ?? 0);
-	}
-	return offset;
-}
 
 export function motionSystem(world: World): void {
 	const computed = store(world, Computed);
@@ -250,7 +249,7 @@ export function motionSystem(world: World): void {
 		// A staggering ancestor shifts this node's motion clock without moving
 		// the node: the nth child simply samples its own tracks that much
 		// earlier in their span.
-		const localFrame = computed.localTime[eid]! - staggerOffset(world, entity);
+		const localFrame = computed.localTime[eid]! - getStaggerOffset(entity);
 
 		// 1: Preset animations (FADE/GAIN/GROW/SHRINK/BLUR/SLIDE)
 		for (const anim of animations) {
@@ -282,7 +281,7 @@ export function motionSystem(world: World): void {
 			// than take the whole composition down.
 			const channel = worldProps[property] as { computed: number[] } | undefined;
 			if (channel === undefined) continue;
-			const result = sampleTrack(world, keyframes, localFrame, property);
+			const result = sampleTrack(world, keyframes, localFrame, property, keyframeTrack.loop[tid] ?? TrackLoop.NONE);
 			if (result === null || target == null) continue;
 			// A reveal is a ratio, so a track that overshoots (a spring, a
 			// keyframe authored past the end) still reads as fully drawn.
@@ -499,6 +498,7 @@ function sampleTrack(
 	keyframes: Entity[],
 	frame: number,
 	property: PropertyPath,
+	loop: TrackLoop = TrackLoop.NONE,
 ): number | null {
 	const keyframe = store(world, Keyframe);
 	if (keyframes.length === 0) return null;
@@ -512,6 +512,9 @@ function sampleTrack(
 
 	const firstFrame = keyframe.time[keyframes[0]!.id()]!;
 	const lastFrame = keyframe.time[keyframes[keyframes.length - 1]!.id()]!;
+
+	// A looping track is the same track sampled at a wrapped time.
+	frame = loopedFrame(frame, firstFrame, lastFrame, loop);
 
 	if (frame <= firstFrame) {
 		return firstValue;

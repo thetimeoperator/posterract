@@ -82,6 +82,7 @@ export type {
   CueProps,
   DuckProps,
   PathProps,
+  Placement,
   EllipseProps,
   PolygonProps,
   LottieProps,

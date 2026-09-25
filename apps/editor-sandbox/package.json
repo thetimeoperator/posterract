@@ -23,6 +23,7 @@
     "@posterract/koota-solid": "workspace:*",
     "@posterract/video-reconciler": "workspace:*",
     "@posterract/video-runtime": "workspace:*",
+    "@posterract/video-compiler": "workspace:*",
     "@kobalte/core": "^0.13.11",
     "@kobalte/utils": "^0.9.1",
     "@solid-primitives/keyboard": "^1.3.3",

@@ -36,3 +36,8 @@ export const TextRange = trait({ start: 0, end: null as number | null });
 
 // Runtime-only: cached text layout, one Token[] per line. Never serialized.
 export const TextCache = trait({ tokens: () => [] as Token[][] });
+
+// Runtime-only: the text is being typed into over the canvas. The editor shows
+// its words in a field of its own while that lasts, so the live preview leaves
+// them out rather than drawing them twice. Never serialized.
+export const TextEditing = trait();

@@ -3,7 +3,6 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 import { Assets } from "./assets";
-import { ExportsView } from "./exports-view";
 import { useLayout } from "@/context/layout";
 import { useEditorApi } from "@/context/agent-api";
 import { createSignal, Show } from "solid-js";
@@ -13,46 +12,28 @@ import { Icon } from "../ui/icon";
 import { ProjectMenu } from "./project-menu";
 import { useProject } from "@/context/project";
 import { cx } from "@/lib/cva";
-import { PosterractCodePanel } from "@/components/posterract-code-panel";
-import { GenerateLauncher, openGeneratePanel } from "@/components/genai";
-import { createStoredSignal } from "@/lib/store";
-import { store } from "@/init";
+import { GenerateLauncher } from "@/components/genai";
 
-type LeftSection = "assets" | "exports";
 
 /**
  * The left instrument: a rail of what the drawer can show, and the drawer.
- * The project name and the layout toggles moved to the command bar; the AI
- * buttons keep their place at the top of the drawer so a connected agent is
- * always in view.
+ * Assets and one persistent media-generation launcher remain
+ * accessible even when the drawer is collapsed.
  */
 export function SidebarLeft() {
-  const [section, setSection] = createStoredSignal(
-    store.define<LeftSection>("layout.leftSection", "assets"),
-  );
+  const { leftOpen, toggleLeft } = useLayout();
 
   return (
     <div class="flex h-full min-h-0 overflow-hidden">
       <div class="posterract-rail">
-        <RailButton icon="folder-thumbnail" label="Assets" active={section() === "assets"} onClick={() => setSection("assets")} />
-        <RailButton icon="film-video-export" label="Exports" active={section() === "exports"} onClick={() => setSection("exports")} />
-        <RailButton icon="ai-generate" label="Generate with your keys" onClick={() => openGeneratePanel()} />
+        <RailButton icon="workspace-assets" label="Assets" active={leftOpen()} onClick={toggleLeft} />
+        <GenerateLauncher compact />
       </div>
-      <div class="flex min-w-0 flex-1 flex-col">
+      <div class="flex min-w-0 flex-1 flex-col" style={{ display: leftOpen() ? undefined : 'none' }}>
         <div class="posterract-agent-slot flex flex-col">
-          <GenerateLauncher />
-          <PosterractCodePanel />
+          <div class="posterract-panel-heading"><strong>Project assets</strong><button type="button" onClick={toggleLeft} aria-label="Collapse asset panel">‹</button></div>
         </div>
-        <Show when={section() === "assets"}>
-          <Assets />
-        </Show>
-        {/* Finished renders live on this computer; the library is where they are
-            found again, and the only place one is sent to the cloud. */}
-        <Show when={section() === "exports"}>
-          <div class="flex min-h-0 flex-1 flex-col">
-            <ExportsView />
-          </div>
-        </Show>
+        <Assets />
       </div>
     </div>
   );

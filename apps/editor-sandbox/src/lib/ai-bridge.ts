@@ -40,12 +40,24 @@ export const PROVIDER_LABELS = {
 	gemini: { name: 'Google Gemini', site: 'aistudio.google.com/apikey' },
 	minimax: { name: 'MiniMax', site: 'platform.minimax.io' },
 	fish: { name: 'Fish Audio', site: 'fish.audio' },
+	/** Speech to text for the voice bar (and captions), through Groq's OpenAI-compatible endpoint. */
+	transcribe: { name: 'Groq', site: 'console.groq.com/keys' },
+	/** Jev, which reads free-form commands. */
+	openrouter: { name: 'OpenRouter', site: 'openrouter.ai/keys' },
+	xai: { name: 'xAI', site: 'console.x.ai' },
 } as const;
+
+/** Where a spoken command goes when the transcription key is saved from the voice bar. */
+export const GROQ_TRANSCRIBE = { url: 'https://api.groq.com/openai/v1', model: 'whisper-large-v3-turbo' } as const;
 
 export interface AiKeysStatus {
 	minimax: boolean;
 	fish: boolean;
 	gemini: boolean;
+	transcribe: boolean;
+	openrouter: boolean;
+	xai: boolean;
+	voiceProvider: 'openai-compatible' | 'xai';
 	/** The keys file's name inside the project folder. */
 	path: string;
 }
@@ -68,14 +80,46 @@ export function aiKeysStatus(dir: string): Promise<AiKeysStatus> {
 }
 
 /** Which provider a key field belongs to. */
-export type AiKeyProvider = 'minimax' | 'fish' | 'gemini';
+export type AiKeyProvider = 'minimax' | 'fish' | 'gemini' | 'transcribe' | 'openrouter' | 'xai';
+
+/** What else a save can set beside a key: where transcription goes, and with which service. */
+export type AiKeySettings = { transcribeUrl?: string; transcribeModel?: string; voiceProvider?: 'openai-compatible' | 'xai' };
 
 /** Saves the keys the user typed; blank fields keep the existing value. */
 export function aiSaveKeys(
 	dir: string,
-	keys: Partial<Record<AiKeyProvider, string>>,
-): Promise<{ minimax: boolean; fish: boolean; gemini: boolean }> {
+	keys: Partial<Record<AiKeyProvider, string>> & AiKeySettings,
+): Promise<Omit<AiKeysStatus, 'path'>> {
 	return mainBridge.call(MAIN_CHANNELS.AI_KEYS_SAVE, { dir, keys });
+}
+
+/** The words of a spoken command. The clip goes to the provider from the main process, on the project's key. */
+export function aiTranscribeCommand(dir: string, audio: Uint8Array, mime: string, prompt?: string): Promise<{ text: string; ms: number }> {
+	return mainBridge.call(MAIN_CHANNELS.AI_TRANSCRIBE_COMMAND, { dir, audio, mime, ...(prompt ? { prompt } : {}) });
+}
+
+/** One typed-decision request to Jev through OpenRouter; `requestId` lets a newer one call it off. */
+export function aiDecide(
+	dir: string,
+	state: unknown,
+	questions: Record<string, unknown>,
+	requestId?: string,
+): Promise<{ answers: Record<string, unknown>; usage?: unknown; ms: number }> {
+	return mainBridge.call(MAIN_CHANNELS.AI_DECIDE, { dir, state, questions, ...(requestId ? { requestId } : {}) });
+}
+
+/** Writes one line of what was said and what the bar made of it, in the project folder. */
+export function voiceLog(dir: string, entry: Record<string, unknown>): Promise<void> {
+	return mainBridge.call(MAIN_CHANNELS.VOICE_LOG, { dir, entry }).catch(() => undefined) as Promise<void>;
+}
+
+export function aiCancelDecision(requestId: string): Promise<void> {
+	return mainBridge.call(MAIN_CHANNELS.AI_DECIDE_CANCEL, { requestId });
+}
+
+/** Asks for the microphone the first time it is wanted (macOS shows its own prompt). */
+export function requestMicrophoneAccess(): Promise<{ status: 'granted' | 'denied' | 'restricted' }> {
+	return mainBridge.call(MAIN_CHANNELS.VOICE_MIC_ACCESS, undefined);
 }
 
 /** Reveals api-keys.json in the file manager, for anyone who prefers the file. */

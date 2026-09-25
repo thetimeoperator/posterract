@@ -39,7 +39,7 @@ function when(at: number): string {
 }
 
 /**
- * Every finished render, on this machine.
+ * Every finished render on this machine, alongside the project picker.
  *
  * Export is local and nothing is uploaded by rendering — so the library is
  * where a video lives until the user decides to do something with it. Sending
@@ -86,10 +86,10 @@ export function ExportsView() {
   };
 
   return (
-    <div class="flex flex-col h-full min-h-0">
+    <section aria-label="Exported videos" class="mx-auto flex w-full max-w-6xl flex-1 flex-col min-h-0 p-5">
       <div class="h-10 shrink-0 flex items-center justify-between px-4">
         <span class="text-xs font-450 text-foreground">
-          Exports
+          Exported videos from all projects
           <Show when={exports()?.length}>
             <span class="ml-1 text-muted-foreground">({exports()!.length})</span>
           </Show>
@@ -161,6 +161,6 @@ export function ExportsView() {
           </For>
         </div>
       </Show>
-    </div>
+    </section>
   );
 }

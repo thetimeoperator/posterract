@@ -29,6 +29,7 @@ import {
 	togglePlayback,
 } from '@posterract/video-runtime';
 import { Not, Or } from 'koota';
+import { createSignal } from 'solid-js';
 
 import { zoomBy, zoomTo, zoomToFit, zoomToSelection } from '../camera';
 import { getDocumentEditor } from '../editor';
@@ -57,16 +58,33 @@ import { groupSelection, ungroupSelection, unwrapSequenceSelection, wrapSelectio
 import { getEditHistory } from '../history';
 import { splitAtPlayhead } from '../split';
 import { Keys, MODIFIER_KEYS, Pointer } from '../traits';
+import { openVoiceBar, startTalking, stopTalking, voiceTalking } from '../voice';
 import { editTransform } from './interactions';
 
 import type { TransformWrite } from './interactions';
 import type { CameraMatrix } from '@posterract/video-runtime';
 import type { Entity, World } from 'koota';
+import type { Accessor } from 'solid-js';
+
+export type CommandGroup = 'Transport' | 'Range' | 'Editing' | 'Canvas' | 'Timeline' | 'Export' | 'Agent';
 
 type Shortcut = {
 	keys: string[];
 	action: (world: World) => void;
+	/** Set on everything that is a command a person could name, say or look up. */
+	id?: string;
+	label?: string;
+	group?: CommandGroup;
+	/** Other ways of saying it, for the voice bar. */
+	aliases?: string[];
+	/** What it needs to do anything: a selection, or an active scene. */
+	when?: 'selection' | 'scene';
+	/** How the voice bar reports it done, when that reads better than the label ("Duplicated"). */
+	done?: string;
 }
+
+/** A shortcut with a name: what the voice bar, the shortcut sheet and the agent see. */
+export type Command = Shortcut & { id: string; label: string; group: CommandGroup };
 
 /** The node kinds a shortcut selects, hides or seeks around. */
 const NODES = Or(Geometry, Group, AdjustmentLayer);
@@ -165,6 +183,60 @@ export function nudgeSelection(world: World, dx: number, dy: number): void {
 }
 
 const nudge = (dx: number, dy: number) => (world: World): void => nudgeSelection(world, dx, dy);
+
+/**
+ * The keys that can be held to talk to the editor: Q, or one of two others no
+ * shortcut uses, picked in the bar's settings and remembered on this machine.
+ */
+export const TALK_KEYS = ['q', '`', 'g'] as const;
+const TALK_KEY_SETTING = 'posterract.voice.talkKey';
+
+function storedTalkKey(): string {
+	try {
+		const saved = localStorage.getItem(TALK_KEY_SETTING);
+		return saved && (TALK_KEYS as readonly string[]).includes(saved) ? saved : TALK_KEYS[0];
+	} catch {
+		return TALK_KEYS[0];
+	}
+}
+
+const [talkKey, setTalkKeySignal] = createSignal(storedTalkKey());
+
+/** The key held to talk to the editor. */
+export const voiceTalkKey: Accessor<string> = talkKey;
+
+/** How a talk key is written for a person: "Q", "`", "G". */
+export const talkKeyName = (key: string): string => key.toUpperCase();
+
+/**
+ * What the talk key does by being held, which the tables cannot express: a
+ * hold the window loses focus in the middle of never sees its release (`held`
+ * is cleared without a lift), so it ends on the first frame the key is no
+ * longer down — and what it recorded is thrown away, not sent.
+ */
+function updateTalkHold(held: Set<string>): void {
+	if (voiceTalking() === 'key' && !held.has(talkKey())) void stopTalking('lost-focus');
+}
+
+/** Holding the talk key listens; letting go sends what was said. Their key is the one picked. */
+const TALK_PRESS: Shortcut = {
+	keys: [talkKey(), '!mod', '!alt', '!shift'], action: () => void startTalking('key'),
+	id: 'voice.talk', label: 'Talk to the editor', group: 'Agent',
+};
+const TALK_LIFT: Shortcut = { keys: [talkKey()], action: () => void stopTalking('released') };
+
+/** Makes `key` the talk key, from now on and on this machine. */
+export function setTalkKey(key: string): void {
+	if (!(TALK_KEYS as readonly string[]).includes(key)) return;
+	TALK_PRESS.keys[0] = key;
+	TALK_LIFT.keys[0] = key;
+	setTalkKeySignal(key);
+	try {
+		localStorage.setItem(TALK_KEY_SETTING, key);
+	} catch {
+		// Kept for this session only.
+	}
+}
 
 /** How long space has to be held to read as a pan and not as a tap. */
 const SPACE_HAND_DELAY = 200;
@@ -405,82 +477,111 @@ function deselect(world: World): void {
 }
 
 const PRESSED_SHORTCUTS: readonly Shortcut[] = [
-	{ keys: ['z', 'mod', '!shift'], action: undoEdit },
-	{ keys: ['z', 'mod', 'shift'], action: redoEdit },
-	{ keys: ['backspace'], action: deleteSelection },
+	{ keys: ['z', 'mod', '!shift'], action: undoEdit, id: 'edit.undo', label: 'Undo — survives a reload', group: 'Editing', aliases: ['undo', 'undo that', 'take that back'], done: 'Undone' },
+	{ keys: ['z', 'mod', 'shift'], action: redoEdit, id: 'edit.redo', label: 'Redo', group: 'Editing', aliases: ['redo', 'redo that'], done: 'Redone' },
+	{ keys: ['backspace'], action: deleteSelection, id: 'edit.delete', label: 'Delete — a scene with content asks first', group: 'Editing', aliases: ['delete', 'remove', 'delete this', 'remove this'], when: 'selection', done: 'Deleted' },
 	{ keys: ['delete'], action: deleteSelection },
-	{ keys: ['d', 'mod', '!shift'], action: duplicateSelection },
-	{ keys: ['g', 'mod', '!shift'], action: groupSelection },
-	{ keys: ['g', 'mod', 'shift'], action: ungroupSelection },
-	{ keys: ['enter', 'mod', '!shift', '!alt'], action: wrapSelectionInScene },
-	{ keys: ['enter', 'mod', 'alt', '!shift'], action: wrapSelectionInSequence },
-	{ keys: ['enter', 'mod', 'alt', 'shift'], action: unwrapSequenceSelection },
-	{ keys: ['b', 'mod'], action: splitAtPlayhead },
-	{ keys: ['c', 'mod'], action: copySelection },
-	{ keys: ['v', 'mod'], action: pasteSelection },
-	{ keys: ['x', 'mod'], action: cutSelection },
-	{ keys: ['h', 'mod', 'shift'], action: toggleSelectionHidden },
-	{ keys: ['a', 'mod'], action: selectAll },
-	{ keys: ['=', 'mod'], action: zoom(ZOOM_STEP) },
+	{ keys: ['d', 'mod', '!shift'], action: duplicateSelection, id: 'edit.duplicate', label: 'Duplicate', group: 'Editing', aliases: ['duplicate', 'duplicate this', 'clone', 'make a copy'], when: 'selection', done: 'Duplicated' },
+	{ keys: ['g', 'mod', '!shift'], action: groupSelection, id: 'edit.group', label: 'Group', group: 'Editing', aliases: ['group', 'group these', 'group them'], when: 'selection', done: 'Grouped' },
+	{ keys: ['g', 'mod', 'shift'], action: ungroupSelection, id: 'edit.ungroup', label: 'Ungroup', group: 'Editing', aliases: ['ungroup', 'break apart'], when: 'selection', done: 'Ungrouped' },
+	{ keys: ['enter', 'mod', '!shift', '!alt'], action: wrapSelectionInScene, id: 'edit.wrap-scene', label: 'Wrap in a scene', group: 'Editing', aliases: ['wrap in a scene', 'make a scene from this'], when: 'selection', done: 'Wrapped in a scene' },
+	{ keys: ['enter', 'mod', 'alt', '!shift'], action: wrapSelectionInSequence, id: 'edit.wrap-sequence', label: 'Wrap in a sequence', group: 'Editing', aliases: ['wrap in a sequence', 'make a sequence'], when: 'selection', done: 'Wrapped in a sequence' },
+	{ keys: ['enter', 'mod', 'alt', 'shift'], action: unwrapSequenceSelection, id: 'edit.unwrap-sequence', label: 'Unwrap the sequence', group: 'Editing', aliases: ['unwrap', 'unwrap the sequence'], when: 'selection', done: 'Unwrapped' },
+	{ keys: ['b', 'mod'], action: splitAtPlayhead, id: 'edit.split', label: 'Split at the playhead', group: 'Editing', aliases: ['split', 'cut', 'cut here', 'blade', 'split here'], when: 'scene', done: 'Split at the playhead' },
+	{ keys: ['c', 'mod'], action: copySelection, id: 'edit.copy', label: 'Copy', group: 'Editing', aliases: ['copy', 'copy this'], when: 'selection', done: 'Copied' },
+	{ keys: ['v', 'mod'], action: pasteSelection, id: 'edit.paste', label: 'Paste', group: 'Editing', aliases: ['paste', 'paste it'], done: 'Pasted' },
+	{ keys: ['x', 'mod'], action: cutSelection, id: 'edit.cut', label: 'Cut to the clipboard', group: 'Editing', aliases: ['cut to clipboard'], when: 'selection', done: 'Cut to the clipboard' },
+	{ keys: ['h', 'mod', 'shift'], action: toggleSelectionHidden, id: 'edit.hide', label: 'Hide or show the selection', group: 'Editing', aliases: ['hide', 'hide this', 'show', 'unhide'], when: 'selection' },
+	{ keys: ['a', 'mod'], action: selectAll, id: 'edit.select-all', label: 'Select all', group: 'Editing', aliases: ['select all', 'select everything'] },
+	{ keys: ['=', 'mod'], action: zoom(ZOOM_STEP), id: 'canvas.zoom-in', label: 'Zoom in', group: 'Canvas', aliases: ['zoom in', 'closer'] },
 	{ keys: ['+', 'mod'], action: zoom(ZOOM_STEP) },
-	{ keys: ['-', 'mod'], action: zoom(1 / ZOOM_STEP) },
-	{ keys: ['0', 'mod'], action: zoomActualSize },
-	{ keys: ['1', 'mod'], action: zoomToFit },
-	{ keys: ['2', 'mod'], action: zoomToSelection },
-	{ keys: ['v', '!mod'], action: selectTool(ToolType.MOVE) },
-	{ keys: ['h', '!mod'], action: selectTool(ToolType.HAND) },
-	{ keys: ['f', '!mod'], action: selectTool(ToolType.SCENE) },
-	{ keys: ['t', '!mod'], action: selectTool(ToolType.TEXT) },
-	{ keys: ['r', '!mod'], action: selectTool(ToolType.RECT) },
-	{ keys: ['a', '!mod'], action: seekFrames(-1) },
-	{ keys: ['d', '!mod'], action: seekFrames(1) },
-	{ keys: ['w', '!mod'], action: seekSeconds(1) },
-	{ keys: ['s', '!mod'], action: seekSeconds(-1) },
-	{ keys: [']', '!mod'], action: restack('front') },
-	{ keys: ['[', '!mod'], action: restack('back') },
-	{ keys: ['\\', '!mod'], action: selectParents },
-	{ keys: ['enter', '!mod'], action: selectChildren },
-	{ keys: ['escape'], action: deselect },
-	{ keys: ['arrowleft', '!shift'], action: nudge(-NUDGE, 0) },
-	{ keys: ['arrowright', '!shift'], action: nudge(NUDGE, 0) },
-	{ keys: ['arrowup', '!shift'], action: nudge(0, -NUDGE) },
-	{ keys: ['arrowdown', '!shift'], action: nudge(0, NUDGE) },
-	{ keys: ['arrowleft', 'shift'], action: nudge(-NUDGE_FAST, 0) },
-	{ keys: ['arrowright', 'shift'], action: nudge(NUDGE_FAST, 0) },
-	{ keys: ['arrowup', 'shift'], action: nudge(0, -NUDGE_FAST) },
-	{ keys: ['arrowdown', 'shift'], action: nudge(0, NUDGE_FAST) },
+	{ keys: ['-', 'mod'], action: zoom(1 / ZOOM_STEP), id: 'canvas.zoom-out', label: 'Zoom out', group: 'Canvas', aliases: ['zoom out', 'further'] },
+	{ keys: ['0', 'mod'], action: zoomActualSize, id: 'canvas.actual-size', label: 'Actual size', group: 'Canvas', aliases: ['actual size', 'zoom to 100', '100 percent'] },
+	{ keys: ['1', 'mod'], action: zoomToFit, id: 'canvas.zoom-fit', label: 'Zoom to fit', group: 'Canvas', aliases: ['zoom to fit', 'fit', 'fit to screen', 'show everything'] },
+	{ keys: ['2', 'mod'], action: zoomToSelection, id: 'canvas.zoom-selection', label: 'Zoom to selection', group: 'Canvas', aliases: ['zoom to selection', 'zoom to this', 'focus on this'], when: 'selection' },
+	{ keys: ['v', '!mod'], action: selectTool(ToolType.MOVE), id: 'canvas.move-tool', label: 'Move tool', group: 'Canvas', aliases: ['move tool', 'select tool', 'pointer'] },
+	{ keys: ['h', '!mod'], action: selectTool(ToolType.HAND), id: 'canvas.hand-tool', label: 'Hand tool', group: 'Canvas', aliases: ['hand tool', 'hand', 'pan tool'] },
+	{ keys: ['f', '!mod'], action: selectTool(ToolType.SCENE), id: 'canvas.frame-tool', label: 'Frame', group: 'Canvas', aliases: ['frame tool', 'draw a frame', 'new frame', 'scene tool'] },
+	{ keys: ['t', '!mod'], action: selectTool(ToolType.TEXT), id: 'canvas.text-tool', label: 'Text', group: 'Canvas', aliases: ['text tool', 'add text', 'type text'] },
+	{ keys: ['r', '!mod'], action: selectTool(ToolType.RECT), id: 'canvas.component-tool', label: 'Component — draw a shape', group: 'Canvas', aliases: ['component', 'shape', 'draw a shape', 'rectangle', 'shape tool'] },
+	{ keys: ['a', '!mod'], action: seekFrames(-1), id: 'transport.frame-back', label: 'Back one frame', group: 'Transport', aliases: ['back one frame', 'previous frame', 'step back'] },
+	{ keys: ['d', '!mod'], action: seekFrames(1), id: 'transport.frame-forward', label: 'Forward one frame', group: 'Transport', aliases: ['forward one frame', 'next frame', 'step forward'] },
+	{ keys: ['w', '!mod'], action: seekSeconds(1), id: 'transport.second-forward', label: 'Forward one second', group: 'Transport', aliases: ['forward one second', 'skip ahead'] },
+	{ keys: ['s', '!mod'], action: seekSeconds(-1), id: 'transport.second-back', label: 'Back one second', group: 'Transport', aliases: ['back one second', 'skip back'] },
+	{ keys: [']', '!mod'], action: restack('front'), id: 'edit.bring-front', label: 'Bring to front', group: 'Editing', aliases: ['bring to front', 'to the front', 'on top'], when: 'selection', done: 'Brought to front' },
+	{ keys: ['[', '!mod'], action: restack('back'), id: 'edit.send-back', label: 'Send to back', group: 'Editing', aliases: ['send to back', 'to the back', 'behind everything'], when: 'selection', done: 'Sent to back' },
+	{ keys: ['\\', '!mod'], action: selectParents, id: 'edit.select-parents', label: 'Select the parent', group: 'Editing', aliases: ['select parent', 'select the parent', 'go up a level'], when: 'selection' },
+	{ keys: ['enter', '!mod'], action: selectChildren, id: 'edit.select-children', label: 'Select the children', group: 'Editing', aliases: ['select children', 'select the children', 'go inside'], when: 'selection' },
+	{ keys: ['escape'], action: deselect, id: 'edit.deselect', label: 'Deselect', group: 'Editing', aliases: ['deselect', 'clear selection', 'select nothing'] },
+	{ keys: ['arrowleft', '!shift'], action: nudge(-NUDGE, 0), id: 'canvas.nudge-left', label: 'Nudge left', group: 'Canvas', aliases: ['nudge left'], when: 'selection' },
+	{ keys: ['arrowright', '!shift'], action: nudge(NUDGE, 0), id: 'canvas.nudge-right', label: 'Nudge right', group: 'Canvas', aliases: ['nudge right'], when: 'selection' },
+	{ keys: ['arrowup', '!shift'], action: nudge(0, -NUDGE), id: 'canvas.nudge-up', label: 'Nudge up', group: 'Canvas', aliases: ['nudge up'], when: 'selection' },
+	{ keys: ['arrowdown', '!shift'], action: nudge(0, NUDGE), id: 'canvas.nudge-down', label: 'Nudge down', group: 'Canvas', aliases: ['nudge down'], when: 'selection' },
+	{ keys: ['arrowleft', 'shift'], action: nudge(-NUDGE_FAST, 0), id: 'canvas.nudge-left-far', label: 'Nudge left ten pixels', group: 'Canvas', aliases: ['nudge left ten'], when: 'selection' },
+	{ keys: ['arrowright', 'shift'], action: nudge(NUDGE_FAST, 0), id: 'canvas.nudge-right-far', label: 'Nudge right ten pixels', group: 'Canvas', aliases: ['nudge right ten'], when: 'selection' },
+	{ keys: ['arrowup', 'shift'], action: nudge(0, -NUDGE_FAST), id: 'canvas.nudge-up-far', label: 'Nudge up ten pixels', group: 'Canvas', aliases: ['nudge up ten'], when: 'selection' },
+	{ keys: ['arrowdown', 'shift'], action: nudge(0, NUDGE_FAST), id: 'canvas.nudge-down-far', label: 'Nudge down ten pixels', group: 'Canvas', aliases: ['nudge down ten'], when: 'selection' },
 	{ keys: [' '], action: onSpacePressed },
 
 	// Transport and range. `J`/`K`/`L` shuttle, `I`/`O` mark the work area —
 	// which is what an export renders, so marking a range is choosing what to
 	// export rather than a second concept beside it.
-	{ keys: ['home'], action: seekToStart },
-	{ keys: ['end'], action: seekToEnd },
-	{ keys: ['arrowup', '!mod', '!shift', 'alt'], action: seekToCut(-1) },
-	{ keys: ['arrowdown', '!mod', '!shift', 'alt'], action: seekToCut(1) },
-	{ keys: ['j', '!mod'], action: shuttleBy(-1) },
-	{ keys: ['k', '!mod'], action: pauseShuttle },
-	{ keys: ['l', '!mod'], action: shuttleBy(1) },
-	{ keys: ['i', '!mod'], action: setInPoint },
-	{ keys: ['o', '!mod'], action: setOutPoint },
-	{ keys: ['x', 'alt', '!mod'], action: clearInOut },
-	{ keys: ['n', '!mod'], action: toggleSnapping },
-	{ keys: ['m', '!mod'], action: toggleMarkerAtPlayhead },
-	{ keys: ['arrowleft', 'alt', '!shift'], action: nudgeSelectionInTime(-1) },
-	{ keys: ['arrowright', 'alt', '!shift'], action: nudgeSelectionInTime(1) },
-	{ keys: ['arrowleft', 'alt', 'shift'], action: nudgeSelectionInTime(-10) },
-	{ keys: ['arrowright', 'alt', 'shift'], action: nudgeSelectionInTime(10) },
-	{ keys: ['=', 'alt', '!mod'], action: zoomTimelineIn },
+	{ keys: ['home'], action: seekToStart, id: 'transport.start', label: 'Go to the start, or the in point', group: 'Transport', aliases: ['go to the start', 'go to start', 'beginning', 'rewind to start'] },
+	{ keys: ['end'], action: seekToEnd, id: 'transport.end', label: 'Go to the end, or the out point', group: 'Transport', aliases: ['go to the end', 'go to end'] },
+	{ keys: ['arrowup', '!mod', '!shift', 'alt'], action: seekToCut(-1), id: 'transport.previous-cut', label: 'Previous cut', group: 'Transport', aliases: ['previous cut', 'last cut'] },
+	{ keys: ['arrowdown', '!mod', '!shift', 'alt'], action: seekToCut(1), id: 'transport.next-cut', label: 'Next cut', group: 'Transport', aliases: ['next cut'] },
+	{ keys: ['j', '!mod'], action: shuttleBy(-1), id: 'transport.shuttle-back', label: 'Shuttle back — press again for 2× and 4×', group: 'Transport', aliases: ['shuttle back', 'play backwards', 'reverse'] },
+	{ keys: ['k', '!mod'], action: pauseShuttle, id: 'transport.pause-shuttle', label: 'Pause the shuttle', group: 'Transport', aliases: ['pause the shuttle', 'stop the shuttle'] },
+	{ keys: ['k', 'mod'], action: () => openVoiceBar(), id: 'voice.type', label: 'Type a command', group: 'Agent', aliases: ['type a command'] },
+	TALK_PRESS,
+	{ keys: ['l', '!mod'], action: shuttleBy(1), id: 'transport.shuttle-forward', label: 'Shuttle forward — press again for 2× and 4×', group: 'Transport', aliases: ['shuttle forward', 'fast forward'] },
+	{ keys: ['i', '!mod'], action: setInPoint, id: 'range.in', label: 'Mark in — sets the work area an export renders', group: 'Range', aliases: ['mark in', 'set the in point', 'in point'], when: 'scene', done: 'Marked in' },
+	{ keys: ['o', '!mod'], action: setOutPoint, id: 'range.out', label: 'Mark out', group: 'Range', aliases: ['mark out', 'set the out point', 'out point'], when: 'scene', done: 'Marked out' },
+	{ keys: ['x', 'alt', '!mod'], action: clearInOut, id: 'range.clear', label: 'Clear the range', group: 'Range', aliases: ['clear the range', 'clear in and out'], when: 'scene', done: 'Cleared the range' },
+	{ keys: ['n', '!mod'], action: toggleSnapping, id: 'edit.snapping', label: 'Snapping on or off — hold ⌘ while dragging to invert', group: 'Editing', aliases: ['snapping', 'toggle snapping', 'turn snapping off', 'turn snapping on'] },
+	{ keys: ['m', '!mod'], action: toggleMarkerAtPlayhead, id: 'range.marker', label: 'Marker at the playhead — press again to remove it', group: 'Range', aliases: ['marker', 'add a marker', 'drop a marker'], when: 'scene' },
+	{ keys: ['arrowleft', 'alt', '!shift'], action: nudgeSelectionInTime(-1), id: 'edit.nudge-earlier', label: 'Nudge the selection one frame earlier', group: 'Editing', aliases: ['one frame earlier', 'nudge earlier'], when: 'selection' },
+	{ keys: ['arrowright', 'alt', '!shift'], action: nudgeSelectionInTime(1), id: 'edit.nudge-later', label: 'Nudge the selection one frame later', group: 'Editing', aliases: ['one frame later', 'nudge later'], when: 'selection' },
+	{ keys: ['arrowleft', 'alt', 'shift'], action: nudgeSelectionInTime(-10), id: 'edit.nudge-earlier-far', label: 'Nudge ten frames earlier', group: 'Editing', aliases: ['ten frames earlier'], when: 'selection' },
+	{ keys: ['arrowright', 'alt', 'shift'], action: nudgeSelectionInTime(10), id: 'edit.nudge-later-far', label: 'Nudge ten frames later', group: 'Editing', aliases: ['ten frames later'], when: 'selection' },
+	{ keys: ['=', 'alt', '!mod'], action: zoomTimelineIn, id: 'timeline.zoom-in', label: 'Zoom the timeline in', group: 'Timeline', aliases: ['zoom the timeline in'] },
 	{ keys: ['+', 'alt', '!mod'], action: zoomTimelineIn },
-	{ keys: ['-', 'alt', '!mod'], action: zoomTimelineOut },
-	{ keys: ['z', 'shift', '!mod'], action: zoomTimelineToFit },
-	{ keys: ['z', 'alt', '!mod'], action: zoomTimelineToSelection },
-	{ keys: ['backspace', 'shift'], action: rippleDeleteSelection },
+	{ keys: ['-', 'alt', '!mod'], action: zoomTimelineOut, id: 'timeline.zoom-out', label: 'Zoom the timeline out', group: 'Timeline', aliases: ['zoom the timeline out'] },
+	{ keys: ['z', 'shift', '!mod'], action: zoomTimelineToFit, id: 'timeline.fit', label: 'Fit the whole video', group: 'Timeline', aliases: ['fit the whole video', 'fit the timeline', 'show the whole video'] },
+	{ keys: ['z', 'alt', '!mod'], action: zoomTimelineToSelection, id: 'timeline.zoom-selection', label: 'Zoom the timeline to the selection', group: 'Timeline', aliases: ['zoom the timeline to this'], when: 'selection' },
+	{ keys: ['backspace', 'shift'], action: rippleDeleteSelection, id: 'edit.ripple-delete', label: 'Ripple delete — closes the gap', group: 'Editing', aliases: ['ripple delete', 'delete and close the gap'], when: 'selection', done: 'Ripple deleted' },
 	{ keys: ['delete', 'shift'], action: rippleDeleteSelection },
 ];
 
+/**
+ * Commands a key reaches through a handler of its own rather than this
+ * table — play/pause is Space's press and lift above — listed so they can be
+ * named and looked up all the same. Never matched against key presses.
+ */
+const LISTED_ONLY: readonly Command[] = [
+	{ keys: [' '], action: toggleActivePlayback, id: 'transport.play', label: 'Play / pause', group: 'Transport', aliases: ['play', 'pause', 'stop', 'resume', 'play pause'] },
+];
+
+/**
+ * Every command the table names, once each, in the table's order: what the
+ * voice bar matches against and the shortcut sheet lists. Commands with no
+ * key of their own (workspaces, panels, export) belong to the UI and are
+ * registered from there (see `registerCommand` in `engine/voice.tsx`).
+ */
+export const COMMANDS: readonly Command[] = (() => {
+	const seen = new Set<string>();
+	const commands: Command[] = [];
+	for (const shortcut of [...PRESSED_SHORTCUTS, ...LISTED_ONLY]) {
+		if (!shortcut.id || !shortcut.label || !shortcut.group || seen.has(shortcut.id)) continue;
+		seen.add(shortcut.id);
+		commands.push(shortcut as Command);
+	}
+	return commands;
+})();
+
 const LIFTED_SHORTCUTS: readonly Shortcut[] = [
 	{ keys: [' '], action: onSpaceLifted },
+	TALK_LIFT,
 ];
 
 /**
@@ -525,4 +626,5 @@ export function shortcutSystem(world: World): void {
 	}
 
 	updateSpaceHold(world, keys.held);
+	updateTalkHold(keys.held);
 }

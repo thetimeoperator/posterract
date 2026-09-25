@@ -211,6 +211,7 @@ export function ExportProvider(props: { children: JSX.Element }) {
         progress={renderOverlay()?.progress ?? 0}
         remaining={renderOverlay()?.remaining}
         config={renderOverlay()?.config as ExportConfig | undefined}
+        size={renderOverlay()?.size}
         duration={renderOverlay()?.duration ?? 0}
         onCancel={cancelRender}
       />

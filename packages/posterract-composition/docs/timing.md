@@ -16,7 +16,7 @@ jump to the range's edges when one is set. `⌥X` clears it.
 
 ```tsx
 {/* Only 2s–7.5s renders, whatever else the scene holds */}
-<scene id="main" workarea={[2, 7.5]}>…</scene>
+<scene id="main" width={1080} height={1920} workarea={[2, 7.5]}>…</scene>
 ```
 
 ## `locked` — protecting a layer
@@ -40,7 +40,7 @@ changes nothing about the output; it exists so a beat, a cut, or a place to
 come back to is written down in the source rather than remembered.
 
 ```tsx
-<scene id="main">
+<scene id="main" width={1080} height={1920}>
   <marker time={2.5} name="Hook lands" />
   <marker time="00:12" name="CTA" color="#73E8C0" />
   …

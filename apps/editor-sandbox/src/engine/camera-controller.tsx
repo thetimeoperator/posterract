@@ -6,6 +6,7 @@ import { createMemo, onCleanup, onMount } from 'solid-js';
 import { useTrait, useWorld } from '@posterract/koota-solid';
 import { panCamera, setCamera, zoomCameraAt, getCamera, RenderSurface, getCameraMatrix, Root, Tool, ToolType } from '@posterract/video-runtime';
 import { useEditor } from './hooks/use-editor';
+import { useManualCamera } from './camera';
 
 import type { JSX } from 'solid-js';
 
@@ -71,6 +72,7 @@ export function CameraController(): JSX.Element {
 		event.preventDefault();
 
 		const scale = DELTA_MODE_SCALE[event.deltaMode] ?? 1;
+		useManualCamera(world);
 
 		if (event.ctrlKey || event.metaKey) {
 			const [x, y] = localPoint(event);
@@ -91,6 +93,7 @@ export function CameraController(): JSX.Element {
 		event.preventDefault();
 
 		panning = true;
+		useManualCamera(world);
 		panPointerId = event.pointerId;
 		canvas()?.setPointerCapture(event.pointerId);
 

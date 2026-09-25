@@ -3,7 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 import { ControlScrollArea } from "@/components/ui/control-scrollarea";
-import { Show, createMemo } from "solid-js";
+import { For, Show, createMemo } from "solid-js";
 import {
   ToolType,
   Source,
@@ -22,6 +22,12 @@ import {
   isText,
 } from "@posterract/video-runtime";
 import { useAssetSelection, useSelection, useTool } from "@/engine/hooks";
+import { useLayout } from '@/context/layout';
+import { SelectionActions } from '@/components/shell/selection-actions';
+import { PartInspector } from './part-inspector';
+import { useActiveScene } from '@/engine/hooks/use-active-scene';
+import { useEditor } from '@/engine/hooks';
+import { Button } from '@/components/ui/button';
 import { VariablesSettings } from "./variables";
 import { VersionHistory } from "./version-history";
 import { SceneSkillPanel } from "./scene-skill";
@@ -49,6 +55,7 @@ import { InterpolationSettings } from "./interpolation";
 import { DiagramSettings } from "./diagram";
 import { LottieSettings } from "./lottie";
 import { VectorSettings } from "./vector";
+import { ShapeSettings } from "./shape";
 
 import type { Entity } from "koota";
 
@@ -88,7 +95,11 @@ function classifyNode(entity: Entity): SelectionTarget {
 
 export function Inspector() {
   const tool = useTool();
-  const { nodes, keyframes, first } = useSelection();
+  const { nodes, keyframes, parts, first } = useSelection();
+  const { inspectorTab, setInspectorTab, toggleInspector } = useLayout();
+  const activeScene = useActiveScene();
+  const editor = useEditor();
+  const selectedPart = () => parts()[0];
   const { asset } = useAssetSelection();
 
   // For ExportPanel (root scenes only) and TransitionSettings (sequence items).
@@ -114,8 +125,9 @@ export function Inspector() {
     return [
       ...nodes().map(stableEntityKey),
       ...keyframes().map(stableEntityKey),
+      ...parts().map(stableEntityKey),
       asset()?.id ?? "",
-    ].join(",") + selectionTarget();
+    ].join(",") + selectionTarget() + inspectorTab();
   });
 
   const includesTarget = (...targets: SelectionTarget[]) => {
@@ -124,8 +136,22 @@ export function Inspector() {
 
   return (
     <div class="h-full min-h-0 flex flex-col" data-right-sidebar>
+      <div class="posterract-inspector-tabs" role="group" aria-label="Inspector section">
+        <For each={['design', 'motion', 'history'] as const}>{tab => <button type="button" aria-pressed={inspectorTab() === tab} onClick={() => setInspectorTab(tab)}>{tab === 'design' ? 'Design' : tab === 'motion' ? 'Motion' : 'History'}</button>}</For>
+        <button type="button" class="ml-auto" aria-label="Hide inspector" onClick={toggleInspector}>›</button>
+      </div>
+      <Show when={inspectorTab() !== 'history'}><SelectionActions /></Show>
       <Show when={selectionHash()} keyed>
         <ControlScrollArea class="flex-1 min-h-0" scrollKey={selectionHash()}>
+          <Show when={inspectorTab() === 'history'}><VersionHistory /></Show>
+          <Show when={inspectorTab() !== 'history' && selectedPart()} keyed>{part => <PartInspector part={part} />}</Show>
+          <Show when={inspectorTab() === 'motion' && !selectedPart()}>
+            <Show when={nodes().length === 1} fallback={<p class="px-4 py-5 text-xs leading-relaxed text-muted-foreground">Select a layer to add an entrance or exit. Select a keyframe in the timeline to edit its curve.</p>}>
+              <AnimationsSettings selection={nodes()} />
+            </Show>
+            <Show when={keyframes().length > 0}><InterpolationSettings selection={keyframes()} /></Show>
+          </Show>
+          <Show when={inspectorTab() === 'design' && !selectedPart()}>
           <Show when={includesTarget("scene-tool")}>
             <SceneTemplatePanel />
           </Show>
@@ -146,15 +172,15 @@ export function Inspector() {
                 Click the video canvas or a timeline layer to edit it.
               </p>
             </div>
-            <VersionHistory />
+            <Show when={activeScene()} keyed>{scene => <div class="px-4 pb-4"><Button variant="outline" class="w-full" onClick={() => editor.select(scene)}>Edit scene settings</Button></div>}</Show>
             <VariablesSettings />
           </Show>
 
-          <Show when={includesTarget("shape", "diagram", "text", "audio", "scene", "caption", "group", "mask", "adjustment")}>
+          <Show when={includesTarget("shape", "diagram", "lottie", "vector", "text", "audio", "scene", "caption", "group", "mask", "adjustment", "sequence")}>
             <TimeSettings selection={nodes()} />
           </Show>
 
-          <Show when={includesTarget("shape", "diagram", "text", "audio", "scene", "caption", "group", "mask", "adjustment")}>
+          <Show when={includesTarget("shape", "diagram", "lottie", "vector", "text", "audio", "scene", "caption", "group", "mask", "adjustment", "sequence")}>
             <TransformSettings selection={nodes()} />
           </Show>
 
@@ -177,6 +203,10 @@ export function Inspector() {
 
           <Show when={includesTarget("lottie")}>
             <LottieSettings selection={nodes()} />
+          </Show>
+
+          <Show when={includesTarget("shape")}>
+            <ShapeSettings selection={nodes()} />
           </Show>
 
           <Show when={includesTarget("vector")}>
@@ -207,8 +237,8 @@ export function Inspector() {
             <EffectsSettings selection={nodes()} />
           </Show>
 
-          <Show when={includesTarget("shape", "diagram", "text", "caption", "group", "mask")}>
-            <AnimationsSettings selection={nodes()} />
+          <Show when={includesTarget("shape", "diagram", "lottie", "vector", "text", "caption", "group", "mask")}>
+            <div class="px-4 py-3 border-t border-border"><Button variant="outline" class="w-full" onClick={() => setInspectorTab('motion')}>Edit animation →</Button></div>
           </Show>
 
           <Show when={includesTarget("shape") && isSequenceChild()}>
@@ -229,6 +259,7 @@ export function Inspector() {
 
           <Show when={includesTarget("keyframe")}>
             <InterpolationSettings selection={keyframes()} />
+          </Show>
           </Show>
         </ControlScrollArea>
       </Show>

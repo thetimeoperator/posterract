@@ -30,6 +30,14 @@
   font-feature-settings: 'zero' 1;
 }
 
+/* The landing page's wordmark face, so the editor's POSTERRACT matches it. */
+@font-face {
+  font-family: 'Switzer';
+  src: url('./assets/fonts/Switzer-Variable.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-style: normal;
+}
+
 @theme inline {
   --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
@@ -503,8 +511,9 @@ body {
   border-radius: 16px;
   border: 1px solid rgba(234, 255, 243, 0.12);
   background: rgba(6, 11, 9, 0.7);
-  -webkit-backdrop-filter: blur(26px) saturate(1.15);
-  backdrop-filter: blur(26px) saturate(1.15);
+  /* No backdrop blur: the canvas under the panels repaints every frame, and a
+     blur over it is recomputed every frame — it halved the editor's frame rate.
+     The panels are all but opaque (see below); only Frost is glass. */
   box-shadow:
     0 20px 40px -22px rgba(0, 0, 0, 0.9),
     0 6px 16px -10px rgba(0, 0, 0, 0.6),
@@ -576,12 +585,14 @@ body {
 
 /* Wordmark in the left instrument's header. */
 .posterract-wordmark {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  letter-spacing: 0.22em;
+  font-family: 'Switzer', 'Helvetica Neue', Arial, system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 720;
+  letter-spacing: 0.23em;
+  line-height: 1;
   color: var(--text);
 }
-.posterract-wordmark b { color: var(--posterract-neon); font-weight: 500; }
+.posterract-wordmark b { color: var(--posterract-neon); font-weight: inherit; }
 
 @media (prefers-reduced-motion: reduce) {
   .posterract-instrument { transition: none; }
@@ -602,7 +613,6 @@ body {
 .posterract-deck-card {
   position: absolute; z-index: 2; display: flex; flex-direction: column; text-align: left; padding: 0; overflow: hidden; cursor: pointer;
   border-radius: 12px; border: 1px solid rgba(101, 255, 154, 0.22); background: rgba(5, 10, 7, 0.86);
-  -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
   box-shadow: 0 30px 50px -28px rgba(0, 0, 0, 0.95), inset 0 1px 0 rgba(234, 255, 243, 0.06);
   transform: rotate(var(--rot, 0deg)); transform-origin: 50% 100%;
   animation: posterract-deck-in 420ms cubic-bezier(0.2, 0.9, 0.3, 1.15) both;
@@ -679,15 +689,16 @@ body {
 .posterract-rail {
   display: flex; flex-direction: column; align-items: center; gap: 8px; width: 52px; flex: none;
   /* The first icon lines up with the first button in the drawer. */
-  padding: 12px 6px; border-right: 1px solid var(--edge);
+  padding: 12px 0; border-right: 1px solid var(--edge);
   background: rgba(0, 0, 0, 0.18);
 }
 .posterract-rail-button {
-  display: grid; place-items: center; width: 40px; height: 40px; border-radius: 11px;
+  display: grid; place-items: center; width: 40px; height: 40px; padding: 0; flex: 0 0 40px; line-height: 0; border-radius: 11px;
   border: 1px solid transparent; background: transparent; color: var(--text-dim); cursor: pointer;
   transition: background-color 120ms ease-out, color 120ms ease-out, border-color 120ms ease-out, box-shadow 160ms ease-out;
 }
 .posterract-rail-button:hover { background: var(--surface-2); color: var(--text); }
+.posterract-rail-button > svg { display: block; width: 20px; height: 20px; margin: 0; }
 .posterract-rail-button.is-active {
   color: var(--posterract-neon); background: var(--neon-soft); border-color: var(--edge-strong);
   box-shadow: 0 0 18px -4px rgba(101, 255, 154, 0.45);
@@ -761,7 +772,229 @@ body {
 .posterract-theme-switch.is-frost { color: var(--posterract-neon); border-color: var(--edge-strong); background: var(--neon-soft); }
 .posterract-theme-switch.is-frost .posterract-theme-switch-dot { background: var(--posterract-neon); box-shadow: 0 0 8px var(--posterract-neon); }
 
+/* ---- The voice bar: a black pill at the bottom of the canvas, above the dock ---- */
+.posterract-voice {
+  position: absolute; left: 50%; bottom: calc(var(--canvas-bottom-inset, 0px) + 12px); transform: translateX(-50%);
+  z-index: 20; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none;
+}
+.posterract-voice > * { pointer-events: auto; }
+.posterract-voice-bar {
+  display: flex; align-items: center; gap: 10px; padding: 4px; overflow: hidden;
+  border-radius: 24px; border: 1px solid var(--edge, rgba(234, 255, 243, 0.12)); background: #000;
+  box-shadow: 0 18px 40px -20px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(234, 255, 243, 0.05);
+  transition: width 180ms ease-out, height 180ms ease-out, border-color 180ms ease-out;
+}
+.posterract-voice-bar.is-idle { justify-content: center; }
+.posterract-voice-bar.is-listening { justify-content: center; padding: 6px; border-color: var(--edge-strong, rgba(101, 255, 154, 0.3)); }
+.posterract-voice-bar.is-typing { border-color: var(--edge-strong, rgba(101, 255, 154, 0.3)); }
+.posterract-voice-pill { display: block; padding: 0; border: 0; background: transparent; cursor: pointer; border-radius: 20px; }
+.posterract-voice-pill:focus-visible { outline: 2px solid var(--posterract-neon); outline-offset: 2px; }
+.posterract-voice-input {
+  flex: 1; min-width: 0; height: 100%; padding: 0 12px 0 0; border: 0; outline: none; background: transparent;
+  color: var(--text, #eafff3); font: 500 13px 'Inter', sans-serif;
+}
+.posterract-voice-input::placeholder { color: var(--text-faint, rgba(234, 255, 243, 0.4)); font-weight: 400; }
+.posterract-voice-line {
+  flex: 1; min-width: 0; padding-right: 12px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  color: var(--text, #eafff3); font: 500 13px 'Inter', sans-serif;
+}
+.posterract-voice-line.is-error { color: #ffb4a8; font-weight: 450; }
+.posterract-voice-note {
+  animation: posterract-fade-in 140ms ease-out both;
+  max-width: 460px; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--edge, rgba(234, 255, 243, 0.12));
+  background: rgba(0, 0, 0, 0.86); color: var(--text-dim, rgba(234, 255, 243, 0.62)); font: 500 12px 'Inter', sans-serif;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.posterract-voice-note.is-error { color: #ffb4a8; }
+.posterract-voice-list { width: 460px; max-height: 240px; border-radius: 14px; border: 1px solid var(--edge, rgba(234, 255, 243, 0.12)); background: rgba(0, 0, 0, 0.92) !important; }
+.posterract-voice-list [cmdk-list] { padding: 4px; }
+.posterract-voice-row { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px; border-radius: 8px; color: var(--text, #eafff3); font: 450 12px 'Inter', sans-serif; cursor: pointer; }
+.posterract-voice-row[data-selected="true"], .posterract-voice-row:hover { background: var(--neon-soft, rgba(101, 255, 154, 0.12)); }
+.posterract-voice-key { width: 460px; display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 14px; border: 1px solid var(--edge, rgba(234, 255, 243, 0.12)); background: rgba(0, 0, 0, 0.92); }
+.posterract-voice-key-close { align-self: flex-end; padding: 2px 6px; border: 0; background: transparent; color: var(--text-faint, rgba(234, 255, 243, 0.4)); font: 500 11px 'Inter', sans-serif; cursor: pointer; }
+.posterract-voice-key-close:hover { color: var(--text, #eafff3); }
+.posterract-voice-meter { position: relative; overflow: hidden; border-radius: 20px; background: #000; }
+.posterract-voice-meter > span {
+  position: absolute; left: 0; top: 50%; height: 2px; transform: translateY(-50%);
+  background: var(--posterract-neon); box-shadow: 0 0 10px var(--posterract-neon); transition: width 80ms linear;
+}
+.posterract-voice-chips { max-width: 520px; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.posterract-voice-chip {
+  height: 26px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--edge-strong, rgba(101, 255, 154, 0.3));
+  background: rgba(0, 0, 0, 0.9); color: var(--text, #eafff3); font: 500 12px 'Inter', sans-serif; white-space: nowrap; cursor: pointer;
+}
+.posterract-voice-chip.is-unsure { border-style: dashed; color: var(--text-dim, rgba(234, 255, 243, 0.62)); }
+.posterract-voice-chip:hover:not(:disabled) { background: var(--neon-soft, rgba(101, 255, 154, 0.12)); }
+.posterract-voice-chip:disabled { cursor: default; }
+.posterract-voice-chip-menu { min-width: 180px; }
+.posterract-voice-odds { margin-left: auto; padding-left: 12px; color: var(--text-faint, rgba(234, 255, 243, 0.4)); font: 500 11px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
+.posterract-voice-choices {
+  width: 460px; display: flex; flex-direction: column; gap: 2px; padding: 4px; border-radius: 14px;
+  border: 1px solid var(--edge, rgba(234, 255, 243, 0.12)); background: rgba(0, 0, 0, 0.92);
+}
+.posterract-voice-choice {
+  display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px; border: 0; border-radius: 8px; background: transparent;
+  color: var(--text, #eafff3); font: 450 12px 'Inter', sans-serif; text-align: left; cursor: pointer;
+}
+.posterract-voice-choice:hover { background: var(--neon-soft, rgba(101, 255, 154, 0.12)); }
+.posterract-voice-help {
+  width: 460px; display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border-radius: 14px;
+  border: 1px solid var(--edge, rgba(234, 255, 243, 0.12)); background: rgba(0, 0, 0, 0.92);
+  color: var(--text-dim, rgba(234, 255, 243, 0.62)); font: 450 12px/1.5 'Inter', sans-serif;
+}
+.posterract-voice-help-title { color: var(--text, #eafff3); font-weight: 600; }
+.posterract-voice-ghosts { position: absolute; inset: 0; z-index: 15; overflow: hidden; pointer-events: none; }
+.posterract-voice-ghost {
+  position: absolute; border: 1.5px dashed var(--posterract-neon); border-radius: 4px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35); animation: posterract-fade-in 120ms ease-out both;
+}
+.posterract-voice-ghost.is-now { border-color: rgba(234, 255, 243, 0.4); }
+.posterract-voice-ghost-number {
+  position: absolute; left: -10px; top: -10px; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--posterract-neon); color: #000; font: 700 11px/20px 'Inter', sans-serif; text-align: center;
+}
+.posterract-voice-hint {
+  display: flex; align-items: center; gap: 8px; padding: 5px 6px 5px 12px; border-radius: 999px;
+  border: 1px solid var(--edge-strong, rgba(101, 255, 154, 0.3)); background: rgba(0, 0, 0, 0.9);
+  color: var(--text, #eafff3); font: 500 12px 'Inter', sans-serif; white-space: nowrap;
+  animation: posterract-fade-in 200ms ease-out both;
+}
+.posterract-voice-hint-close {
+  display: grid; place-items: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%;
+  background: transparent; color: var(--text-faint, rgba(234, 255, 243, 0.4)); cursor: pointer;
+}
+.posterract-voice-hint-close:hover { color: var(--text, #eafff3); background: rgba(234, 255, 243, 0.08); }
+.posterract-voice-settings {
+  display: grid; place-items: center; flex-shrink: 0; width: 28px; height: 28px; margin-right: 6px; padding: 0; border: 0;
+  border-radius: 8px; background: transparent; color: var(--text-faint, rgba(234, 255, 243, 0.4)); cursor: pointer;
+}
+.posterract-voice-settings:hover, .posterract-voice-settings[data-expanded] { color: var(--text, #eafff3); background: rgba(234, 255, 243, 0.08); }
+.posterract-voice-settings-menu { width: 280px; display: flex; flex-direction: column; gap: 12px; padding: 12px !important; }
+.posterract-voice-setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.posterract-voice-setting-label { display: flex; flex-direction: column; gap: 2px; color: var(--text, #eafff3); font: 500 12px 'Inter', sans-serif; }
+.posterract-voice-setting-note { color: var(--text-faint, rgba(234, 255, 243, 0.4)); font: 450 11px 'Inter', sans-serif; }
+.posterract-voice-choices-row { display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: rgba(234, 255, 243, 0.06); }
+.posterract-voice-option {
+  min-width: 30px; height: 24px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent;
+  color: var(--text-dim, rgba(234, 255, 243, 0.62)); font: 600 12px 'Inter', sans-serif; cursor: pointer;
+}
+.posterract-voice-option:hover { color: var(--text, #eafff3); }
+.posterract-voice-option.is-on { background: var(--neon-soft, rgba(101, 255, 154, 0.12)); color: var(--posterract-neon); }
+@media (prefers-reduced-motion: reduce) { .posterract-voice-bar { transition: none; } }
+
 /* ---- Responsive bar: the wordmark and the name give way before the controls do ---- */
 @media (max-width: 1240px) { .posterract-wordmark { display: none; } }
 @media (max-width: 1080px) { .posterract-bar-name { width: 120px; } .posterract-scene-chip { min-width: 26px; padding: 0 6px; } }
 @media (max-width: 920px) { .posterract-theme-switch span + * { display: none; } }
+
+/* Editing workspaces: calm, legible tools around a predictable working frame. */
+.posterract-editor-shell { --edge: rgba(234,255,243,.13); --text-dim: #a9bbb1; --text-faint: #81988b; }
+.posterract-instrument { border-radius: 12px; background: rgba(10,17,13,.94); box-shadow: 0 8px 26px -16px #0009, inset 0 1px 0 #ffffff08; }
+.posterract-instrument:hover { box-shadow: 0 8px 26px -16px #0009, inset 0 1px 0 #ffffff08; }
+.posterract-command-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 100%; padding: 0 12px; }
+.posterract-project-identity { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.posterract-project-status { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.posterract-project-status > span { padding-left: 6px; font-size: 11px; }
+.posterract-bar-name { width: clamp(100px, 12vw, 190px); font-size: 13px; font-weight: 550; }
+.posterract-bar-name:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.posterract-wordmark { white-space: nowrap; }
+.posterract-command-actions, .posterract-export-action { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.posterract-export-action {
+  gap: 0; height: 34px; overflow: hidden; border-radius: 9px;
+  border: 1px solid #80edaf48;
+  background: linear-gradient(135deg, #244a36 0%, #172c22 70%);
+  box-shadow: inset 0 1px 0 #c3ffdb18, 0 2px 8px #0003;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+.posterract-export-action:hover { border-color: #a1ffc180; box-shadow: inset 0 1px 0 #c3ffdb25, 0 0 16px #65ff9a12; }
+.posterract-command-actions [data-slot="button"] { height: 32px; font-size: 12px; }
+.posterract-export-action [data-slot="button"] {
+  align-self: stretch; height: 32px; border: 0; border-radius: 0; color: #d7ffe7;
+  background: transparent; cursor: pointer; transition: background 140ms ease, color 140ms ease;
+}
+.posterract-export-action [data-slot="button"]:hover,
+.posterract-export-action [data-slot="button"][data-expanded] { background: #a3ffbf12; color: #fff; }
+.posterract-export-action [data-slot="button"]:active { background: #071b1970; }
+.posterract-export-action [data-slot="button"]:focus-visible { outline: 2px solid #b3ffcf; outline-offset: -3px; box-shadow: none; }
+.posterract-export-action .posterract-export-primary { padding: 0 12px 0 5px; gap: 8px; font-weight: 600; }
+.posterract-export-icon {
+  display: grid; place-items: center; width: 24px; height: 24px; border-radius: 5px;
+  color: #aaffc9; background: linear-gradient(145deg, #87ffc92b, #87ffc909); box-shadow: inset 0 0 0 1px #abffcf1a;
+}
+.posterract-export-icon > svg { display: block; width: 16px; height: 16px; margin: 0; }
+.posterract-export-action .posterract-export-options { position: relative; width: 30px; padding: 0; }
+.posterract-export-options::before { content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 1px; background: #c8ffdc28; }
+.posterract-agent-popover, .posterract-generate-popover {
+  max-width: calc(100vw - 24px);
+  max-height: min(640px, calc(100vh - 32px), var(--kb-popper-content-available-height, 640px));
+  overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain;
+  -webkit-app-region: no-drag;
+}
+.posterract-agent-popover, .posterract-generate-popover {
+  border-radius: 12px; border-color: #bcffd12e; background: linear-gradient(160deg, #16271d, #0c1510 65%);
+  color: #eafff3; box-shadow: 0 18px 60px #0008, inset 0 1px 0 #ffffff0a;
+}
+.posterract-agent-popover button:focus-visible { outline: 2px solid #a2ffc2; outline-offset: -3px; }
+.posterract-workspace-switch, .posterract-detail-switch { display: flex; align-items: center; padding: 3px; gap: 2px; border: 1px solid var(--edge); border-radius: 8px; background: #03080550; flex-shrink: 0; }
+.posterract-workspace-switch button, .posterract-detail-switch button { padding: 6px 12px; border-radius: 5px; font: 500 12px 'Inter', sans-serif; color: var(--text-dim); cursor: pointer; }
+.posterract-workspace-switch button:hover, .posterract-detail-switch button:hover { background: var(--surface-2); color: var(--text); }
+.posterract-workspace-switch button[aria-pressed="true"] { background: #27392e; color: #eafff3; box-shadow: 0 1px 3px #0004; }
+.posterract-detail-switch button[aria-pressed="true"] { background: #65ff9a1c; color: #9affbc; }
+.posterract-command-actions .posterract-agent-compact { width: auto; min-height: 32px; height: 32px; margin: 0; padding: 0 10px; gap: 6px; border-radius: 7px; font-size: 12px; }
+.posterract-agent-compact.is-active::after { content: ''; width: 5px; height: 5px; border-radius: 50%; background: #65ff9a; }
+/* Two strips that run the width of the canvas: the scene name above it, the
+   playhead clock and fit buttons below. They are mostly empty space, and they
+   cross the canvas toolbar — so the strip itself must let a click through, and
+   only what is actually drawn in it may take one. Given `pointer-events: auto`
+   (as these had), the empty half of the strip swallows every click meant for
+   the tools sitting behind it. */
+.posterract-preview-heading, .posterract-preview-controls { position: absolute; pointer-events: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; height: 32px; color: var(--text-dim); font-size: 12px; }
+.posterract-preview-heading > *, .posterract-preview-controls > * { pointer-events: auto; }
+.posterract-preview-heading > span { font-size: 11px; flex-shrink: 0; color: var(--text-faint); }
+.posterract-preview-controls [data-slot="button"] { height: 28px; padding: 0 8px; font-size: 12px; }
+.posterract-preview-controls [aria-pressed="true"] { color: #a0ffc1; background: #65ff9a12; }
+.posterract-preview-time { font: 500 12px 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
+.posterract-scene-switcher { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--text); padding: 5px 7px; border-radius: 6px; cursor: pointer; }
+.posterract-scene-switcher:hover { background: var(--surface-2); }
+.posterract-scene-switcher > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.posterract-active-video-label { flex-shrink: 0; color: var(--text-dim); font-size: 11px; font-weight: 400; }
+.posterract-agent-slot { padding: 0 12px 12px; gap: 0; }
+.posterract-panel-heading { height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--text); font-size: 12px; }
+.posterract-panel-heading button { color: var(--text-dim); width: 24px; height: 28px; border-radius: 5px; cursor: pointer; }
+.posterract-rail-button { border-radius: 8px; }
+.posterract-rail-button.is-active { box-shadow: none; background: #65ff9a14; }
+.posterract-inspector-tabs { display: flex; align-items: center; gap: 12px; height: 44px; min-height: 44px; padding: 0 14px; border-bottom: 1px solid var(--edge); }
+.posterract-inspector-tabs button { font-size: 12px; height: 44px; color: var(--text-dim); border-bottom: 2px solid transparent; cursor: pointer; }
+.posterract-inspector-tabs button[aria-pressed="true"] { color: var(--text); border-bottom-color: var(--primary); }
+.posterract-selection-summary { padding: 14px; border-bottom: 1px solid var(--edge); }
+.posterract-selection-summary > div:first-child { display: flex; flex-direction: column; gap: 4px; }
+.posterract-selection-summary strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 550; }
+.posterract-selection-summary span { color: var(--text-dim); font-size: 11px; }
+.posterract-selection-actions { display: flex; gap: 4px; align-items: center; margin: 10px -3px -2px; }
+.posterract-selection-actions [data-slot="button"] { height: 27px; font-size: 11px; padding: 0 6px; }
+.posterract-inspector .text-xxs { font-size: 11px; }
+.posterract-inspector input, .posterract-inspector [data-slot="select-trigger"] { font-size: 12px; }
+.posterract-motion-add { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+.posterract-motion-add [data-slot="button"] { height: 32px; font-size: 12px; }
+.posterract-inline-motion { padding: 4px 0; }
+.posterract-timeline-heading { height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-bottom: 1px solid var(--edge); }
+.posterract-timeline-heading-label { display: flex; align-items: center; gap: 8px; min-width: 194px; }
+.posterract-timeline-heading-label strong { font-size: 12px; font-weight: 550; }
+.posterract-timeline-heading-label span { font-size: 11px; color: var(--text-faint); }
+.posterract-timeline-heading [data-slot="button"] { height: 27px; font-size: 12px; }
+.posterract-detail-switch { border: 0; background: transparent; }
+.posterract-detail-switch button { padding: 5px 10px; }
+.posterract-instrument-grab { top: -3px; left: 0; transform: none; width: 100%; height: 7px; background: transparent; border-radius: 0; }
+.posterract-instrument-grab:hover { background: #65ff9a50; box-shadow: none; }
+.posterract-dock { overflow: visible; }
+.posterract-dock > .grid { overflow: hidden; border-radius: 12px; }
+@media (max-width: 1200px) {
+  .posterract-command-bar { gap: 10px; }
+  .posterract-project-identity { gap: 6px; }
+  .posterract-command-bar .posterract-wordmark { display: none; }
+  .posterract-workspace-switch button { padding-inline: 10px; }
+  .posterract-timeline-heading-label span { display: none; }
+  .posterract-timeline-heading-label { min-width: 80px; }
+}
+.posterract-preview-heading .posterract-scene-switcher { max-width: calc(100% - 225px); }
+.posterract-canvas-tools { background: #101b14ef !important; }

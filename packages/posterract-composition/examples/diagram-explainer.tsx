@@ -8,7 +8,7 @@ export default function DiagramExplainer() {
 
   return (
     <stage id="workspace" background="#03100B">
-      <scene id="diagram-demo" name="Agent-designed diagram" width={1280} height={720} active fill="#06110D">
+      <scene id="diagram-demo" name="Agent-designed diagram" width={1280} height={720} fill="#06110D">
         <diagramNode id="prompt" name="User instruction" x={80} y={110} width={310} height={130}
           label="User instruction" subtitle="Explain the signal" shape="rounded" fill="#0B2118" />
         <diagramArrow id="prompt-arrow" name="Instruction flow" x={390} y={175} width={180} height={0}

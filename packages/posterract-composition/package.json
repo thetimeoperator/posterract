@@ -6,7 +6,8 @@
   "type": "module",
   "sideEffects": false,
   "files": [
-    "dist"
+    "dist",
+    "vocabulary.json"
   ],
   "exports": {
     ".": {
@@ -28,7 +29,8 @@
     "./jsx-dev-runtime": {
       "types": "./dist/jsx-runtime.d.ts",
       "import": "./dist/jsx-runtime.js"
-    }
+    },
+    "./vocabulary.json": "./vocabulary.json"
   },
   "publishConfig": {
     "access": "public"
@@ -39,7 +41,8 @@
     "prepublishOnly": "npm run build",
     "prepack": "node scripts/prepack.mjs",
     "postpack": "node scripts/postpack.mjs",
-    "test": "node --import tsx --test src/*.test.ts"
+    "test": "node scripts/vocabulary.mjs --check && node --import tsx --test src/*.test.ts",
+    "vocabulary": "node scripts/vocabulary.mjs"
   },
   "keywords": [
     "posterract",

@@ -3,7 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 
-import { Active, AdjustmentLayer, Animation, AnimationPhase, AnimationType, appendChild, AssetId, Audio, Background, bindAsset, BlendMode, BlendModeType, Blur, Caption, CaptionAlign, CAPTION_PRESET_FILLS, CAPTION_PRESET_STYLES, CaptionType, Chars, ClipHeight, ClipsContent, Computed, CornerRadius, createEntity, DEFAULT_BACKGROUND, Color, ColorStop, Delay, Diagram, DiagramKindType, Effect, EffectType, Expanded, FontStyle, FramePromises, FrameRate, Generating, GenerationRequest, getActiveEntity, Loop, LoadRequest, Geometry, GeometryType, getEntityTree, getParentEntity, getParentNode, Component, Cue, Hidden, Host, Live, Locked, Lottie, LottieSlot, Path, PathTrim, Polygon, After, Stagger, Duck, Marker, IsMask, isText, ItemIndex, KeepAspectRatio, Keyframe, KeyframeTrack, MixedCornerRadius, Muted, Name, Offset, Opacity, Paint, PaintType, parseColor, PendingSource, PendingSync, Playback, PlaybackRate, Position, removeChild, RenderSurface, resizeEntity, Scale, ScaleMode, ScaleModeType, secondsToFrames, getAsset, getEntityChildren, Group, Sequential, Shader, Size, Stage, Root, Rotation, Scene, SceneSkill, Selected, Shadow, Source, SourceError, SourceFrameRate, SourceModifiers, hasModifier, setCameraMatrix, Stroke, StrokeCap, StrokeJoin, StrokeStyle, SyncRequest, TextAlign, TextBaseline, TextCase, TextDecorationType, TextRange, TextStyle, TranscriptionRequest, Transition, TransitionType, Trim, UniformScale, Volume, Workarea } from '@posterract/video-runtime';
+import { Active, AdjustmentLayer, Animation, AnimationPhase, AnimationType, appendChild, AssetId, Audio, Background, bindAsset, BlendMode, BlendModeType, Blur, Caption, CaptionAlign, CAPTION_PRESET_FILLS, CAPTION_PRESET_STYLES, CaptionType, Chars, ClipHeight, ClipsContent, Computed, CornerRadius, createEntity, DEFAULT_BACKGROUND, Color, ColorStop, Delay, Diagram, DiagramKindType, Effect, EffectType, Expanded, FontStyle, FramePromises, FrameRate, Generating, GenerationRequest, getActiveEntity, Loop, LoadRequest, Geometry, GeometryType, getEntityTree, getParentEntity, getParentNode, Component, Cue, Hidden, Host, Live, Locked, Lottie, LottieSlot, Path, PathTrim, Place, PLACEMENTS, isPlacement, Polygon, After, Stagger, Duck, Marker, IsMask, isText, ItemIndex, KeepAspectRatio, Keyframe, KeyframeTrack, MixedCornerRadius, Muted, Name, Offset, Opacity, Paint, PaintType, parseColor, PendingSource, PendingSync, Playback, PlaybackRate, Position, removeChild, RenderSurface, resizeEntity, Scale, ScaleMode, ScaleModeType, secondsToFrames, getAsset, getEntityChildren, Group, Sequential, Shader, Size, Stage, Root, Rotation, Scene, SceneSkill, Selected, Shadow, Source, SourceError, SourceFrameRate, SourceModifiers, hasModifier, setCameraMatrix, Stroke, StrokeCap, StrokeJoin, StrokeStyle, SyncRequest, TextAlign, TextBaseline, TextCase, TextDecorationType, TextRange, TextStyle, TrackLoop, TranscriptionRequest, Transition, TransitionType, Trim, UniformScale, Volume, Workarea } from '@posterract/video-runtime';
 import { COMPONENT_ATTR, LIVE_ATTR, LOOP_ATTR, parseTime, SOURCE_ATTR } from '@posterract/composition';
 import { createSignal } from 'solid-js';
 import { SVGElements } from 'solid-js/web';
@@ -874,6 +874,33 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 		syncChars(node);
 	}
 
+	/**
+	 * `place` and `inset` make one placement between them, and props arrive in
+	 * whatever order the source spells them, so either one arriving works the
+	 * placement out again from what the element is authored with now. An inset
+	 * with no `place` places nothing: where the element belongs is what `place`
+	 * says, and without it the element is where `x`/`y` put it.
+	 */
+	private applyPlacement(node: SceneNode): void {
+		const { entity } = node;
+		const place = node.props.place;
+		if (!isPlacement(place)) {
+			entity.remove(Place);
+			return;
+		}
+
+		const inset = node.props.inset;
+		const pair: unknown[] = Array.isArray(inset) ? inset : [inset, inset];
+		const [fx, fy] = PLACEMENTS[place];
+		entity.add(Place);
+		entity.set(Place, {
+			fx,
+			fy,
+			insetX: toNumber(pair[0]) ?? 0,
+			insetY: toNumber(pair[1] ?? pair[0]) ?? 0,
+		});
+	}
+
 	public setProperty(node: SceneNode, name: string, value: unknown): void {
 		if (!isSceneNode(node)) return;
 
@@ -1071,6 +1098,14 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 				entity.set(Position, { [name]: toNumber(value) ?? 0 });
 				return;
 			}
+			case 'place':
+			case 'inset': {
+				// A scene is placed on the stage, which has no frame to be
+				// placed in; a sequence has no position at all.
+				if (entity.has(Sequential) || entity.has(Scene)) return;
+				this.applyPlacement(node);
+				return;
+			}
 			case 'offsetX':
 			case 'offsetY': {
 				if (entity.has(Sequential)) return;
@@ -1154,6 +1189,14 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 			case 'loop': {
 				if (entity.has(Lottie)) {
 					entity.set(Lottie, { loop: value === true });
+					return;
+				}
+				if (entity.has(KeyframeTrack)) {
+					// `loop` alone is a repeat; "pingpong" goes there and back.
+					const loop = value === 'pingpong'
+						? TrackLoop.PINGPONG
+						: value === true || value === 'repeat' ? TrackLoop.REPEAT : TrackLoop.NONE;
+					entity.set(KeyframeTrack, { loop });
 					return;
 				}
 				break;
@@ -1352,8 +1395,14 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 				return;
 			}
 			case 'easing': {
-				if (!entity.has(Keyframe)) return;
 				const easing = typeof value === 'string' ? value.replace(/\s+/g, '') : '';
+				if (entity.has(Animation)) {
+					// For a preset the empty descriptor is "the preset's own
+					// curve", so linear has to stay spelled out.
+					entity.set(Animation, { easing: easing === 'linear' ? 'linear' : (EASINGS[easing] ?? easing) });
+					return;
+				}
+				if (!entity.has(Keyframe)) return;
 				entity.set(Keyframe, { easing: EASINGS[easing] ?? easing });
 				return;
 			}
@@ -1404,8 +1453,18 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 				return;
 			}
 			case 'amount': {
+				if (entity.has(Animation)) {
+					// Unset is the preset's own (see the runtime's `animationDefaults`).
+					entity.set(Animation, { amount: toNumber(value) ?? null });
+					return;
+				}
 				if (!entity.has(Duck)) return;
 				entity.set(Duck, { amount: toNumber(value) ?? -12 });
+				return;
+			}
+			case 'distance': {
+				if (!entity.has(Animation)) return;
+				entity.set(Animation, { distance: toNumber(value) ?? null });
 				return;
 			}
 			case 'attack':

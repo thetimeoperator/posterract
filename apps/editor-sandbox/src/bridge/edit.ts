@@ -23,4 +23,12 @@ export interface WriteResult {
   ids?: Record<string, string>;
   unrolled?: string[];
   error?: string;
+  /** The revision each written file now stands at: which version of it the canvas is showing. */
+  revisions?: Record<string, string>;
+  /**
+   * The revision each file stood at when the edits were applied to it. When
+   * that is not what the canvas thought it was showing, someone else's change
+   * lies underneath this write and the canvas has not seen it yet.
+   */
+  bases?: Record<string, string>;
 }

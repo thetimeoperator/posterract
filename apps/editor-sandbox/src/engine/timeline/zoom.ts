@@ -12,8 +12,9 @@
  */
 import { Computed, Selected, getActiveEntity, store } from '@posterract/video-runtime';
 
-import { MAX_RESOLUTION, MIN_RESOLUTION, TIMELINE_ZOOM_STEP } from './detail';
+import { MAX_RESOLUTION, MIN_RESOLUTION, TIMELINE_ZOOM_STEP } from './config';
 import { getResolution, getScrollX, setResolution, setScrollX } from './view';
+import { TimelineSurface } from './surface';
 
 import type { World } from 'koota';
 
@@ -24,26 +25,27 @@ export const zoomTimeline = (factor: number) => (world: World): void => {
 	const scene = getActiveEntity(world);
 	if (!scene) return;
 
-	const next = clampResolution(getResolution(world, scene) * factor);
+	const previous = getResolution(world, scene);
+	const next = clampResolution(previous * factor);
 	// Hold the playhead still: its offset from the left edge is what the user
 	// is reading, so the scroll moves with the scale rather than after it.
 	const playhead = store(world, Computed).localTime[scene.id()] ?? 0;
-	const offset = playhead - getScrollX(world, scene);
+	const offset = (playhead - getScrollX(world, scene)) * previous;
 	setResolution(world, scene, next);
-	setScrollX(world, scene, Math.max(0, playhead - offset));
+	setScrollX(world, scene, playhead - offset / next);
 };
 
-export const zoomTimelineIn = zoomTimeline(1 / TIMELINE_ZOOM_STEP);
-export const zoomTimelineOut = zoomTimeline(TIMELINE_ZOOM_STEP);
+export const zoomTimelineIn = zoomTimeline(TIMELINE_ZOOM_STEP);
+export const zoomTimelineOut = zoomTimeline(1 / TIMELINE_ZOOM_STEP);
 
 /** Fit a frame span into the viewport, with a little air either side. */
 function fitSpan(world: World, from: number, to: number): void {
 	const scene = getActiveEntity(world);
 	if (!scene || to <= from) return;
-	const viewport = document.querySelector('[data-timeline-layers-viewport]')?.clientWidth ?? 0;
+	const viewport = world.get(TimelineSurface)?.layout.width ?? 0;
 	const width = viewport || 800;
 	const padded = (to - from) * 1.06;
-	setResolution(world, scene, clampResolution(padded / width));
+	setResolution(world, scene, clampResolution(width / padded));
 	setScrollX(world, scene, Math.max(0, from - (to - from) * 0.03));
 }
 
@@ -52,8 +54,7 @@ export function zoomTimelineToFit(world: World): void {
 	const scene = getActiveEntity(world);
 	if (!scene) return;
 	const computed = store(world, Computed);
-	let end = 0;
-	for (const child of world.query(Computed)) end = Math.max(end, computed.end[child.id()] ?? 0);
+	const end = computed.duration[scene.id()] ?? 0;
 	fitSpan(world, 0, end || 1);
 }
 

@@ -22,7 +22,7 @@ export const TIMELINE_DETAILS: Array<{ value: TimelineDetail; label: string; hin
 ];
 
 const [detail, setDetail] = createStoredSignal(
-	store.define<TimelineDetail>('timeline.detail', 'clips'),
+	store.define<TimelineDetail>('timeline.detail', 'animation'),
 );
 
 export const timelineDetail = detail;
@@ -31,10 +31,8 @@ export const setTimelineDetail = setDetail;
 /**
  * Timeline zoom, as keys rather than only a wheel gesture.
  *
- * `resolution` is frames-per-pixel, so zooming in divides it. The playhead is
+ * `resolution` is pixels-per-frame, so zooming in multiplies it. The playhead is
  * the anchor: zooming should keep the frame you are looking at where it is,
  * not scroll the view out from under you.
  */
-export const TIMELINE_ZOOM_STEP = 1.4;
-export const MIN_RESOLUTION = 0.02;
-export const MAX_RESOLUTION = 40;
+export { TIMELINE_ZOOM_STEP, MIN_RESOLUTION, MAX_RESOLUTION } from './config';

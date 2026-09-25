@@ -2,129 +2,131 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-/**
- * The command bar: the one strip across the top of the editor.
- *
- * Wordmark and project on the left, the videos of this project in the
- * middle as chips (the same scene entities the canvas and timeline show, so
- * activating one moves every pane at once), and on the right the readouts
- * that used to head the inspector — save state and zoom — plus the layout
- * toggles that lived in the left panel's title row.
- */
-import { createSignal, For } from "solid-js";
-import { toast } from "somoto";
-import { useWorld } from "@posterract/koota-solid";
-import { Name, Scene, getParentNode } from "@posterract/video-runtime";
-import { ProjectMenu } from "@/components/sidebar-left/project-menu";
-import { InspectorHeader } from "@/components/sidebar-right/inspector/inspector-header";
-import { Button } from "@/components/ui/button";
-import { Icon } from "@/components/ui/icon";
-import { useLayout } from "@/context/layout";
-import { useProject } from "@/context/project";
-import { useDerived, useEditor } from "@/engine/hooks";
-import { useActiveScene } from "@/engine/hooks/use-active-scene";
+import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+import { useNavigate } from '@solidjs/router';
+import { toast } from 'somoto';
+import { ProjectMenu } from '@/components/sidebar-left/project-menu';
+import { SavePill } from '@/components/sidebar-right/inspector/save-pill';
+import { ExportPanel } from '@/components/sidebar-right/inspector/export';
+import { getDefaultExportTemplate } from '@/components/sidebar-right/inspector/export-templates';
+import { PosterractCodePanel } from '@/components/posterract-code-panel';
+import { Button } from '@/components/ui/button';
+import { Icon } from '@/components/ui/icon';
+import { Dialog, DialogContent, DialogDescription, DialogPortal, DialogTitle } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuPortal, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
+import { useLayout, type EditorWorkspace } from '@/context/layout';
+import { useExport } from '@/context/export';
+import { useProject } from '@/context/project';
+import { useActiveScene } from '@/engine/hooks/use-active-scene';
+import { useProjectConfig } from '@/engine/project-config';
+import { setTimelineDetail } from '@/engine/timeline/detail';
+import { registerCommand } from '@/engine/voice';
 
-import type { Entity } from "koota";
+const WORKSPACES: { value: EditorWorkspace; label: string; hint: string }[] = [
+  { value: 'storyboard', label: 'Storyboard', hint: 'Arrange scenes on the canvas' },
+  { value: 'edit', label: 'Edit', hint: 'Cut video, edit text and sound' },
+  { value: 'motion', label: 'Motion', hint: 'Refine animation and keyframes' },
+];
 
 export function CommandBar() {
-  const world = useWorld();
-  const editor = useEditor();
+  const navigate = useNavigate();
   const project = useProject();
-  const activeScene = useActiveScene();
-  const { toggleTimeline, toggleUI, editorTheme, toggleEditorTheme } = useLayout();
-
-  // Top-level scenes only: a scene nested inside another is a component of
-  // that video, not a video of its own.
-  const scenes = useDerived<Entity[]>(
-    () => [...world.query(Scene)].filter((entity) => getParentNode(entity) === null),
-    (prev, next) => prev.length === next.length && prev.every((entity, index) => entity === next[index]),
-  );
-
+  const layout = useLayout();
+  const scene = useActiveScene();
+  const config = useProjectConfig();
+  const { exportScene, exporting } = useExport();
   const [draft, setDraft] = createSignal<string | null>(null);
+  const [exportSettings, setExportSettings] = createSignal(false);
+
+  // The dialog is this bar's, so the voice bar's command for it is registered here.
+  onMount(() => onCleanup(registerCommand({
+    id: 'export.settings', label: 'Export settings', group: 'Export', keys: [],
+    aliases: ['export settings', 'export options'], when: 'scene',
+    action: () => setExportSettings(true),
+  })));
 
   const commitName = async (input: HTMLInputElement) => {
-    const trimmed = draft()?.trim() ?? "";
-    // The rename the folder follows: the project keeps its id, so the URL
-    // and the open editor are untouched by the move.
-    if (trimmed.length > 0 && trimmed !== project.name()) {
-      try {
-        await project.rename(trimmed);
-      } catch (error) {
-        toast.error("Failed to rename project", { description: (error as Error).message });
-      }
+    const name = draft()?.trim();
+    if (name && name !== project.name()) {
+      try { await project.rename(name); }
+      catch (error) { toast.error('Could not rename project', { description: (error as Error).message }); }
     }
     setDraft(null);
     input.blur();
   };
+  const runExport = () => {
+    const current = scene();
+    if (current) void exportScene(current, config()?.exportOf(current) ?? getDefaultExportTemplate());
+  };
 
   return (
-    <div
-      class="flex h-full items-center gap-2 pr-2"
-      classList={{ "pl-2": true }}
-      style="-webkit-app-region: drag;"
-    >
-      <div class="flex items-center gap-2" style="-webkit-app-region: no-drag;">
-        <ProjectMenu />
-        <span class="posterract-wordmark">POSTER<b>RACT</b></span>
-        <span class="text-muted-foreground/40">/</span>
-        <input
-          type="text"
-          class="posterract-bar-name"
-          value={draft() ?? project.name()}
-          placeholder="Project name"
-          onInput={(event) => setDraft(event.currentTarget.value)}
-          onFocus={(event) => {
-            setDraft(project.name());
-            event.currentTarget.select();
-          }}
-          onBlur={() => setDraft(null)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") void commitName(event.currentTarget);
-            if (event.key === "Escape") {
-              setDraft(null);
-              event.currentTarget.blur();
-            }
-          }}
-        />
-      </div>
-
-      {/* The videos in this project. */}
-      <div class="mx-auto flex items-center gap-1.5" style="-webkit-app-region: no-drag;">
-        <For each={scenes()}>
-          {(scene, index) => (
-            <button
-              type="button"
-              class="posterract-scene-chip"
-              classList={{ "is-active": activeScene() === scene }}
-              title={scene.get(Name)?.value?.trim() || "Untitled video"}
-              onClick={() => editor.activate(scene)}
-            >
-              {String(index() + 1).padStart(2, "0")}
+    <>
+      <div class="posterract-command-bar" style="-webkit-app-region: drag;">
+        <div class="posterract-project-identity" style="-webkit-app-region: no-drag;">
+          <ProjectMenu />
+          <span class="posterract-wordmark">POSTER<b>RACT</b></span>
+          <div class="posterract-project-status">
+            <input
+              aria-label="Project name" type="text" class="posterract-bar-name" value={draft() ?? project.name()}
+              onInput={e => setDraft(e.currentTarget.value)}
+              onFocus={e => { setDraft(project.name()); e.currentTarget.select(); }}
+              onBlur={() => setDraft(null)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') void commitName(e.currentTarget);
+                if (e.key === 'Escape') { setDraft(null); e.currentTarget.blur(); }
+              }}
+            />
+            <SavePill />
+          </div>
+        </div>
+        <div class="posterract-workspace-switch" role="group" aria-label="Editor workspace" style="-webkit-app-region: no-drag;">
+          <For each={WORKSPACES}>{mode => (
+            <button type="button" aria-pressed={layout.workspace() === mode.value} title={mode.hint}
+              onClick={() => { layout.setWorkspace(mode.value); if (mode.value === 'motion') setTimelineDetail('animation'); }}>
+              {mode.label}
             </button>
-          )}
-        </For>
+          )}</For>
+        </div>
+        <div class="posterract-command-actions" style="-webkit-app-region: no-drag;">
+          <PosterractCodePanel compact />
+          <DropdownMenu placement="bottom-end">
+            <DropdownMenuTrigger as={Button} variant="ghost" size="icon" aria-label="Workspace panels and appearance" title="Workspace panels and appearance">
+              <Icon name="sidebar" />
+            </DropdownMenuTrigger>
+            <DropdownMenuPortal><DropdownMenuContent class="w-56">
+              <DropdownMenuItem onSelect={layout.toggleLeft}>{layout.leftOpen() ? 'Collapse assets' : 'Show assets'}</DropdownMenuItem>
+              <DropdownMenuItem onSelect={layout.toggleInspector}>{layout.inspectorOpen() ? 'Hide inspector' : 'Show inspector'}</DropdownMenuItem>
+              <DropdownMenuItem onSelect={layout.toggleTimeline}>{layout.timelineMinimized() ? 'Expand timeline' : 'Collapse timeline'}</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => layout.setInspectorTab('history')}>Version history</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={layout.toggleEditorTheme}>{layout.editorTheme() === 'noir' ? 'Switch to Glass' : 'Switch to Noir'}</DropdownMenuItem>
+              <DropdownMenuItem onSelect={layout.toggleUI}>Hide interface</DropdownMenuItem>
+            </DropdownMenuContent></DropdownMenuPortal>
+          </DropdownMenu>
+          <div class="posterract-export-action" role="group" aria-label="Video export" aria-busy={exporting()}>
+            <Button variant="ghost" disabled={!scene() || exporting()} onClick={runExport} class="posterract-export-primary" aria-label={exporting() ? 'Exporting video' : 'Export video'}>
+              <span class="posterract-export-icon" aria-hidden="true"><Icon name="film-video-export" class="size-4" /></span>
+              <span>{exporting() ? 'Exporting…' : 'Export'}</span>
+            </Button>
+            <DropdownMenu placement="bottom-end">
+              <DropdownMenuTrigger as={Button} variant="ghost" class="posterract-export-options" aria-label="Export and scheduling options" title="Export options">
+                <Icon name="chevron-down" class="size-4" />
+              </DropdownMenuTrigger>
+              <DropdownMenuPortal><DropdownMenuContent class="w-56">
+                <DropdownMenuItem disabled={!scene()} onSelect={() => setExportSettings(true)}>Export settings…</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => navigate('/?view=exports')}>Open exports library…</DropdownMenuItem>
+              </DropdownMenuContent></DropdownMenuPortal>
+            </DropdownMenu>
+          </div>
+        </div>
       </div>
-
-      <div class="flex items-center gap-1" style="-webkit-app-region: no-drag;">
-        <button
-          type="button"
-          class="posterract-theme-switch"
-          classList={{ "is-frost": editorTheme() === "frost" }}
-          onClick={toggleEditorTheme}
-          title={editorTheme() === "frost" ? "Glass mode on — switch to Noir" : "Switch to Glass mode"}
-          aria-pressed={editorTheme() === "frost"}
-        >
-          <span class="posterract-theme-switch-dot" />
-          {editorTheme() === "frost" ? "Glass" : "Noir"}
-        </button>
-        <InspectorHeader />
-        <Button variant="ghost" size="icon" class="text-muted-foreground" onClick={toggleTimeline} title="Collapse the timeline">
-          <Icon name="sidebar-timeline" />
-        </Button>
-        <Button variant="ghost" size="icon" class="text-muted-foreground" onClick={toggleUI} title="Hide the instruments">
-          <Icon name="sidebar" />
-        </Button>
-      </div>
-    </div>
+      <Dialog open={exportSettings()} onOpenChange={setExportSettings}>
+        <DialogPortal><DialogContent class="max-h-[85vh] overflow-y-auto">
+          <DialogTitle>Export settings</DialogTitle>
+          <DialogDescription>Choose the format and quality for the active video.</DialogDescription>
+          <Show when={scene()} keyed>{current => <ExportPanel selection={[current]} />}</Show>
+        </DialogContent></DialogPortal>
+      </Dialog>
+    </>
   );
 }

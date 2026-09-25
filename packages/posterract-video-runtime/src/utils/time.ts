@@ -5,7 +5,7 @@
 import { CONONICAL_TIME_BASE, PaintType } from '../constants';
 import {
 	Audio, AssetId, Cache, Computed, Geometry, Paint, Trim, Library, FrameRate,
-	Delay, IsMask, PlaybackRate, SourceFrameRate,
+	Delay, IsMask, PlaybackRate, SourceFrameRate, Stagger, ItemIndex,
 } from '../traits';
 import { getParentNode } from '../queries/hierarchy';
 import { getSourceDuration } from '../actions/assets';
@@ -111,6 +111,16 @@ export function getLocalWindow(entity: Entity): { in: number; out: number } {
 		in: Math.round(((computed?.start ?? 0) - origin) * playbackRate),
 		out: Math.round(((computed?.end ?? 0) - origin) * playbackRate),
 	};
+}
+
+/** Nested staggers add in the same local clock used by preset playback. */
+export function getStaggerOffset(entity: Entity): number {
+	let offset = 0;
+	let current = entity;
+	for (let parent = getParentNode(current); parent !== null; current = parent, parent = getParentNode(parent)) {
+		offset += (parent.get(Stagger)?.value ?? 0) * (current.get(ItemIndex)?.value ?? 0);
+	}
+	return offset;
 }
 
 /**

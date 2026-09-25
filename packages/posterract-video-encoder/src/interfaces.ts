@@ -70,7 +70,9 @@ export interface VideoConfig {
 	fps?: number;
 
 	/**
-	 * Resolution of the composition
+	 * Resolution of the composition: the length of its *shorter* side, px. A
+	 * landscape scene at 1080 is 1920×1080, a vertical one 1080×1920 (see
+	 * `outputSize`).
 	 * @example
 	 * 1080 for 1080p
 	 * 1440 for 1440p
@@ -120,6 +122,6 @@ export interface ImageEncoderConfig {
 	/** Frames to capture, relative to the node's first visible frame. */
 	frames: number[];
 
-	/** Target output height in px (default: the node's native size). */
+	/** The length of the output's shorter side, px, as for a video export (default: the node's native size). */
 	resolution?: number;
 }
