@@ -7,7 +7,23 @@ import { useEffect, useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { artifactUrls, useEngineStore } from "./store";
 import { startSimulator } from "./simulator";
-import type { AccountSetDTO, AnalyticsDashboardDTO, AnalyticsRangeDays, PlatformId } from "@posterract/contract";
+import {
+  POINTS_SOURCE_LABELS,
+  levelProgress,
+  nextRank,
+  rankFor,
+  type AccountSetDTO,
+  type AnalyticsDashboardDTO,
+  type AnalyticsRangeDays,
+  type LeaderboardDTO,
+  type LeaderboardPeriod,
+  type PlatformId,
+  type PointsDashboardDTO,
+  type PointsEntryDTO,
+  type PointsPlatform,
+  type PointsSource,
+  type PostPointsDTO,
+} from "@posterract/contract";
 
 export function useEngineBoot() {
   const hydrate = useEngineStore((s) => s.hydrate);
@@ -51,6 +67,141 @@ export const usePoints = () => {
     [stats, points],
   );
 };
+// Demo points: posts scored under the real rules (see POINTS_RATES), so the
+// Points tab shows what a working creator's month looks like.
+const DEMO_POINTS_POSTS: Array<{
+  provider: PointsPlatform;
+  title: string;
+  daysAgo: number;
+  parts: Array<[PointsSource, number, number?]>;
+}> = [
+  { provider: "instagram", title: "The habit that changed my mornings", daysAgo: 3, parts: [
+    ["watch", 96.5, 96.5], ["views", 48.2, 48_200], ["saves", 34.6, 692], ["likes", 31.4, 3_140],
+    ["comments", 28.6, 286], ["shares", 20.5, 410], ["record", 10, 48_200], ["retention", 5, 58.3], ["post", 1],
+  ] },
+  { provider: "facebook", title: "Building the studio in 30 seconds", daysAgo: 6, parts: [
+    ["watch", 61.2, 61.2], ["views", 31.6, 31_600], ["likes", 19.2, 1_920], ["shares", 19, 380],
+    ["comments", 14.4, 144], ["retention", 10, 79.1], ["breakout", 5, 31_600], ["post", 1],
+  ] },
+  { provider: "threads", title: "The product drop nobody expected", daysAgo: 9, parts: [
+    ["comments", 32, 320], ["views", 29.2, 58_400], ["likes", 26.1, 2_610], ["shares", 22.5, 450], ["post", 1],
+  ] },
+  { provider: "instagram", title: "Five edits that doubled my watch time", daysAgo: 12, parts: [
+    ["watch", 38.4, 38.4], ["views", 22.9, 22_900], ["saves", 15.5, 310], ["likes", 11.8, 1_180],
+    ["comments", 9.6, 96], ["shares", 7, 140], ["post", 1],
+  ] },
+  { provider: "facebook", title: "Studio tour, part two", daysAgo: 15, parts: [
+    ["watch", 21.7, 21.7], ["views", 12.4, 12_400], ["likes", 6.4, 640], ["comments", 5.2, 52], ["shares", 4.4, 88], ["post", 1],
+  ] },
+  { provider: "instagram", title: "Lighting setup under $100", daysAgo: 18, parts: [
+    ["watch", 8.2, 8.2], ["views", 6.1, 6_100], ["saves", 3.7, 74], ["likes", 2.8, 280],
+    ["comments", 2.2, 22], ["shares", 0.9, 18], ["post", 1],
+  ] },
+  { provider: "threads", title: "Why I stopped posting daily", daysAgo: 21, parts: [
+    ["comments", 6.4, 64], ["views", 4.9, 9_800], ["likes", 4.2, 420], ["shares", 1.8, 36], ["post", 1],
+  ] },
+  { provider: "facebook", title: "The 3-second hook rule", daysAgo: 24, parts: [
+    ["watch", 5.6, 5.6], ["views", 4.3, 4_300], ["likes", 1.9, 190], ["comments", 1.4, 14], ["shares", 0.6, 12], ["post", 1],
+  ] },
+];
+
+const DEMO_PROVIDER_LABELS: Record<PointsPlatform, string> = {
+  instagram: "Instagram",
+  facebook: "Facebook",
+  threads: "Threads",
+};
+
+const round2 = (value: number) => Math.round(value * 100) / 100;
+
+function demoPointsDashboard(): PointsDashboardDTO {
+  const now = Date.now();
+  const topPosts: PostPointsDTO[] = DEMO_POINTS_POSTS.map((post, index) => ({
+    projectionId: `points_demo_${index}`,
+    provider: post.provider,
+    title: post.title,
+    publishedAt: now - post.daysAgo * 86_400_000,
+    total: round2(post.parts.reduce((sum, [, points]) => sum + points, 0)),
+    parts: post.parts.map(([source, points, value]) => ({ source, points, value })),
+  }));
+  const recent: PointsEntryDTO[] = [
+    { id: "demo_streak_7", source: "streak" as const, amount: 10, note: "7-day streak", at: now - 5 * 86_400_000 },
+    { id: "demo_followers_5k", source: "followers" as const, amount: 40, note: "5,000 followers · Threads @posterract-lab", at: now - 8 * 86_400_000 },
+    ...DEMO_POINTS_POSTS.slice(0, 4).flatMap((post, postIndex) =>
+      post.parts.slice(0, 3).map(([source, points], partIndex) => ({
+        id: `demo_${postIndex}_${source}`,
+        source,
+        amount: round2(points / (partIndex + 2)),
+        note: `${POINTS_SOURCE_LABELS[source]} · ${DEMO_PROVIDER_LABELS[post.provider]} · ${post.title}`,
+        at: now - (postIndex * 2 + partIndex + 1) * 3_600_000,
+      })),
+    ),
+  ].sort((left, right) => right.at - left.at);
+  const totalPoints = round2(topPosts.reduce((sum, post) => sum + post.total, 0) + 10 + 40);
+  const progress = levelProgress(totalPoints);
+  const rank = rankFor(totalPoints);
+  const upcoming = nextRank(totalPoints);
+  return {
+    totalPoints,
+    weekPoints: 86.45,
+    monthPoints: 402.7,
+    level: progress.level,
+    levelFloor: progress.floor,
+    nextLevelAt: progress.next,
+    rank: { id: rank.id, label: rank.label },
+    nextRank: upcoming ? { id: upcoming.id, label: upcoming.label, minLevel: upcoming.minLevel } : undefined,
+    streak: { current: 12, best: 19, next: { days: 30, points: 1_000 } },
+    followers: [
+      { accountId: "demo_ig", provider: "instagram", handle: "@posterract-lab", followers: 21_470, baseline: 18_200, next: { followers: 25_000, points: 150 } },
+      { accountId: "demo_fb", provider: "facebook", handle: "Posterract Lab", followers: 12_840, baseline: 12_100, next: { followers: 25_000, points: 150 } },
+      { accountId: "demo_th", provider: "threads", handle: "@posterract-lab", followers: 7_460, baseline: 4_300, next: { followers: 10_000, points: 50 } },
+    ],
+    topPosts,
+    recent,
+    badges: ["first_transmission", "streak_7", "record", "breakout"],
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  };
+}
+
+const DEMO_CREATORS = [
+  "Mara Vance", "Theo Lindqvist", "Juno Okafor", "Ren Castillo", "Ivy Marchetti", "Soren Blake",
+  "Lena Ashworth", "Dax Moreau", "Noor Haddad", "Callum Reyes", "Tess Navarro", "Ezra Quinn",
+  "Priya Sandoval", "Milo Kerrigan", "Wren Takahashi", "Otis Delacroix", "Ada Whitlock", "Jonah Ferreira",
+  "Kira Lozano", "Silas Brennan", "Nadia Petrov", "Hugo Almeida", "Rhea Kessler",
+];
+
+function demoLeaderboard(period: LeaderboardPeriod, me: PointsDashboardDTO): LeaderboardDTO {
+  const scale = period === "week" ? 0.07 : period === "month" ? 0.3 : 1;
+  const mine = period === "week" ? me.weekPoints : period === "month" ? me.monthPoints : me.totalPoints;
+  const rows = DEMO_CREATORS.map((name, index) => {
+    const lifetime = round2(42_000 / (index + 1) ** 1.6 + 60);
+    const points = round2(lifetime * scale * (1 + ((index * 37) % 11) / 40));
+    return { name, lifetime, points, isMe: false };
+  });
+  rows.push({ name: "Posterract Lab", lifetime: me.totalPoints, points: mine, isMe: true });
+  rows.sort((left, right) => right.points - left.points || right.lifetime - left.lifetime);
+  const entries = rows.map((row, index) => {
+    const rank = rankFor(row.lifetime);
+    return {
+      position: index + 1,
+      name: row.name,
+      level: levelProgress(row.lifetime).level,
+      rank: { id: rank.id, label: rank.label },
+      points: row.points,
+      isMe: row.isMe,
+    };
+  });
+  return { period, entries, me: entries.find((entry) => entry.isMe), total: entries.length };
+}
+
+export function usePointsDashboard(): PointsDashboardDTO {
+  return useMemo(demoPointsDashboard, []);
+}
+
+export function useLeaderboard(period: LeaderboardPeriod): LeaderboardDTO {
+  const me = usePointsDashboard();
+  return useMemo(() => demoLeaderboard(period, me), [period, me]);
+}
+
 type DemoAnalyticsProvider = "instagram" | "tiktok" | "facebook" | "threads";
 
 const demoDaily = (provider: DemoAnalyticsProvider, rangeDays: AnalyticsRangeDays) => {

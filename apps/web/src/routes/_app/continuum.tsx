@@ -6,6 +6,7 @@ import clsx from "clsx";
 import { Button, EmptyState, Modal, Panel, PlatformBrandMark, Segmented, StatusBadge, pushSignal } from "@posterract/hyperkit";
 import type { PlatformId, TransmissionStatus } from "@posterract/contract";
 import { CalendarPostDialog } from "@/components/CalendarPostDialog";
+import { PointsChip, pointsByTransmission } from "@/components/PointsChip";
 import { addCalendarDays, startOfWeek, scheduleTimeForDay, sameCalendarDay, calendarDayKey } from "@/lib/calendar-date";
 import { ArtifactThumb } from "@/components/ArtifactThumb";
 import { useEngineActions, useProjections, useTransmissions } from "@/engine/useEngine";
@@ -19,7 +20,7 @@ function PostStatusDot({ status }: { status: TransmissionStatus }) {
   return <span role="img" aria-label={`Status: ${status}`} title={status} className={clsx("inline-block h-1.5 w-1.5 flex-none rounded-full", status === "live" ? "bg-neon" : status === "scheduled" ? "bg-ice" : status === "failed" || status === "partial" ? "bg-redshift" : status === "canceled" ? "bg-starlight-faint" : "bg-solar")} />;
 }
 
-function CalendarPlatformLogos({ platforms }: { platforms: readonly PlatformId[] }) {
+function CalendarPlatformLogos({ platforms, points }: { platforms: readonly PlatformId[]; points?: number }) {
   const unique = [...new Set(platforms)];
   return (
     <span data-calendar-platforms className="calendar-post-platforms">
@@ -27,12 +28,13 @@ function CalendarPlatformLogos({ platforms }: { platforms: readonly PlatformId[]
         <PlatformBrandMark key={platform} platform={platform} height={18} className="flex-none" />
       ))}
       {platforms.length === 0 && <span className="text-[9px] text-starlight-faint">No targets</span>}
+      {points !== undefined && <PointsChip points={points} size="sm" className="ml-auto" />}
     </span>
   );
 }
 
-function CalendarPostSummary({ title, scheduledFor, status, platforms }: {
-  title: string; scheduledFor: number; status: TransmissionStatus; platforms: readonly PlatformId[];
+function CalendarPostSummary({ title, scheduledFor, status, platforms, points }: {
+  title: string; scheduledFor: number; status: TransmissionStatus; platforms: readonly PlatformId[]; points?: number;
 }) {
   return <span className="calendar-post-summary">
     <span className="calendar-post-heading">
@@ -41,7 +43,7 @@ function CalendarPostSummary({ title, scheduledFor, status, platforms }: {
         {new Date(scheduledFor).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
       </time></span>
     </span>
-    <CalendarPlatformLogos platforms={platforms} />
+    <CalendarPlatformLogos platforms={platforms} points={points} />
   </span>;
 }
 
@@ -110,6 +112,7 @@ function Continuum() {
     }
     return grouped;
   }, [projections]);
+  const pointsByPost = useMemo(() => pointsByTransmission(projections), [projections]);
   const { rescheduleTransmission } = useEngineActions();
   const [periodAnchor, setPeriodAnchor] = useState(() => Date.now());
   const [view, setView] = useState<"week" | "month">("month");
@@ -310,6 +313,7 @@ function Continuum() {
           now={now}
           transmissions={transmissions}
           platformsByPost={platformsByPost}
+          pointsByPost={pointsByPost}
           onPickDay={setSelectedDay}
           onPickPost={openPost}
           draggingId={draggingId}
@@ -354,7 +358,7 @@ function Continuum() {
               <div className="mt-2 space-y-1.5">
                 {items.length === 0 ? <p className="rounded-[10px] border border-dashed border-[var(--glass-border)] px-3 py-3 text-[10px] text-starlight-faint">No posts scheduled.</p> : items.map((t) => {
                   const canDrag = t.status === "scheduled" && reschedulingId !== t.id;
-                  return <div key={t.id} data-draggable-post data-transmission-id={t.id} draggable={canDrag} onDragStart={(event) => beginPostDrag(event, t.id)} onDragEnd={finishPostDrag} title={canDrag ? "Drag to move this scheduled post" : undefined} className={clsx("calendar-post-shell", canDrag && "calendar-post-shell--draggable", draggingId === t.id && "is-dragging", reschedulingId === t.id && "is-rescheduling")}><button type="button" onClick={() => openPost(t.id)} aria-label={`View post: ${t.title}`} data-calendar-post-surface draggable={false} className="calendar-post-block calendar-post-block--agenda calendar-post-compact w-full text-left flex items-center gap-2 rounded-[8px]"><ArtifactThumb artifactId={t.artifactId} className="h-8 w-6 flex-none" hoverPreview={false} /><CalendarPostSummary title={t.title} scheduledFor={t.scheduledFor!} status={t.status} platforms={platformsByPost.get(t.id) ?? []} /></button></div>;
+                  return <div key={t.id} data-draggable-post data-transmission-id={t.id} draggable={canDrag} onDragStart={(event) => beginPostDrag(event, t.id)} onDragEnd={finishPostDrag} title={canDrag ? "Drag to move this scheduled post" : undefined} className={clsx("calendar-post-shell", canDrag && "calendar-post-shell--draggable", draggingId === t.id && "is-dragging", reschedulingId === t.id && "is-rescheduling")}><button type="button" onClick={() => openPost(t.id)} aria-label={`View post: ${t.title}`} data-calendar-post-surface draggable={false} className="calendar-post-block calendar-post-block--agenda calendar-post-compact w-full text-left flex items-center gap-2 rounded-[8px]"><ArtifactThumb artifactId={t.artifactId} className="h-8 w-6 flex-none" hoverPreview={false} /><CalendarPostSummary title={t.title} scheduledFor={t.scheduledFor!} status={t.status} platforms={platformsByPost.get(t.id) ?? []} points={pointsByPost.get(t.id)} /></button></div>;
                 })}
               </div>
             </section>
@@ -433,7 +437,7 @@ function Continuum() {
                       draggable={false}
                       className="calendar-post-block calendar-post-block--week calendar-post-compact w-full text-left block rounded-[8px]"
                     >
-                      <CalendarPostSummary title={t.title} scheduledFor={t.scheduledFor!} status={t.status} platforms={platformsByPost.get(t.id) ?? []} />
+                      <CalendarPostSummary title={t.title} scheduledFor={t.scheduledFor!} status={t.status} platforms={platformsByPost.get(t.id) ?? []} points={pointsByPost.get(t.id)} />
                     </button>
                     </div>
                   );
@@ -498,6 +502,7 @@ function DayInspector({
   onPickPost: (id: string) => void;
 }) {
   const dayStart = day ?? startOfWeek(now);
+  const pointsByPost = pointsByTransmission(projections);
   const items = transmissions
     .filter(
       (transmission) =>
@@ -585,7 +590,7 @@ function DayInspector({
             return (
               <button type="button" key={transmission.id} onClick={() => onPickPost(transmission.id)} aria-label={`View post: ${transmission.title}`} className="day-inspector-post w-full text-left">
                 <ArtifactThumb artifactId={transmission.artifactId} className="h-9 w-7 flex-none" hoverPreview={false} />
-                <CalendarPostSummary title={transmission.title} scheduledFor={transmission.scheduledFor!} status={transmission.status} platforms={platforms} />
+                <CalendarPostSummary title={transmission.title} scheduledFor={transmission.scheduledFor!} status={transmission.status} platforms={platforms} points={pointsByPost.get(transmission.id)} />
                 <StatusBadge status={transmission.status} size="sm" />
               </button>
             );
@@ -602,6 +607,7 @@ function MonthView({
   now,
   transmissions,
   platformsByPost,
+  pointsByPost,
   onPickDay,
   onPickPost,
   draggingId,
@@ -616,6 +622,7 @@ function MonthView({
   now: number;
   transmissions: ReturnType<typeof useTransmissions>;
   platformsByPost: ReadonlyMap<string, readonly PlatformId[]>;
+  pointsByPost: ReadonlyMap<string, number>;
   onPickDay: (day: number) => void;
   onPickPost: (id: string) => void;
   draggingId: string | null;
@@ -705,7 +712,7 @@ function MonthView({
                     )}
                     data-calendar-post-surface
                   >
-                    <CalendarPostSummary title={t.title} scheduledFor={t.scheduledFor!} status={t.status} platforms={platformsByPost.get(t.id) ?? []} />
+                    <CalendarPostSummary title={t.title} scheduledFor={t.scheduledFor!} status={t.status} platforms={platformsByPost.get(t.id) ?? []} points={pointsByPost.get(t.id)} />
                   </button>
                   );
                 })}

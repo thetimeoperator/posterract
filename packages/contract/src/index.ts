@@ -133,6 +133,8 @@ export type ProjectionDTO = {
   platformPostUrl?: string;
   errorCategory?: ErrorCategory;
   errorSummary?: string;
+  /** Points this post has earned on its platform (Instagram, Facebook and Threads). */
+  points?: number;
   updatedAt: number;
 };
 
@@ -458,30 +460,244 @@ export type AnalyticsDashboardDTO = {
   platforms: PlatformAnalyticsDTO[];
 };
 
-export type Rank = { id: string; label: string; minRP: number };
+// ---------------------------------------------------------------------------
+// Points, levels and ranks. One set of numbers for the scorer (the worker),
+// the API and the Points tab, so what a post is said to earn is what it earns.
+// Points are decimal: 3,540 views on Instagram are 3.54 points.
+// ---------------------------------------------------------------------------
 
-export const RANKS: Rank[] = [
-  { id: "drifter", label: "Drifter", minRP: 0 },
-  { id: "signalman", label: "Signalman", minRP: 500 },
-  { id: "navigator", label: "Navigator", minRP: 2_500 },
-  { id: "voyager", label: "Voyager", minRP: 10_000 },
-  { id: "luminary", label: "Luminary", minRP: 40_000 },
-  { id: "ascendant", label: "Ascendant", minRP: 150_000 },
-  { id: "architect", label: "Architect", minRP: 500_000 },
+/** The platforms whose posts earn points; the rest earn nothing yet. */
+export const POINTS_PLATFORMS = ["instagram", "facebook", "threads"] as const;
+export type PointsPlatform = (typeof POINTS_PLATFORMS)[number];
+
+/**
+ * How many of a thing make one point, per platform. Threads counts a view
+ * each time a post is displayed rather than played, so its views are worth
+ * half. Watch time is hours per point.
+ */
+export const POINTS_RATES: Record<PointsPlatform, {
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  saves: number | null;
+  watchHours: number | null;
+}> = {
+  instagram: { views: 1_000, likes: 100, comments: 10, shares: 20, saves: 20, watchHours: 1 },
+  facebook: { views: 1_000, likes: 100, comments: 10, shares: 20, saves: null, watchHours: 1 },
+  threads: { views: 2_000, likes: 100, comments: 10, shares: 20, saves: null, watchHours: null },
+};
+
+/** Points for a post going live, per platform. */
+export const POINTS_POST_LIVE = 1;
+
+/**
+ * Launch day, Sep 24 2026 (UTC). Points count from here: posts published
+ * before it earn nothing, and streaks and follower growth start counting from
+ * it, so everyone starts at level 1.
+ */
+export const POINTS_START_AT = Date.UTC(2026, 8, 24);
+
+/**
+ * Retention bonus on Instagram and Facebook: the share of the video watched
+ * on average. Judged from day 3, for posts with 1,000+ views; the best tier
+ * reached is kept, so the bonus is +5 at 50% and +10 in all at 75%.
+ */
+export const POINTS_RETENTION = {
+  minViews: 1_000,
+  minAgeHours: 72,
+  tiers: [
+    { share: 0.5, points: 5 },
+    { share: 0.75, points: 10 },
+  ],
+} as const;
+
+/** Streak milestones, each earned once per streak; a new streak earns them again. */
+export const POINTS_STREAK_MILESTONES = [
+  { days: 7, points: 10 },
+  { days: 30, points: 1_000 },
+  { days: 100, points: 5_000 },
+  { days: 365, points: 10_000 },
+] as const;
+
+/**
+ * Follower milestones per connected account: 1 point per 100 followers,
+ * paid out as each is crossed. Only growth after the account was connected
+ * counts, so an audience someone arrives with earns nothing by itself.
+ */
+export const POINTS_FOLLOWER_MILESTONES = [
+  { followers: 1_000, points: 10 },
+  { followers: 5_000, points: 40 },
+  { followers: 10_000, points: 50 },
+  { followers: 25_000, points: 150 },
+  { followers: 50_000, points: 250 },
+  { followers: 100_000, points: 500 },
+  { followers: 250_000, points: 1_500 },
+  { followers: 500_000, points: 2_500 },
+  { followers: 1_000_000, points: 5_000 },
+] as const;
+
+/**
+ * Personal bests per account, for posts with 1,000+ views after at least five
+ * earlier posts: beating the account's best views is a record, and 3× its
+ * usual views (the median of the 30 days before) is a breakout.
+ */
+export const POINTS_PERSONAL_BEST = {
+  minViews: 1_000,
+  minEarlierPosts: 5,
+  record: 10,
+  breakout: 5,
+  breakoutMultiple: 3,
+  breakoutWindowDays: 30,
+} as const;
+
+/**
+ * Total points needed for each level, index 0 being level 1. Each level asks
+ * about 13.7% more than the step before it: level 2 is 10 points, level 100
+ * is 24.19 million — reached only by a top creator posting daily for years.
+ */
+export const LEVEL_THRESHOLDS: readonly number[] = [
+  0, 10, 21, 34, 49, 66, 85, 105, 130, 160,
+  190, 225, 270, 315, 365, 430, 495, 575, 665, 765,
+  880, 1_010, 1_160, 1_330, 1_520, 1_740, 1_980, 2_260, 2_590, 2_950,
+  3_360, 3_830, 4_370, 4_980, 5_670, 6_460, 7_350, 8_370, 9_520, 10_800,
+  12_300, 14_000, 16_000, 18_200, 20_700, 23_500, 26_700, 30_400, 34_600, 39_300,
+  44_700, 50_900, 57_800, 65_800, 74_800, 85_100, 96_700, 110_000, 125_000, 142_000,
+  162_000, 184_000, 209_000, 238_000, 270_000, 307_000, 349_000, 397_000, 452_000, 514_000,
+  584_000, 664_000, 755_000, 859_000, 976_000, 1_110_000, 1_260_000, 1_430_000, 1_630_000, 1_850_000,
+  2_110_000, 2_400_000, 2_730_000, 3_100_000, 3_520_000, 4_010_000, 4_560_000, 5_180_000, 5_890_000, 6_700_000,
+  7_620_000, 8_660_000, 9_850_000, 11_190_000, 12_730_000, 14_470_000, 16_450_000, 18_710_000, 21_270_000, 24_190_000,
 ];
 
+export const MAX_LEVEL = LEVEL_THRESHOLDS.length;
+
+/** The level `points` have reached, 1 to 100. */
+export function levelFor(points: number): number {
+  let level = 1;
+  for (let index = 1; index < LEVEL_THRESHOLDS.length; index += 1) {
+    if (points >= LEVEL_THRESHOLDS[index]!) level = index + 1;
+    else break;
+  }
+  return level;
+}
+
+/** Where `points` stand inside their level: its floor, the next level's floor (null at 100), and the share covered. */
+export function levelProgress(points: number): { level: number; floor: number; next: number | null; progress: number } {
+  const level = levelFor(points);
+  const floor = LEVEL_THRESHOLDS[level - 1]!;
+  const next = level < MAX_LEVEL ? LEVEL_THRESHOLDS[level]! : null;
+  return { level, floor, next, progress: next === null ? 1 : (points - floor) / (next - floor) };
+}
+
+/**
+ * Ranks, Call of Duty style: ten tiers of ten levels, each level a title
+ * within its tier. Level 1 is Bronze Recruit, level 10 Bronze General, level
+ * 11 Silver Recruit, and level 100 Legendary General.
+ */
+export const RANK_TIERS = [
+  { id: "bronze", label: "Bronze" },
+  { id: "silver", label: "Silver" },
+  { id: "gold", label: "Gold" },
+  { id: "platinum", label: "Platinum" },
+  { id: "diamond", label: "Diamond" },
+  { id: "master", label: "Master" },
+  { id: "grandmaster", label: "Grandmaster" },
+  { id: "titan", label: "Titan" },
+  { id: "mythic", label: "Mythic" },
+  { id: "legendary", label: "Legendary" },
+] as const;
+export type RankTierId = (typeof RANK_TIERS)[number]["id"];
+
+/** The ten titles inside every tier, from its first level to its tenth. */
+export const RANK_TITLES = [
+  "Recruit",
+  "Private",
+  "Corporal",
+  "Sergeant",
+  "Lieutenant",
+  "Captain",
+  "Major",
+  "Colonel",
+  "Commander",
+  "General",
+] as const;
+
+/** A level's rank, e.g. level 26 is Gold Captain. `minRP` is the points the level needs. */
+export type Rank = {
+  id: string;
+  label: string;
+  tier: RankTierId;
+  tierIndex: number;
+  title: (typeof RANK_TITLES)[number];
+  titleIndex: number;
+  minLevel: number;
+  minRP: number;
+};
+
+export function rankForLevel(level: number): Rank {
+  const clamped = Math.min(MAX_LEVEL, Math.max(1, Math.floor(level)));
+  const tierIndex = Math.floor((clamped - 1) / RANK_TITLES.length);
+  const titleIndex = (clamped - 1) % RANK_TITLES.length;
+  const tier = RANK_TIERS[tierIndex]!;
+  const title = RANK_TITLES[titleIndex]!;
+  return {
+    id: `${tier.id}-${title.toLowerCase()}`,
+    label: `${tier.label} ${title}`,
+    tier: tier.id,
+    tierIndex,
+    title,
+    titleIndex,
+    minLevel: clamped,
+    minRP: LEVEL_THRESHOLDS[clamped - 1]!,
+  };
+}
+
+/** The first rank of every tier: the ladder from Bronze Recruit to Legendary Recruit. */
+export const RANKS: Rank[] = RANK_TIERS.map((_, index) => rankForLevel(index * RANK_TITLES.length + 1));
+
 export function rankFor(lifetimeRP: number): Rank {
-  let current = RANKS[0];
-  for (const rank of RANKS) if (lifetimeRP >= rank.minRP) current = rank;
-  return current;
+  return rankForLevel(levelFor(lifetimeRP));
 }
 
-/** The rank above the current one, or undefined at the top. */
+/** The rank of the next level, or undefined at level 100. */
 export function nextRank(lifetimeRP: number): Rank | undefined {
-  return RANKS.find((r) => r.minRP > lifetimeRP);
+  const level = levelFor(lifetimeRP);
+  return level < MAX_LEVEL ? rankForLevel(level + 1) : undefined;
 }
 
-export type PointsSource = "post" | "bonus" | "streak" | "milestone" | "views" | "likes" | "comments";
+export type PointsSource =
+  | "post"
+  | "views"
+  | "likes"
+  | "comments"
+  | "shares"
+  | "saves"
+  | "watch"
+  | "retention"
+  | "record"
+  | "breakout"
+  | "streak"
+  | "followers"
+  | "bonus"
+  | "milestone";
+
+/** What each kind of points is called on the Points tab. */
+export const POINTS_SOURCE_LABELS: Record<PointsSource, string> = {
+  post: "Post live",
+  views: "Views",
+  likes: "Likes",
+  comments: "Comments",
+  shares: "Shares",
+  saves: "Saves",
+  watch: "Watch time",
+  retention: "Retention bonus",
+  record: "Personal record",
+  breakout: "Breakout",
+  streak: "Streak",
+  followers: "Follower milestone",
+  bonus: "Bonus",
+  milestone: "Milestone",
+};
 
 export const BADGES: Record<string, string> = {
   first_transmission: "First Transmission",
@@ -489,6 +705,10 @@ export const BADGES: Record<string, string> = {
   streak_7: "7-Day Streak",
   streak_30: "30-Day Streak",
   streak_100: "100-Day Streak",
+  streak_365: "365-Day Streak",
+  club_100k: "100k Club",
+  record: "Record Breaker",
+  breakout: "Breakout",
 };
 
 export type PointsEntryDTO = {
@@ -505,6 +725,66 @@ export type PointsSummaryDTO = {
   streakDays: number;
   badges: string[];
   recent: PointsEntryDTO[];
+};
+
+/** One post's points, rule by rule. */
+export type PostPointsDTO = {
+  projectionId: string;
+  provider: PointsPlatform;
+  title: string;
+  url?: string;
+  publishedAt?: number;
+  total: number;
+  parts: Array<{ source: PointsSource; points: number; value?: number }>;
+};
+
+export type FollowerMilestoneDTO = {
+  accountId: string;
+  provider: PointsPlatform;
+  handle: string;
+  avatarUrl?: string;
+  followers: number;
+  /** Followers when the account was connected: growth from here counts. */
+  baseline: number;
+  next?: { followers: number; points: number };
+};
+
+/** Everything the My Points tab shows. */
+export type PointsDashboardDTO = {
+  totalPoints: number;
+  weekPoints: number;
+  monthPoints: number;
+  level: number;
+  levelFloor: number;
+  nextLevelAt: number | null;
+  rank: { id: string; label: string };
+  nextRank?: { id: string; label: string; minLevel: number };
+  streak: { current: number; best: number; next?: { days: number; points: number } };
+  followers: FollowerMilestoneDTO[];
+  topPosts: PostPointsDTO[];
+  recent: PointsEntryDTO[];
+  badges: string[];
+  timeZone?: string;
+};
+
+export type LeaderboardPeriod = "week" | "month" | "all";
+
+export type LeaderboardEntryDTO = {
+  position: number;
+  name: string;
+  avatarUrl?: string;
+  level: number;
+  rank: { id: string; label: string };
+  points: number;
+  isMe: boolean;
+};
+
+/** Everyone on the base plan or above, ranked by points in the period. */
+export type LeaderboardDTO = {
+  period: LeaderboardPeriod;
+  entries: LeaderboardEntryDTO[];
+  me?: LeaderboardEntryDTO;
+  total: number;
 };
 
 // ---------------------------------------------------------------------------
@@ -560,6 +840,8 @@ export type BillingSubscriptionDTO = {
   status: string;
   accessState: "active" | "inactive";
   entitled: boolean;
+  /** how access was granted: a paid subscription, or an AI FOR SAVAGES membership */
+  entitledVia?: "subscription" | "aiforsavages";
   plan: {
     id?: "pro" | "allstar" | "superstar";
     unitAmount: number;

@@ -6,7 +6,10 @@ import type {
   AnalyticsRangeDays,
   ArtifactDTO,
   EventDTO,
+  LeaderboardDTO,
+  LeaderboardPeriod,
   PlatformId,
+  PointsDashboardDTO,
   PointsSummaryDTO,
   PortalDTO,
   ProjectionDTO,
@@ -35,8 +38,12 @@ type Bootstrap = {
 type State = Bootstrap & {
   loaded: boolean;
   analytics: Partial<Record<AnalyticsRangeDays, AnalyticsDashboardDTO>>;
+  pointsDashboard?: PointsDashboardDTO;
+  leaderboards: Partial<Record<LeaderboardPeriod, LeaderboardDTO>>;
   refresh: () => Promise<void>;
   loadAnalytics: (rangeDays: AnalyticsRangeDays) => Promise<void>;
+  loadPointsDashboard: () => Promise<void>;
+  loadLeaderboard: (period: LeaderboardPeriod) => Promise<void>;
 };
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -62,6 +69,7 @@ const usePostgresStore = create<State>((set) => ({
   accountSets: [],
   points: emptyPoints,
   analytics: {},
+  leaderboards: {},
   refresh: async () => {
     const data = await request<Bootstrap>("/v1/bootstrap");
     for (const artifact of data.artifacts) {
@@ -75,10 +83,33 @@ const usePostgresStore = create<State>((set) => ({
     );
     set((state) => ({ analytics: { ...state.analytics, [rangeDays]: data } }));
   },
+  loadPointsDashboard: async () => {
+    const data = await request<PointsDashboardDTO>("/v1/points/dashboard");
+    set({ pointsDashboard: data });
+  },
+  loadLeaderboard: async (period) => {
+    const data = await request<LeaderboardDTO>(`/v1/leaderboard?period=${period}`);
+    set((state) => ({ leaderboards: { ...state.leaderboards, [period]: data } }));
+  },
 }));
 
 export async function refreshPostgresEngine(): Promise<void> {
   await usePostgresStore.getState().refresh();
+}
+
+// Streak days follow the creator's own calendar, so once per launch the
+// server is told the time zone this device is in.
+let timeZoneSent = false;
+function sendTimeZone() {
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  if (timeZoneSent || !timeZone) return;
+  timeZoneSent = true;
+  void request("/v1/points/time-zone", {
+    method: "PUT",
+    body: JSON.stringify({ timeZone }),
+  }).catch(() => {
+    timeZoneSent = false;
+  });
 }
 
 export function useEngineBoot() {
@@ -86,7 +117,7 @@ export function useEngineBoot() {
   useEffect(() => {
     let active = true;
     const run = () =>
-      void refresh().catch((error) => {
+      void refresh().then(sendTimeZone, (error) => {
         if (active) console.error("PostgreSQL engine refresh failed", error);
       });
     run();
@@ -117,6 +148,28 @@ export function useAnalyticsDashboard(
     });
   }, [loadAnalytics, rangeDays]);
   return dashboard;
+}
+
+export function usePointsDashboard(): PointsDashboardDTO | undefined {
+  const dashboard = usePostgresStore((state) => state.pointsDashboard);
+  const loadPointsDashboard = usePostgresStore((state) => state.loadPointsDashboard);
+  useEffect(() => {
+    void loadPointsDashboard().catch((error) => {
+      console.error("PostgreSQL points refresh failed", error);
+    });
+  }, [loadPointsDashboard]);
+  return dashboard;
+}
+
+export function useLeaderboard(period: LeaderboardPeriod): LeaderboardDTO | undefined {
+  const leaderboard = usePostgresStore((state) => state.leaderboards[period]);
+  const loadLeaderboard = usePostgresStore((state) => state.loadLeaderboard);
+  useEffect(() => {
+    void loadLeaderboard(period).catch((error) => {
+      console.error("PostgreSQL leaderboard refresh failed", error);
+    });
+  }, [loadLeaderboard, period]);
+  return leaderboard;
 }
 
 export const artifactUrls = new Map<string, string>();

@@ -8,11 +8,12 @@ import {
   Radio,
   Settings,
   Plus,
+  Trophy,
   type LucideIcon,
 } from "lucide-react";
 
 export type NavItem = {
-  path: "/create" | "/forge" | "/skills" | "/continuum" | "/transmissions" | "/echoes" | "/vault" | "/portals" | "/uplink" | "/settings";
+  path: "/create" | "/forge" | "/skills" | "/continuum" | "/transmissions" | "/echoes" | "/points" | "/vault" | "/portals" | "/uplink" | "/settings";
   label: string;
   flavor: string;
   icon: LucideIcon;
@@ -26,6 +27,7 @@ export const MVP_NAV_ITEMS: NavItem[] = [
   { path: "/continuum", label: "Calendar", flavor: "Publishing schedule", icon: CalendarDays, section: "mvp" },
   { path: "/uplink", label: "API Keys", flavor: "Agent access", icon: Bot, section: "mvp" },
   { path: "/echoes", label: "Analytics", flavor: "Performance", icon: BarChart3, section: "mvp" },
+  { path: "/points", label: "Points", flavor: "Levels & leaderboard", icon: Trophy, section: "mvp" },
   { path: "/portals", label: "Social accounts", flavor: "Connections", icon: Orbit, section: "mvp" },
   { path: "/vault", label: "Assets", flavor: "Media library", icon: Archive, section: "mvp" },
   { path: "/settings", label: "Settings", flavor: "Workspace", icon: Settings, section: "mvp" },

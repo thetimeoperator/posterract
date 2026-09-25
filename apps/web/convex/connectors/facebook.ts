@@ -458,6 +458,7 @@ export async function facebookPostInsights(args: {
   reactions?: number;
   sharesAvailable: boolean;
   watchTimeSeconds?: number;
+  averageWatchSeconds?: number;
   threeSecondViews?: number;
 }> {
   const url = new URL(`${GRAPH}/${API_VERSION}/${args.videoId}`);
@@ -492,23 +493,78 @@ export async function facebookPostInsights(args: {
     // Some Page Reel objects do not expose post engagement fields directly.
   }
   let watchTimeSeconds: number | undefined;
+  let averageWatchSeconds: number | undefined;
   let threeSecondViews: number | undefined;
-  try {
+  // Watch times come back in milliseconds. An unknown metric fails the whole
+  // request, so the Reel catalog and the one for other videos are asked apart.
+  const videoInsights = async (metrics: string) => {
     const insightsUrl = new URL(`${GRAPH}/${API_VERSION}/${args.videoId}/video_insights`);
-    insightsUrl.searchParams.set("metric", "total_video_view_time,total_video_views");
+    insightsUrl.searchParams.set("metric", metrics);
     insightsUrl.searchParams.set("access_token", args.pageAccessToken);
     const insightsResponse = await fetch(insightsUrl);
     const insights = (await insightsResponse.json()) as {
       data?: Array<{ name?: string; values?: Array<{ value?: number }> }>;
     };
-    if (insightsResponse.ok) {
-      const value = (name: string) =>
-        insights.data?.find((row) => row.name === name)?.values?.at(-1)?.value;
-      watchTimeSeconds = value("total_video_view_time");
-      threeSecondViews = value("total_video_views");
-    }
+    if (!insightsResponse.ok) return undefined;
+    return (name: string) => {
+      const value = insights.data?.find((row) => row.name === name)?.values?.at(-1)?.value;
+      return typeof value === "number" ? value : undefined;
+    };
+  };
+  try {
+    // Reels: total and average play time.
+    const reel = await videoInsights("post_video_view_time,post_video_avg_time_watched");
+    const total = reel?.("post_video_view_time");
+    const average = reel?.("post_video_avg_time_watched");
+    if (total !== undefined) watchTimeSeconds = total / 1000;
+    if (average !== undefined) averageWatchSeconds = average / 1000;
   } catch {
     // Facebook insight catalogs vary by Page and Graph version; base data stays valid.
+  }
+  if (watchTimeSeconds === undefined) {
+    try {
+      // Videos that are not Reels.
+      const video = await videoInsights("total_video_view_total_time,total_video_avg_time_watched,total_video_views");
+      const total = video?.("total_video_view_total_time");
+      const average = video?.("total_video_avg_time_watched");
+      if (total !== undefined) watchTimeSeconds = total / 1000;
+      if (average !== undefined && averageWatchSeconds === undefined) averageWatchSeconds = average / 1000;
+      threeSecondViews = video?.("total_video_views");
+    } catch {
+      // As above.
+    }
+  }
+  if (shares === undefined || reactions === undefined) {
+    // Reels do not expose `shares` or `reactions` as fields; their insights
+    // count them by type instead ({ SHARE: 3, COMMENT: 1 }, { LIKE: 9, LOVE: 2 }),
+    // and an empty object means none yet.
+    try {
+      const socialUrl = new URL(`${GRAPH}/${API_VERSION}/${args.videoId}/video_insights`);
+      socialUrl.searchParams.set("metric", "post_video_social_actions,post_video_likes_by_reaction_type");
+      socialUrl.searchParams.set("access_token", args.pageAccessToken);
+      const socialResponse = await fetch(socialUrl);
+      const social = (await socialResponse.json()) as {
+        data?: Array<{ name?: string; values?: Array<{ value?: Record<string, number> | number }> }>;
+      };
+      if (socialResponse.ok) {
+        const counts = (name: string) => {
+          const value = social.data?.find((row) => row.name === name)?.values?.at(-1)?.value;
+          return value && typeof value === "object" ? value : undefined;
+        };
+        const actions = counts("post_video_social_actions");
+        const byReaction = counts("post_video_likes_by_reaction_type");
+        if (shares === undefined && actions) {
+          shares = Object.entries(actions)
+            .filter(([type]) => /share/i.test(type))
+            .reduce((sum, [, count]) => sum + (Number(count) || 0), 0);
+        }
+        if (reactions === undefined && byReaction) {
+          reactions = Object.values(byReaction).reduce((sum, count) => sum + (Number(count) || 0), 0);
+        }
+      }
+    } catch {
+      // Base counts stay valid without the breakdowns.
+    }
   }
   return {
     views: body.views ?? 0,
@@ -518,6 +574,7 @@ export async function facebookPostInsights(args: {
     reactions,
     sharesAvailable: shares !== undefined,
     watchTimeSeconds,
+    averageWatchSeconds,
     threeSecondViews,
   };
 }

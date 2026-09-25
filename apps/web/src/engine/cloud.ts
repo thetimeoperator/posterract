@@ -10,7 +10,10 @@ import type {
   ArtifactDTO,
   AnalyticsRangeDays,
   EventDTO,
+  LeaderboardDTO,
+  LeaderboardPeriod,
   PlatformId,
+  PointsDashboardDTO,
   PointsSummaryDTO,
   PortalDTO,
   ProjectionDTO,
@@ -156,6 +159,15 @@ export function usePoints(): PointsSummaryDTO | undefined {
     badges: data.badges,
     recent: data.recent.map((e) => ({ id: e.id, source: e.source, amount: e.amount, note: e.note, at: e.at })),
   };
+}
+
+/** The Points tab is served by the PostgreSQL API only; the Convex engine is legacy. */
+export function usePointsDashboard(): PointsDashboardDTO | undefined {
+  return undefined;
+}
+
+export function useLeaderboard(_period: LeaderboardPeriod): LeaderboardDTO | undefined {
+  return undefined;
 }
 
 export function useAnalyticsDashboard(rangeDays: AnalyticsRangeDays) {

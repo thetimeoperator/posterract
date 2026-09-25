@@ -19,6 +19,11 @@ import {
   encryptSecret,
 } from "../../api/src/security.js";
 import {
+  awardPostLive,
+  isPointsPlatform,
+  scoreWorkspacePoints,
+} from "../../api/src/points.js";
+import {
   instagramAccountSummary,
   instagramPostInsights,
   instagramPublishReel,
@@ -896,6 +901,11 @@ async function refreshAccountAnalytics(accountId) {
         return { status: "skipped" };
       }
       await applyCumulativeAnalytics(account, summary, videos);
+      // What the fresh numbers earn. Scoring failing leaves the analytics in
+      // place; the next refresh scores everything again and pays the rest.
+      if (isPointsPlatform(account.provider)) {
+        await scoreWorkspacePoints(postgres, account.workspace_id).catch(() => undefined);
+      }
     }
 
     await postgres.query(
@@ -1092,13 +1102,16 @@ const activities = {
         [row.id, attempt],
       );
       if (result.status === "live") {
-        await postgres.query(
-          `insert into points_ledger
-            (workspace_id, source, amount, reference_id, note)
-           values ($1, 'post', 10, $2, $3)
-           on conflict (reference_id, source) do nothing`,
-          [row.workspace_id, `projection:${row.id}`, `${row.provider} post live`],
-        );
+        // The point for going live, paid now rather than at the next analytics
+        // refresh. It never holds up a post: that refresh scores every live
+        // post again and pays anything missed here.
+        await awardPostLive(postgres, {
+          projectionId: row.id,
+          workspaceId: row.workspace_id,
+          provider: row.provider,
+          socialAccountId: row.social_account_id,
+          title: row.title,
+        }).catch(() => undefined);
       }
       await emit(
         row,

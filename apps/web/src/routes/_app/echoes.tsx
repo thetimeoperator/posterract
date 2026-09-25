@@ -20,6 +20,7 @@ import {
   type PlatformId,
 } from "@posterract/contract";
 import { useAnalyticsDashboard, useProjections, useTransmissions } from "@/engine/useEngine";
+import { PointsChip } from "@/components/PointsChip";
 
 export const Route = createFileRoute("/_app/echoes")({ component: Analytics });
 
@@ -821,6 +822,11 @@ function PlatformIntelligence({ platform, rangeDays }: { platform: PlatformAnaly
 }
 
 function TopPosts({ posts }: { posts: AnalyticsPostDTO[] }) {
+  const projections = useProjections();
+  const pointsByProjection = useMemo(
+    () => new Map(projections.flatMap((row) => (row.points === undefined ? [] : [[row.id, row.points] as const]))),
+    [projections],
+  );
   if (!posts.length) {
     return <p className="py-10 text-center text-[13.5px] text-starlight-faint">Post metrics will appear after the first analytics sync.</p>;
   }
@@ -847,9 +853,14 @@ function TopPosts({ posts }: { posts: AnalyticsPostDTO[] }) {
                 </span>
                 <div className="min-w-0">
                   <p className="truncate text-[14px] text-starlight">{post.title}</p>
-                  <p className="telemetry mt-1 text-[9.5px] text-starlight-faint">
-                    {post.publishedAt ? new Date(post.publishedAt).toLocaleDateString([], { month: "short", day: "numeric" }) : "Published"}
-                  </p>
+                  <div className="mt-1 flex items-center gap-2">
+                    <p className="telemetry text-[9.5px] text-starlight-faint">
+                      {post.publishedAt ? new Date(post.publishedAt).toLocaleDateString([], { month: "short", day: "numeric" }) : "Published"}
+                    </p>
+                    {pointsByProjection.has(post.projectionId) && (
+                      <PointsChip points={pointsByProjection.get(post.projectionId)!} size="sm" />
+                    )}
+                  </div>
                 </div>
               </div>
               <p className="telemetry text-right text-[12.5px] text-starlight">{compact(post.views)}</p>

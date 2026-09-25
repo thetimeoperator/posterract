@@ -62,8 +62,6 @@ export function createTikTokDirectActivities({ postgres, r2, environment = proce
         platform_post_url = $3, updated_at = now() where id = $1`, [row.id, postId, postUrl]);
       await client.query(`update tiktok_publish_sessions set state = 'complete', last_platform_status = 'PUBLISH_COMPLETE',
         error_code = null, updated_at = now() where id = $1`, [session.id]);
-      await client.query(`insert into points_ledger (workspace_id, source, amount, reference_id, note)
-        values ($1, 'post', 10, $2, 'TikTok post published') on conflict (reference_id, source) do nothing`, [row.workspace_id, `projection:${row.id}`]);
       await client.query(`update publish_attempts set status = 'succeeded', completed_at = now()
         where projection_id = $1 and status = 'started'`, [row.id]);
       if (changed.rows.length) await client.query(`insert into events (workspace_id, transmission_id, projection_id, type, message)

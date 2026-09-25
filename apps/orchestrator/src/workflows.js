@@ -53,7 +53,9 @@ export async function analyticsRefreshWorkflow() {
     } catch {
       // The next durable cycle retries global failures without killing the loop.
     }
-    await condition(() => refreshRequested, "6 hours");
+    // Stats, and the points scored from them, refresh twice a day. The patch
+    // keeps the loop already running on the old 6-hour timer replaying cleanly.
+    await condition(() => refreshRequested, patched("analytics-twice-daily") ? "12 hours" : "6 hours");
   }
   return continueAsNew();
 }

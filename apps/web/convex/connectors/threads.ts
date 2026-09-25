@@ -256,27 +256,39 @@ export async function threadsPostInsights(args: {
   replies: number;
   reposts: number;
   quotes: number;
+  threadShares: number;
 }> {
-  const url = new URL(`${GRAPH}/${API_VERSION}/${args.mediaId}/insights`);
-  url.searchParams.set("metric", "views,likes,replies,reposts,quotes");
-  url.searchParams.set("access_token", args.accessToken);
-  const response = await fetch(url);
-  const body = (await response.json()) as {
-    data?: Array<{ name?: string; values?: Array<{ value?: number }>; total_value?: { value?: number } }>;
-    error?: { message?: string };
+  type InsightRow = { name?: string; values?: Array<{ value?: number }>; total_value?: { value?: number } };
+  const fetchMetrics = async (metrics: string) => {
+    const url = new URL(`${GRAPH}/${API_VERSION}/${args.mediaId}/insights`);
+    url.searchParams.set("metric", metrics);
+    url.searchParams.set("access_token", args.accessToken);
+    const response = await fetch(url);
+    const body = (await response.json()) as { data?: InsightRow[]; error?: { message?: string } };
+    if (!response.ok) throw new Error(`Threads post insights failed: ${body.error?.message ?? response.status}`);
+    return body.data ?? [];
   };
-  if (!response.ok) throw new Error(`Threads post insights failed: ${body.error?.message ?? response.status}`);
+  // `shares` is the newest metric; a post that does not report it still
+  // reports the rest.
+  let data: InsightRow[];
+  try {
+    data = await fetchMetrics("views,likes,replies,reposts,quotes,shares");
+  } catch {
+    data = await fetchMetrics("views,likes,replies,reposts,quotes");
+  }
   const value = (name: string) => {
-    const metric = body.data?.find((row) => row.name === name);
+    const metric = data.find((row) => row.name === name);
     return metric?.total_value?.value ?? metric?.values?.at(-1)?.value ?? 0;
   };
   return {
     views: value("views"),
     likes: value("likes"),
     comments: value("replies"),
-    shares: value("reposts") + value("quotes"),
+    // Everything that passes the post on: reposts, quotes and shares.
+    shares: value("reposts") + value("quotes") + value("shares"),
     replies: value("replies"),
     reposts: value("reposts"),
     quotes: value("quotes"),
+    threadShares: value("shares"),
   };
 }

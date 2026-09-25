@@ -148,7 +148,7 @@ test("signed media supports GET, HEAD and ranges without redirect; tampering, ex
   await cleanupTikTokMedia(postgres, r2, env.R2_BUCKET); assert.equal(deleted, 1);
 });
 
-test("restart resumes known publish ID, private completion succeeds and awards posting points exactly once", async (t) => {
+test("restart resumes known publish ID, private completion succeeds and awards no points (TikTok earns none yet)", async (t) => {
   const f = await fixture(t);
   assert.equal((await f.activities.initializeTikTokDirect(projection)).status, "processing");
   const restarted = createTikTokDirectActivities(f.deps);
@@ -158,7 +158,7 @@ test("restart resumes known publish ID, private completion succeeds and awards p
   assert.equal((await restarted.pollTikTokDirect(projection)).status, "live");
   const row = (await f.db.query("select * from projections")).rows[0];
   assert.equal(row.status, "live"); assert.equal(row.platform_post_id, null);
-  assert.equal((await f.db.query("select * from points_ledger")).rows.length, 1);
+  assert.equal((await f.db.query("select * from points_ledger")).rows.length, 0);
 });
 
 test("processing and network outages never initialize another upload", async (t) => {

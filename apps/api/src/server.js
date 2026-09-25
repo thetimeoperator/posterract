@@ -61,6 +61,7 @@ import {
 // belong on the VPS.
 import { registerDesktopAuthRoutes } from "./desktopAuth.js";
 import { loadAccountSets, registerAccountSetRoutes } from "./accountSets.js";
+import { loadPointsSummary, registerPointsRoutes } from "./points.js";
 import { registerTikTokRoutes } from "./tiktok.js";
 import { registerTikTokMediaRoute, cleanupTikTokMedia } from "./tiktokMedia.js";
 import { loadExplicitPostAccounts } from "./postTargets.js";
@@ -1002,8 +1003,10 @@ app.get("/v1/openapi.json", async () => ({
     "/v1/chats/{id}": { get: { summary: "Read a retained chat and its messages" } },
     "/v1/schedule": { get: { summary: "List scheduled publications in a time range" } },
     "/v1/analytics": { get: { summary: "Read approved TikTok, Instagram, Facebook, and Threads analytics" } },
-    "/v1/points": { get: { summary: "Read the workspace Resonance Points balance" } },
+    "/v1/points": { get: { summary: "Read the workspace points total, week, streak and badges" } },
+    "/v1/points/dashboard": { get: { summary: "Read points, level, rank, streak, follower milestones and top posts" } },
     "/v1/points/ledger": { get: { summary: "Read the immutable points ledger" } },
+    "/v1/leaderboard": { get: { summary: "Rank everyone on the base plan or above by points (period=week|month|all)" } },
     "/v1/accounts": { get: { summary: "List connected social accounts" } },
     "/v1/uploads/multipart": { post: { summary: "Start a direct R2 multipart upload" } },
     "/v1/posts": { post: { summary: "Publish now or schedule a post" } },
@@ -1574,68 +1577,7 @@ app.get(
   },
 );
 
-app.get(
-  "/v1/points",
-  { preHandler: requireScope("points:read") },
-  async (request) => {
-    const workspaceId = requiredWorkspace(request);
-    const result = await postgres.query(
-      `select coalesce(s.lifetime_rp, sum(l.amount), 0) as lifetime_rp,
-              coalesce(s.week_rp, sum(l.amount) filter (where l.awarded_at >= date_trunc('week', now())), 0) as week_rp,
-              coalesce(s.streak_days, 0) as streak_days,
-              coalesce(s.badges, '{}') as badges
-       from points_ledger l
-       full join user_stats s on s.workspace_id = l.workspace_id
-       where coalesce(l.workspace_id, s.workspace_id) = $1
-       group by s.lifetime_rp, s.week_rp, s.streak_days, s.badges`,
-      [workspaceId],
-    );
-    const row = result.rows[0] ?? {};
-    return {
-      lifetimeRP: Number(row.lifetime_rp ?? 0),
-      weekRP: Number(row.week_rp ?? 0),
-      streakDays: Number(row.streak_days ?? 0),
-      badges: row.badges ?? [],
-    };
-  },
-);
-
-app.get(
-  "/v1/points/ledger",
-  { preHandler: requireScope("points:read") },
-  async (request, reply) => {
-    const limit = Math.min(100, Math.max(1, Number(request.query?.limit ?? 30)));
-    if (!Number.isInteger(limit)) return reply.code(400).send({ error: "invalid_limit" });
-    const beforeValue = request.query?.before;
-    const before = beforeValue ? new Date(beforeValue) : undefined;
-    if (before && !Number.isFinite(before.getTime())) {
-      return reply.code(400).send({ error: "invalid_cursor" });
-    }
-    const result = await postgres.query(
-      `select id, source, amount, reference_id, note, awarded_at
-       from points_ledger
-       where workspace_id = $1
-         and ($2::timestamptz is null or awarded_at < $2)
-       order by awarded_at desc, id desc
-       limit $3`,
-      [requiredWorkspace(request), before ?? null, limit],
-    );
-    return {
-      entries: result.rows.map((row) => ({
-        id: String(row.id),
-        source: row.source,
-        amount: Number(row.amount),
-        referenceId: row.reference_id ?? undefined,
-        note: row.note ?? undefined,
-        awardedAt: new Date(row.awarded_at).getTime(),
-      })),
-      nextCursor:
-        result.rows.length === limit
-          ? new Date(result.rows.at(-1).awarded_at).toISOString()
-          : undefined,
-    };
-  },
-);
+registerPointsRoutes(app, { postgres, requireScope, requireSession, requiredWorkspace });
 
 app.get(
   "/v1/bootstrap",
@@ -1649,8 +1591,7 @@ app.get(
       eventsResult,
       accountsResult,
       accountSets,
-      pointsResult,
-      statsResult,
+      points,
     ] =
       await Promise.all([
         loadVaultMedia(postgres, workspaceId),
@@ -1660,8 +1601,13 @@ app.get(
           [workspaceId],
         ),
         postgres.query(
-          `select * from projections
-           where workspace_id = $1 order by created_at desc`,
+          `select p.*, earned.points as points_earned
+           from projections p
+           left join (
+             select projection_id, sum(points) as points from post_points
+             where workspace_id = $1 group by projection_id
+           ) earned on earned.projection_id = p.id
+           where p.workspace_id = $1 order by p.created_at desc`,
           [workspaceId],
         ),
         postgres.query(
@@ -1675,20 +1621,7 @@ app.get(
           [workspaceId],
         ),
         loadAccountSets(postgres, workspaceId),
-        postgres.query(
-          `select *,
-                  sum(amount) over () as lifetime_rp,
-                  sum(amount) filter (where awarded_at >= date_trunc('week', now())) over () as week_rp
-           from points_ledger
-           where workspace_id = $1
-           order by awarded_at desc limit 50`,
-          [workspaceId],
-        ),
-        postgres.query(
-          `select lifetime_rp, week_rp, streak_days, badges
-           from user_stats where workspace_id = $1`,
-          [workspaceId],
-        ),
+        loadPointsSummary(postgres, workspaceId),
       ]);
 
     const artifacts = await Promise.all(
@@ -1721,13 +1654,6 @@ app.get(
         createdAt: new Date(row.created_at).getTime(),
       })),
     );
-    const recentPoints = pointsResult.rows.map((row) => ({
-      id: String(row.id),
-      source: row.source,
-      amount: row.amount,
-      note: row.note ?? undefined,
-      at: new Date(row.awarded_at).getTime(),
-    }));
     return {
       workspaceId,
       artifacts,
@@ -1766,6 +1692,9 @@ app.get(
         platformPostUrl: row.platform_post_url ?? undefined,
         errorCategory: row.error_category ?? undefined,
         errorSummary: row.error_summary ?? undefined,
+        points: row.points_earned === null || row.points_earned === undefined
+          ? undefined
+          : Number(row.points_earned),
         updatedAt: new Date(row.updated_at).getTime(),
       })),
       events: eventsResult.rows.map((row) => ({
@@ -1796,19 +1725,7 @@ app.get(
         windowUsage: row.metadata?.windowUsage,
       })),
       accountSets,
-      points: {
-        lifetimeRP: Number(
-          statsResult.rows[0]?.lifetime_rp ??
-            pointsResult.rows[0]?.lifetime_rp ??
-            0,
-        ),
-        weekRP: Number(
-          statsResult.rows[0]?.week_rp ?? pointsResult.rows[0]?.week_rp ?? 0,
-        ),
-        streakDays: Number(statsResult.rows[0]?.streak_days ?? 0),
-        badges: statsResult.rows[0]?.badges ?? [],
-        recent: recentPoints,
-      },
+      points,
     };
   },
 );

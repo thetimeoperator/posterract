@@ -4,6 +4,7 @@ import { Button, Modal, StatusBadge, pushSignal } from '@posterract/hyperkit';
 import { PLATFORM_CAPABILITIES } from '@posterract/contract';
 import { artifactUrl, useEngineActions, usePortals, useProjections, useTransmissions } from '@/engine/useEngine';
 import { localDateTimeValue } from '@/lib/calendar-date';
+import { PointsChip } from '@/components/PointsChip';
 
 export function CalendarPostDialog({ transmissionId, onClose }: { transmissionId: string | null; onClose: () => void }) {
   const transmission = useTransmissions().find((item) => item.id === transmissionId);
@@ -53,7 +54,7 @@ export function CalendarPostDialog({ transmissionId, onClose }: { transmissionId
             const portal = portals.find((item) => item.id === projection.portalId);
             const publicUrl = /^https?:\/\//i.test(projection.platformPostUrl ?? '') ? projection.platformPostUrl : undefined;
             return <div key={projection.id} className="rounded-xl border border-[var(--glass-border)] bg-white/[0.02] p-3">
-              <div className="flex flex-wrap items-center gap-2"><div className="mr-auto"><p className="text-xs font-medium text-starlight">{PLATFORM_CAPABILITIES[projection.provider].label}</p><p className="mt-0.5 text-xs text-starlight-faint">{portal?.displayName || portal?.handle || 'Connected account'}{portal?.displayName && portal.handle ? ` · ${portal.handle}` : ''}</p></div><StatusBadge status={projection.status} size="sm" />{publicUrl && <a href={publicUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-neon">View post <ExternalLink size={12} /></a>}{(projection.status === 'failed' || projection.status === 'needs_reauth') && <Button size="sm" variant="secondary" onClick={() => actions.retryProjection(projection.id)} icon={<RotateCcw size={12} />}>Retry</Button>}</div>
+              <div className="flex flex-wrap items-center gap-2"><div className="mr-auto"><p className="text-xs font-medium text-starlight">{PLATFORM_CAPABILITIES[projection.provider].label}</p><p className="mt-0.5 text-xs text-starlight-faint">{portal?.displayName || portal?.handle || 'Connected account'}{portal?.displayName && portal.handle ? ` · ${portal.handle}` : ''}</p></div>{projection.points !== undefined && <PointsChip points={projection.points} />}<StatusBadge status={projection.status} size="sm" />{publicUrl && <a href={publicUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-neon">View post <ExternalLink size={12} /></a>}{(projection.status === 'failed' || projection.status === 'needs_reauth') && <Button size="sm" variant="secondary" onClick={() => actions.retryProjection(projection.id)} icon={<RotateCcw size={12} />}>Retry</Button>}</div>
               {projection.errorSummary && <p className="mt-2 text-xs text-red-300">{projection.errorSummary}</p>}
               {(projection.caption !== transmission.baseCaption || projection.hashtags.join(' ') !== transmission.hashtags.join(' ')) && <details className="mt-2 text-xs text-starlight-dim"><summary className="cursor-pointer">Platform caption</summary><p className="mt-2 whitespace-pre-wrap">{projection.caption}</p><p>{projection.hashtags.join(' ')}</p></details>}
             </div>;

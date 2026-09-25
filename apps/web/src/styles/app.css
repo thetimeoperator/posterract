@@ -939,7 +939,7 @@ select {
 
 .bottom-dock-shell {
   display: inline-flex;
-  width: 330px;
+  width: 374px;
   max-width: calc(100vw - 20px);
   min-width: 0;
   height: 60px;
@@ -1128,6 +1128,13 @@ select {
   .forge-grid { display: block; min-height: auto; }
   .forge-sessions { display: none; }
   .space-backdrop__video { display: none; }
+}
+
+/* Eight dock buttons share a phone's width; hover magnification is desktop-only anyway. */
+@media (max-width: 400px) {
+  .bottom-dock-buttons { padding-inline: 4px; }
+  .bottom-dock-item { width: min(40px, calc((100vw - 56px) / 8)) !important; }
+  .bottom-dock-item > div { width: 100%; height: auto; aspect-ratio: 1 / 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {

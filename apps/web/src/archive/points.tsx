@@ -2,19 +2,10 @@ import { Link } from "@tanstack/react-router";
 import clsx from "clsx";
 import { Flame, Radio, Sparkles, TrendingUp, Zap } from "lucide-react";
 import { Button, EmptyState, OrbitRing, Panel, ProgressBeam, Telemetry } from "@posterract/hyperkit";
-import type { PointsSource } from "@posterract/contract";
-import { BADGES, RANKS, nextRank, rankFor } from "@posterract/contract";
+import { BADGES, POINTS_SOURCE_LABELS, RANKS, nextRank, rankFor } from "@posterract/contract";
 import { usePoints, useTransmissions } from "@/engine/useEngine";
 
-const SOURCE_LABEL: Record<PointsSource, string> = {
-  post: "Post live",
-  bonus: "Bonus",
-  streak: "Streak",
-  milestone: "Milestone",
-  views: "Views",
-  likes: "Likes",
-  comments: "Comments",
-};
+const SOURCE_LABEL = POINTS_SOURCE_LABELS;
 
 /**
  * Resonance — the points chamber. Rank ring, charge toward the next rank,
