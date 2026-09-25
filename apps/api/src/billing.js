@@ -961,7 +961,45 @@ export function createStripeBillingService({
       [workspaceId],
     );
     const subscription = publicSubscription(result.rows[0], config);
+
+    // An active AI FOR SAVAGES membership includes the Posterract base plan.
+    //
+    // Strictly additive: the paid rule above is untouched and this can only
+    // ever grant access, never remove it. It requires app_users.email_verified
+    // so someone who signed up here with another person's address and never
+    // verified it can never inherit that person's membership.
+    //
+    // If the `core` schema is unavailable for any reason this falls back to
+    // the paid rule alone rather than failing the request.
+    if (!subscription.entitled) {
+      try {
+        const viaMembership = await postgres.query(
+          `select exists (
+             select 1
+             from workspaces w
+             join app_users u on u.id = w.owner_id
+             where w.id = $1
+               and u.email_verified = true
+               and core.has_membership(u.id, 'aiforsavages')
+           ) as ok`,
+          [workspaceId],
+        );
+        if (viaMembership.rows[0]?.ok === true) {
+          subscription.entitled = true;
+          subscription.accessState = "active";
+          subscription.entitledVia = "aiforsavages";
+        }
+      } catch {
+        // core schema missing or unreadable — paid rule stands on its own
+      }
+    }
+    if (subscription.entitled && !subscription.entitledVia) {
+      subscription.entitledVia = "subscription";
+    }
+
     if (role !== undefined) {
+      // unchanged: with no Stripe customer this stays false, so a member who
+      // got Pro through AI FOR SAVAGES sees no billing controls
       const customer = await postgres.query("select 1 from billing_customers where workspace_id = $1 limit 1", [workspaceId]);
       subscription.canManageBilling = ["owner", "admin"].includes(role) && customer.rows.length > 0;
     }

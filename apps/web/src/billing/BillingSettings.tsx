@@ -72,13 +72,13 @@ export function BillingSettings() {
     {loading ? <p role="status" className="text-sm text-starlight-dim">Loading billing details…</p> : subscription ? <>
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="font-display text-lg font-semibold">{subscription.plan?.id ? names[subscription.plan.id] : "Workspace subscription"}</p>
-          <p className="mt-1 text-sm text-starlight-dim">{subscription.plan ? `${money(subscription.plan.unitAmount)} / ${subscription.plan.interval}` : "No paid plan"} · {subscription.status.replaceAll("_", " ")}</p>
+          <p className="font-display text-lg font-semibold">{subscription.plan?.id ? names[subscription.plan.id] : subscription.entitledVia === "aiforsavages" ? "Pro" : "Workspace subscription"}</p>
+          <p className="mt-1 text-sm text-starlight-dim">{subscription.entitledVia === "aiforsavages" && !subscription.plan ? "Included with your AI FOR SAVAGES membership" : `${subscription.plan ? `${money(subscription.plan.unitAmount)} / ${subscription.plan.interval}` : "No paid plan"} · ${subscription.status.replaceAll("_", " ")}`}</p>
           {subscription.currentPeriodEnd && <p className="mt-1 text-xs text-starlight-faint">{subscription.cancelAtPeriodEnd ? "Access ends" : "Current period ends"} {new Date(subscription.currentPeriodEnd).toLocaleDateString()}</p>}
         </div>
         {subscription.canManageBilling && <Button onClick={() => void openPortal()} disabled={busy}>{busy ? "Opening Stripe…" : "Manage billing"}</Button>}
       </div>
-      <p className="mt-3 text-xs text-starlight-dim">{subscription.canManageBilling ? "Update your payment method, download invoices, or cancel future renewals in Stripe." : "Billing management is available to the owner or an admin of a workspace with a Stripe subscription."}</p>
+      <p className="mt-3 text-xs text-starlight-dim">{subscription.canManageBilling ? "Update your payment method, download invoices, or cancel future renewals in Stripe." : subscription.entitledVia === "aiforsavages" ? "Your Pro access comes with your AI FOR SAVAGES membership. There is nothing to manage here while that membership is active." : "Billing management is available to the owner or an admin of a workspace with a Stripe subscription."}</p>
       {subscription.canManageBilling && subscription.status === "active" && <div className="mt-6 border-t border-white/10 pt-5">
         <h3 className="font-display text-sm font-semibold">Billing cycle</h3>
         <div className="mt-3 grid gap-3">
