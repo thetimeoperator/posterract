@@ -58,6 +58,9 @@ jobs:
       - name: Test agent discovery
         run: pnpm --filter @posterract/desktop test:agent-discovery
 
+      - name: Test media imports
+        run: pnpm --filter @posterract/desktop test:asset-import
+
       - name: Build distributables
         run: pnpm --filter @posterract/desktop make
 

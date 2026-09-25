@@ -41,7 +41,7 @@ const hero = generate.image({ prompt: "a lone figure on a ridge at dawn", aspect
 export default function Film() {
   return (
     <stage id="workspace">
-      <scene id="main" width={1080} height={1920} active>
+      <scene id="main" width={1080} height={1920}>
         <image id="opening" src={hero} width={1080} height={1920} />
         <video id="pan" src={generate.video({ prompt: "slow push in", startFrame: hero, duration: 5 })} />
       </scene>

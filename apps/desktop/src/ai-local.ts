@@ -3,12 +3,16 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
- * Bring-your-own-keys AI generation, entirely on the user's machine. The
- * keys live in a plain `api-keys.json` at the project root — the user's
- * file, in the user's folder, never uploaded anywhere. Generation calls the
- * providers directly from the desktop main process and writes the finished
- * media into the project's `assets/generated/`, where the editor's asset
- * library picks it up like any other file.
+ * Bring-your-own-keys AI generation, entirely on the user's machine.
+ *
+ * The keys are the person's, not a project's: they are saved once, beside the
+ * app's own settings, and every project they open has them. A project may
+ * still keep an `api-keys.json` of its own — one shared with a teammate, or a
+ * separate account for one job — and that file wins for that project. Keys
+ * never leave this machine. Generation calls the providers directly from the
+ * desktop main process and writes the finished media into the project's
+ * `assets/generated/`, where the editor's asset library picks it up like any
+ * other file.
  *
  * Provider contracts (verified against public docs, 2026-09-01):
  * - MiniMax H3 video: POST https://api.minimax.io/v2/video_generation with a
@@ -23,10 +27,16 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile, appendFile } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { shell } from "electron";
+import { app, shell } from "electron";
 import { requireProjectDir, requireProjectPath } from "./projects.ts";
 
 const KEYS_FILE = "api-keys.json";
+
+/**
+ * Where the person's own keys live: beside the app's settings, so a project
+ * made tomorrow can already talk. A key typed into the panel goes here.
+ */
+const myKeysFile = (): string => join(app.getPath("userData"), KEYS_FILE);
 
 const MINIMAX_BASE = "https://api.minimax.io";
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
@@ -38,6 +48,26 @@ const FISH_MODEL = "s2-pro";
 
 const TRANSCRIBE_BASE = "https://api.openai.com/v1";
 const TRANSCRIBE_MODEL = "whisper-1";
+
+/** Groq's OpenAI-compatible endpoint, and the model the voice bar asks it for. */
+const GROQ_BASE = "https://api.groq.com/openai/v1";
+const GROQ_MODEL = "whisper-large-v3-turbo";
+/** xAI speech-to-text, behind the `voiceProvider` switch. */
+const XAI_STT_URL = "https://api.x.ai/v1/stt";
+const XAI_STT_MODEL = "grok-voice-transcribe-2.0";
+/**
+ * OpenRouter's typed-decision endpoint for Jev. It is `/alpha/` and may move,
+ * so the path lives here and nowhere else; the model is pinned so behaviour
+ * does not shift under the editor.
+ */
+const DECISIONS_URL = "https://openrouter.ai/api/alpha/decisions";
+const DECISIONS_MODEL = "typesafe/jev-1.13-20260917";
+
+/** How long a spoken command may wait for its words, and a typed one for its reading. */
+const COMMAND_TRANSCRIBE_TIMEOUT_MS = 8_000;
+const DECIDE_TIMEOUT_MS = 4_000;
+/** Groq takes 224 tokens of prompt; this many characters stays inside that. */
+const COMMAND_PROMPT_CHARS = 800;
 /** What the endpoints accept, and what fits in one request. */
 const TRANSCRIBE_LIMIT = 25 * 1024 * 1024;
 
@@ -59,6 +89,13 @@ type AiKeys = {
   transcribeUrl: string;
   /** The model that endpoint expects. Defaults to `whisper-1`. */
   transcribeModel: string;
+  /** Which service turns a spoken command into words. */
+  voiceProvider: "openai-compatible" | "xai";
+  xai: string;
+  /** For Jev, which reads free-form commands (the voice bar's own words). */
+  openrouter: string;
+  /** Where decisions go; the OpenRouter endpoint unless a local stand-in is set. */
+  decisionsUrl: string;
 };
 
 export type AiLocalRequest = {
@@ -88,9 +125,16 @@ function keyField(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-async function readKeys(dir: string): Promise<AiKeys> {
+const NO_KEYS: AiKeys = {
+  minimax: "", fish: "", gemini: "",
+  transcribe: "", transcribeUrl: TRANSCRIBE_BASE, transcribeModel: TRANSCRIBE_MODEL,
+  voiceProvider: "openai-compatible", xai: "", openrouter: "", decisionsUrl: DECISIONS_URL,
+};
+
+/** One keys file, as keys; everything missing is empty. */
+async function readKeysFile(path: string): Promise<AiKeys | null> {
   try {
-    const raw = JSON.parse(await readFile(join(dir, KEYS_FILE), "utf8")) as Record<string, unknown>;
+    const raw = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
     return {
       minimax: keyField(raw.minimax),
       fish: keyField(raw.fish),
@@ -98,13 +142,46 @@ async function readKeys(dir: string): Promise<AiKeys> {
       transcribe: keyField(raw.transcribe),
       transcribeUrl: keyField(raw.transcribeUrl) || TRANSCRIBE_BASE,
       transcribeModel: keyField(raw.transcribeModel) || TRANSCRIBE_MODEL,
+      voiceProvider: keyField(raw.voiceProvider) === "xai" ? "xai" : "openai-compatible",
+      xai: keyField(raw.xai),
+      openrouter: keyField(raw.openrouter),
+      decisionsUrl: keyField(raw.decisionsUrl) || DECISIONS_URL,
     };
   } catch {
-    return {
-      minimax: "", fish: "", gemini: "",
-      transcribe: "", transcribeUrl: TRANSCRIBE_BASE, transcribeModel: TRANSCRIBE_MODEL,
-    };
+    return null;
   }
+}
+
+/**
+ * The keys a project works with: the person's own, with anything the project
+ * states itself on top. A project that has never been given a key of its own
+ * simply uses theirs — which is the whole point of saving them once.
+ */
+async function readKeys(dir: string): Promise<AiKeys> {
+  const [mine, theirs] = await Promise.all([readKeysFile(myKeysFile()), readKeysFile(join(dir, KEYS_FILE))]);
+  if (!mine && !theirs) return NO_KEYS;
+  // Keys added before they were the person's rather than a project's: the
+  // first project opened with them lends them to every other, once.
+  if (!mine && theirs) {
+    await mkdir(app.getPath("userData"), { recursive: true }).catch(() => undefined);
+    await writeFile(myKeysFile(), `${JSON.stringify(theirs, null, 2)}\n`, "utf8").catch(() => undefined);
+  }
+  const base = mine ?? NO_KEYS;
+  if (!theirs) return base;
+  // Only what the project actually states wins: a blank field there is not a
+  // decision to have no key.
+  return {
+    minimax: theirs.minimax || base.minimax,
+    fish: theirs.fish || base.fish,
+    gemini: theirs.gemini || base.gemini,
+    transcribe: theirs.transcribe || base.transcribe,
+    transcribeUrl: theirs.transcribeUrl !== TRANSCRIBE_BASE ? theirs.transcribeUrl : base.transcribeUrl,
+    transcribeModel: theirs.transcribeModel !== TRANSCRIBE_MODEL ? theirs.transcribeModel : base.transcribeModel,
+    voiceProvider: theirs.voiceProvider === "xai" || base.voiceProvider === "xai" ? (theirs.voiceProvider ?? base.voiceProvider) : "openai-compatible",
+    xai: theirs.xai || base.xai,
+    openrouter: theirs.openrouter || base.openrouter,
+    decisionsUrl: theirs.decisionsUrl !== DECISIONS_URL ? theirs.decisionsUrl : base.decisionsUrl,
+  };
 }
 
 export async function aiKeysStatus({ dir }: { dir: string }) {
@@ -115,7 +192,10 @@ export async function aiKeysStatus({ dir }: { dir: string }) {
     fish: Boolean(keys.fish),
     gemini: Boolean(keys.gemini),
     transcribe: Boolean(keys.transcribe),
-    path: KEYS_FILE,
+    openrouter: Boolean(keys.openrouter),
+    xai: Boolean(keys.xai),
+    voiceProvider: keys.voiceProvider,
+    path: (await readKeysFile(join(projectDir, KEYS_FILE))) ? KEYS_FILE : myKeysFile(),
   };
 }
 
@@ -153,33 +233,48 @@ export async function aiKeysSave({
     transcribe: keyField(keys.transcribe ?? current.transcribe),
     transcribeUrl: keyField(keys.transcribeUrl ?? current.transcribeUrl) || TRANSCRIBE_BASE,
     transcribeModel: keyField(keys.transcribeModel ?? current.transcribeModel) || TRANSCRIBE_MODEL,
+    voiceProvider: (keys.voiceProvider ?? current.voiceProvider) === "xai" ? "xai" : "openai-compatible",
+    xai: keyField(keys.xai ?? current.xai),
+    openrouter: keyField(keys.openrouter ?? current.openrouter),
+    decisionsUrl: keyField(keys.decisionsUrl ?? current.decisionsUrl) || DECISIONS_URL,
   };
-  await writeFile(join(projectDir, KEYS_FILE), `${JSON.stringify(next, null, 2)}\n`, "utf8");
+  // The endpoint override is for a local stand-in only; the default is not written.
+  const { decisionsUrl, ...stored } = next;
+  const file = decisionsUrl === DECISIONS_URL ? stored : next;
+  const text = `${JSON.stringify(file, null, 2)}\n`;
+
+  // A key typed once is a key for every project: it is saved with the app's
+  // own settings. A project that already keeps its own file is kept in step,
+  // so what it says and what the person just typed cannot drift apart.
+  await mkdir(join(app.getPath("userData")), { recursive: true }).catch(() => undefined);
+  await writeFile(myKeysFile(), text, "utf8");
+  if (await readKeysFile(join(projectDir, KEYS_FILE))) {
+    await writeFile(join(projectDir, KEYS_FILE), text, "utf8");
+  }
   await ensureGitignored(projectDir);
   return {
     minimax: Boolean(next.minimax),
     fish: Boolean(next.fish),
     gemini: Boolean(next.gemini),
     transcribe: Boolean(next.transcribe),
+    openrouter: Boolean(next.openrouter),
+    xai: Boolean(next.xai),
+    voiceProvider: next.voiceProvider,
   };
 }
 
 /** Reveals api-keys.json in the file manager (creating it first if needed). */
 export async function aiKeysReveal({ dir }: { dir: string }) {
   const projectDir = await requireProjectDir(dir);
-  const file = join(projectDir, KEYS_FILE);
-  try {
-    await readFile(file, "utf8");
-  } catch {
-    await writeFile(
-      file,
-      `${JSON.stringify({ minimax: "", fish: "", gemini: "", transcribe: "" }, null, 2)}\n`,
-      "utf8",
-    );
-    await ensureGitignored(projectDir);
+  // Whichever file is actually in use: the project's own, or the person's.
+  const theirs = join(projectDir, KEYS_FILE);
+  const file = (await readKeysFile(theirs)) ? theirs : myKeysFile();
+  if (file === myKeysFile() && !(await readKeysFile(file))) {
+    await mkdir(app.getPath("userData"), { recursive: true }).catch(() => undefined);
+    await writeFile(file, `${JSON.stringify({ transcribe: "", openrouter: "" }, null, 2)}\n`, "utf8");
   }
   shell.showItemInFolder(file);
-  return { path: KEYS_FILE };
+  return { path: file };
 }
 
 function required(value: string | undefined, message: string): string {
@@ -456,4 +551,177 @@ export async function transcribeLocal({
   await mkdir(cacheDir, { recursive: true });
   await writeFile(cacheFile, `${JSON.stringify(result, null, 2)}\n`, "utf8");
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// The voice bar: a spoken command in, its words out; a sentence in, a reading
+// of it out. Both are short requests on the user's own keys, made from here so
+// no key ever reaches the renderer.
+// ---------------------------------------------------------------------------
+
+/** Sends once, and once more after a moment when the service was busy or broken. */
+async function withRetry(send: () => Promise<Response>): Promise<Response> {
+  const first = await send();
+  if (first.status !== 429 && first.status < 500) return first;
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  return send();
+}
+
+/** What went wrong, in the provider's words when it gave any. */
+async function providerError(response: Response, fallback: string): Promise<Error> {
+  const payload = (await response.json().catch(() => ({}))) as { error?: { message?: unknown } | string; message?: unknown };
+  const message = typeof payload.error === "string" ? payload.error : payload.error?.message ?? payload.message;
+  return new Error(String(message ?? `${fallback} (${response.status})`).slice(0, 300));
+}
+
+function timedOut(error: unknown, what: string): Error {
+  if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+    return new Error(`${what} took too long to answer.`);
+  }
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+/** A spoken command's words as a command reads: trimmed, and no full stop after a short one. */
+function tidyTranscript(text: string): string {
+  const trimmed = text.trim();
+  return trimmed.split(/\s+/).length <= 3 ? trimmed.replace(/\.$/, "") : trimmed;
+}
+
+async function transcribeOpenAiCompatible(keys: AiKeys, audio: Uint8Array, mime: string, prompt?: string): Promise<string> {
+  if (!keys.transcribe) throw new Error("Add your Groq key to talk to the editor.");
+  // A Groq key (gsk_…) with the endpoint still on the OpenAI default can only
+  // mean Groq: send it there, with the model Groq serves.
+  const groqKey = keys.transcribe.startsWith("gsk_");
+  const base = (keys.transcribeUrl === TRANSCRIBE_BASE && groqKey ? GROQ_BASE : keys.transcribeUrl).replace(/\/+$/, "");
+  const model = keys.transcribeModel === TRANSCRIBE_MODEL && groqKey ? GROQ_MODEL : keys.transcribeModel;
+
+  const form = () => {
+    const body = new FormData();
+    body.append("file", new Blob([audio as unknown as ArrayBuffer], { type: mime }), "command.webm");
+    body.append("model", model);
+    body.append("response_format", "json");
+    body.append("language", "en");
+    body.append("temperature", "0");
+    if (prompt) body.append("prompt", prompt.slice(0, COMMAND_PROMPT_CHARS));
+    return body;
+  };
+  const response = await withRetry(() => fetch(`${base}/audio/transcriptions`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${keys.transcribe}` },
+    body: form(),
+    signal: AbortSignal.timeout(COMMAND_TRANSCRIBE_TIMEOUT_MS),
+  }));
+  if (!response.ok) throw await providerError(response, "Transcription failed");
+  const payload = (await response.json().catch(() => ({}))) as { text?: unknown };
+  return typeof payload.text === "string" ? payload.text : "";
+}
+
+async function transcribeWithXai(keys: AiKeys, audio: Uint8Array, mime: string, prompt?: string): Promise<string> {
+  if (!keys.xai) throw new Error("Add your xAI key to talk to the editor.");
+  const terms = (prompt ?? "")
+    .split(",")
+    .map((term) => term.trim())
+    .filter((term) => term.length > 0 && term.length <= 50)
+    .slice(0, 100);
+
+  const form = () => {
+    const body = new FormData();
+    body.append("model", XAI_STT_MODEL);
+    body.append("language", "en");
+    body.append("format", "true");
+    for (const term of terms) body.append("keyterm", term);
+    // The file goes last: xAI reads the fields before it.
+    body.append("file", new Blob([audio as unknown as ArrayBuffer], { type: mime }), "command.webm");
+    return body;
+  };
+  const response = await withRetry(() => fetch(XAI_STT_URL, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${keys.xai}` },
+    body: form(),
+    signal: AbortSignal.timeout(COMMAND_TRANSCRIBE_TIMEOUT_MS),
+  }));
+  if (!response.ok) throw await providerError(response, "Transcription failed");
+  const payload = (await response.json().catch(() => ({}))) as { text?: unknown };
+  return typeof payload.text === "string" ? payload.text : "";
+}
+
+/**
+ * The words of a spoken command, from a short clip the voice bar recorded.
+ * Not `transcribeLocal`: that takes a project file, caches by its hash and
+ * asks for word timings, none of which a command needs.
+ */
+export async function transcribeCommand({
+  dir,
+  audio,
+  mime,
+  prompt,
+}: {
+  dir: string;
+  audio: Uint8Array;
+  mime: string;
+  prompt?: string;
+}): Promise<{ text: string; ms: number }> {
+  const projectDir = await requireProjectDir(dir);
+  if (!(audio instanceof Uint8Array) || audio.byteLength === 0) throw new Error("Nothing was recorded.");
+  if (audio.byteLength > TRANSCRIBE_LIMIT) throw new Error("That recording is too long for a command.");
+  const keys = await readKeys(projectDir);
+  const started = Date.now();
+  try {
+    const text = keys.voiceProvider === "xai"
+      ? await transcribeWithXai(keys, audio, mime, prompt)
+      : await transcribeOpenAiCompatible(keys, audio, mime, prompt);
+    return { text: tidyTranscript(text), ms: Date.now() - started };
+  } catch (error) {
+    throw timedOut(error, "The speech service");
+  }
+}
+
+/** Decisions in flight, by the id the editor gave them, so a newer one can call an older one off. */
+const decisions = new Map<string, AbortController>();
+
+/**
+ * One typed-decision request to Jev through OpenRouter: the situation, and
+ * every question about it at once (they are answered in parallel).
+ */
+export async function decide({
+  dir,
+  state,
+  questions,
+  requestId,
+}: {
+  dir: string;
+  state: unknown;
+  questions: Record<string, unknown>;
+  requestId?: string;
+}): Promise<{ answers: Record<string, unknown>; usage?: unknown; ms: number }> {
+  const projectDir = await requireProjectDir(dir);
+  const keys = await readKeys(projectDir);
+  if (!keys.openrouter) throw new Error("Add your OpenRouter key to use your own words.");
+
+  const controller = new AbortController();
+  if (requestId) decisions.set(requestId, controller);
+  const started = Date.now();
+  try {
+    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(DECIDE_TIMEOUT_MS)]);
+    const response = await withRetry(() => fetch(keys.decisionsUrl, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${keys.openrouter}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: DECISIONS_MODEL, state, questions }),
+      signal,
+    }));
+    if (!response.ok) throw await providerError(response, "Reading the command failed");
+    const payload = (await response.json().catch(() => ({}))) as { answers?: Record<string, unknown>; usage?: unknown };
+    return { answers: payload.answers ?? {}, usage: payload.usage, ms: Date.now() - started };
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error("Cancelled.");
+    throw timedOut(error, "Reading the command");
+  } finally {
+    if (requestId) decisions.delete(requestId);
+  }
+}
+
+/** Calls off a decision the editor no longer wants (the person kept typing). */
+export function cancelDecision({ requestId }: { requestId: string }): void {
+  decisions.get(requestId)?.abort();
+  decisions.delete(requestId);
 }

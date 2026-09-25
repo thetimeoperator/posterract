@@ -29,6 +29,13 @@ const MAX_TIMEOUT_MS = 600_000;
 
 let server: Server | null = null;
 let headless = false;
+/** When a request last arrived or was answered: what an engine instance goes by to know it is no longer wanted. */
+let lastActivity = Date.now();
+
+/** How long nothing has been asked of this instance, in ms; 0 while a request is in flight. */
+export function cliIdleFor(): number {
+  return pendingRequests.size > 0 ? 0 : Date.now() - lastActivity;
+}
 let responseListener: ((event: IpcMainEvent, payload: unknown) => void) | null = null;
 const pendingRequests = new Map<string, PendingRequest>();
 
@@ -190,6 +197,10 @@ export function startCliServer(getWindow: () => BrowserWindow | null): void {
   installResponseListener();
   server = createServer({ allowHalfOpen: true }, (socket) => {
     headless = true;
+    lastActivity = Date.now();
+    socket.on("close", () => {
+      lastActivity = Date.now();
+    });
     let body = "";
     socket.setEncoding("utf8");
     socket.setTimeout(60_000, () => socket.destroy());

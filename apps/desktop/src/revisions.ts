@@ -111,7 +111,17 @@ function fileKey(relativePath: string): string {
   return relativePath.replace(/[^A-Za-z0-9_.-]/g, "_");
 }
 
+/**
+ * Where the snapshots are kept: beside the app's other data — except for an
+ * engine instance (see main's `--engine`), which has a profile of its own for
+ * everything else and the person's store for this. Opening a project can write
+ * to its source (elements that have no id are given one), and what that write
+ * replaced belongs in the Version History the person will look in, not in one
+ * nobody opens. Snapshots are content-addressed and written atomically, so two
+ * instances sharing the folder cannot get in each other's way.
+ */
 function storeRoot(): string {
+  if (process.argv.includes("--engine")) return join(app.getPath("appData"), "Posterract", "revisions");
   return join(app.getPath("userData"), "revisions");
 }
 
@@ -173,6 +183,26 @@ export async function snapshotBeforeWrite(absolutePath: string): Promise<void> {
 }
 
 /**
+ * Preserve content the app held for a file that has since been replaced
+ * behind its back — by an agent's file tools, or an IDE. `snapshotBeforeWrite`
+ * covers every write the app makes itself, by reading the file just before it
+ * is replaced; an outside write gives no such moment, so whoever noticed the
+ * change hands over what the file said when the app last read it. Without this
+ * the version an outside edit replaced would be the one version the history
+ * never had.
+ */
+export async function snapshotContent(absolutePath: string, content: string): Promise<void> {
+  if (!SOURCE_FILE.test(absolutePath) || !content || content.length > MAX_SNAPSHOT_BYTES) return;
+  const projectDir = await findProjectRoot(absolutePath);
+  if (!projectDir) return;
+  await writeSnapshot(
+    await storeDir(projectDir, relativeTo(projectDir, absolutePath)),
+    content,
+    false,
+  ).catch(() => undefined);
+}
+
+/**
  * Mark that a source file disappeared. The content itself is already held by
  * the snapshot taken before the last write; this records that the working copy
  * is gone so the app can offer a restore rather than only reporting a missing
@@ -204,6 +234,23 @@ export async function listRevisions(projectDir: string, relativePath: string): P
     }),
   );
   return entries.sort((a, b) => b.savedAt - a.savedAt);
+}
+
+/**
+ * What a source said at a revision (the sha256 of its bytes, the id every read
+ * and write hands out), or null when the history does not hold it. Snapshot
+ * names carry the first sixteen hex characters of that hash, so a revision is
+ * looked up by name without opening anything.
+ */
+export async function readRevisionByHash(projectDir: string, relativePath: string, revisionId: string): Promise<string | null> {
+  if (!/^[0-9a-f]{16,64}$/.test(revisionId)) return null;
+  const dir = await storeDir(projectDir, relativePath);
+  const names = await readdir(dir).catch(() => [] as string[]);
+  const name = names.find((entry) => entry.endsWith(`-${revisionId.slice(0, 16)}.snap`));
+  if (!name) return null;
+  const content = await readFile(join(dir, name), "utf8").catch(() => null);
+  // Sixteen characters name it; the whole hash decides it.
+  return content !== null && sha256(content).startsWith(revisionId) ? content : null;
 }
 
 export async function readRevision(projectDir: string, relativePath: string, id: string): Promise<string> {

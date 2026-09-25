@@ -14,6 +14,9 @@ const cliPackage = JSON.parse(readFileSync(join(cliDir, "package.json"), "utf8")
 rmSync(stageDir, { recursive: true, force: true });
 mkdirSync(join(stageDir, "bin"), { recursive: true });
 cpSync(join(cliDir, "dist", "index.cjs"), join(stageDir, "posterract.cjs"));
+// The commands that read the project folder themselves (`outline`, ...) live in
+// a bundle of their own, which the main one loads on demand from beside it.
+cpSync(join(cliDir, "dist", "offline.cjs"), join(stageDir, "offline.cjs"));
 
 const unixWrapper = `#!/bin/sh
 SELF="$0"

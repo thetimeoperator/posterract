@@ -13,15 +13,17 @@ import {
   nativeImage,
   protocol,
   shell,
+  systemPreferences,
   type IpcMainEvent,
   type IpcMainInvokeEvent,
   type MenuItemConstructorOptions,
 } from "electron";
 import type { FileHandle } from "node:fs/promises";
 import { MAIN_CHANNELS } from "./channels.ts";
+import { appendVoiceLog, type VoiceLogEntry } from "./voice-log.ts";
 import { handle, installMainBridge, invoke, emit } from "./ipc.ts";
 import { DesktopAuthManager } from "./auth.ts";
-import { isCliHeadless, startCliServer, stopCliServer } from "./cli-server.ts";
+import { cliIdleFor, isCliHeadless, startCliServer, stopCliServer } from "./cli-server.ts";
 import { LocalAgentConnectionManager } from "./local-agent.ts";
 import { addSkillFolder, listSkills, revealSkill } from "./skills.ts";
 import {
@@ -29,6 +31,7 @@ import {
   setProjectControlMailbox,
   stopProjectControlMailbox,
 } from "./project-control-mailbox.ts";
+import { INSTANCE_PROFILE } from "@posterract/cli/protocol";
 import type { LocalAgentActivity, LocalAgentKind } from "@posterract/contract/local-agent";
 import {
   assetFile,
@@ -65,9 +68,14 @@ import {
   writeProjectAsset,
   importLottieFromUrl,
   locateProjectElement,
+  projectSourcePatch,
+  projectSourceTouched,
+  editProjectSource,
   readEditHistory,
+  readProjectViewState,
   requireProjectDir,
   writeEditHistory,
+  writeProjectViewState,
   projectRevisionContent,
   projectRevisions,
   restoreProjectRevision,
@@ -81,7 +89,9 @@ import {
   renameExport,
   revealExport,
 } from "./exports-library.ts";
-import { aiGenerate, aiKeysReveal, aiKeysSave, aiKeysStatus, transcribeLocal } from "./ai-local.ts";
+import {
+  aiGenerate, aiKeysReveal, aiKeysSave, aiKeysStatus, cancelDecision, decide, transcribeCommand, transcribeLocal,
+} from "./ai-local.ts";
 
 const APP_SCHEME = "posterract-app";
 const MEDIA_SCHEME = "posterract-media";
@@ -373,6 +383,26 @@ function captureConsole(window: BrowserWindow): void {
   });
 }
 
+/**
+ * The engine without the app: `--engine` is an instance nobody is looking at,
+ * started by the CLI when it is asked for something only the renderer can do —
+ * an export, a frame, an inspection — and the app is not open.
+ *
+ * A composition is rendered with browser machinery (WebCodecs, CanvasKit,
+ * WebGPU), so "headless" cannot mean "no browser"; it means no window, no Dock
+ * icon, no sign-in, and gone again when it is no longer wanted. It runs under
+ * a profile of its own (the CLI starts it with `POSTERRACT_PROFILE=engine`),
+ * which is what keeps it clear of the person's app in both directions: its
+ * single-instance lock, socket and settings are its own, so opening the real
+ * app while an export runs is just opening the app.
+ *
+ * It loads the editor directly. The shell around it is the signed-in product;
+ * rendering a local file is not, and never asked for an account.
+ */
+const ENGINE_MODE = process.argv.includes("--engine");
+/** How long an engine waits for another request before it quits. Long enough that a run of commands shares one. */
+const ENGINE_IDLE_MS = Math.max(5_000, Number(process.env.POSTERRACT_ENGINE_IDLE_MS) || 120_000);
+
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
     show: false,
@@ -406,12 +436,12 @@ function createWindow(): BrowserWindow {
     if (validExternalUrl(url)) void shell.openExternal(url);
   });
   window.once("ready-to-show", () => {
-    if (!process.argv.includes("--hidden")) window.show();
+    if (!ENGINE_MODE && !process.argv.includes("--hidden")) window.show();
   });
   window.on("closed", () => {
     if (mainWindow === window) mainWindow = null;
   });
-  void window.loadURL(`${APP_SCHEME}://app/`);
+  void window.loadURL(ENGINE_MODE ? `${APP_SCHEME}://app/editor-sandbox/#/` : `${APP_SCHEME}://app/`);
   mainWindow = window;
   return window;
 }
@@ -542,6 +572,31 @@ async function setFileInputFiles(
   await webContents.debugger.sendCommand("DOM.setFileInputFiles", { files: [absolutePath], nodeId });
 }
 
+/** Whether `url` is one of the app's own pages, on the scheme registered above. */
+function isAppPage(url: string): boolean {
+  try {
+    return new URL(url).protocol === `${APP_SCHEME}:`;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Asks macOS for the microphone the first time the voice bar wants it, and
+ * says how that went. An isolated test instance with POSTERRACT_FAKE_MIC set
+ * feeds a synthetic microphone and never raises the system prompt.
+ */
+async function microphoneAccess(): Promise<{ status: "granted" | "denied" | "restricted" }> {
+  if (process.platform !== "darwin") return { status: "granted" };
+  if (INSTANCE_PROFILE && process.env.POSTERRACT_FAKE_MIC === "1") return { status: "granted" };
+  let status = systemPreferences.getMediaAccessStatus("microphone");
+  if (status === "not-determined") {
+    status = (await systemPreferences.askForMediaAccess("microphone")) ? "granted" : "denied";
+  }
+  if (status === "granted") return { status: "granted" };
+  return { status: status === "restricted" ? "restricted" : "denied" };
+}
+
 function allowedExportPath(path: string): boolean {
   const candidate = resolve(path);
   return [app.getPath("downloads"), app.getPath("videos"), app.getPath("documents")].some((root) =>
@@ -564,7 +619,11 @@ function registerHandlers(): void {
   handle(MAIN_CHANNELS.AGENT_GET_STATUS, () => requireLocalAgentConnection().getStatus());
   handle(MAIN_CHANNELS.AGENT_SET_ACTIVE_PROJECT, async ({ dir }: { dir: string }) => {
     const state = await requireLocalAgentConnection().setActiveProject({ dir });
-    if (state.activeProject) {
+    // An engine answers the CLI that started it and nobody else. The mailbox
+    // lives inside the project folder, where there is room for one app: if the
+    // person opens the project while an engine still has it, the mailbox — and
+    // every agent connected through it — is the app's, not the engine's.
+    if (state.activeProject && !ENGINE_MODE) {
       await setProjectControlMailbox({ id: state.activeProject.id, dir: state.activeProject.dir });
     }
     return state;
@@ -659,11 +718,18 @@ function registerHandlers(): void {
   handle(MAIN_CHANNELS.AI_KEYS_REVEAL, (data: Parameters<typeof aiKeysReveal>[0]) => aiKeysReveal(data));
   handle(MAIN_CHANNELS.AI_GENERATE, (data: Parameters<typeof aiGenerate>[0]) => aiGenerate(data));
   handle(MAIN_CHANNELS.AI_TRANSCRIBE, (data: { dir: string; path: string }) => transcribeLocal(data));
+  handle(MAIN_CHANNELS.AI_TRANSCRIBE_COMMAND, (data: Parameters<typeof transcribeCommand>[0]) => transcribeCommand(data));
+  handle(MAIN_CHANNELS.AI_DECIDE, (data: Parameters<typeof decide>[0]) => decide(data));
+  handle(MAIN_CHANNELS.VOICE_LOG, (data: { dir: string; entry: VoiceLogEntry }) => appendVoiceLog(data.dir, data.entry));
+  handle(MAIN_CHANNELS.AI_DECIDE_CANCEL, (data: Parameters<typeof cancelDecision>[0]) => cancelDecision(data));
+  handle(MAIN_CHANNELS.VOICE_MIC_ACCESS, () => microphoneAccess());
   // Read-only sibling of PROJECTS_COMPILE for the agent bridge's `validate`:
   // same compile (stamping included), but in memory — never writes to disk.
   handle(MAIN_CHANNELS.PROJECTS_VALIDATE, ({ dir }: { dir: string }) => validateProject(dir));
-  handle(MAIN_CHANNELS.PROJECTS_WRITE, ({ dir, edits }: { dir: string; edits: Parameters<typeof writeProject>[1] }) =>
-    writeProject(dir, edits),
+  handle(
+    MAIN_CHANNELS.PROJECTS_WRITE,
+    ({ dir, edits, actor, note }: { dir: string; edits: Parameters<typeof writeProject>[1]; actor?: "canvas" | "agent"; note?: unknown }) =>
+      writeProject(dir, edits, actor === "agent" ? "agent" : "canvas", typeof note === "string" && note.trim() ? note.trim().slice(0, 300) : undefined),
   );
   handle(MAIN_CHANNELS.PROJECTS_WATCH, ({ dir }: { dir: string }, event) =>
     watchProject(BrowserWindow.fromWebContents(event.sender), dir),
@@ -677,11 +743,14 @@ function registerHandlers(): void {
   handle(MAIN_CHANNELS.PROJECTS_CONFIG_WRITE, ({ dir, config }: { dir: string; config: unknown }) =>
     writeConfig(dir, config),
   );
-  handle(MAIN_CHANNELS.PROJECTS_SOURCE_READ, ({ dir, path }: { dir: string; path: string }) =>
-    readProjectSource(dir, path),
+  handle(
+    MAIN_CHANNELS.PROJECTS_SOURCE_READ,
+    ({ dir, path, select }: { dir: string; path: string; select?: Parameters<typeof readProjectSource>[2] }) =>
+      readProjectSource(dir, path, select),
   );
   handle(MAIN_CHANNELS.PROJECTS_SOURCE_WRITE, (data: Parameters<typeof writeProjectSource>[0]) =>
-    writeProjectSource(data),
+    // The renderer may say an agent asked for this write; nothing else it says about who is believed.
+    writeProjectSource({ ...data, actor: data.actor === "agent" ? "agent" : "canvas" }),
   );
   handle(MAIN_CHANNELS.PROJECTS_REVISIONS_LIST, ({ dir, path }: { dir: string; path: string }) =>
     projectRevisions(dir, path),
@@ -721,6 +790,23 @@ function registerHandlers(): void {
   handle(MAIN_CHANNELS.PROJECTS_HISTORY_READ, ({ dir }: { dir: string }) => readEditHistory(dir));
   handle(MAIN_CHANNELS.PROJECTS_HISTORY_WRITE, ({ dir, value }: { dir: string; value: unknown }) =>
     writeEditHistory(dir, value),
+  );
+  handle(MAIN_CHANNELS.PROJECTS_SOURCE_EDIT, (data: Parameters<typeof editProjectSource>[0]) =>
+    editProjectSource({ ...data, actor: data.actor === "agent" ? "agent" : "canvas" }),
+  );
+  handle(
+    MAIN_CHANNELS.PROJECTS_SOURCE_TOUCHED,
+    ({ dir, path, fromRevision, ids }: { dir: string; path: string; fromRevision: string; ids: string[] }) =>
+      projectSourceTouched(dir, path, String(fromRevision), Array.isArray(ids) ? ids.map(String) : []),
+  );
+  handle(
+    MAIN_CHANNELS.PROJECTS_SOURCE_PATCH,
+    ({ dir, path, fromRevision }: { dir: string; path: string; fromRevision: string }) =>
+      projectSourcePatch(dir, path, fromRevision),
+  );
+  handle(MAIN_CHANNELS.PROJECTS_VIEW_READ, ({ dir }: { dir: string }) => readProjectViewState(dir));
+  handle(MAIN_CHANNELS.PROJECTS_VIEW_WRITE, ({ dir, value }: { dir: string; value: unknown }) =>
+    writeProjectViewState(dir, value),
   );
   handle(MAIN_CHANNELS.EXPORTS_RECORD, (entry: Parameters<typeof recordExport>[0]) => recordExport(entry));
   handle(MAIN_CHANNELS.EXPORTS_LIST, () => listExports());
@@ -865,16 +951,29 @@ ipcMain.on(PRIVATE_FILE_GRANT, (_event, path: unknown) => {
   if (typeof path === "string" && isAbsolute(path)) grantExternalFile(path);
 });
 
+// A profiled instance (`POSTERRACT_PROFILE`, see the CLI's cli-socket-path.ts)
+// is a second app beside the user's own: its own user data — which is also
+// what the single-instance lock is keyed on — so it neither quits on sight of
+// the user's app nor shares its settings, history or approved folders. It is
+// for tests and headless work, so it leaves the `posterract://` links alone.
+if (INSTANCE_PROFILE) {
+  app.setPath("userData", join(app.getPath("appData"), `Posterract-${INSTANCE_PROFILE}`));
+}
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  if (process.defaultApp && process.argv[1]) {
+  if (INSTANCE_PROFILE) {
+    // Deep links belong to the user's own app.
+  } else if (process.defaultApp && process.argv[1]) {
     app.setAsDefaultProtocolClient(DEEP_LINK_SCHEME, process.execPath, [resolve(process.argv[1])]);
   } else {
     app.setAsDefaultProtocolClient(DEEP_LINK_SCHEME);
   }
 
   app.on("second-instance", () => {
+    // A second engine is the CLI racing itself: the one that is up answers both.
+    if (ENGINE_MODE) return;
     if (!mainWindow || mainWindow.isDestroyed()) createWindow();
     else {
       if (mainWindow.isMinimized()) mainWindow.restore();
@@ -902,15 +1001,37 @@ if (!app.requestSingleInstanceLock()) {
       contents.on("will-attach-webview", (event) => event.preventDefault());
     });
     app.on("browser-window-created", (_event, window) => {
-      window.webContents.session.setPermissionRequestHandler((_contents, permission, callback) => {
+      // The microphone is the voice bar's, and only while the talk key is held:
+      // audio alone, asked for by the app's own pages, and nothing else.
+      window.webContents.session.setPermissionRequestHandler((contents, permission, callback, details) => {
+        if (permission === "media") {
+          const types = (details as { mediaTypes?: string[] }).mediaTypes ?? [];
+          callback(types.length > 0 && types.every((type) => type === "audio") && isAppPage(contents.getURL()));
+          return;
+        }
         callback(permission === "fullscreen" || permission === "clipboard-sanitized-write");
       });
-      window.webContents.session.setPermissionCheckHandler((_contents, permission) =>
-        permission === "fullscreen" || permission === "clipboard-sanitized-write",
-      );
+      window.webContents.session.setPermissionCheckHandler((_contents, permission, requestingOrigin, details) => {
+        if (permission === "media") {
+          return (details as { mediaType?: string }).mediaType === "audio" && isAppPage(requestingOrigin);
+        }
+        return permission === "fullscreen" || permission === "clipboard-sanitized-write";
+      });
     });
 
-    if (process.platform === "darwin") {
+    if (ENGINE_MODE) {
+      // Nobody's app: no Dock icon, no place in the app switcher, no focus taken.
+      if (process.platform === "darwin") {
+        app.setActivationPolicy("accessory");
+        app.dock?.hide();
+      }
+      const idle = setInterval(() => {
+        if (cliIdleFor() < ENGINE_IDLE_MS) return;
+        clearInterval(idle);
+        app.quit();
+      }, 2_000);
+      idle.unref();
+    } else if (process.platform === "darwin") {
       const icon = nativeImage.createFromPath(join(app.getAppPath(), "assets", "icon.png"));
       if (!icon.isEmpty()) app.dock?.setIcon(icon);
     }
@@ -918,6 +1039,7 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.on("activate", () => {
+    if (ENGINE_MODE) return;
     if (!mainWindow || mainWindow.isDestroyed()) createWindow();
   });
   app.on("before-quit", () => {

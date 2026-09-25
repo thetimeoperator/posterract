@@ -55,10 +55,25 @@ const config: ForgeConfig = {
       !path.startsWith("/assets/"),
     osxSign: process.env.SKIP_SIGN ? undefined : {},
     osxNotarize: appleCredentials,
+    extendInfo: {
+      NSMicrophoneUsageDescription:
+        "Posterract listens only while you hold the talk key, to carry out the command you speak.",
+    },
   },
   makers: [
     new MakerZIP({}, ["darwin"]),
-    new MakerDMG({ name: `Posterract-${process.arch}` }),
+    new MakerDMG({
+      name: `Posterract-${process.arch}`,
+      // Gatekeeper assesses the downloaded wrapper as well as the signed app.
+      additionalDMGOptions: process.env.SKIP_SIGN
+        ? undefined
+        : {
+            "code-sign": {
+              "signing-identity": process.env.APPLE_SIGN_IDENTITY ?? "Developer ID Application",
+              identifier: "com.posterract.desktop",
+            },
+          },
+    }),
     new MakerSquirrel({
       name: "posterract",
       authors: "Posterract",

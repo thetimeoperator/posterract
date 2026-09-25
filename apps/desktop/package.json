@@ -1,7 +1,7 @@
 {
   "name": "@posterract/desktop",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.2",
   "description": "Agent-native local video editing with Posterract cloud publishing.",
   "author": "Posterract",
   "type": "module",
@@ -23,12 +23,17 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:migration": "esbuild src/legacy-migration.test.ts --bundle --platform=node --format=cjs --external:esbuild --outfile=.tmp/legacy-migration.test.cjs && node --test .tmp/legacy-migration.test.cjs",
     "test:element-source": "esbuild src/element-source.test.ts --bundle --platform=node --format=esm --outfile=.tmp/element-source.test.mjs && node --test .tmp/element-source.test.mjs",
+    "test:asset-import": "esbuild src/asset-import.test.ts --bundle --platform=node --format=esm --outfile=.tmp/asset-import.test.mjs && node --test .tmp/asset-import.test.mjs",
     "test:revisions": "esbuild src/revisions.test.ts --bundle --platform=node --format=esm --alias:electron=./src/testing/electron-stub.ts --outfile=.tmp/revisions.test.mjs && POSTERRACT_TEST_USER_DATA=\"$(mktemp -d)\" node --test .tmp/revisions.test.mjs",
+    "test:intents": "esbuild ../editor-sandbox/tests/intents.test.ts --bundle --platform=node --format=esm --alias:@=../editor-sandbox/src --alias:cmdk-solid=../editor-sandbox/tests/cmdk-solid-filter.ts --outfile=.tmp/intents.test.mjs && node --test .tmp/intents.test.mjs",
+    "test:view-state": "esbuild src/view-state.test.ts --bundle --platform=node --format=esm --outfile=.tmp/view-state.test.mjs && node --test .tmp/view-state.test.mjs",
     "test:agent-connection": "esbuild src/local-agent-state.test.ts --bundle --platform=node --format=cjs --outfile=.tmp/local-agent-state.test.cjs && esbuild src/mcp-client-config.test.ts --bundle --platform=node --format=cjs --outfile=.tmp/mcp-client-config.test.cjs && node --test .tmp/local-agent-state.test.cjs .tmp/mcp-client-config.test.cjs",
     "test:mailbox": "esbuild src/project-control-mailbox.test.ts --bundle --platform=node --format=esm --alias:electron=./src/testing/electron-stub.ts --outfile=.tmp/project-control-mailbox.test.mjs && node --test .tmp/project-control-mailbox.test.mjs",
     "test:skills": "esbuild src/skills.test.ts --bundle --platform=node --format=esm --alias:electron=./src/testing/electron-stub.ts --outfile=.tmp/skills.test.mjs && node --test .tmp/skills.test.mjs",
     "test:agent-discovery": "esbuild src/agent-discovery.test.ts --bundle --platform=node --format=cjs --alias:electron=./src/testing/electron-stub.ts --outfile=.tmp/agent-discovery.test.cjs && node --test .tmp/agent-discovery.test.cjs",
-    "prepare:squirrel": "node scripts/prepare-squirrel-vendor.mjs"
+    "prepare:squirrel": "node scripts/prepare-squirrel-vendor.mjs",
+    "test:editor-workspace": "esbuild ../editor-sandbox/tests/editor-workspace.test.ts --bundle --platform=node --format=esm --outfile=.tmp/editor-workspace.test.mjs && node --test .tmp/editor-workspace.test.mjs",
+    "test:output-size": "esbuild ../../packages/posterract-video-encoder/src/output-size.test.ts --bundle --platform=node --format=esm --outfile=.tmp/output-size.test.mjs && node --test .tmp/output-size.test.mjs"
   },
   "dependencies": {
     "@posterract/cli": "workspace:*",

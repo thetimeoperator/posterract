@@ -17,6 +17,11 @@ const compositionTarget = join(stageDir, "@posterract", "composition");
 rmSync(join(desktopDir, "sdk"), { recursive: true, force: true });
 mkdirSync(compositionTarget, { recursive: true });
 cpSync(join(compositionDir, "dist"), join(compositionTarget, "dist"), { recursive: true });
+// Every element and prop as data, generated from the types (see the
+// composition package's scripts/vocabulary.mjs). Staged with the SDK so it is
+// in every project folder: an agent can read what `<text>` accepts from a
+// file, with no app and no CLI.
+cpSync(join(compositionDir, "vocabulary.json"), join(compositionTarget, "vocabulary.json"));
 
 const compositionPackage = JSON.parse(readFileSync(join(compositionDir, "package.json"), "utf8"));
 writeFileSync(
@@ -32,6 +37,7 @@ writeFileSync(
       "./generate": { types: "./dist/generate.d.ts", default: "./dist/generate.js" },
       "./jsx-runtime": { types: "./dist/jsx-runtime.d.ts", default: "./dist/jsx-runtime.js" },
       "./jsx-dev-runtime": { types: "./dist/jsx-runtime.d.ts", default: "./dist/jsx-runtime.js" },
+      "./vocabulary.json": "./vocabulary.json",
     },
   }, null, 2) + "\n",
 );

@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { watch, type FSWatcher } from "node:fs";
 import {
@@ -20,16 +21,28 @@ import {
   POSTERRACT_STARTER_SOURCE,
   applyEdits,
   compileVirtualProject,
+  formatOutline,
+  diffSources,
+  hasViewState,
+  lintProject,
+  lintSource,
+  outlineSource,
+  patchSources,
+  prepareProject,
   stampProject,
   type CompileDiagnostic,
+  type LintDiagnostic,
+  type SourcePatch,
   type SourceEdit,
   type WriteResult,
 } from "@posterract/video-compiler";
 import { MAIN_CHANNELS } from "./channels.ts";
 import { emit } from "./ipc.ts";
-import { locateElement } from "./element-source.ts";
+import { extractElementSource, locateElement } from "./element-source.ts";
 import { migrateLegacyProject } from "./legacy-migration.ts";
-import { listRevisions, readRevision, recordDeletion, snapshotBeforeWrite } from "./revisions.ts";
+import { appendJournal, type JournalActor } from "./journal.ts";
+import { listRevisions, readRevision, readRevisionByHash, recordDeletion, snapshotBeforeWrite, snapshotContent } from "./revisions.ts";
+import { readViewStateFile, seedViewStateFile, writeViewStateFile, type ViewState } from "./view-state.ts";
 
 export type ProjectInfo = {
   id: string;
@@ -42,8 +55,13 @@ export type ProjectInfo = {
 };
 
 export type CompileResult =
-  | { ok: true; code: string }
+  /** `revisions`: what each source said when this was compiled — what a canvas mounting `code` is showing. */
+  | { ok: true; code: string; revisions?: Record<string, string> }
   | { ok: false; error: string };
+
+/** The revision of every source file in a project's file map. */
+const sourceRevisions = (files: Record<string, string>): Record<string, string> =>
+  Object.fromEntries(Object.entries(files).filter(([path]) => SOURCE_FILE.test(path)).map(([path, content]) => [path, revision(content)]));
 
 export type FsEntry = {
   name: string;
@@ -67,7 +85,24 @@ type SourceWriteRequest = {
   path: string;
   content: string;
   expectedRevisionId: string;
+  /** Who is writing, for the journal (see ./journal.ts). The person, unless said otherwise. */
+  actor?: JournalActor;
 };
+
+/**
+ * What each source said when the app last read or wrote it, by absolute path.
+ * A write the app makes snapshots the file just before replacing it; a write
+ * made behind its back — an agent's file tools, an IDE — leaves no such
+ * moment, and this is what lets the version it replaced reach the history
+ * anyway (see the watcher).
+ */
+const lastSeen = new Map<string, string>();
+/**
+ * What the latest outside write to each source replaced: the version a canvas
+ * was showing when the file changed under it, kept at hand so a patch can be
+ * made from it without waiting on the history store (see `projectSourcePatch`).
+ */
+const lastSeenBefore = new Map<string, string>();
 
 const SDK_VERSION = "0.201.0";
 const ENTRY_FILES = ["src/index.tsx", "src/index.ts", "index.tsx", "index.ts", "index.jsx", "index.js"];
@@ -79,6 +114,8 @@ const approvedRoots = new Set<string>();
 const approvedExternalFiles = new Set<string>();
 const watchers = new Map<string, { watcher: FSWatcher; windows: Set<BrowserWindow> }>();
 const selfWrites = new Map<string, { writtenAt: number; revisionId: string }>();
+/** A second look at a path whose change arrived too close to one of the app's own writes to call (see the watcher). */
+const rechecks = new Map<string, ReturnType<typeof setTimeout>>();
 const APPROVED_ROOTS_FILE = "projects-roots.json";
 
 function markSelfWrite(path: string, content: string | Uint8Array, writtenAt: number): void {
@@ -299,7 +336,7 @@ const MANAGED_MARK = "<!-- posterract-managed";
 // Short on purpose: this is read into the agent's context at the start of
 // every session, so it carries the one rule that matters and the order of
 // operations, and points at the docs and the skill for everything else.
-const PROJECT_AGENTS = `${MANAGED_MARK}: rewritten by Posterract Desktop on open; delete this line to own the file -->\n# Posterract project\n\nPosterract Desktop renders this folder's TSX as the canvas and timeline and exposes it over the \`posterract\` MCP server.\n\n**Canvas-first.** While Desktop has this project open, edit the composition only through the tools: \`posterract_write_source\` (with the \`revisionId\` from \`posterract_read_source\`) or the semantic tools (\`posterract_set_properties\`, \`posterract_set_text\`, \`posterract_create_element\`, ...). Never rewrite index.tsx with file tools: tool edits show on the canvas instantly and keep undo and Version History; raw writes do not. If the \`posterract_*\` tools are missing, ask the user to restart the agent session.\n\n**Order:** \`posterract_connection_status\` -> \`posterract_get_context\` -> \`posterract_read_source\` -> edit -> \`posterract_validate\` + \`posterract_check\` -> \`posterract_get_geometry\` or \`posterract_capture\` (look at the image) -> repeat. Read \`.posterract/docs\` before using an unfamiliar primitive.\n\n**Skills:** a scene may declare \`skill="<name>"\`, the skill folder (SKILL.md plus assets) it is made with. \`posterract_get_context\` reports it with the folder path; read that SKILL.md before editing the scene and follow its workflow.\n\n**Rules:** one top-level scene per exportable video; keep stable element ids; no credentials in this folder; export, post, or schedule only when the user asks.\n`;
+const PROJECT_AGENTS = `${MANAGED_MARK}: rewritten by Posterract Desktop on open; delete this line to own the file -->\n# Posterract project\n\nPosterract Desktop renders this folder's TSX as the canvas and timeline and exposes it over the \`posterract\` MCP server.\n\n**File-first.** The TSX is the document: edit it with your own file tools (read a range, search, replace a string), the way you edit any code. Desktop watches the file and shows the change on the canvas: a change to values or text in place, as one step of the user's undo history (Cmd+Z takes it back); added, removed or moved elements by reloading the canvas, which keeps the user's own undo steps. Every version you replace is kept in Version History. Give each element you add an \`id\`. Before you write, run \`posterract changes --since <revisionId>\` (or \`posterract_changes\`) to see what the user changed since you last looked, and work around it rather than over it. The semantic tools (\`posterract_set_properties\`, \`posterract_set_text\`, \`posterract_create_element\`, ...) still work and answer with the revision they produced. If the \`posterract_*\` tools are missing, the \`posterract\` CLI does the same; otherwise ask the user to restart the agent session.\n\n**Order:** \`posterract_look\` (what the author has selected, their playhead, their \`@agent\` notes) -> \`posterract_outline\` -> \`posterract_read_source\` with \`id\` or \`lines\` (never the whole file) -> edit -> \`posterract_inspect\` (facts, then problems with fixes: fix every ✗) -> repeat -> \`posterract_capture\` only at the end, to judge taste -> \`posterract_show\` what you changed. \`posterract_describe\` lists every element and prop: ask it instead of guessing a name.\n\n**Say it, do not compute it.** Put things where they belong with \`place\` (\`place=\"lower-third\"\`, \`place=\"bottom-right\" inset={48}\`) rather than working out \`x\`/\`y\`. Anything that keeps moving is a few keyframes and \`loop\` on the \`<keyframeTrack>\` (\`loop=\"pingpong\"\` for there and back), never a keyframe per change of direction. Tune a preset \`<animation>\` with \`distance\`, \`amount\` and \`easing\` before writing keyframes by hand. \`.posterract/docs/elements.md\` and \`keyframes-animations-transitions.md\` have the details.\n\n**You hear what you broke.** After the source changes, the next \`posterract\` tool or command you run — any of them, from any agent — comes back with what is newly wrong attached (a prop nothing reads, text off the frame, with the fix), each problem once. Fix it when you hear it; \`posterract inspect\` lists everything still open.\n\n**The app does not have to be open.** \`posterract inspect\`, \`geometry\`, \`validate\`, \`capture\` and \`render -o exports/<name>.mp4\` start the engine (the app with no window) for themselves when it is closed; \`render --from 2 --to 5 --scale 0.5\` is a quick look at a change.\n\n**Skills:** a scene may declare \`skill="<name>"\`, the skill folder (SKILL.md plus assets) it is made with. \`posterract_get_context\` reports it with the folder path; read that SKILL.md before editing the scene and follow its workflow.\n\n**Rules:** one top-level scene per exportable video; keep stable element ids; no credentials in this folder; export, post, or schedule only when the user asks.\n`;
 
 /** Guidance earlier desktop versions wrote; a file still equal to one of these is app-owned and safe to refresh. */
 const LEGACY_PROJECT_AGENTS_2 = `# Posterract creative project\n\n- The canvas and timeline are generated from the local TSX source.\n- Keep one top-level scene per independently exportable video.\n- Preserve stable element ids when editing existing elements.\n- Do not place credentials or social-network tokens in this folder.\n- Read .posterract/docs before using an unfamiliar SDK primitive.\n- For diagrams, read .posterract/docs/diagrams.md, choose the visual design from the user's meaning, and inspect captures before claiming success.\n- Run posterract doctor --json before beginning local agent work.\n- Run posterract context --json --tree to inspect the active project and runtime.\n- Run posterract validate and posterract check after every meaningful edit.\n- Inspect posterract capture output before claiming a visual result is correct.\n- Export, post, or schedule only after the user explicitly asks.\n`;
@@ -309,70 +346,190 @@ const PROJECT_CLAUDE = PROJECT_AGENTS;
 const PROJECT_CURSOR_RULES = `---\ndescription: Posterract composition editing rules\nalwaysApply: true\n---\n${PROJECT_AGENTS}`;
 
 /**
- * Project-scoped Claude Code hook. Claude Code runs it before every Edit or
- * Write; it blocks the call (exit 2) when the target is the composition
- * source and Desktop's session heartbeat is fresh, and explains which MCP
- * tool to use instead. The guidance files ask for canvas-first editing; this
- * is the part that makes the ask hold. The script is app-owned and refreshed
- * on every open, like the docs.
+ * Project-scoped Claude Code hooks.
+ *
+ * The app used to *block* an agent's Edit/Write of the composition while
+ * Desktop had the project open, because a change made to the file meant a
+ * remount and a lost undo history. A file edit is now shown on the canvas in
+ * place, as one step of that history (see the editor's hot-reload), so the
+ * file is the agent's to edit — and what it needs instead of a gate is
+ * feedback. After every Edit or Write of a composition source, the hook below
+ * runs the vocabulary lint and, when Desktop is showing the project, `inspect`,
+ * and hands back whatever is wrong: the agent hears that its caption runs 47px
+ * off the frame without asking, the way a type-checker speaks up on save.
+ *
+ * The scripts are app-owned and refreshed on every open, like the docs. The
+ * settings file is the user's once they touch it; one that still says exactly
+ * what an earlier version wrote is brought up to date.
  */
-const PROJECT_CLAUDE_SETTINGS = `${JSON.stringify(
-  {
-    hooks: {
-      PreToolUse: [
-        {
-          matcher: "Edit|Write|MultiEdit",
-          hooks: [{ type: "command", command: 'node "$CLAUDE_PROJECT_DIR/.posterract/hooks/guard-source.mjs"' }],
-        },
-      ],
-    },
-  },
-  null,
-  2,
-)}\n`;
+const claudeSettings = (hooks: Record<string, unknown>): string => `${JSON.stringify({ hooks }, null, 2)}\n`;
 
-const PROJECT_GUARD_HOOK = `// Posterract Desktop guard (app-owned; refreshed on every project open).
-// Keeps composition edits on the canvas while Desktop has the project open.
-import { existsSync, readFileSync } from "node:fs";
-import { relative, resolve, sep } from "node:path";
+const PROJECT_CLAUDE_SETTINGS = claudeSettings({
+  PostToolUse: [
+    {
+      matcher: "Edit|Write|MultiEdit",
+      hooks: [{ type: "command", command: 'node "$CLAUDE_PROJECT_DIR/.posterract/hooks/feedback.mjs"', timeout: 40 }],
+    },
+  ],
+});
+
+/** What earlier versions wrote: the blocking guard. Still equal to this means nobody made it theirs. */
+const LEGACY_PROJECT_CLAUDE_SETTINGS = claudeSettings({
+  PreToolUse: [
+    {
+      matcher: "Edit|Write|MultiEdit",
+      hooks: [{ type: "command", command: 'node "$CLAUDE_PROJECT_DIR/.posterract/hooks/guard-source.mjs"' }],
+    },
+  ],
+});
+
+/**
+ * A settings file the user has made their own may still name this script as a
+ * PreToolUse hook. It no longer has anything to object to, so it lets every
+ * edit through; the file stays so that such a settings file does not fail.
+ */
+const PROJECT_GUARD_HOOK = `// Posterract Desktop (app-owned; refreshed on every project open).
+// This used to keep composition edits off the file while Desktop had the
+// project open. File edits are now shown on the canvas in place and keep the
+// user's undo history, so there is nothing left to guard: every edit is allowed.
+// Feedback after an edit comes from feedback.mjs (a PostToolUse hook).
+process.exit(0);
+`;
+
+const PROJECT_FEEDBACK_HOOK = `// Posterract Desktop feedback (app-owned; refreshed on every project open).
+// Runs after an agent's Edit/Write of a composition source and hands back what
+// is wrong with it: props the editor does not understand, text running off the
+// frame, elements nobody can see. Says nothing when nothing is wrong, and never
+// fails an edit over a problem of its own.
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, relative, resolve, sep } from "node:path";
 
 let payload = {};
 try {
   payload = JSON.parse(readFileSync(0, "utf8") || "{}");
 } catch {
-  // No usable input: never block on a malformed hook payload.
+  process.exit(0);
 }
 const filePath = payload?.tool_input?.file_path;
 if (typeof filePath !== "string") process.exit(0);
 
 const project = process.env.CLAUDE_PROJECT_DIR || process.cwd();
-const target = relative(project, resolve(project, filePath)).split(sep).join("/");
-const isComposition =
-  target === "index.tsx" || target === "src/index.tsx" || (target.startsWith("src/") && target.endsWith(".tsx"));
-if (!isComposition) process.exit(0);
+const absolute = resolve(project, filePath);
+const target = relative(project, absolute).split(sep).join("/");
+const isSource = /\\.[cm]?[jt]sx$/i.test(target) && !target.startsWith("..") &&
+  !target.split("/").some((part) => part.startsWith(".") || part === "node_modules");
+if (!isSource || !existsSync(absolute)) process.exit(0);
 
-const sessionPath = resolve(project, ".posterract", "runtime", "session.json");
-if (!existsSync(sessionPath)) process.exit(0);
+const run = (args, timeout) => spawnSync("posterract", args, { encoding: "utf8", timeout, cwd: project });
+const SIGN = /^\\s*[\\u2717\\u26a0]/;
+/** Everything wrong right now: { key, group, text }. The key leaves out what an unrelated edit moves (line numbers). */
+const items = [];
+
+// 1. The vocabulary: works with the app closed.
+const lint = run(["lint", target, "--project", project], 15000);
+if (lint.error) process.exit(0); // No posterract on PATH: nothing to say.
+// Only real findings: an older CLI that has no \`lint\` also exits 1, with nothing to report.
+for (const line of lint.status === 1 ? (lint.stdout || "").split("\\n") : []) {
+  if (!/[\\u2717\\u26a0]/.test(line)) continue;
+  items.push({ key: "lint " + line.replace(/^\\S*?:\\d+:\\d+\\s+/, ""), group: "", text: line.trim() });
+}
+
+// 2. The video itself, when Desktop is showing this project. The canvas takes a
+//    moment to show a change made to the file; wait until it says it has.
 let live = false;
 try {
-  const session = JSON.parse(readFileSync(sessionPath, "utf8"));
-  live = typeof session.heartbeatAt === "number" && Date.now() - session.heartbeatAt < 60_000;
+  const session = JSON.parse(readFileSync(resolve(project, ".posterract", "runtime", "session.json"), "utf8"));
+  live = typeof session.heartbeatAt === "number" && Date.now() - session.heartbeatAt < 60000;
 } catch {
   live = false;
 }
-if (!live) process.exit(0);
+let inspected = false;
+if (live) {
+  const revision = createHash("sha256").update(readFileSync(absolute)).digest("hex");
+  const deadline = Date.now() + 5000;
+  let caughtUp = false;
+  while (Date.now() < deadline && !caughtUp) {
+    const context = run(["context", "--json"], 4000);
+    try {
+      const state = JSON.parse(context.stdout);
+      // Another write landed meanwhile: that one's hook will speak for it.
+      if (state.sourceRevision && state.sourceRevision !== revision) process.exit(0);
+      caughtUp = state.shownRevision === revision;
+    } catch {
+      break;
+    }
+    if (!caughtUp) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 200);
+  }
+  if (caughtUp) {
+    const inspect = run(["inspect", "--all", "--problems"], 30000);
+    // One block per scene: its verdict, then PROBLEMS, then a line per problem with its fix under it.
+    for (const block of (inspect.stdout || "").trim().split(/\\n\\s*\\n/)) {
+      const lines = block.split("\\n");
+      const from = lines.indexOf("PROBLEMS");
+      if (from < 1) continue;
+      inspected = true;
+      const scene = (lines[0].match(/scene#(\\S+)/) || [])[1] || lines[0];
+      for (let index = from + 1; index < lines.length; index += 1) {
+        if (!SIGN.test(lines[index])) continue;
+        const fix = /^\\s*fix:/.test(lines[index + 1] || "") ? "\\n" + lines[index + 1] : "";
+        items.push({ key: "inspect " + scene + " " + lines[index].trim(), group: lines[0], text: lines[index] + fix });
+      }
+    }
+  }
+}
 
+// 3. Say each thing once per agent session. A problem the agent has been told
+//    about and has not touched is not news after its next edit; one it fixed
+//    and brought back is.
+const seenPath = resolve(project, ".posterract", "cache", "feedback-seen.json");
+const agentSession = typeof payload.session_id === "string" ? payload.session_id : "";
+let seen = [];
+try {
+  const stored = JSON.parse(readFileSync(seenPath, "utf8"));
+  if (stored.session === agentSession && Array.isArray(stored.keys)) seen = stored.keys;
+} catch {
+  seen = [];
+}
+const fresh = items.filter((item) => !seen.includes(item.key));
+// What was not looked at this time is still whatever it was.
+const kept = inspected ? [] : seen.filter((key) => key.startsWith("inspect "));
+try {
+  mkdirSync(dirname(seenPath), { recursive: true });
+  writeFileSync(seenPath, JSON.stringify({ session: agentSession, keys: [...new Set([...kept, ...items.map((item) => item.key)])] }));
+} catch {
+  // Forgetting only means saying something twice.
+}
+
+if (!fresh.length) process.exit(0);
+const report = [];
+for (const item of fresh) {
+  if (item.group && !report.includes(item.group)) report.push("", item.group);
+  report.push(item.text);
+}
+const old = items.length - fresh.length;
 process.stderr.write(
-  \`Posterract Desktop has this project open: edit \${target} through the MCP tools, not file tools \` +
-    "(posterract_read_source -> posterract_write_source with its revisionId, or posterract_set_properties / set_text / create_element). " +
-    "Tool edits show on the canvas and keep undo. If the posterract_* tools are missing, ask the user to restart the agent session.\\n",
+  "Posterract checked " + target + " after your edit:\\n\\n" + report.join("\\n").trim() + "\\n" +
+    (old ? "\\n(" + old + " more you were already told about " + (old === 1 ? "is" : "are") + " still open: posterract inspect --all --problems)\\n" : "") +
+    "\\nFix every \\u2717 before moving on; judge every \\u26a0. Run posterract inspect again to confirm.\\n",
 );
 process.exit(2);
 `;
 
 const PROJECT_README = `# Posterract project\n\nThis folder is the source of truth for a local Posterract composition.\n\n- Edit \`src/index.tsx\` in your IDE or with your coding agent.\n- Connect your agent from Posterract Desktop; the app registers the local MCP server automatically.\n- Keep media under \`assets/\`, or explicitly link approved local files.\n- Use the Posterract MCP context, validation, check, and capture tools during agent work.\n- Run \`posterract doctor\` only when diagnosing the local runtime.\n- Local export never uploads automatically.\n\nThe installed SDK documentation is under \`.posterract/docs\`.\n`;
 
-async function writeAtomic(path: string, content: string | Uint8Array): Promise<void> {
+/** Thrown by `writeAtomic` when the file is no longer the revision the caller built its content on. */
+class StaleWrite extends Error {}
+
+/**
+ * `expected`, when given, is the revision the new content was made from. It is
+ * checked again at the last moment — with the new content already on disk under
+ * its temporary name, one `rename` from landing — because a check made before
+ * the write leaves room for someone else's write in between, and this one would
+ * then replace theirs with content that never saw it.
+ */
+async function writeAtomic(path: string, content: string | Uint8Array, expected?: string): Promise<void> {
   // Preserve whatever is on disk before it is replaced. This is the single
   // choke point for both the agent's source writes and the visual editor's,
   // so every path that can destroy a composition passes through here.
@@ -387,8 +544,17 @@ async function writeAtomic(path: string, content: string | Uint8Array): Promise<
   const startedAt = Date.now();
   markSelfWrite(path, content, startedAt);
   await writeFile(temporary, content);
+  if (expected !== undefined) {
+    const standing = await readFile(path).then(revision, () => null);
+    if (standing !== expected) {
+      await rm(temporary, { force: true });
+      selfWrites.delete(path);
+      throw new StaleWrite(path);
+    }
+  }
   await rename(temporary, path);
   markSelfWrite(path, content, Date.now());
+  if (typeof content === "string" && SOURCE_FILE.test(path)) lastSeen.set(path, content);
 }
 
 async function stageProjectEnvironment(dir: string): Promise<void> {
@@ -440,11 +606,16 @@ async function ensureProjectGuidance(dir: string): Promise<void> {
   await writeManagedGuidance(join(dir, ".codex", "AGENTS.md"), PROJECT_AGENTS);
   // Claude Code settings may carry the user's own hooks and permissions, so
   // they are only ever created, never rewritten.
-  if (!(await exists(join(dir, ".claude", "settings.json")))) {
-    await writeAtomic(join(dir, ".claude", "settings.json"), PROJECT_CLAUDE_SETTINGS);
+  const settingsPath = join(dir, ".claude", "settings.json");
+  const settings = await readFile(settingsPath, "utf8").catch(() => null);
+  // Created when missing; brought up to date while it still says exactly what
+  // an earlier version wrote (the blocking guard); otherwise the user's.
+  if (settings === null || settings === LEGACY_PROJECT_CLAUDE_SETTINGS) {
+    await writeAtomic(settingsPath, PROJECT_CLAUDE_SETTINGS);
   }
-  // The guard script is app-owned, so it follows the app version.
+  // The hook scripts are app-owned, so they follow the app version.
   await writeAtomic(join(dir, ".posterract", "hooks", "guard-source.mjs"), PROJECT_GUARD_HOOK);
+  await writeAtomic(join(dir, ".posterract", "hooks", "feedback.mjs"), PROJECT_FEEDBACK_HOOK);
   // The packaged SDK and its docs are version-matched to the desktop. Refresh
   // the app-owned project environment on every open so an existing project
   // immediately learns newly shipped primitives without touching user source.
@@ -466,6 +637,7 @@ async function scaffold(dir: string, displayName: string, packageName = basename
     writeAtomic(join(dir, ".cursor", "rules", "posterract.mdc"), PROJECT_CURSOR_RULES),
     writeAtomic(join(dir, ".claude", "settings.json"), PROJECT_CLAUDE_SETTINGS),
     writeAtomic(join(dir, ".posterract", "hooks", "guard-source.mjs"), PROJECT_GUARD_HOOK),
+    writeAtomic(join(dir, ".posterract", "hooks", "feedback.mjs"), PROJECT_FEEDBACK_HOOK),
     writeAtomic(join(dir, "README.md"), PROJECT_README),
     writeAtomic(
       join(dir, ".gitignore"),
@@ -533,6 +705,7 @@ async function sourceFiles(dir: string): Promise<Record<string, string>> {
         if (!SOURCE_FILE.test(entry.name) && extname(entry.name) !== ".json") return;
         const path = relative(dir, absolute).split(sep).join("/");
         files[path] = await readFile(absolute, "utf8");
+        if (SOURCE_FILE.test(entry.name)) lastSeen.set(absolute, files[path]!);
       }),
     );
   };
@@ -683,7 +856,11 @@ export async function compileProject(dir: string): Promise<CompileResult> {
   let files = await sourceFiles(project.dir);
   const original = Object.fromEntries(Object.entries(files).map(([path, content]) => [path, revision(content)]));
   const stamped = new Map<string, string>();
-  await stampProject({ files, onWrite: (path, content) => stamped.set(path, content) });
+  // Ids are stamped, and in the same write any editor view state an older
+  // source still carries (`selected`, `active`, `camera`, ...) is lifted out
+  // of it: the view lives in the sidecar now, so a click is no longer a
+  // revision of the document (see ./view-state.ts).
+  const lifted = await prepareProject({ files, onWrite: (path, content) => stamped.set(path, content) });
   if (stamped.size) {
     for (const path of stamped.keys()) {
       const absolute = await requireProjectPath(project.dir, path);
@@ -696,15 +873,126 @@ export async function compileProject(dir: string): Promise<CompileResult> {
       [...stamped].map(async ([path, content]) => {
         const destination = await requireProjectPath(project.dir, path, false);
         await writeAtomic(destination, content);
+        await appendJournal(project.dir, {
+          at: Date.now(),
+          actor: "app",
+          path,
+          from: original[path] ?? null,
+          to: revision(content),
+          note: "named elements and lifted editor view state; the video itself is unchanged",
+        });
       }),
     );
     files = await sourceFiles(project.dir);
+    // Carried over once: a project that already has a sidecar keeps it. Losing
+    // this costs a selection and a zoom level, never the compile.
+    if (hasViewState(lifted)) await seedViewStateFile(project.dir, lifted).catch(() => false);
   }
   const result = await compileVirtualProject(
     Object.entries(files).map(([path, content]) => ({ path, content })),
     project.entry,
   );
-  return result.ok ? { ok: true, code: result.code } : { ok: false, error: diagnosticMessage(result.diagnostics) };
+  return result.ok
+    ? { ok: true, code: result.code, revisions: sourceRevisions(files) }
+    : { ok: false, error: diagnosticMessage(result.diagnostics) };
+}
+
+/**
+ * What a canvas showing `fromRevision` of a source has to do to show what is
+ * on disk now, when that can be said exactly (see the compiler's patch.ts) —
+ * or why it cannot, in which case the caller mounts the file again as it
+ * always has. This is what lets an edit made to the file, by an agent's file
+ * tools or an IDE, reach the canvas as the small change it is: no remount, no
+ * lost undo history.
+ *
+ * The base is what the canvas says it is showing, never what the app assumes:
+ * it is looked up in the source history by that revision, and a revision the
+ * history does not hold is a reason to remount, not to guess.
+ */
+export async function projectSourcePatch(
+  dir: string,
+  path: string,
+  fromRevision: string,
+): Promise<{ revisionId: string; patch: SourcePatch }> {
+  const projectDir = await requireProjectDir(dir);
+  const absolute = await requireProjectPath(projectDir, path);
+  if (!SOURCE_FILE.test(absolute)) throw new Error("Only project source files can be patched");
+  const bytes = await readFile(absolute);
+  const revisionId = revision(bytes);
+  if (revisionId === fromRevision) return { revisionId, patch: { ok: true, ops: [] } };
+
+  const held = lastSeenBefore.get(absolute);
+  const base = held && revision(held) === fromRevision ? held : await readRevisionByHash(projectDir, path, fromRevision);
+  if (base === null || base === undefined) {
+    return { revisionId, patch: { ok: false, reason: "the version the canvas is showing is no longer in the history" } };
+  }
+  return { revisionId, patch: patchSources(path, base, bytes.toString("utf8")) };
+}
+
+/**
+ * Which of `ids` someone else has changed since the caller last saw the source
+ * at `fromRevision` — the conflict check of an edit that is about one element.
+ *
+ * A whole-file revision check ("the file changed, read it again") fails an
+ * agent's edit of a caption because the person nudged a clip at the other end
+ * of the timeline, which is no conflict at all. What matters is whether the
+ * element the edit is about is still what the agent thinks it is: if nobody
+ * touched it, the edit goes ahead on top of whatever else changed; if somebody
+ * did, the agent is told what they changed, so it can decide again knowing it.
+ *
+ * `known: false` when the revision is not one the history holds: nothing can
+ * be said, and the caller must not take that for "untouched".
+ */
+export async function projectSourceTouched(
+  dir: string,
+  path: string,
+  fromRevision: string,
+  ids: string[],
+): Promise<{ revisionId: string; known: boolean; touched: Array<{ id: string; changes: string[] }> }> {
+  const projectDir = await requireProjectDir(dir);
+  if (path === "auto") {
+    const entry = await entryFor(projectDir);
+    if (!entry) throw new Error("Project entry file is missing");
+    path = entry;
+  }
+  const absolute = await requireProjectPath(projectDir, path);
+  const bytes = await readFile(absolute);
+  const revisionId = revision(bytes);
+  if (revisionId === fromRevision) return { revisionId, known: true, touched: [] };
+
+  const held = lastSeenBefore.get(absolute);
+  const base = held && revision(held) === fromRevision ? held : await readRevisionByHash(projectDir, path, fromRevision);
+  if (base === null || base === undefined) return { revisionId, known: false, touched: [] };
+
+  const diff = diffSources(path, base, bytes.toString("utf8"));
+  const wanted = new Set(ids);
+  const touched = new Map<string, string[]>();
+  const note = (id: string, what: string): void => {
+    if (wanted.has(id)) touched.set(id, [...(touched.get(id) ?? []), what]);
+  };
+  for (const change of diff.changes) {
+    if (change.kind === "prop") note(change.id, `${change.name}: ${change.before ?? "(unset)"} → ${change.after ?? "(unset)"}`);
+    else if (change.kind === "text") note(change.id, `says: "${change.before}" → "${change.after}"`);
+    else if (change.kind === "moved") note(change.id, `moved from #${change.from ?? "?"} to #${change.to ?? "?"}`);
+    else note(change.id, change.kind);
+  }
+  for (const motion of diff.motion) note(motion.id, "its keyframes or animations changed");
+  return { revisionId, known: true, touched: [...touched].map(([id, changes]) => ({ id, changes })) };
+}
+
+/** Where the author is looking in this project, or null before anything was remembered. */
+export async function readProjectViewState(dir: string): Promise<ViewState | null> {
+  return readViewStateFile(await requireProjectDir(dir));
+}
+
+/**
+ * Remembers where the author is looking. Pinned to one fixed path, like the
+ * undo cache, so this cannot become a general write primitive for the
+ * renderer; the folder it lives in is ignored by the project watcher, so
+ * writing it never reloads the canvas.
+ */
+export async function writeProjectViewState(dir: string, value: unknown): Promise<void> {
+  await writeViewStateFile(await requireProjectDir(dir), value);
 }
 
 /**
@@ -715,10 +1003,16 @@ export async function compileProject(dir: string): Promise<CompileResult> {
  * annotated `readOnlyHint`); the editor's own loads keep `compileProject`,
  * which persists freshly minted IDs so element identity survives reloads.
  */
-export async function validateProject(dir: string): Promise<CompileResult> {
+export async function validateProject(dir: string): Promise<CompileResult & { lint: LintDiagnostic[] }> {
   const project = await getProject(dir);
-  if (!project) return { ok: false, error: "Project entry file is missing" };
+  if (!project) return { ok: false, error: "Project entry file is missing", lint: [] };
   const files = await sourceFiles(project.dir);
+  // Compiling proves the source is a program; it says nothing about whether
+  // the editor understands it, because no type-checker runs and the runtime
+  // ignores a prop it does not know. The lint is that second half (see the
+  // compiler's lint.ts). Read before stamping, so its line numbers are the
+  // file's own.
+  const lint = lintProject(files);
   // `stampProject` updates the virtual `files` map in place (see the
   // writer's `save()`), so the compile below sees the stamped sources.
   await stampProject({ files });
@@ -726,12 +1020,32 @@ export async function validateProject(dir: string): Promise<CompileResult> {
     Object.entries(files).map(([path, content]) => ({ path, content })),
     project.entry,
   );
-  return result.ok ? { ok: true, code: result.code } : { ok: false, error: diagnosticMessage(result.diagnostics) };
+  return result.ok
+    ? { ok: true, code: result.code, lint }
+    : { ok: false, error: diagnosticMessage(result.diagnostics), lint };
 }
 
-export async function writeProject(dir: string, edits: SourceEdit[]): Promise<WriteResult> {
+/** What a write came to, plus which revision each file stood at before and after it (see `writeProject`). */
+export type ProjectWriteResult = WriteResult & { revisions?: Record<string, string>; bases?: Record<string, string> };
+
+/**
+ * How often a canvas write starts over when the file changes underneath it.
+ *
+ * The edits are addressed by element id, so applying them to whatever the file
+ * says now is always right: a retry is a rebase, never a guess. What has to be
+ * avoided is giving up, because a write that gives up leaves the person's edit
+ * on the canvas and out of the file. With an agent editing the same file that
+ * is no corner case — each attempt takes as long as parsing the source, and an
+ * agent's burst of edits can land inside two of them in a row, which is all the
+ * old limit of two allowed. Eight, spaced out, outlasts any burst a tool makes.
+ */
+const WRITE_ATTEMPTS = 8;
+
+export async function writeProject(dir: string, edits: SourceEdit[], actor: JournalActor = "canvas", note?: string): Promise<ProjectWriteResult> {
   const projectDir = await requireProjectDir(dir);
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  for (let attempt = 0; attempt < WRITE_ATTEMPTS; attempt += 1) {
+    // Out of step with whoever else is writing: they rarely write twice in the same stride.
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 20 * 2 ** Math.min(attempt, 4) + Math.random() * 40));
     const files = await sourceFiles(projectDir);
     const original = Object.fromEntries(Object.entries(files).map(([path, content]) => [path, revision(content)]));
     const changed = new Map<string, string>();
@@ -747,7 +1061,7 @@ export async function writeProject(dir: string, edits: SourceEdit[]): Promise<Wr
       }
     }
     if (conflict) {
-      if (attempt === 0) continue;
+      if (attempt < WRITE_ATTEMPTS - 1) continue;
       return {
         ...result,
         skipped: [...new Set([...result.skipped, ...edits.map((edit) => edit.kind === "variable" ? `${edit.file}:${edit.name}` : edit.source)])],
@@ -755,13 +1069,36 @@ export async function writeProject(dir: string, edits: SourceEdit[]): Promise<Wr
       };
     }
 
-    await Promise.all(
-      [...changed].map(async ([path, content]) => {
+    let landed = 0;
+    try {
+      // One file after another, so that a write found stale stops the rest.
+      for (const [path, content] of changed) {
         const destination = await requireProjectPath(projectDir, path, false);
-        await writeAtomic(destination, content);
-      }),
-    );
-    return result;
+        await writeAtomic(destination, content, original[path]);
+        landed += 1;
+        await appendJournal(projectDir, { at: Date.now(), actor, path, from: original[path] ?? null, to: revision(content), ...(note ? { note } : {}) });
+      }
+    } catch (error) {
+      if (!(error instanceof StaleWrite)) throw error;
+      // Starting over applies every edit again, which is only right while none
+      // of them is on disk yet: an insert applied twice is two elements.
+      if (landed === 0 && attempt < WRITE_ATTEMPTS - 1) continue;
+      return {
+        ...result,
+        skipped: [...new Set([...result.skipped, ...edits.map((edit) => edit.kind === "variable" ? `${edit.file}:${edit.name}` : edit.source)])],
+        error: "The source kept changing in another editor; the visual edit was not written",
+      };
+    }
+    // The canvas already shows these edits; this is how it learns which
+    // revision of each file it is now showing. `bases` is what each file said
+    // when the edits were applied to it: if that is not the revision the
+    // canvas thought it was showing, someone else's change lies underneath
+    // this write, and the canvas is still owed it.
+    return {
+      ...result,
+      revisions: Object.fromEntries([...changed].map(([path, content]) => [path, revision(content)])),
+      bases: Object.fromEntries([...changed.keys()].map((path) => [path, original[path] ?? ""])),
+    };
   }
   return { skipped: edits.map((edit) => edit.kind === "variable" ? `${edit.file}:${edit.name}` : edit.source), error: "Concurrent source edit" };
 }
@@ -780,7 +1117,9 @@ export async function restoreProjectRevision(
   const content = await readRevision(projectDir, path, id);
   const absolute = await requireProjectPath(projectDir, path, false);
   if (!SOURCE_FILE.test(absolute)) throw new Error("Only project source files have revisions");
+  const replaced = await readFile(absolute).then(revision, () => null);
   await writeAtomic(absolute, content);
+  await appendJournal(projectDir, { at: Date.now(), actor: "app", path, from: replaced, to: revision(content), note: "restored an earlier version" });
   const project = await getProject(projectDir);
   if (!project) throw new Error("Project not found");
   const files = await sourceFiles(project.dir);
@@ -861,14 +1200,49 @@ function revision(content: string | Uint8Array): string {
 }
 
 /**
+ * Which part of a source a reader wants. A real project's entry file runs to
+ * hundreds of kilobytes, most of it keyframes; handed over whole it does not
+ * fit in an agent's context, and the agent is left with nothing. So a read can
+ * name one element, a range of lines, or ask for the outline — and a `bounded`
+ * read of a file too large to be useful whole answers with the outline and how
+ * to ask for a part, instead of with everything.
+ */
+export type SourceSelect = {
+  /** One element, children included, by its stable id. */
+  id?: string;
+  /** 1-based, inclusive. */
+  lines?: [from: number, to: number];
+  /** One line per element (see the compiler's `formatOutline`) instead of the text. */
+  outline?: boolean;
+  /** Answer with the outline rather than the text when the file is larger than a reader can use. */
+  bounded?: boolean;
+};
+
+export type SourceRead = {
+  path: string;
+  content: string;
+  revisionId: string;
+  totalLines: number;
+  totalChars: number;
+  /** The lines `content` covers, when it is a part of the file. */
+  range?: { from: number; to: number };
+  outline?: string[];
+  note?: string;
+};
+
+/** Past this a whole file is a dump rather than an answer (roughly ten thousand tokens). */
+const BOUNDED_SOURCE_CHARS = 40_000;
+
+/**
  * Reads a project source file. `path` "auto" resolves the project's actual
  * entry file through the same `ENTRY_FILES` resolution the rest of the app
  * uses (migrated projects can keep the entry at the project root, not under
  * `src/`); the result reports the resolved path. The revision is exactly
  * sha256 of the on-disk bytes — the one revision namespace shared with
- * `context.sourceRevision`, which goes through this same function.
+ * `context.sourceRevision`, which goes through this same function — and is the
+ * whole file's whatever part of it `select` asked for.
  */
-export async function readProjectSource(dir: string, path: string): Promise<{ path: string; content: string; revisionId: string }> {
+export async function readProjectSource(dir: string, path: string, select: SourceSelect = {}): Promise<SourceRead> {
   let relativePath = path;
   if (path === "auto") {
     const entry = await entryFor(await requireProjectDir(dir));
@@ -878,7 +1252,40 @@ export async function readProjectSource(dir: string, path: string): Promise<{ pa
   const absolute = await requireProjectPath(dir, relativePath);
   if (!SOURCE_FILE.test(absolute)) throw new Error("Only project source files may be opened in the source editor");
   const bytes = await readFile(absolute);
-  return { path: relativePath, content: bytes.toString("utf8"), revisionId: revision(bytes) };
+  const content = bytes.toString("utf8");
+  const lines = content.split("\n");
+  const whole = { path: relativePath, revisionId: revision(bytes), totalLines: lines.length, totalChars: content.length };
+
+  if (select.id !== undefined) {
+    const text = extractElementSource(content, select.id);
+    const at = locateElement(content, select.id);
+    if (text === null || !at) throw new Error(`No element with id "${select.id}" in ${relativePath}`);
+    return { ...whole, content: text, range: { from: at.line, to: at.line + text.split("\n").length - 1 } };
+  }
+
+  if (select.lines) {
+    const from = Math.max(1, Math.floor(select.lines[0]) || 1);
+    const to = Math.min(lines.length, Math.max(from, Math.floor(select.lines[1]) || from));
+    return { ...whole, content: lines.slice(from - 1, to).join("\n"), range: { from, to } };
+  }
+
+  if (select.outline || (select.bounded && content.length > BOUNDED_SOURCE_CHARS)) {
+    return {
+      ...whole,
+      content: "",
+      outline: formatOutline(outlineSource(relativePath, content)),
+      ...(select.outline
+        ? {}
+        : {
+          note:
+            `${relativePath} is ${content.length.toLocaleString("en-US")} characters, too large to be useful whole, so this is its outline: ` +
+            "one line per element with the lines it spans. Read a part with `id` (one element) or `lines` ([from, to]); " +
+            "with file tools, read those lines of the file directly.",
+        }),
+    };
+  }
+
+  return { ...whole, content };
 }
 
 export async function writeProjectSource(request: SourceWriteRequest): Promise<{
@@ -889,6 +1296,13 @@ export async function writeProjectSource(request: SourceWriteRequest): Promise<{
   if (typeof request.content !== "string" || request.content.length > 5_000_000) {
     throw new Error("Source file is too large");
   }
+  // "auto" names the entry file, the way it does for a read: a write that
+  // follows `read_source`'s default has to land on the file that was read.
+  if (request.path === "auto") {
+    const entry = await entryFor(await requireProjectDir(request.dir));
+    if (!entry) throw new Error("Project entry file is missing");
+    request = { ...request, path: entry };
+  }
   const absolute = await requireProjectPath(request.dir, request.path);
   // Compare in the same namespace `readProjectSource` hands out: sha256 of
   // the raw on-disk bytes.
@@ -897,6 +1311,13 @@ export async function writeProjectSource(request: SourceWriteRequest): Promise<{
     throw new Error("This source changed on disk. Reload it before saving your edit.");
   }
   await writeAtomic(absolute, request.content);
+  await appendJournal(await requireProjectDir(request.dir), {
+    at: Date.now(),
+    actor: request.actor ?? "canvas",
+    path: request.path,
+    from: revision(current),
+    to: revision(request.content),
+  });
   const project = await getProject(request.dir);
   if (!project) throw new Error("Project not found");
   const files = await sourceFiles(project.dir);
@@ -908,8 +1329,80 @@ export async function writeProjectSource(request: SourceWriteRequest): Promise<{
   return {
     revisionId: revision(request.content),
     content: request.content,
-    diagnostics: compiled.diagnostics,
+    // What the compiler said, then what the vocabulary says: a source that
+    // compiles can still ask for a prop the editor ignores (see lint.ts), and
+    // the writer should hear about it with the write, not after a render.
+    diagnostics: [...compiled.diagnostics, ...lintSource(request.path, request.content)],
   };
+}
+
+export interface SourceEditRequest {
+  dir: string;
+  path: string;
+  oldString: string;
+  newString: string;
+  replaceAll?: boolean;
+  actor?: JournalActor;
+}
+
+/**
+ * Replaces one string of a source with another: the edit an agent's own file
+ * tools make, for an agent that has none (a chat client with only the MCP
+ * tools). It costs the agent the two strings, where `writeProjectSource` costs
+ * it the whole file, and it cannot take a stale copy of the rest of the file
+ * with it. `oldString` has to be there exactly once unless `replaceAll`; the
+ * change then goes through the same write as any other, so it is snapshotted,
+ * journalled, linted and shown on the canvas.
+ */
+export async function editProjectSource(request: SourceEditRequest): Promise<{
+  revisionId: string;
+  replaced: number;
+  line: number;
+  diagnostics: CompileDiagnostic[];
+}> {
+  if (typeof request.oldString !== "string" || !request.oldString) throw new Error("`old_string` is empty: say what to replace.");
+  if (typeof request.newString !== "string") throw new Error("`new_string` must be a string.");
+  if (request.oldString === request.newString) throw new Error("`old_string` and `new_string` are the same: nothing to change.");
+  let path = request.path;
+  if (path === "auto") {
+    const entry = await entryFor(await requireProjectDir(request.dir));
+    if (!entry) throw new Error("Project entry file is missing");
+    path = entry;
+  }
+  const absolute = await requireProjectPath(request.dir, path);
+  if (!SOURCE_FILE.test(absolute)) throw new Error("Only project source files can be edited this way");
+  const bytes = await readFile(absolute);
+  const content = bytes.toString("utf8");
+
+  const found: number[] = [];
+  for (let at = content.indexOf(request.oldString); at !== -1; at = content.indexOf(request.oldString, at + request.oldString.length)) {
+    found.push(at);
+  }
+  const lineOf = (offset: number): number => content.slice(0, offset).split("\n").length;
+  if (!found.length) {
+    throw new Error(
+      `\`old_string\` is not in ${path}. It has to match the file exactly, spaces and line breaks included: ` +
+        "read that part again (posterract_read_source with `id` or `lines`) and copy it from there.",
+    );
+  }
+  if (found.length > 1 && !request.replaceAll) {
+    throw new Error(
+      `\`old_string\` is in ${path} ${found.length} times (lines ${found.slice(0, 8).map(lineOf).join(", ")}${found.length > 8 ? ", …" : ""}). ` +
+        "Include more of the text around it so that it names one place, or pass `replace_all`.",
+    );
+  }
+
+  const next = request.replaceAll
+    ? content.split(request.oldString).join(request.newString)
+    : content.slice(0, found[0]!) + request.newString + content.slice(found[0]! + request.oldString.length);
+  const written = await writeProjectSource({
+    dir: request.dir,
+    path,
+    content: next,
+    expectedRevisionId: revision(bytes),
+    ...(request.actor ? { actor: request.actor } : {}),
+  });
+  return { revisionId: written.revisionId, replaced: request.replaceAll ? found.length : 1, line: lineOf(found[0]!), diagnostics: written.diagnostics };
 }
 
 function emitProjectEvent(dir: string, path: string, revisionId?: string): void {
@@ -939,8 +1432,25 @@ export async function watchProject(window: BrowserWindow | null, dir: string): P
     if (ATOMIC_WRITE_TEMP.test(path) || path === basename(projectDir)) return;
     const absolute = join(projectDir, path);
     const selfWrite = selfWrites.get(absolute);
-    if (selfWrite && Date.now() - selfWrite.writtenAt < SELF_WRITE_GRACE_MS) return;
-    void (async () => {
+    const sinceSelfWrite = selfWrite ? Date.now() - selfWrite.writtenAt : Number.POSITIVE_INFINITY;
+    if (sinceSelfWrite < SELF_WRITE_GRACE_MS) {
+      // Almost certainly the app's own write echoing back — but not certainly.
+      // Someone else's write can land in the same half second (an agent that
+      // sets a prop through a tool and then edits the file does exactly that),
+      // and dropping the event would leave the canvas showing a file that no
+      // longer exists. So look once the grace has passed: the content decides,
+      // as it does for any event, and an echo of our own write is recognised
+      // by its hash and ignored.
+      clearTimeout(rechecks.get(absolute));
+      rechecks.set(absolute, setTimeout(() => {
+        rechecks.delete(absolute);
+        void look();
+      }, SELF_WRITE_GRACE_MS - sinceSelfWrite + 25));
+      return;
+    }
+    void look();
+
+    async function look(): Promise<void> {
       try {
         // Recursive fs.watch also reports ancestor directories (for example
         // `src`) during an atomic child write. A directory has no project
@@ -952,6 +1462,27 @@ export async function watchProject(window: BrowserWindow | null, dir: string): P
         const latestSelfWrite = selfWrites.get(absolute);
         if (latestSelfWrite?.revisionId === revisionId) return;
         if (latestSelfWrite) selfWrites.delete(absolute);
+        if (SOURCE_FILE.test(path)) {
+          // Someone else wrote this source: an agent's file tools, an IDE. The
+          // version they replaced is kept — the app never got to snapshot it
+          // before the write, the way it does for its own — and the revision
+          // is entered in the journal as theirs.
+          const replaced = lastSeen.get(absolute);
+          if (replaced !== content) {
+            if (replaced !== undefined) {
+              lastSeenBefore.set(absolute, replaced);
+              await snapshotContent(absolute, replaced);
+            }
+            lastSeen.set(absolute, content);
+            await appendJournal(projectDir, {
+              at: Date.now(),
+              actor: "external",
+              path,
+              from: replaced === undefined ? null : revision(replaced),
+              to: revisionId,
+            });
+          }
+        }
         emitProjectEvent(projectDir, path, SOURCE_FILE.test(path) ? revisionId : undefined);
       } catch {
         // Recheck after the awaits: a self-write can have started while this
@@ -968,7 +1499,7 @@ export async function watchProject(window: BrowserWindow | null, dir: string): P
         void recordDeletion(projectDir, path).catch(() => undefined);
         emitProjectEvent(projectDir, path);
       }
-    })();
+    }
   });
   watchers.set(projectDir, { watcher, windows });
 }
@@ -1176,12 +1707,29 @@ export async function copyProjectAsset(dir: string, source: string, path: string
   const temporary = `${output}.${randomUUID()}.import`;
   await mkdir(dirname(output), { recursive: true });
   try {
-    await copyFile(input, temporary);
+    await cloneOrCopy(input, temporary);
     await rename(temporary, output);
   } catch (error) {
     await rm(temporary, { force: true }).catch(() => undefined);
     throw error;
   }
+}
+
+/**
+ * Copies `input` to `output` as an APFS clone where the volume can make one:
+ * instant, and no second copy of the footage on disk until one of the two
+ * changes. Node's copyFile cannot clone on macOS, so `cp -c` (clonefile)
+ * does it; another volume, or one that cannot clone, gets a plain copy.
+ */
+async function cloneOrCopy(input: string, output: string): Promise<void> {
+  if (process.platform === "darwin") {
+    const cloned = await new Promise<boolean>((done) => {
+      execFile("/bin/cp", ["-c", input, output], (error) => done(!error));
+    });
+    if (cloned) return;
+    await rm(output, { force: true }).catch(() => undefined);
+  }
+  await copyFile(input, output);
 }
 
 export async function assetFile(dir: string, source: string): Promise<{ path: string; name: string; mimeType: string; mtime: number }> {

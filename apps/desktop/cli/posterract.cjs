@@ -3461,11 +3461,11 @@ var require_commander = __commonJS({
 });
 
 // src/index.ts
-var import_node_child_process3 = require("node:child_process");
-var import_node_crypto3 = require("node:crypto");
-var import_node_fs4 = require("node:fs");
+var import_node_child_process4 = require("node:child_process");
+var import_node_crypto4 = require("node:crypto");
+var import_node_fs5 = require("node:fs");
 var import_node_os4 = require("node:os");
-var import_node_path5 = require("node:path");
+var import_node_path6 = require("node:path");
 
 // ../../node_modules/.pnpm/commander@14.0.3/node_modules/commander/esm.mjs
 var import_index = __toESM(require_commander(), 1);
@@ -3521,6 +3521,7 @@ function parseTime(value) {
 }
 
 // src/cli-client.ts
+var import_node_child_process = require("node:child_process");
 var import_node_net = require("node:net");
 
 // ../../node_modules/.pnpm/@trpc+client@11.18.0_@trpc+server@11.18.0_typescript@5.9.3__typescript@5.9.3/node_modules/@trpc/client/dist/objectSpread2-BvkFp-_Y.mjs
@@ -4493,6 +4494,26 @@ var import_awaitAsyncGenerator = __toESM2(require_awaitAsyncGenerator(), 1);
 var import_wrapAsyncGenerator = __toESM2(require_wrapAsyncGenerator(), 1);
 var import_objectSpread28 = __toESM2(require_objectSpread2(), 1);
 
+// src/cli-socket-path.ts
+var import_node_crypto = require("node:crypto");
+var import_node_os = require("node:os");
+var import_node_path = require("node:path");
+var PROFILE = (process.env.POSTERRACT_PROFILE ?? "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 32);
+var INSTANCE_PROFILE = PROFILE;
+function socketPathFor(profile) {
+  const suffix = profile ? `-${profile}` : "";
+  return (0, import_node_os.platform)() === "win32" ? `\\\\.\\pipe\\posterract-editor-${(0, import_node_crypto.createHash)("sha256").update((0, import_node_os.homedir)()).digest("hex").slice(0, 12)}${suffix}` : (0, import_node_path.join)((0, import_node_os.tmpdir)(), `posterract-editor-${typeof process.getuid === "function" ? process.getuid() : "user"}${suffix}.sock`);
+}
+var SOCKET_PATH = socketPathFor(PROFILE);
+var ENGINE_PROFILE = "engine";
+var ENGINE_SOCKET_PATH = socketPathFor(ENGINE_PROFILE);
+
+// src/project-control.ts
+var import_node_crypto2 = require("node:crypto");
+var import_node_fs = require("node:fs");
+var import_node_os2 = require("node:os");
+var import_node_path2 = require("node:path");
+
 // src/cli-channels.ts
 var CLI_PROTOCOL_VERSION = 2;
 var LOCAL_CONTROL_PROTOCOL_VERSION = 1;
@@ -4505,17 +4526,7 @@ var LOCAL_CONTROL_RUNTIME = {
 };
 var MAX_FRAMES_PER_SHEET = 12;
 
-// src/cli-socket-path.ts
-var import_node_crypto = require("node:crypto");
-var import_node_os = require("node:os");
-var import_node_path = require("node:path");
-var SOCKET_PATH = (0, import_node_os.platform)() === "win32" ? `\\\\.\\pipe\\posterract-editor-${(0, import_node_crypto.createHash)("sha256").update((0, import_node_os.homedir)()).digest("hex").slice(0, 12)}` : (0, import_node_path.join)((0, import_node_os.tmpdir)(), `posterract-editor-${typeof process.getuid === "function" ? process.getuid() : "user"}.sock`);
-
 // src/project-control.ts
-var import_node_crypto2 = require("node:crypto");
-var import_node_fs = require("node:fs");
-var import_node_os2 = require("node:os");
-var import_node_path2 = require("node:path");
 var POLL_MS = 35;
 var ACTIVE_PROJECT_POINTER_VERSION = 1;
 var HEARTBEAT_STALE_MS = 45e3;
@@ -4535,7 +4546,8 @@ function looksLikeProject(dir) {
 }
 function activeProjectPointerPath() {
   const runtime = process.env.POSTERRACT_RUNTIME_DIR;
-  return runtime ? (0, import_node_path2.join)((0, import_node_path2.resolve)(runtime), "active-project.json") : (0, import_node_path2.join)((0, import_node_os2.homedir)(), ".posterract", "runtime", "active-project.json");
+  if (runtime) return (0, import_node_path2.join)((0, import_node_path2.resolve)(runtime), "active-project.json");
+  return (0, import_node_path2.join)((0, import_node_os2.homedir)(), ".posterract", INSTANCE_PROFILE ? `runtime-${INSTANCE_PROFILE}` : "runtime", "active-project.json");
 }
 function readActiveProjectPointer() {
   try {
@@ -4548,10 +4560,11 @@ function readActiveProjectPointer() {
     return null;
   }
 }
-function resolveProjectDir(explicit) {
+function resolveProjectDir(explicit, options = {}) {
   const candidates = [
     explicit,
     process.env.POSTERRACT_PROJECT_DIR,
+    ...options.here ? [process.cwd()] : [],
     process.env.CLAUDE_PROJECT_DIR,
     process.env.CURSOR_PROJECT_DIR,
     process.env.VSCODE_CWD,
@@ -4579,10 +4592,12 @@ function localControlPaths(projectDir) {
     captures: (0, import_node_path2.join)(runtime, LOCAL_CONTROL_RUNTIME.captures)
   };
 }
+var DesktopUnavailableError = class extends Error {
+};
 function readLocalControlSession(projectDir) {
   const { session } = localControlPaths(projectDir);
   if (!(0, import_node_fs.existsSync)(session)) {
-    throw new Error("Posterract Desktop is not exposing this project. Open the project in Desktop and retry.");
+    throw new DesktopUnavailableError("Posterract Desktop is not exposing this project. Open the project in Desktop and retry.");
   }
   const value = readJson(session);
   if (value.protocolVersion !== LOCAL_CONTROL_PROTOCOL_VERSION) {
@@ -4599,10 +4614,10 @@ function readLocalControlSession(projectDir) {
     throw new Error("The local-control session belongs to a different project.");
   }
   if (value.expiresAt <= Date.now()) {
-    throw new Error("The Posterract project session expired. Reopen the project in Desktop.");
+    throw new DesktopUnavailableError("The Posterract project session expired. Reopen the project in Desktop.");
   }
   if (typeof value.heartbeatAt === "number" && Date.now() - value.heartbeatAt > HEARTBEAT_STALE_MS) {
-    throw new Error(
+    throw new DesktopUnavailableError(
       "Posterract Desktop is not responding: its project session heartbeat is stale. Start Posterract Desktop and open this project, then retry."
     );
   }
@@ -4662,9 +4677,9 @@ async function requestProjectControl(projectDir, request, timeoutMs, activity) {
 // src/cli-client.ts
 var DEFAULT_TIMEOUT_MS = 6e4;
 var GENERATE_TIMEOUT_MS = 6e5;
-function transport(request, timeoutMs) {
+function transport(request, timeoutMs, socketPath = SOCKET_PATH) {
   return new Promise((resolve4, reject) => {
-    const sock = (0, import_node_net.connect)(SOCKET_PATH);
+    const sock = (0, import_node_net.connect)(socketPath);
     let buf = "";
     let settled = false;
     const settle = (fn) => {
@@ -4713,9 +4728,102 @@ function transport(request, timeoutMs) {
     sock.on("error", (err2) => settle(() => reject(err2)));
   });
 }
+var ENGINE_PATHS = /* @__PURE__ */ new Set([
+  "context",
+  "validate",
+  "inspect",
+  "geometry",
+  "check",
+  "capture",
+  "export",
+  "exportProgress",
+  "media.probe",
+  "media.frame",
+  "media.filmstrip",
+  "media.waveform",
+  "media.extract"
+]);
+var notRunning = (error2) => {
+  const code = error2?.code;
+  return code === "ENOENT" || code === "ECONNREFUSED";
+};
+var routedTo;
+var usingEngine = () => routedTo === ENGINE_SOCKET_PATH;
+function engineCommand() {
+  const given = process.env.POSTERRACT_ENGINE_COMMAND;
+  if (given) {
+    try {
+      const parsed = JSON.parse(given);
+      if (Array.isArray(parsed) && parsed.length && parsed.every((part) => typeof part === "string")) return parsed;
+    } catch {
+    }
+    return [given];
+  }
+  return process.versions.electron ? [process.execPath] : void 0;
+}
+async function engineAnswers() {
+  try {
+    await transport({ path: "ping", input: void 0 }, 2e3, ENGINE_SOCKET_PATH);
+    return true;
+  } catch {
+    return false;
+  }
+}
+var canRunOnEngine = (path) => !INSTANCE_PROFILE && process.env.POSTERRACT_NO_ENGINE !== "1" && ENGINE_PATHS.has(path);
+async function engineRequest(projectDir, request, timeoutMs) {
+  await ensureEngine(projectDir);
+  return transport(request, timeoutMs, ENGINE_SOCKET_PATH);
+}
+var engineReady;
+var engineProject;
+function ensureEngine(forProject) {
+  if (forProject !== void 0 && engineProject !== void 0 && forProject !== engineProject) engineReady = void 0;
+  engineProject = forProject ?? engineProject;
+  engineReady ??= (async () => {
+    if (!await engineAnswers()) {
+      const command = engineCommand();
+      if (!command) {
+        throw new Error(
+          "Posterract is not running, and this CLI was not started by the app, so it cannot start the engine itself. Open Posterract, or set POSTERRACT_ENGINE_COMMAND to the app's binary."
+        );
+      }
+      process.stderr.write("Posterract is not open: starting the engine (no window)\u2026\n");
+      const env = { ...process.env, POSTERRACT_PROFILE: ENGINE_PROFILE };
+      delete env.ELECTRON_RUN_AS_NODE;
+      const child = (0, import_node_child_process.spawn)(command[0], [...command.slice(1), "--hidden", "--engine"], { env, detached: true, stdio: "ignore" });
+      child.on("error", () => void 0);
+      child.unref();
+      const deadline = Date.now() + 6e4;
+      while (!await engineAnswers()) {
+        if (Date.now() > deadline) throw new Error("The Posterract engine did not start within 60 seconds. `posterract doctor` checks the install.");
+        await new Promise((done) => setTimeout(done, 250));
+      }
+    }
+    const projectDir = forProject ?? resolveProjectDir(void 0, { here: true });
+    const context2 = await transport({ path: "context", input: { tree: false } }, 3e4, ENGINE_SOCKET_PATH);
+    if (context2.projectDir !== projectDir || !context2.shownRevision) {
+      await transport({ path: "open", input: { dir: projectDir } }, 12e4, ENGINE_SOCKET_PATH);
+    }
+  })();
+  engineReady.catch(() => {
+    engineReady = void 0;
+  });
+  return engineReady;
+}
+async function send(request, timeoutMs) {
+  if (routedTo) return transport(request, timeoutMs, routedTo);
+  try {
+    return await transport(request, timeoutMs);
+  } catch (error2) {
+    if (!notRunning(error2) || !canRunOnEngine(request.path)) throw error2;
+    await ensureEngine();
+    routedTo = ENGINE_SOCKET_PATH;
+    return transport(request, timeoutMs, ENGINE_SOCKET_PATH);
+  }
+}
 var cliLink = () => ({ op }) => observable((observer) => {
   const timeoutMs = typeof op.context.timeoutMs === "number" ? op.context.timeoutMs : DEFAULT_TIMEOUT_MS;
-  transport({ path: op.path, input: op.input }, timeoutMs).then((data) => {
+  send({ path: op.path, input: op.input }, timeoutMs).then((data) => {
     observer.next({ result: { data } });
     observer.complete();
   }).catch((err2) => observer.error(TRPCClientError.from(err2)));
@@ -4745,7 +4853,7 @@ async function waitForCliSocket(timeoutMs = 3e4) {
 }
 
 // src/fonts.ts
-var import_node_child_process = require("node:child_process");
+var import_node_child_process2 = require("node:child_process");
 var import_node_os3 = require("node:os");
 var LIST_FONTS_JXA = `
 ObjC.import("AppKit");
@@ -4794,7 +4902,7 @@ function listLocalFonts(options = {}) {
   if ((0, import_node_os3.platform)() !== "darwin") {
     throw new Error("fonts is only supported on macOS.");
   }
-  const result = (0, import_node_child_process.spawnSync)("osascript", ["-l", "JavaScript", "-e", LIST_FONTS_JXA], {
+  const result = (0, import_node_child_process2.spawnSync)("osascript", ["-l", "JavaScript", "-e", LIST_FONTS_JXA], {
     encoding: "utf8",
     maxBuffer: 16 * 1024 * 1024
   });
@@ -5567,10 +5675,10 @@ function createDiagnosticZip(output, files) {
 }
 
 // src/ytdlp.ts
-var import_node_child_process2 = require("node:child_process");
+var import_node_child_process3 = require("node:child_process");
 var BIN = process.env.YT_DLP_PATH ?? "yt-dlp";
 function assertInstalled() {
-  const probe = (0, import_node_child_process2.spawnSync)(BIN, ["--version"], { encoding: "utf8" });
+  const probe = (0, import_node_child_process3.spawnSync)(BIN, ["--version"], { encoding: "utf8" });
   if (probe.error) {
     if (probe.error.code === "ENOENT") {
       throw new Error(
@@ -5596,7 +5704,7 @@ function fetchVideo(url2, opts = {}) {
   if (opts.raw?.length) args.push(...opts.raw);
   args.push(url2);
   return new Promise((resolve4, reject) => {
-    const child = (0, import_node_child_process2.spawn)(BIN, args, { stdio: ["ignore", "pipe", "inherit"] });
+    const child = (0, import_node_child_process3.spawn)(BIN, args, { stdio: ["ignore", "pipe", "inherit"] });
     let out = "";
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk) => out += chunk);
@@ -8527,6 +8635,119 @@ function handleIntersectionResults(result, left, right) {
   }
   result.value = merged.data;
   return result;
+}
+var $ZodTuple = /* @__PURE__ */ $constructor("$ZodTuple", (inst, def) => {
+  $ZodType.init(inst, def);
+  const items = def.items;
+  const memo3 = globalConfig.memoizer;
+  memo3?.attach(inst);
+  inst._zod.parse = (payload, ctx) => {
+    const input = payload.value;
+    if (!Array.isArray(input)) {
+      payload.issues.push({
+        input,
+        inst,
+        expected: "tuple",
+        code: "invalid_type"
+      });
+      return payload;
+    }
+    payload.value = memo3 ? memo3.alloc(inst, payload, [], ctx) : [];
+    const proms = [];
+    const optinStart = getTupleOptStart(items, "optin");
+    const optoutStart = getTupleOptStart(items, "optout");
+    if (!def.rest) {
+      if (input.length < optinStart) {
+        payload.issues.push({
+          code: "too_small",
+          minimum: optinStart,
+          inclusive: true,
+          input,
+          inst,
+          origin: "array"
+        });
+        return payload;
+      }
+      if (input.length > items.length) {
+        payload.issues.push({
+          code: "too_big",
+          maximum: items.length,
+          inclusive: true,
+          input,
+          inst,
+          origin: "array"
+        });
+      }
+    }
+    const itemResults = new Array(items.length);
+    for (let i2 = 0; i2 < items.length; i2++) {
+      const r = items[i2]._zod.run({ value: input[i2], issues: [] }, ctx);
+      if (r instanceof Promise) {
+        proms.push(r.then((rr) => {
+          itemResults[i2] = rr;
+        }));
+      } else {
+        itemResults[i2] = r;
+      }
+    }
+    if (def.rest) {
+      let i2 = items.length - 1;
+      const rest = input.slice(items.length);
+      for (const el of rest) {
+        i2++;
+        const result = def.rest._zod.run({ value: el, issues: [] }, ctx);
+        if (result instanceof Promise) {
+          proms.push(result.then((r) => handleTupleResult(r, payload, i2)));
+        } else {
+          handleTupleResult(result, payload, i2);
+        }
+      }
+    }
+    if (proms.length) {
+      return Promise.all(proms).then(() => handleTupleResults(itemResults, payload, items, input, optoutStart));
+    }
+    return handleTupleResults(itemResults, payload, items, input, optoutStart);
+  };
+});
+function getTupleOptStart(items, key) {
+  for (let i2 = items.length - 1; i2 >= 0; i2--) {
+    const omittable = key === "optin" ? items[i2]._zod.optin !== void 0 : items[i2]._zod.optout === "optional";
+    if (!omittable)
+      return i2 + 1;
+  }
+  return 0;
+}
+function handleTupleResult(result, final, index) {
+  if (result.issues.length) {
+    final.issues.push(...prefixIssues(index, result.issues));
+  }
+  final.value[index] = result.value;
+}
+function handleTupleResults(itemResults, final, items, input, optoutStart) {
+  for (let i2 = 0; i2 < items.length; i2++) {
+    const r = itemResults[i2];
+    const isPresent = i2 < input.length;
+    if (!isPresent && i2 >= optoutStart && items[i2]._zod.optin === "optional") {
+      final.value.length = i2;
+      break;
+    }
+    if (r.issues.length) {
+      if (!isPresent && i2 >= optoutStart) {
+        final.value.length = i2;
+        break;
+      }
+      final.issues.push(...prefixIssues(i2, r.issues));
+    }
+    final.value[i2] = r.value;
+  }
+  for (let i2 = final.value.length - 1; i2 >= input.length; i2--) {
+    if (items[i2]._zod.optout === "optional" && final.value[i2] === void 0) {
+      final.value.length = i2;
+    } else {
+      break;
+    }
+  }
+  return final;
 }
 var $ZodRecord = /* @__PURE__ */ $constructor("$ZodRecord", (inst, def) => {
   $ZodType.init(inst, def);
@@ -11929,6 +12150,39 @@ function intersection(left, right) {
     type: "intersection",
     left,
     right
+  });
+}
+var ZodTuple = /* @__PURE__ */ $constructor("ZodTuple", (inst, def) => {
+  _ensureDefaultMemoizer();
+  $ZodTuple.init(inst, def);
+  ZodType.init(inst, def);
+  inst._zod.processJSONSchema = (ctx, json, params) => tupleProcessor(inst, ctx, json, params);
+}, {
+  rest(rest) {
+    return this.clone({
+      ...this._zod.def,
+      rest
+    });
+  },
+  partial() {
+    const def = this._zod.def;
+    if (def.checks?.length)
+      throw new Error(".partial() cannot be used on tuple schemas containing refinements");
+    return this.clone({
+      ...def,
+      items: def.items.map((item) => new ZodOptional({ type: "optional", innerType: item }))
+    });
+  }
+});
+function tuple(items, _paramsOrRest, _params) {
+  const hasRest = _paramsOrRest instanceof $ZodType;
+  const params = hasRest ? _params : _paramsOrRest;
+  const rest = hasRest ? _paramsOrRest : null;
+  return new ZodTuple({
+    type: "tuple",
+    items,
+    rest,
+    ...util_exports.normalizeParams(params)
   });
 }
 var ZodRecord = /* @__PURE__ */ $constructor("ZodRecord", (inst, def) => {
@@ -20908,41 +21162,41 @@ var require_fast_uri = /* @__PURE__ */ __commonJSMin(((exports2, module2) => {
     schemelessOptions.skipEscape = true;
     return serialize(resolved, schemelessOptions);
   }
-  function resolveComponent(base, relative, options, skipNormalization) {
+  function resolveComponent(base, relative2, options, skipNormalization) {
     const target = {};
     if (!skipNormalization) {
       base = parse4(serialize(base, options), options);
-      relative = parse4(serialize(relative, options), options);
+      relative2 = parse4(serialize(relative2, options), options);
     }
     options = options || {};
-    if (!options.tolerant && relative.scheme) {
-      target.scheme = relative.scheme;
-      target.userinfo = relative.userinfo;
-      target.host = relative.host;
-      target.port = relative.port;
-      target.path = removeDotSegments(relative.path || "");
-      target.query = relative.query;
+    if (!options.tolerant && relative2.scheme) {
+      target.scheme = relative2.scheme;
+      target.userinfo = relative2.userinfo;
+      target.host = relative2.host;
+      target.port = relative2.port;
+      target.path = removeDotSegments(relative2.path || "");
+      target.query = relative2.query;
     } else {
-      if (relative.userinfo !== void 0 || relative.host !== void 0 || relative.port !== void 0) {
-        target.userinfo = relative.userinfo;
-        target.host = relative.host;
-        target.port = relative.port;
-        target.path = removeDotSegments(relative.path || "");
-        target.query = relative.query;
+      if (relative2.userinfo !== void 0 || relative2.host !== void 0 || relative2.port !== void 0) {
+        target.userinfo = relative2.userinfo;
+        target.host = relative2.host;
+        target.port = relative2.port;
+        target.path = removeDotSegments(relative2.path || "");
+        target.query = relative2.query;
       } else {
-        if (!relative.path) {
+        if (!relative2.path) {
           target.path = base.path;
-          if (relative.query !== void 0) target.query = relative.query;
+          if (relative2.query !== void 0) target.query = relative2.query;
           else target.query = base.query;
         } else {
-          if (relative.path[0] === "/") target.path = removeDotSegments(relative.path);
+          if (relative2.path[0] === "/") target.path = removeDotSegments(relative2.path);
           else {
-            if ((base.userinfo !== void 0 || base.host !== void 0 || base.port !== void 0) && !base.path) target.path = "/" + relative.path;
-            else if (!base.path) target.path = relative.path;
-            else target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative.path;
+            if ((base.userinfo !== void 0 || base.host !== void 0 || base.port !== void 0) && !base.path) target.path = "/" + relative2.path;
+            else if (!base.path) target.path = relative2.path;
+            else target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative2.path;
             target.path = removeDotSegments(target.path);
           }
-          target.query = relative.query;
+          target.query = relative2.query;
         }
         target.userinfo = base.userinfo;
         target.host = base.host;
@@ -20950,7 +21204,7 @@ var require_fast_uri = /* @__PURE__ */ __commonJSMin(((exports2, module2) => {
       }
       target.scheme = base.scheme;
     }
-    target.fragment = relative.fragment;
+    target.fragment = relative2.fragment;
     return target;
   }
   function equal(uriA, uriB, options) {
@@ -24591,7 +24845,7 @@ var require_formats = /* @__PURE__ */ __commonJSMin(((exports2) => {
   }
   const TIME = /^(\d\d):(\d\d):(\d\d(?:\.\d+)?)(z|([+-])(\d\d)(?::?(\d\d))?)?$/i;
   function getTime(strictTimeZone) {
-    return function time3(str) {
+    return function time4(str) {
       const matches = TIME.exec(str);
       if (!matches) return false;
       const hr = +matches[1];
@@ -24628,10 +24882,10 @@ var require_formats = /* @__PURE__ */ __commonJSMin(((exports2) => {
   }
   const DATE_TIME_SEPARATOR = /t|\s/i;
   function getDateTime(strictTimeZone) {
-    const time3 = getTime(strictTimeZone);
+    const time4 = getTime(strictTimeZone);
     return function date_time(str) {
       const dateTime = str.split(DATE_TIME_SEPARATOR);
-      return dateTime.length === 2 && date4(dateTime[0]) && time3(dateTime[1]);
+      return dateTime.length === 2 && date4(dateTime[0]) && time4(dateTime[1]);
     };
   }
   function compareDateTime(dt1, dt2) {
@@ -26871,8 +27125,239 @@ function toError(value) {
   return value instanceof Error ? value : new Error(String(value));
 }
 
-// src/mcp.ts
+// src/format.ts
+var COLLAPSE_RUNS = 6;
+var time3 = (seconds) => seconds.toFixed(2).padStart(6);
+var SIGN = { error: "\u2717", warning: "\u26A0", note: "\xB7" };
+function elementLine(element) {
+  const head = `${element.kind}${element.id ? `#${element.id}` : ""}`;
+  const box = element.box ? `  ${element.box.width}\xD7${element.box.height} at ${element.box.x},${element.box.y}` : "";
+  return [
+    `  ${time3(element.start)}\u2013${time3(element.end)}  `,
+    "  ".repeat(element.depth),
+    head,
+    element.name ? ` "${element.name}"` : "",
+    element.text ? ` says "${element.text}"` : "",
+    box,
+    element.keyframes ? `  \xB7 ${element.keyframes} keyframes` : ""
+  ].join("");
+}
+function formatInspect(result) {
+  const { scene, elements, markers, problems } = result;
+  const errors = problems.filter((problem) => problem.severity === "error").length;
+  const warnings = problems.filter((problem) => problem.severity === "warning").length;
+  const lines = [
+    `${errors ? "\u2717" : "\u2713"} scene${scene.id ? `#${scene.id}` : ""}${scene.name ? ` "${scene.name}"` : ""}  ${scene.width}\xD7${scene.height} \xB7 ${scene.fps}fps \xB7 ${scene.duration.toFixed(2)}s` + // Only worth a mention when it trims something: a work area that is the
+    // whole scene says nothing the duration has not.
+    (scene.workarea && (scene.workarea[0] > 1e-3 || Math.abs(scene.workarea[1] - scene.duration) > 1e-3) ? ` \xB7 plays ${scene.workarea[0].toFixed(2)}\u2013${scene.workarea[1].toFixed(2)}s` : ""),
+    `  ${elements.length} elements \xB7 ${errors} error${errors === 1 ? "" : "s"}, ${warnings} warning${warnings === 1 ? "" : "s"} \xB7 ${result.samples} moments checked in ${result.ms} ms`,
+    "",
+    "TIMELINE   (document order: later draws on top)"
+  ];
+  const shape = (element) => `${element.depth}:${element.kind}`;
+  for (let index = 0; index < elements.length; ) {
+    let end = index;
+    while (end + 1 < elements.length && shape(elements[end + 1]) === shape(elements[index])) end += 1;
+    const run2 = end - index + 1;
+    if (run2 < COLLAPSE_RUNS) {
+      lines.push(elementLine(elements[index]));
+      index += 1;
+      continue;
+    }
+    const inner = elements.slice(index + 1, end);
+    lines.push(elementLine(elements[index]));
+    lines.push(
+      `  ${" ".repeat(15)}${"  ".repeat(elements[index].depth)}\u2026 ${inner.length} more ${elements[index].kind} (${Math.min(...inner.map((item) => item.start)).toFixed(2)}\u2013${Math.max(...inner.map((item) => item.end)).toFixed(2)}s)`
+    );
+    lines.push(elementLine(elements[end]));
+    index = end + 1;
+  }
+  if (markers.length) {
+    lines.push("", "MARKERS   (notes on the timeline; `@agent \u2026` is addressed to you)");
+    for (const marker of markers) lines.push(`  ${time3(marker.time)}  ${marker.name}`);
+  }
+  lines.push("", "PROBLEMS");
+  if (!problems.length) lines.push("  none found");
+  for (const problem of problems) {
+    const where = problem.at === void 0 ? "" : ` @${problem.at.toFixed(2)}s`;
+    lines.push(`  ${SIGN[problem.severity]} ${problem.message}${where}`);
+    if (problem.fix) lines.push(`      fix: ${problem.fix}`);
+  }
+  return lines;
+}
+function formatLook(result) {
+  if (!result.scene) return ["No scene is active in the editor."];
+  const { scene } = result;
+  const lines = [
+    `scene${scene.id ? `#${scene.id}` : ""}${scene.name ? ` "${scene.name}"` : ""}  ${scene.width}\xD7${scene.height} \xB7 playhead ${(result.playhead ?? 0).toFixed(2)}s`
+  ];
+  if (!result.selected.length) lines.push("selected: nothing");
+  for (const item of result.selected) {
+    const props = Object.entries(item.props).map(([name, value]) => `${name}=${value}`).join(" ");
+    lines.push(`selected: ${item.kind}${item.id ? `#${item.id}` : ""}${item.name ? ` "${item.name}"` : ""}${item.text ? ` says "${item.text}"` : ""}${props ? `  ${props}` : ""}`);
+  }
+  if (result.notes.length) {
+    lines.push("notes for you (@agent markers, nearest the playhead first):");
+    for (const note of result.notes) lines.push(`  ${time3(note.time)}s  ${note.text}`);
+  }
+  if (result.markers.length) {
+    lines.push(`markers: ${result.markers.slice(0, 12).map((marker) => `${marker.time.toFixed(2)}s ${marker.name}`).join(" \xB7 ")}${result.markers.length > 12 ? " \xB7 \u2026" : ""}`);
+  }
+  return lines;
+}
+
+// src/edit-feedback.ts
+var import_node_crypto3 = require("node:crypto");
+var import_node_fs3 = require("node:fs");
 var import_node_path3 = require("node:path");
+var SOURCE_FILE = /\.[cm]?[jt]sx?$/i;
+var SKIPPED = /* @__PURE__ */ new Set(["node_modules", ".git", ".posterract", "exports", "assets"]);
+function sourcesFingerprint(projectDir) {
+  const parts = [];
+  const visit = (folder, depth) => {
+    let entries;
+    try {
+      entries = (0, import_node_fs3.readdirSync)(folder, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.name.startsWith(".") || SKIPPED.has(entry.name)) continue;
+      const absolute = (0, import_node_path3.join)(folder, entry.name);
+      if (entry.isDirectory()) {
+        if (depth < 6) visit(absolute, depth + 1);
+      } else if (SOURCE_FILE.test(entry.name)) {
+        try {
+          const details = (0, import_node_fs3.statSync)(absolute);
+          parts.push(`${(0, import_node_path3.relative)(projectDir, absolute).split(import_node_path3.sep).join("/")}:${details.size}:${details.mtimeMs}`);
+        } catch {
+        }
+      }
+    }
+  };
+  visit(projectDir, 0);
+  return (0, import_node_crypto3.createHash)("sha256").update(parts.sort().join("\n")).digest("hex");
+}
+function memoryStore(initial = { told: [] }) {
+  let state = initial;
+  return { read: () => state, write: (next) => {
+    state = next;
+  } };
+}
+function fileStore(projectDir) {
+  const path = (0, import_node_path3.join)(projectDir, ".posterract", "cache", "edit-feedback.json");
+  return {
+    read() {
+      try {
+        const value = JSON.parse((0, import_node_fs3.readFileSync)(path, "utf8"));
+        return { ...typeof value.linted === "string" ? { linted: value.linted } : {}, ...typeof value.inspected === "string" ? { inspected: value.inspected } : {}, told: Array.isArray(value.told) ? value.told.filter((entry) => typeof entry === "string") : [] };
+      } catch {
+        return { told: [] };
+      }
+    },
+    write(state) {
+      try {
+        (0, import_node_fs3.mkdirSync)((0, import_node_path3.join)(projectDir, ".posterract", "cache"), { recursive: true });
+        (0, import_node_fs3.writeFileSync)(path, JSON.stringify(state));
+      } catch {
+      }
+    }
+  };
+}
+var keyOf = (finding) => finding.split("\n")[0].replace(/^\S+?:\d+:\d+\s+/, "").trim();
+var isFinding = (line) => /^[✗⚠]/.test(keyOf(line));
+var problemLines = (result) => result.problems.filter((problem) => problem.severity !== "note").map((problem) => {
+  const where = problem.at === void 0 ? "" : ` @${problem.at.toFixed(2)}s`;
+  return `${problem.severity === "error" ? "\u2717" : "\u26A0"} ${problem.message}${where}${problem.fix ? `
+    fix: ${problem.fix}` : ""}`;
+});
+function createEditFeedback(options) {
+  const { store } = options;
+  return {
+    baseline() {
+      let projectDir;
+      try {
+        projectDir = options.projectDir();
+      } catch {
+        return;
+      }
+      const now = sourcesFingerprint(projectDir);
+      store.write({ linted: now, inspected: now, told: store.read().told });
+    },
+    heard(findings, half) {
+      let now;
+      try {
+        now = sourcesFingerprint(options.projectDir());
+      } catch {
+      }
+      const state = store.read();
+      store.write({
+        ...state,
+        ...now && half === "lint" ? { linted: now } : {},
+        ...now && half === "inspect" ? { inspected: now } : {},
+        told: [.../* @__PURE__ */ new Set([...state.told, ...findings.filter(isFinding).map(keyOf)])]
+      });
+    },
+    async since() {
+      let projectDir;
+      try {
+        projectDir = options.projectDir();
+      } catch {
+        return void 0;
+      }
+      if (!(0, import_node_fs3.existsSync)(projectDir)) return void 0;
+      const state = store.read();
+      const now = sourcesFingerprint(projectDir);
+      if (state.linted === void 0 && state.inspected === void 0) {
+        store.write({ linted: now, inspected: now, told: state.told });
+        return void 0;
+      }
+      if (state.linted === now && state.inspected === now) return void 0;
+      const found = [];
+      let linted = state.linted;
+      let inspected = state.inspected;
+      if (linted !== now) {
+        try {
+          found.push(...options.lint(projectDir));
+          linted = now;
+        } catch {
+        }
+      }
+      if (inspected !== now && options.inspect) {
+        const budget = new Promise((done) => setTimeout(() => done("late"), options.budgetMs ?? 6e3).unref?.());
+        const result = await Promise.race([options.inspect(projectDir).catch(() => "late"), budget]);
+        if (result !== "late") {
+          for (const scene of result) found.push(...problemLines(scene));
+          inspected = now;
+        }
+      } else if (!options.inspect) {
+        inspected = now;
+      }
+      const keys = new Set(found.map(keyOf));
+      const fresh = [...new Map(found.map((finding) => [keyOf(finding), finding])).values()].filter((finding) => !state.told.includes(keyOf(finding)));
+      const checkedAll = linted === now && inspected === now;
+      const stillTrue = checkedAll ? state.told.filter((key) => keys.has(key)) : state.told;
+      store.write({ ...linted ? { linted } : {}, ...inspected ? { inspected } : {}, told: [.../* @__PURE__ */ new Set([...stillTrue, ...fresh.map(keyOf)])] });
+      if (!fresh.length) return void 0;
+      const errors = fresh.filter((finding) => keyOf(finding).startsWith("\u2717")).length;
+      return [
+        `Posterract checked the video, because its source changed since your last call \u2014 ${fresh.length} new ${fresh.length === 1 ? "problem" : "problems"}${errors ? ` (${errors} \u2717)` : ""}:`,
+        "",
+        ...fresh,
+        "",
+        "Fix every \u2717 before moving on; judge every \u26A0. Each is said once: `posterract inspect` lists all that are open."
+      ].join("\n");
+    }
+  };
+}
+
+// src/offline-loader.ts
+function offline() {
+  return require("./offline.cjs");
+}
+
+// src/mcp.ts
+var import_node_path4 = require("node:path");
 var DEFAULT_TIMEOUT_MS2 = 6e4;
 var RENDER_TIMEOUT_MS = 6e5;
 var STATUS_TIMEOUT_MS = 1e4;
@@ -26881,10 +27366,19 @@ var START_DESKTOP_HINT = "Start Posterract Desktop and open this project, then r
 function record2(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value : { result: value };
 }
-function jsonResult(value) {
+var MAX_RESULT_CHARS = 6e4;
+function jsonResult(value, narrowWith = "Ask for less: name the ids, scene, time or lines you need.") {
+  const text = JSON.stringify(value, null, 2);
+  if (text.length <= MAX_RESULT_CHARS) {
+    return { content: [{ type: "text", text }], structuredContent: record2(value) };
+  }
+  const note = `Result was ${text.length.toLocaleString("en-US")} characters; only the first ${MAX_RESULT_CHARS.toLocaleString("en-US")} are shown. ${narrowWith}`;
   return {
-    content: [{ type: "text", text: JSON.stringify(value, null, 2) }],
-    structuredContent: record2(value)
+    content: [{ type: "text", text: `${note}
+
+${text.slice(0, MAX_RESULT_CHARS)}
+\u2026 [truncated]` }],
+    structuredContent: { truncated: true, totalChars: text.length, note }
   };
 }
 function errorText(error2) {
@@ -26933,29 +27427,64 @@ async function servePosterractMcp(explicitProjectDir) {
   const projectDir = () => resolveProjectDir(explicitProjectDir);
   const call = async (tool, path, input = void 0, timeoutMs = DEFAULT_TIMEOUT_MS2) => {
     const activeProjectDir = projectDir();
-    return requestProjectControl(
-      activeProjectDir,
-      { path, input },
-      timeoutMs,
-      {
-        cliVersion: version,
-        command: `mcp:${tool}`,
-        projectDir: activeProjectDir,
-        invokedAt: Date.now(),
-        targets: targetsOf(input)
-      }
-    );
-  };
-  const safely = (fn) => async () => {
     try {
-      return await fn();
+      return await requestProjectControl(
+        activeProjectDir,
+        { path, input },
+        timeoutMs,
+        {
+          cliVersion: version,
+          command: `mcp:${tool}`,
+          projectDir: activeProjectDir,
+          invokedAt: Date.now(),
+          targets: targetsOf(input)
+        }
+      );
+    } catch (error2) {
+      if (!(error2 instanceof DesktopUnavailableError) || !canRunOnEngine(path)) throw error2;
+      return engineRequest(activeProjectDir, { path, input }, timeoutMs);
+    }
+  };
+  const feedback2 = createEditFeedback({
+    projectDir,
+    store: memoryStore(),
+    lint: (dir) => offline().lint(dir, dir).lines,
+    inspect: async (dir) => {
+      for (let waited = 0; waited < 3e3; waited += 150) {
+        const context2 = await call("feedback", "context", { tree: false });
+        if (!context2.shownRevision || context2.shownRevision === context2.sourceRevision) break;
+        await new Promise((done) => setTimeout(done, 150));
+      }
+      const scenes = offline().outline(dir, dir).entries.filter((entry) => entry.tag === "scene" && entry.id && entry.depth <= 1);
+      const results = [];
+      for (const scene of scenes) results.push(await call("feedback", "inspect", { id: scene.id }, RENDER_TIMEOUT_MS));
+      return results;
+    }
+  });
+  feedback2.baseline();
+  const withFeedback = async (result, checksItself) => {
+    try {
+      if (checksItself) {
+        feedback2.heard(result.content.flatMap((item) => item.type === "text" ? item.text.split("\n") : []), checksItself);
+        return result;
+      }
+      if (result.isError) return result;
+      const note = await feedback2.since();
+      return note ? { ...result, content: [...result.content, { type: "text", text: note }] } : result;
+    } catch {
+      return result;
+    }
+  };
+  const safely = (fn, checksItself) => async () => {
+    try {
+      return await withFeedback(await fn(), checksItself);
     } catch (error2) {
       return errorResult(error2);
     }
   };
-  const safelyWith = (fn) => async (value) => {
+  const safelyWith = (fn, checksItself) => async (value) => {
     try {
-      return await fn(value);
+      return await withFeedback(await fn(value), checksItself);
     } catch (error2) {
       return errorResult(error2);
     }
@@ -26964,7 +27493,7 @@ async function servePosterractMcp(explicitProjectDir) {
     const server = new McpServer(
       { name: "posterract", version },
       {
-        instructions: "Posterract canvas. Canvas-first: while Desktop has the project open, make composition edits through these tools (posterract_write_source with the revisionId from posterract_read_source, or the semantic set/create/move tools), never by rewriting index.tsx with file tools; tool edits show on the canvas instantly and keep undo. Start with posterract_connection_status and posterract_get_context; a scene's `skill` names the SKILL.md folder to follow for it; validate and inspect captures before claiming success; export only when asked. Cannot post, schedule, or access credentials."
+        instructions: "Posterract canvas. File-first: the project's TSX is the document, so edit it with your own file tools (read a range, search, replace a string) like any code. Desktop watches the file and shows the change on the canvas: a change to values or text in place, as one step of the user's undo history (Cmd+Z takes it back); adding, removing or moving elements by reloading the canvas, which keeps the user's own undo steps and records yours in Version History. Before you write, posterract_changes with the revisionId you last saw shows what the user changed since: work around it, not over it. Start a turn with posterract_look (what the author has selected, their playhead, their `@agent` notes); read with posterract_outline, then posterract_read_source by `id` or `lines`, never a whole large file; ask posterract_describe instead of guessing an element or prop name. After you edit, your next call to any of these tools comes back with what is newly wrong attached (unknown props, text off the frame, with the fix), each problem once: fix it when you hear it. posterract_inspect reports facts and every open problem across the whole video: fix every error before looking at a capture, and capture only to judge taste. Say where things go with `place` (\"lower-third\", \"bottom-right\" + `inset`) rather than computing x/y; keep anything that repeats a few keyframes and a `loop`; tune a preset with `distance`/`amount`/`easing` before writing keyframes. With Desktop closed, inspect, geometry, validate, capture and export still answer: the engine (the app with no window) is started for them. A scene's `skill` names the SKILL.md folder to follow for it; export only when asked. Cannot post, schedule, or access credentials."
       }
     );
     server.registerTool("posterract_connection_status", {
@@ -27027,32 +27556,113 @@ async function servePosterractMcp(explicitProjectDir) {
     }));
     server.registerTool("posterract_get_context", {
       title: "Get Posterract project context",
-      description: "Read active video, playhead, source revision, variables, fonts, and optionally the complete runtime node tree.",
-      inputSchema: object({ tree: boolean2().optional().default(true) }),
+      description: "Read active video, playhead, source revision, variables and fonts. Small by default. `tree: true` adds the runtime node tree: each element with its id, kind, the props that place it (x, y, width, height, start, end, src, ...), its text, and its motion in one line (keyframes per property, animation presets). Narrow a large tree with `scene` (one scene id) and `depth`; `motion: true` lists every keyframe as a node, which is rarely needed.",
+      inputSchema: object({
+        tree: boolean2().optional().default(false),
+        scene: string2().min(1).optional(),
+        depth: number2().int().min(0).max(32).optional(),
+        motion: boolean2().optional()
+      }),
       annotations: { readOnlyHint: true }
-    }, safelyWith(async ({ tree }) => jsonResult(await call("get_context", "context", { tree }))));
+    }, safelyWith(async (input) => jsonResult(
+      await call("get_context", "context", input),
+      "Narrow the tree: pass `scene` (one scene id) and/or `depth`, and leave `motion` off."
+    )));
     server.registerTool("posterract_read_source", {
       title: "Read composition source",
-      description: `Read a local Posterract TSX source file and its conflict-safe revision ID. The default path "auto" resolves to the project's actual entry file (src/index.tsx, index.tsx, ...), which some migrated projects keep at the project root; the result reports the resolved path.`,
-      inputSchema: object({ path: string2().min(1).default("auto") }),
+      description: "Read a local Posterract TSX source file and its conflict-safe revision ID. The default path \"auto\" resolves to the project's actual entry file (src/index.tsx, index.tsx, ...), which some migrated projects keep at the project root; the result reports the resolved path. Read a part instead of the whole file: `outline: true` gives one line per element with the lines it spans (keyframes folded to counts); `id` gives one element with its children; `lines: [from, to]` gives a range. A very large file answers with its outline unless `full: true`. The revision is always the whole file's.",
+      inputSchema: object({
+        path: string2().min(1).default("auto"),
+        id: string2().min(1).optional(),
+        lines: tuple([number2().int().min(1), number2().int().min(1)]).optional(),
+        outline: boolean2().optional(),
+        full: boolean2().optional()
+      }),
       annotations: { readOnlyHint: true }
-    }, safelyWith(async ({ path }) => jsonResult(await call("read_source", "source.read", { path }))));
+    }, safelyWith(async (input) => jsonResult(
+      await call("read_source", "source.read", input),
+      "Read a part: `outline: true`, `id`, or `lines: [from, to]`."
+    )));
     server.registerTool("posterract_write_source", {
       title: "Write composition source",
       description: "Atomically replace a Posterract TSX source file only if its revision still matches. Returns compiler diagnostics.",
       inputSchema: object({
-        path: string2().min(1).default("src/index.tsx"),
+        path: string2().min(1).default("auto"),
         content: string2(),
         expectedRevisionId: string2().min(1)
       }),
       annotations: { readOnlyHint: false, destructiveHint: true }
     }, safelyWith(async (input) => jsonResult(await call("write_source", "source.write", input))));
+    server.registerTool("posterract_edit_source", {
+      title: "Edit composition source",
+      description: "Replace one string of a TSX source with another \u2014 the edit a file tool makes. If you have file tools of your own (Edit, apply_patch, an IDE), use those on the file instead: Desktop shows the change either way. This is for a client that has only these tools. `old_string` has to match the file exactly (read it first with posterract_read_source by `id` or `lines`) and be there once, unless `replace_all`. Costs the two strings, where posterract_write_source costs the whole file. Answers with the new revisionId and what the compiler and the vocabulary lint say about the result.",
+      inputSchema: object({
+        path: string2().min(1).default("auto"),
+        old_string: string2().min(1),
+        new_string: string2(),
+        replace_all: boolean2().optional()
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true }
+    }, safelyWith(async (input) => jsonResult(await call("edit_source", "source.edit", {
+      path: input.path,
+      oldString: input.old_string,
+      newString: input.new_string,
+      ...input.replace_all ? { replaceAll: true } : {}
+    }))));
+    server.registerTool("posterract_describe", {
+      title: "Describe the composition vocabulary",
+      description: 'What can be written in a composition. With no `element`: every element in one line, led by the common tasks and the element that does each. With an `element` (e.g. "text"): the props it takes, their types and allowed values. Generated from the SDK\'s types, so it is never out of date. Ask this instead of guessing a prop name. Works with Desktop closed.',
+      inputSchema: object({ element: string2().min(1).optional() }),
+      annotations: { readOnlyHint: true }
+    }, safelyWith(async ({ element }) => {
+      const report = offline().describe(element);
+      return { content: [{ type: "text", text: report.lines.join("\n") }] };
+    }));
+    server.registerTool("posterract_outline", {
+      title: "Outline composition source",
+      description: "One line per element of the composition source: id, name, when it plays, where it sits, what it shows, and the lines it spans in the file \u2014 keyframes folded to a count per property, long runs of look-alike siblings to one line. Start here instead of reading a large source whole, then read only the lines (or the `id`) you need. Works with Desktop closed.",
+      inputSchema: object({ path: string2().min(1).optional() }),
+      annotations: { readOnlyHint: true }
+    }, safelyWith(async ({ path }) => {
+      const dir = projectDir();
+      const report = offline().outline(path ?? dir, dir);
+      const header = `${report.path} \xB7 ${report.totalLines} lines \xB7 ${report.totalChars.toLocaleString("en-US")} chars \xB7 ${report.entries.length} elements`;
+      return { content: [{ type: "text", text: [header, ...report.lines].join("\n") }] };
+    }));
+    server.registerTool("posterract_lint", {
+      title: "Lint composition source",
+      description: "Check the composition source against the vocabulary: a prop an element does not take (with what was probably meant \u2014 `fill` on a <text> is `color`), a value an enumeration does not name, a required prop left out. The runtime silently ignores what it does not know, so without this such a mistake shows up only as a render that looks wrong. Works with Desktop closed.",
+      inputSchema: object({ path: string2().min(1).optional() }),
+      annotations: { readOnlyHint: true }
+    }, safelyWith(async ({ path }) => {
+      const dir = projectDir();
+      const report = offline().lint(path ?? dir, dir);
+      const errors = report.diagnostics.filter((entry) => entry.severity === "error").length;
+      const text = report.diagnostics.length ? [...report.lines, `${errors} error(s), ${report.diagnostics.length - errors} warning(s)`].join("\n") : `\u2713 ${report.path}: every prop and value is one the editor understands`;
+      return {
+        content: [{ type: "text", text }],
+        structuredContent: { path: report.path, ok: errors === 0, diagnostics: report.diagnostics },
+        ...errors ? { isError: true } : {}
+      };
+    }, "lint"));
+    server.registerTool("posterract_changes", {
+      title: "See what changed, and who changed it",
+      description: "What changed in the project's source, element by element, and who changed it: the person on the canvas, an agent's tool, a direct edit of the file, or the app's own housekeeping \u2014 `person  text#hook  y  1480 \u2192 1200`. Pass `since` (a revisionId an earlier read or edit handed you) to see everything written after the source last stood there. Run it before you write, so you work around what your collaborator decided instead of over it. Works with Desktop closed.",
+      inputSchema: object({ since: string2().min(6).optional(), limit: number2().int().min(1).max(50).optional() }),
+      annotations: { readOnlyHint: true }
+    }, safelyWith(async (input) => {
+      const report = offline().changes(projectDir(), input);
+      return {
+        content: [{ type: "text", text: report.lines.join("\n") }],
+        structuredContent: { path: report.path, revisionId: report.revisionId, since: report.since }
+      };
+    }));
     server.registerTool("posterract_validate", {
       title: "Validate composition",
-      description: "Compile and evaluate the project's composition sources in memory and report diagnostics. Genuinely read-only: stable-ID stamping runs on an in-memory copy, nothing is written to disk, and the live canvas is untouched.",
+      description: "Compile and evaluate the project's composition sources in memory and report diagnostics \u2014 compiler errors, and the vocabulary lint's findings (props an element does not take, values an enumeration does not name). `ok` is false when either has an error. Genuinely read-only: stable-ID stamping runs on an in-memory copy, nothing is written to disk, and the live canvas is untouched.",
       inputSchema: object({}),
       annotations: { readOnlyHint: true }
-    }, safely(async () => jsonResult(await call("validate", "validate"))));
+    }, safely(async () => jsonResult(await call("validate", "validate")), "lint"));
     server.registerTool("posterract_get_canvas_state", {
       title: "Get live canvas state",
       description: "Read the active video, selection, playhead, frame rate, and undo/redo availability.",
@@ -27077,31 +27687,47 @@ async function servePosterractMcp(explicitProjectDir) {
       inputSchema: object({ time: number2().nonnegative() }),
       annotations: { readOnlyHint: false }
     }, safelyWith(async (input) => jsonResult(await call("seek", "canvas.seek", input))));
+    const expectedRevisionId = string2().min(1).optional().describe(
+      "The revisionId you last saw (from a read or an earlier edit). If someone changed the element(s) this edit names since then, nothing is changed and the answer says what they changed. A change elsewhere in the file is no conflict."
+    );
+    const elementTree = object({
+      tag: string2().regex(/^[a-z][a-zA-Z0-9]*$/),
+      props: record(string2(), any()).optional(),
+      text: string2().optional(),
+      children: array(any()).optional()
+    });
     server.registerTool("posterract_set_properties", {
       title: "Set element properties",
       description: "Apply source-backed properties such as position, size, timing, opacity, rotation, volume, and styles to a stable element ID.",
-      inputSchema: object({ id: string2().min(1), properties: record(string2(), any()) }),
+      inputSchema: object({ id: string2().min(1), properties: record(string2(), any()), expectedRevisionId }),
       annotations: { readOnlyHint: false, destructiveHint: true }
     }, safelyWith(async (input) => jsonResult(await call("set_properties", "canvas.setProperties", input))));
     server.registerTool("posterract_set_text", {
       title: "Set text content",
       description: "Replace the source-backed text content of a text element.",
-      inputSchema: object({ id: string2().min(1), text: string2() }),
+      inputSchema: object({ id: string2().min(1), text: string2(), expectedRevisionId }),
       annotations: { readOnlyHint: false, destructiveHint: true }
     }, safelyWith(async (input) => jsonResult(await call("set_text", "canvas.setText", input))));
+    server.registerTool("posterract_apply_edits", {
+      title: "Apply several edits as one",
+      description: "Several element edits in one call: one step of the user's undo history, one write of the source, and all of them or none (everything is checked before anything changes). Each edit is `{op, ...}` with the same fields as the single tools: `set` {id, properties} \xB7 `text` {id, text} \xB7 `create` {parentId, beforeId?, element} \xB7 `move` {id, parentId, beforeId?} \xB7 `delete` {ids} \xB7 `duplicate` {ids}. A later edit may name an element an earlier `create` of the same call makes, by the `id` in its props. Use this instead of a run of single calls whenever a change is more than one edit: a caption that is a group, a shape and a text is one thing to the user.",
+      inputSchema: object({
+        edits: array(discriminatedUnion("op", [
+          object({ op: literal("set"), id: string2().min(1), properties: record(string2(), any()) }),
+          object({ op: literal("text"), id: string2().min(1), text: string2() }),
+          object({ op: literal("create"), parentId: string2().min(1), beforeId: string2().optional(), element: elementTree }),
+          object({ op: literal("move"), id: string2().min(1), parentId: string2().min(1), beforeId: string2().optional() }),
+          object({ op: literal("delete"), ids: array(string2()).min(1) }),
+          object({ op: literal("duplicate"), ids: array(string2()).min(1) })
+        ])).min(1).max(200),
+        expectedRevisionId
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true }
+    }, safelyWith(async (input) => jsonResult(await call("apply_edits", "canvas.batch", input))));
     server.registerTool("posterract_create_element", {
       title: "Create composition element",
       description: "Insert a new Posterract element tree under a source-backed parent and select it on the live canvas.",
-      inputSchema: object({
-        parentId: string2().min(1),
-        beforeId: string2().optional(),
-        element: object({
-          tag: string2().regex(/^[a-z][a-zA-Z0-9]*$/),
-          props: record(string2(), any()).optional(),
-          text: string2().optional(),
-          children: array(any()).optional()
-        })
-      }),
+      inputSchema: object({ parentId: string2().min(1), beforeId: string2().optional(), element: elementTree }),
       annotations: { readOnlyHint: false, destructiveHint: true }
     }, safelyWith(async (input) => jsonResult(await call("create_element", "canvas.create", input))));
     server.registerTool("posterract_bake_keyframes", {
@@ -27141,13 +27767,13 @@ async function servePosterractMcp(explicitProjectDir) {
     server.registerTool("posterract_delete", {
       title: "Delete elements",
       description: "Delete source-backed elements by stable ID. This can be undone in the editor.",
-      inputSchema: object({ ids: array(string2()).min(1) }),
+      inputSchema: object({ ids: array(string2()).min(1), expectedRevisionId }),
       annotations: { readOnlyHint: false, destructiveHint: true }
     }, safelyWith(async (input) => jsonResult(await call("delete", "canvas.remove", input))));
     server.registerTool("posterract_move", {
       title: "Move element",
       description: "Move an element under another source-backed parent, optionally before a sibling.",
-      inputSchema: object({ id: string2(), parentId: string2(), beforeId: string2().optional() }),
+      inputSchema: object({ id: string2(), parentId: string2(), beforeId: string2().optional(), expectedRevisionId }),
       annotations: { readOnlyHint: false, destructiveHint: true }
     }, safelyWith(async (input) => jsonResult(await call("move", "canvas.move", input))));
     server.registerTool("posterract_undo", {
@@ -27164,13 +27790,41 @@ async function servePosterractMcp(explicitProjectDir) {
     }, safely(async () => jsonResult(await call("redo", "canvas.redo"))));
     server.registerTool("posterract_get_geometry", {
       title: "Measure rendered layout",
-      description: "Read post-transform bounding boxes, draw order, opacity, and text content for elements in the active video, with the pairs that overlap and the ones that fall off or cross the frame. Use this to check layout from data instead of inferring it from a capture. Boxes are in the same scene space as the source's x/y/width/height.",
+      description: "Read post-transform bounding boxes, draw order, opacity, and text content for the elements on screen at `time` (the current playhead when omitted) in the active video, with the pairs that partly overlap and the ones that fall off or cross the frame. Use this to check layout from data instead of inferring it from a capture. Boxes are in the same scene space as the source's x/y/width/height. Elements that are not playing at that time are left out unless named in `ids` or `all` is set (they come back with `visible: false`). Reading does not move the author's playhead.",
       inputSchema: object({
         ids: array(string2()).optional(),
-        time: number2().nonnegative().optional()
+        time: number2().nonnegative().optional(),
+        all: boolean2().optional()
       }),
       annotations: { readOnlyHint: true }
-    }, safelyWith(async (input) => jsonResult(await call("get_geometry", "geometry", input))));
+    }, safelyWith(async (input) => jsonResult(await call("get_geometry", "geometry", input), "Pass `ids`, or a `time` when fewer elements are on screen.")));
+    server.registerTool("posterract_inspect", {
+      title: "Inspect a video",
+      description: "What is in a video and what is wrong with it, as text \u2014 the `ffprobe` of a composition. Visits the whole duration and reports the timeline (when each element plays, where it sits, what it says), the markers, and ranked problems with the element, the numbers and the fix: text running off the frame, an element never in frame or never opaque, something on screen too briefly to read, text overlapping text or hidden under a later layer, spans where nothing draws, sources that failed. Nothing is rendered and the author's playhead does not move. Use this to check your work before looking at a capture; run it before and after an edit to see what changed.",
+      inputSchema: object({ scene: string2().min(1).optional() }),
+      annotations: { readOnlyHint: true }
+    }, safelyWith(async ({ scene }) => {
+      const result = await call("inspect", "inspect", scene === void 0 ? {} : { id: scene }, RENDER_TIMEOUT_MS);
+      return {
+        content: [{ type: "text", text: formatInspect(result).join("\n") }],
+        structuredContent: { scene: result.scene, problems: result.problems }
+      };
+    }, "inspect"));
+    server.registerTool("posterract_look", {
+      title: "See what the author is looking at",
+      description: 'What your collaborator is looking at right now: the active scene, where the playhead is parked, what is selected (with the props an edit starts from), and the markers on the timeline \u2014 those starting `@agent` are notes addressed to you. Call it at the start of a turn: "make this bigger" means the selected element at that playhead.',
+      inputSchema: object({}),
+      annotations: { readOnlyHint: true }
+    }, safely(async () => {
+      const result = await call("look", "look");
+      return { content: [{ type: "text", text: formatLook(result).join("\n") }], structuredContent: record2(result) };
+    }));
+    server.registerTool("posterract_show", {
+      title: "Show the author an element",
+      description: "Bring the editor to an element: activate its scene, move the playhead to `at` seconds (default: the middle of the element's span), select it and frame it in the canvas. View only \u2014 nothing in the source changes. Use it to show your collaborator what you changed.",
+      inputSchema: object({ id: string2().min(1), at: number2().nonnegative().optional() }),
+      annotations: { readOnlyHint: false }
+    }, safelyWith(async (input) => jsonResult(await call("show", "show", input))));
     server.registerTool("posterract_check", {
       title: "Check video structure",
       description: "Run fast structural checks for empty spans, invisible elements, invalid durations, and failed sources.",
@@ -27192,7 +27846,7 @@ async function servePosterractMcp(explicitProjectDir) {
       const fps = Number(context2.frameRate) || 30;
       return imageResult(await call("capture", "capture", {
         id,
-        frames: times?.map((time3) => Math.round(time3 * fps)),
+        frames: times?.map((time4) => Math.round(time4 * fps)),
         combine,
         perSheet
       }, RENDER_TIMEOUT_MS));
@@ -27251,7 +27905,7 @@ async function servePosterractMcp(explicitProjectDir) {
       const dir = projectDir();
       const paths = await fetchVideo(url2, {
         audio,
-        output: (0, import_node_path3.join)(dir, "assets", audio ? "audio" : "video", "%(title).80s.%(ext)s")
+        output: (0, import_node_path4.join)(dir, "assets", audio ? "audio" : "video", "%(title).80s.%(ext)s")
       });
       return jsonResult({ paths });
     }));
@@ -27316,8 +27970,8 @@ async function servePosterractMcp(explicitProjectDir) {
 }
 
 // src/batch.ts
-var import_node_fs3 = require("node:fs");
-var import_node_path4 = require("node:path");
+var import_node_fs4 = require("node:fs");
+var import_node_path5 = require("node:path");
 function parseCsv(text) {
   const rows = [];
   let row = [];
@@ -27363,8 +28017,8 @@ function parseCsv(text) {
   );
 }
 function readBatchRows(path) {
-  const text = (0, import_node_fs3.readFileSync)((0, import_node_path4.resolve)(path), "utf8").replace(/^﻿/, "");
-  if ((0, import_node_path4.extname)(path).toLowerCase() === ".json") {
+  const text = (0, import_node_fs4.readFileSync)((0, import_node_path5.resolve)(path), "utf8").replace(/^﻿/, "");
+  if ((0, import_node_path5.extname)(path).toLowerCase() === ".json") {
     const value = JSON.parse(text);
     if (!Array.isArray(value)) throw new Error("A JSON batch file must be an array of row objects");
     return value.map((row) => {
@@ -27389,15 +28043,69 @@ function outputPathFor(template, row, index) {
     return safe || String(index + 1);
   });
   if (!used.value) {
-    const extension = (0, import_node_path4.extname)(filled) || ".mp4";
-    filled = (0, import_node_path4.join)((0, import_node_path4.dirname)(filled), `${(0, import_node_path4.basename)(filled, extension)}-${index + 1}${extension}`);
+    const extension = (0, import_node_path5.extname)(filled) || ".mp4";
+    filled = (0, import_node_path5.join)((0, import_node_path5.dirname)(filled), `${(0, import_node_path5.basename)(filled, extension)}-${index + 1}${extension}`);
   }
-  return (0, import_node_path4.resolve)(filled);
+  return (0, import_node_path5.resolve)(filled);
 }
 
 // src/index.ts
 var LONG_RUNNING = { context: { timeoutMs: GENERATE_TIMEOUT_MS } };
 var APP_NAME = "Posterract";
+var editFeedback;
+function feedback() {
+  if (editFeedback) return editFeedback;
+  let dir;
+  try {
+    dir = resolveProjectDir(void 0, { here: true });
+  } catch {
+    return void 0;
+  }
+  editFeedback = createEditFeedback({
+    projectDir: () => dir,
+    store: fileStore(dir),
+    lint: (projectDir) => offline().lint(projectDir, projectDir).lines,
+    inspect: async (projectDir) => {
+      const before = process.env.POSTERRACT_NO_ENGINE;
+      if (!usingEngine()) process.env.POSTERRACT_NO_ENGINE = "1";
+      try {
+        for (let waited = 0; waited < 3e3; waited += 150) {
+          const context2 = await editor.context.query({ tree: false });
+          if (!context2.shownRevision || context2.shownRevision === context2.sourceRevision) break;
+          await new Promise((done) => setTimeout(done, 150));
+        }
+        const scenes = offline().outline(projectDir, projectDir).entries.filter((entry) => entry.tag === "scene" && entry.id && entry.depth <= 1);
+        const results = [];
+        for (const scene of scenes) results.push(await editor.inspect.query({ id: scene.id }, LONG_RUNNING));
+        return results;
+      } finally {
+        if (before === void 0) delete process.env.POSTERRACT_NO_ENGINE;
+        else process.env.POSTERRACT_NO_ENGINE = before;
+      }
+    }
+  });
+  return editFeedback;
+}
+var FEEDBACK_AFTER = /* @__PURE__ */ new Set([
+  "outline",
+  "read",
+  "look",
+  "show",
+  "geometry",
+  "changes",
+  "context",
+  "check",
+  "capture",
+  "set",
+  "text",
+  "create",
+  "move",
+  "delete",
+  "duplicate",
+  "apply",
+  "undo",
+  "redo"
+]);
 function handleSocketError(e) {
   const code = errnoCode(e);
   if (code === "ENOENT" || code === "ECONNREFUSED") {
@@ -27455,8 +28163,8 @@ async function mediaFrame(ref, opts) {
   }
   const perSheet = parsePerSheet(opts.perSheet, opts.separate);
   const target = resolveAssetRef(ref);
-  const dir = opts.output ?? (0, import_node_path5.join)((0, import_node_os4.tmpdir)(), `posterract-grab-${(0, import_node_crypto3.randomUUID)().slice(0, 8)}`);
-  (0, import_node_fs4.mkdirSync)(dir, { recursive: true });
+  const dir = opts.output ?? (0, import_node_path6.join)((0, import_node_os4.tmpdir)(), `posterract-grab-${(0, import_node_crypto4.randomUUID)().slice(0, 8)}`);
+  (0, import_node_fs5.mkdirSync)(dir, { recursive: true });
   try {
     const images = await editor.media.frame.query({
       ...target,
@@ -27475,9 +28183,9 @@ async function mediaFrame(ref, opts) {
   }
 }
 function resolveAssetRef(ref) {
-  const absPath = (0, import_node_path5.isAbsolute)(ref) ? ref : (0, import_node_path5.resolve)(process.cwd(), ref);
-  if ((0, import_node_fs4.existsSync)(absPath)) return { path: absPath };
-  if ((0, import_node_path5.isAbsolute)(ref)) {
+  const absPath = (0, import_node_path6.isAbsolute)(ref) ? ref : (0, import_node_path6.resolve)(process.cwd(), ref);
+  if ((0, import_node_fs5.existsSync)(absPath)) return { path: absPath };
+  if ((0, import_node_path6.isAbsolute)(ref)) {
     console.error(`File not found: ${absPath}`);
     process.exit(1);
   }
@@ -27507,8 +28215,8 @@ function parseTimeArg(value, flag, allowNegative = false) {
 }
 function writeImages(images, dir) {
   for (const { timecode, base64: base642 } of images) {
-    const path = (0, import_node_path5.join)(dir, `${timecode}.png`);
-    (0, import_node_fs4.writeFileSync)(path, Buffer.from(base642, "base64"));
+    const path = (0, import_node_path6.join)(dir, `${timecode}.png`);
+    (0, import_node_fs5.writeFileSync)(path, Buffer.from(base642, "base64"));
     console.log(JSON.stringify({ timecode, path }));
   }
 }
@@ -27545,13 +28253,13 @@ function parsePreviewWindow(opts) {
 async function mediaFilmstrip(ref, opts) {
   const { start, end, scale } = parsePreviewWindow(opts);
   const target = resolveAssetRef(ref);
-  const path = opts.output ?? (0, import_node_path5.join)((0, import_node_os4.tmpdir)(), `${(0, import_node_crypto3.randomUUID)()}.png`);
-  (0, import_node_fs4.mkdirSync)((0, import_node_path5.dirname)((0, import_node_path5.resolve)(path)), { recursive: true });
+  const path = opts.output ?? (0, import_node_path6.join)((0, import_node_os4.tmpdir)(), `${(0, import_node_crypto4.randomUUID)()}.png`);
+  (0, import_node_fs5.mkdirSync)((0, import_node_path6.dirname)((0, import_node_path6.resolve)(path)), { recursive: true });
   const stop = startSpinner("Rendering filmstrip");
   try {
     const { base64: base642, ...rest } = await editor.media.filmstrip.query({ ...target, start, end, scale });
     stop();
-    (0, import_node_fs4.writeFileSync)(path, Buffer.from(base642, "base64"));
+    (0, import_node_fs5.writeFileSync)(path, Buffer.from(base642, "base64"));
     console.log(JSON.stringify({ path, ...rest }));
   } catch (e) {
     stop();
@@ -27561,13 +28269,13 @@ async function mediaFilmstrip(ref, opts) {
 async function mediaWaveform(ref, opts) {
   const { start, end, scale } = parsePreviewWindow(opts);
   const target = resolveAssetRef(ref);
-  const path = opts.output ?? (0, import_node_path5.join)((0, import_node_os4.tmpdir)(), `${(0, import_node_crypto3.randomUUID)()}.png`);
-  (0, import_node_fs4.mkdirSync)((0, import_node_path5.dirname)((0, import_node_path5.resolve)(path)), { recursive: true });
+  const path = opts.output ?? (0, import_node_path6.join)((0, import_node_os4.tmpdir)(), `${(0, import_node_crypto4.randomUUID)()}.png`);
+  (0, import_node_fs5.mkdirSync)((0, import_node_path6.dirname)((0, import_node_path6.resolve)(path)), { recursive: true });
   const stop = startSpinner("Rendering waveform");
   try {
     const { base64: base642, ...rest } = await editor.media.waveform.query({ ...target, start, end, scale });
     stop();
-    (0, import_node_fs4.writeFileSync)(path, Buffer.from(base642, "base64"));
+    (0, import_node_fs5.writeFileSync)(path, Buffer.from(base642, "base64"));
     console.log(JSON.stringify({ path, ...rest }));
   } catch (e) {
     stop();
@@ -27583,7 +28291,7 @@ async function mediaExtract(ref, opts) {
   }
   try {
     const result = await editor.media.extract.query(
-      { ...resolveAssetRef(ref), output: (0, import_node_path5.resolve)(opts.output), start, end, audioOnly: Boolean(opts.audioOnly) },
+      { ...resolveAssetRef(ref), output: (0, import_node_path6.resolve)(opts.output), start, end, audioOnly: Boolean(opts.audioOnly) },
       LONG_RUNNING
     );
     console.log(JSON.stringify(result));
@@ -27595,8 +28303,8 @@ async function captureNode(id, opts) {
   const times = (opts.time ?? ["0"]).map((t) => parseTimeArg(t, "--time"));
   const frames = times.map((t) => Math.round(t * TIME_FPS));
   const perSheet = parsePerSheet(opts.perSheet, opts.separate);
-  const dir = opts.output ?? (0, import_node_path5.join)((0, import_node_os4.tmpdir)(), `posterract-capture-${(0, import_node_crypto3.randomUUID)().slice(0, 8)}`);
-  (0, import_node_fs4.mkdirSync)(dir, { recursive: true });
+  const dir = opts.output ?? (0, import_node_path6.join)((0, import_node_os4.tmpdir)(), `posterract-capture-${(0, import_node_crypto4.randomUUID)().slice(0, 8)}`);
+  (0, import_node_fs5.mkdirSync)(dir, { recursive: true });
   try {
     const images = await editor.capture.query(
       { id, frames, combine: !opts.separate, perSheet },
@@ -27616,25 +28324,91 @@ async function checkNode(id, _options = {}) {
     handleSocketError(e);
   }
 }
+function showRenderProgress() {
+  const live = Boolean(process.stderr.isTTY);
+  let said = -1;
+  let drew = false;
+  const timer = setInterval(() => {
+    void editor.exportProgress.query().then((state) => {
+      if (!state) return;
+      const percent = Math.max(0, Math.min(100, Math.round(state.progress)));
+      const left = state.remainingSeconds === void 0 ? "" : ` \xB7 ${Math.floor(state.remainingSeconds / 60)}:${String(state.remainingSeconds % 60).padStart(2, "0")} left`;
+      if (live) {
+        process.stderr.write(`\rrendering ${String(percent).padStart(3)}%${left}   `);
+        drew = true;
+      } else if (Math.floor(percent / 10) > Math.floor(said / 10)) {
+        process.stderr.write(`rendering ${percent}%${left}
+`);
+      }
+      said = percent;
+    }).catch(() => void 0);
+  }, 1e3);
+  return () => {
+    clearInterval(timer);
+    if (drew) process.stderr.write("\r\x1B[K");
+  };
+}
+function renderRange(opts) {
+  const range = {};
+  if (opts.from !== void 0) range.from = parseTimeArg(opts.from, "--from");
+  if (opts.to !== void 0) range.to = parseTimeArg(opts.to, "--to");
+  if (opts.scale !== void 0) {
+    const scale = Number(opts.scale);
+    if (!Number.isFinite(scale) || scale <= 0 || scale > 1) {
+      console.error(`--scale is a fraction of the scene's size, more than 0 and at most 1 (got "${opts.scale}")`);
+      process.exit(1);
+    }
+    range.scale = scale;
+  }
+  return range;
+}
 async function exportScene(id, opts) {
   const allowed = ["mp4", "webm", "ogg", "mov"];
   if (opts.format !== void 0 && !allowed.includes(opts.format)) {
     console.error(`--format must be one of ${allowed.join(", ")} (got "${opts.format}")`);
     process.exit(1);
   }
+  const range = renderRange(opts);
+  const started = Date.now();
+  const stop = showRenderProgress();
   try {
     const result = await editor.export.query(
       {
         id,
-        output: (0, import_node_path5.resolve)(opts.output),
-        format: opts.format
+        output: (0, import_node_path6.resolve)(opts.output),
+        format: opts.format,
+        ...range
       },
       LONG_RUNNING
     );
-    console.log(JSON.stringify(result));
+    stop();
+    if (opts.json) console.log(JSON.stringify(result));
+    else console.log(`\u2713 ${result.path} \xB7 ${((Date.now() - started) / 1e3).toFixed(1)}s${usingEngine() ? " \xB7 rendered by the engine (the app was not open)" : ""}`);
   } catch (error2) {
+    stop();
     handleSocketError(error2);
   }
+}
+async function renderCommand(scene, opts) {
+  let id = scene;
+  if (id === void 0) {
+    try {
+      const projectDir = opts.project ? (0, import_node_path6.resolve)(opts.project) : resolveProjectDir(void 0, { here: true });
+      const scenes = offline().outline(projectDir, projectDir).entries.filter((entry) => entry.tag === "scene" && entry.id);
+      if (scenes.length !== 1) {
+        console.error(
+          scenes.length ? `This project holds ${scenes.length} videos. Say which to render: ${scenes.map((entry) => entry.id).join(", ")}.` : "No <scene> with an id in this project's entry file: there is nothing to render."
+        );
+        process.exit(1);
+      }
+      id = scenes[0].id;
+    } catch (error2) {
+      console.error(error2.message);
+      process.exit(1);
+    }
+  }
+  if (opts.project) process.chdir((0, import_node_path6.resolve)(opts.project));
+  return exportScene(id, opts);
 }
 async function batchExport(id, opts) {
   let rows;
@@ -27690,7 +28464,7 @@ async function batchExport(id, opts) {
 }
 function launchApp(background) {
   const args = background ? ["-g", "-a", APP_NAME, "--args", "--hidden"] : ["-a", APP_NAME];
-  return new Promise((res) => (0, import_node_child_process3.execFile)("open", args, (err2) => res(!err2)));
+  return new Promise((res) => (0, import_node_child_process4.execFile)("open", args, (err2) => res(!err2)));
 }
 async function openProject(path, opts) {
   const launched = process.platform === "darwin" && await launchApp(opts.background ?? false);
@@ -27698,7 +28472,7 @@ async function openProject(path, opts) {
     if (launched) await waitForCliSocket();
     else await editor.ping.query();
     if (path !== void 0) {
-      const result = await editor.open.mutate({ dir: (0, import_node_path5.resolve)(path) });
+      const result = await editor.open.mutate({ dir: (0, import_node_path6.resolve)(path) });
       console.log(JSON.stringify(result));
     }
   } catch (e) {
@@ -27726,22 +28500,22 @@ function packagedResourceRoot() {
   const configured = process.env.POSTERRACT_APP_PATH;
   if (!configured) return null;
   for (const candidate of [
-    (0, import_node_path5.join)(configured, "Resources", "app"),
-    (0, import_node_path5.join)(configured, "resources", "app"),
-    (0, import_node_path5.join)(configured, "app"),
+    (0, import_node_path6.join)(configured, "Resources", "app"),
+    (0, import_node_path6.join)(configured, "resources", "app"),
+    (0, import_node_path6.join)(configured, "app"),
     configured
   ]) {
-    if ((0, import_node_fs4.existsSync)((0, import_node_path5.join)(candidate, "package.json"))) return candidate;
+    if ((0, import_node_fs5.existsSync)((0, import_node_path6.join)(candidate, "package.json"))) return candidate;
   }
   return null;
 }
 function fileCheck(name, path, recovery) {
-  return { name, ok: (0, import_node_fs4.existsSync)(path), detail: path, recovery };
+  return { name, ok: (0, import_node_fs5.existsSync)(path), detail: path, recovery };
 }
 async function doctor(json = false) {
   const resources = packagedResourceRoot();
   const checks = [
-    { name: "cli", ok: (0, import_node_fs4.existsSync)(process.argv[1] ?? ""), detail: process.argv[1] ?? "unknown" },
+    { name: "cli", ok: (0, import_node_fs5.existsSync)(process.argv[1] ?? ""), detail: process.argv[1] ?? "unknown" },
     {
       name: "desktop-path",
       ok: process.platform === "darwin" || Boolean(process.env.POSTERRACT_APP_PATH),
@@ -27753,30 +28527,30 @@ async function doctor(json = false) {
     checks.push(
       fileCheck(
         "sdk",
-        (0, import_node_path5.join)(resources, "sdk", "node_modules", "@posterract", "composition", "dist", "index.d.ts"),
+        (0, import_node_path6.join)(resources, "sdk", "node_modules", "@posterract", "composition", "dist", "index.d.ts"),
         "Reinstall Posterract Desktop; its compatible SDK types are missing."
       ),
       fileCheck(
         "compiler",
-        (0, import_node_path5.join)(resources, "dist", "application.cjs"),
+        (0, import_node_path6.join)(resources, "dist", "application.cjs"),
         "Reinstall Posterract Desktop; the compiler bundle is missing."
       ),
       fileCheck(
         "esbuild",
-        (0, import_node_path5.join)(resources, "dist", process.platform === "win32" ? "esbuild.exe" : "esbuild"),
+        (0, import_node_path6.join)(resources, "dist", process.platform === "win32" ? "esbuild.exe" : "esbuild"),
         "Reinstall Posterract Desktop; the native compiler executable is missing."
       ),
       fileCheck(
         "documentation",
-        (0, import_node_path5.join)(resources, "docs", "module-contract.md"),
+        (0, import_node_path6.join)(resources, "docs", "module-contract.md"),
         "Reinstall Posterract Desktop; versioned SDK documentation is missing."
       )
     );
   }
   try {
-    const output = (0, import_node_fs4.mkdtempSync)((0, import_node_path5.join)((0, import_node_os4.tmpdir)(), "posterract-doctor-"));
-    (0, import_node_fs4.accessSync)(output, import_node_fs4.constants.R_OK | import_node_fs4.constants.W_OK);
-    (0, import_node_fs4.rmSync)(output, { recursive: true, force: true });
+    const output = (0, import_node_fs5.mkdtempSync)((0, import_node_path6.join)((0, import_node_os4.tmpdir)(), "posterract-doctor-"));
+    (0, import_node_fs5.accessSync)(output, import_node_fs5.constants.R_OK | import_node_fs5.constants.W_OK);
+    (0, import_node_fs5.rmSync)(output, { recursive: true, force: true });
     checks.push({ name: "output-directory", ok: true, detail: (0, import_node_os4.tmpdir)() });
   } catch (error2) {
     checks.push({
@@ -27888,37 +28662,37 @@ async function showLogs(opts) {
 function formatLogEntry(entry) {
   const pad = (n, w = 2) => String(n).padStart(w, "0");
   const d = new Date(entry.ts);
-  const time3 = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
+  const time4 = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
   const source = entry.source ? `  (${entry.source})` : "";
-  return `${time3} [${entry.level}] ${entry.message}${source}`;
+  return `${time4} [${entry.level}] ${entry.message}${source}`;
 }
 function screenshotFilename(taken, attempt) {
   const pad = (value) => String(value).padStart(2, "0");
   const date4 = [taken.getFullYear(), pad(taken.getMonth() + 1), pad(taken.getDate())].join("-");
-  const time3 = [pad(taken.getHours()), pad(taken.getMinutes()), pad(taken.getSeconds())].join("-");
+  const time4 = [pad(taken.getHours()), pad(taken.getMinutes()), pad(taken.getSeconds())].join("-");
   const slug = APP_NAME.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-  return `${slug}_${date4}_${time3}${attempt > 1 ? `-${attempt}` : ""}.png`;
+  return `${slug}_${date4}_${time4}${attempt > 1 ? `-${attempt}` : ""}.png`;
 }
 async function appScreenshot(opts) {
   const dir = opts.output ?? (0, import_node_os4.tmpdir)();
-  (0, import_node_fs4.mkdirSync)(dir, { recursive: true });
+  (0, import_node_fs5.mkdirSync)(dir, { recursive: true });
   try {
     const { base64: base642, width, height } = await editor.screenshot.query();
     const taken = /* @__PURE__ */ new Date();
     let attempt = 1;
-    let path = (0, import_node_path5.join)(dir, screenshotFilename(taken, attempt));
-    while ((0, import_node_fs4.existsSync)(path)) {
-      path = (0, import_node_path5.join)(dir, screenshotFilename(taken, ++attempt));
+    let path = (0, import_node_path6.join)(dir, screenshotFilename(taken, attempt));
+    while ((0, import_node_fs5.existsSync)(path)) {
+      path = (0, import_node_path6.join)(dir, screenshotFilename(taken, ++attempt));
     }
-    (0, import_node_fs4.writeFileSync)(path, Buffer.from(base642, "base64"));
+    (0, import_node_fs5.writeFileSync)(path, Buffer.from(base642, "base64"));
     console.log(JSON.stringify({ path, width, height }));
   } catch (e) {
     handleSocketError(e);
   }
 }
 async function reportDiagnostics(opts) {
-  const output = (0, import_node_path5.resolve)(opts.output ?? (0, import_node_path5.join)(process.cwd(), `posterract-report-${Date.now()}.zip`));
-  (0, import_node_fs4.mkdirSync)((0, import_node_path5.dirname)(output), { recursive: true });
+  const output = (0, import_node_path6.resolve)(opts.output ?? (0, import_node_path6.join)(process.cwd(), `posterract-report-${Date.now()}.zip`));
+  (0, import_node_fs5.mkdirSync)((0, import_node_path6.dirname)(output), { recursive: true });
   let contextValue = { status: "desktop unavailable" };
   let validation = { status: "not run" };
   let logs = [];
@@ -27933,7 +28707,7 @@ async function reportDiagnostics(opts) {
   const projectDir = contextValue.projectDir;
   if (projectDir) {
     try {
-      projectConfig = JSON.parse((0, import_node_fs4.readFileSync)((0, import_node_path5.join)(projectDir, "package.json"), "utf8"));
+      projectConfig = JSON.parse((0, import_node_fs5.readFileSync)((0, import_node_path6.join)(projectDir, "package.json"), "utf8"));
     } catch (error2) {
       projectConfig = { error: error2 instanceof Error ? error2.message : String(error2) };
     }
@@ -28019,35 +28793,350 @@ async function fetch2(url2, opts, raw) {
     process.exit(1);
   }
 }
+function outlineCommand(target, opts) {
+  try {
+    const projectDir = opts.project ? (0, import_node_path6.resolve)(opts.project) : target === void 0 ? resolveProjectDir(void 0, { here: true }) : void 0;
+    const report = offline().outline(target ?? projectDir, projectDir);
+    if (opts.json) {
+      console.log(JSON.stringify({ path: report.path, totalLines: report.totalLines, totalChars: report.totalChars, entries: report.entries }));
+      return;
+    }
+    console.log(`${report.path} \xB7 ${report.totalLines} lines \xB7 ${report.totalChars.toLocaleString("en-US")} chars \xB7 ${report.entries.length} elements`);
+    for (const line of report.lines) console.log(line);
+  } catch (error2) {
+    console.error(error2.message);
+    process.exit(1);
+  }
+}
+async function inspectCommand(id, opts) {
+  try {
+    let ids = [id];
+    if (opts.all) {
+      const context2 = await editor.context.query({ tree: true, depth: 1 });
+      const scenes = (context2.tree?.children ?? []).filter((node2) => node2.kind === "scene" && node2.id).map((node2) => node2.id);
+      if (scenes.length) ids = scenes;
+    }
+    const results = [];
+    for (const scene of ids) {
+      results.push(await editor.inspect.query(scene === void 0 ? {} : { id: scene }, LONG_RUNNING));
+    }
+    if (opts.json) {
+      console.log(JSON.stringify(opts.all ? results : results[0]));
+    } else {
+      const reports = results.map((result) => {
+        const lines = formatInspect(result);
+        if (!opts.problems) return lines.join("\n");
+        return [lines[0], ...lines.slice(lines.indexOf("PROBLEMS"))].join("\n");
+      });
+      console.log(reports.join("\n\n"));
+    }
+    feedback()?.heard(results.flatMap((result) => formatInspect(result)), "inspect");
+    if (results.some((result) => result.problems.some((problem) => problem.severity === "error"))) process.exitCode = 1;
+  } catch (e) {
+    handleSocketError(e);
+  }
+}
+async function lookCommand(opts) {
+  try {
+    const result = await editor.look.query();
+    console.log(opts.json ? JSON.stringify(result) : formatLook(result).join("\n"));
+  } catch (e) {
+    handleSocketError(e);
+  }
+}
+async function showCommand(id, opts) {
+  try {
+    const at = opts.at === void 0 ? void 0 : parseTimeArg(opts.at, "--at", true);
+    const result = await editor.show.mutate({ id, ...at === void 0 ? {} : { at } });
+    console.log(opts.json ? JSON.stringify(result) : `showing ${result.id} in scene ${result.scene ?? "?"} at ${result.at ?? 0}s`);
+  } catch (e) {
+    handleSocketError(e);
+  }
+}
+function changesCommand(opts) {
+  try {
+    const projectDir = opts.project ? (0, import_node_path6.resolve)(opts.project) : resolveProjectDir(void 0, { here: true });
+    const report = offline().changes(projectDir, {
+      ...opts.since ? { since: opts.since } : {},
+      ...opts.limit ? { limit: Math.max(1, Number.parseInt(opts.limit, 10) || 8) } : {}
+    });
+    console.log(opts.json ? JSON.stringify(report) : report.lines.join("\n"));
+  } catch (error2) {
+    console.error(error2.message);
+    process.exit(1);
+  }
+}
+function diffCommand(before, after) {
+  try {
+    console.log(offline().diffFiles(before, after).lines.join("\n"));
+  } catch (error2) {
+    console.error(error2.message);
+    process.exit(1);
+  }
+}
+function describeCommand(element, opts) {
+  try {
+    const report = offline().describe(element);
+    console.log(opts.json ? JSON.stringify(report.data) : report.lines.join("\n"));
+  } catch (error2) {
+    console.error(error2.message);
+    process.exit(1);
+  }
+}
+function readCommand(target, opts) {
+  try {
+    const projectDir = opts.project ? (0, import_node_path6.resolve)(opts.project) : target === void 0 ? resolveProjectDir(void 0, { here: true }) : void 0;
+    let lines;
+    if (opts.lines !== void 0) {
+      const match = /^(\d+)(?:\s*[-:,]\s*(\d+))?$/.exec(opts.lines.trim());
+      if (!match) throw new Error(`--lines takes a range like 120-180, not "${opts.lines}".`);
+      lines = [Number(match[1]), Number(match[2] ?? match[1])];
+    }
+    const report = offline().read(target ?? projectDir, projectDir, { ...opts.id === void 0 ? {} : { id: opts.id }, ...lines ? { lines } : {} });
+    if (opts.json) {
+      console.log(JSON.stringify(report));
+      return;
+    }
+    console.log(`${report.path} \xB7 lines ${report.from}-${report.to} of ${report.totalLines} \xB7 revision ${report.revisionId.slice(0, 12)}`);
+    for (const line of report.lines) console.log(line);
+  } catch (error2) {
+    console.error(error2.message);
+    process.exit(1);
+  }
+}
+async function geometryCommand(ids, opts) {
+  try {
+    const time4 = opts.at === void 0 ? void 0 : parseTimeArg(opts.at, "--at");
+    const result = await editor.geometry.query({ ...ids.length ? { ids } : {}, ...time4 === void 0 ? {} : { time: time4 }, ...opts.all ? { all: true } : {} });
+    if (opts.json) {
+      console.log(JSON.stringify(result));
+      return;
+    }
+    const boxes = result.boxes ?? [];
+    const scene = result.scene;
+    console.log(`scene${scene.id ? `#${scene.id}` : ""} ${scene.width}\xD7${scene.height} at ${Number(result.time).toFixed(2)}s \xB7 ${boxes.length} element${boxes.length === 1 ? "" : "s"} (later draws on top)`);
+    for (const box of [...boxes].sort((a, b) => a.z - b.z)) {
+      const flags = [
+        box.visible ? "" : "not playing",
+        box.offscreen ? "outside the frame" : box.clipped ? "past an edge of the frame" : "",
+        box.opacity < 1 ? `opacity ${box.opacity}` : ""
+      ].filter(Boolean);
+      console.log(
+        `  ${box.kind}${box.id ? `#${box.id}` : ""}  ${Math.round(box.width)}\xD7${Math.round(box.height)} at ${Math.round(box.x)},${Math.round(box.y)}` + (box.text ? `  "${box.text}"` : "") + (flags.length ? `  (${flags.join(", ")})` : "")
+      );
+    }
+    for (const [a, b] of result.overlaps ?? []) console.log(`  overlap: ${a} \xD7 ${b}`);
+    if (result.truncated) console.log(`  \u2026 ${String(result.truncated.hint)}`);
+  } catch (e) {
+    handleSocketError(e);
+  }
+}
+function parseAssignments(pairs) {
+  const properties = {};
+  for (const pair of pairs) {
+    const at = pair.indexOf("=");
+    if (at < 1) throw new Error(`"${pair}" is not prop=value.`);
+    const raw = pair.slice(at + 1);
+    let value = raw;
+    try {
+      value = JSON.parse(raw);
+    } catch {
+    }
+    properties[pair.slice(0, at)] = value;
+  }
+  return properties;
+}
+function readJsonArgument(inline, file, what) {
+  const text = inline ?? (0, import_node_fs5.readFileSync)(file === void 0 || file === "-" ? 0 : (0, import_node_path6.resolve)(file), "utf8");
+  try {
+    return JSON.parse(text);
+  } catch (error2) {
+    throw new Error(`${what} is not valid JSON: ${error2.message}`);
+  }
+}
+async function applyEdits(edits, opts) {
+  try {
+    let result;
+    try {
+      result = await editor.canvas.batch.mutate({ edits, ...opts.since ? { expectedRevisionId: opts.since } : {} });
+    } catch (e) {
+      const code = errnoCode(e);
+      if (code !== "ENOENT" && code !== "ECONNREFUSED") throw e;
+      if (edits.some((entry) => entry.op === "duplicate")) throw new Error(`${APP_NAME} is not running, and duplicate needs the canvas. Launch the app, or copy the element in the file.`);
+      const projectDir = opts.project ? (0, import_node_path6.resolve)(opts.project) : resolveProjectDir(void 0, { here: true });
+      const report = await offline().edit(projectDir, edits);
+      result = { ...report, note: `${APP_NAME} is not running: the file was edited directly.` };
+    }
+    if (opts.json) {
+      console.log(JSON.stringify(result));
+      return;
+    }
+    const written = result.written ?? [];
+    const revision = result.revisionId ?? written[0]?.revisionId;
+    console.log(`\u2713 ${edits.length} edit${edits.length === 1 ? "" : "s"} written${revision ? ` \xB7 revision ${revision.slice(0, 12)}` : ""}${result.note ? ` \xB7 ${String(result.note)}` : ""}`);
+    for (const line of result.warnings ?? []) console.log(`\u26A0 ${line}`);
+    for (const line of result.lint ?? []) console.log(line);
+    const skipped = result.skipped ?? [];
+    if (skipped.length) {
+      console.log(`\u26A0 not written to the source (computed by code there, or inside a loop): ${skipped.join(", ")}`);
+      process.exitCode = 1;
+    }
+  } catch (e) {
+    handleSocketError(e);
+  }
+}
+async function canvasCommand(path, opts) {
+  try {
+    const result = await editor.canvas[path].mutate();
+    console.log(opts.json ? JSON.stringify(result) : `\u2713 ${path}${result.revisionId ? ` \xB7 revision ${String(result.revisionId).slice(0, 12)}` : ""}`);
+  } catch (e) {
+    handleSocketError(e);
+  }
+}
+function lintCommand(target, opts) {
+  try {
+    const projectDir = opts.project ? (0, import_node_path6.resolve)(opts.project) : target === void 0 ? resolveProjectDir(void 0, { here: true }) : void 0;
+    const report = offline().lint(target ?? projectDir, projectDir);
+    const errors = report.diagnostics.filter((entry) => entry.severity === "error").length;
+    feedback()?.heard(report.lines, "lint");
+    if (opts.json) {
+      console.log(JSON.stringify({ path: report.path, ok: errors === 0, diagnostics: report.diagnostics }));
+    } else if (!report.diagnostics.length) {
+      console.log(`\u2713 ${report.path}: every prop and value is one the editor understands`);
+    } else {
+      for (const line of report.lines) console.log(line);
+      console.log(`${errors} error${errors === 1 ? "" : "s"}, ${report.diagnostics.length - errors} warning${report.diagnostics.length - errors === 1 ? "" : "s"}`);
+    }
+    if (errors) process.exit(1);
+  } catch (error2) {
+    console.error(error2.message);
+    process.exit(2);
+  }
+}
 var program2 = new Command();
 program2.name("posterract").description(
-  `The Posterract CLI: inspect local media, validate compositions, capture representative frames, and export videos through the desktop editor.`
+  `Read and edit a Posterract video from the command line.
+
+A project is a folder, and the video is a TSX file in it \u2014 the document.
+Edit that file with your own tools; the editor shows the change as you
+make it. These commands read it, check it, and make the edits that are
+easier to say by element id.
+
+  posterract outline           what is in the file, line by line
+  posterract read --id hook    just that element's source
+  posterract set hook y=1200   change it (or edit the file yourself)
+  posterract inspect           what is wrong with the video, and the fix
+
+Most of it works with the app closed. \`<command> --help\` says what one does.`
 ).version(version);
-program2.command("open").description(
+program2.command("open").summary("open a project in the app").description(
   `Launch ${APP_NAME} (or surface the running instance) and, given a path, open that folder as a project.`
 ).argument("[path]", "project folder to open or create (default: none \u2014 just launch the app)").option("-b, --background", "launch or keep the app in the background, without raising a window").action((path, opts) => openProject(path, opts));
-program2.command("context").alias("ctx").description(
+program2.command("context").summary("what the editor has open right now").alias("ctx").description(
   `Print lightweight local editor state: project, source revision, active video, playhead, compile state, fonts, and inspector variables.`
 ).option("--json", "emit only JSON (the default; retained for agent scripts)").option("--tree", "include the current Posterract runtime hierarchy").action((opts) => context(opts));
-program2.command("validate").description("Compile, evaluate, and candidate-mount the open project without replacing the last valid canvas on failure.").option("--json", "emit the stable JSON result").action(() => validate());
-program2.command("doctor").description("Verify the CLI, desktop bridge, open project, and composition compiler.").option("--json", "emit only JSON").action((opts) => doctor(Boolean(opts.json)));
-program2.command("version").description("Print the installed Posterract CLI version.").action(() => console.log(version));
-var mcp = program2.command("mcp").description("Run and inspect the official local Posterract MCP connection for coding agents.");
+program2.command("outline").summary("one line per element of a source, with its lines").description(
+  "One line per element of a composition source: id, name, when it plays, where it sits, what it shows, and the lines it spans in the file \u2014 keyframes folded to a count per property, long runs of look-alike siblings to one line. Reads the text only, so it works with the app closed. Start here instead of reading a large source whole, then read just the lines you need."
+).argument("[target]", "a source file or a project folder (default: the project found from the working directory)").option("--project <dir>", "explicit Posterract project directory").option("--json", "emit the entries as JSON instead of text").action((target, opts) => outlineCommand(target, opts));
+program2.command("inspect").summary("what is in a video and what is wrong with it").description(
+  "What is in a video and what is wrong with it, as text \u2014 the `ffprobe` of a composition. Visits the whole duration (every element's first, middle and last frame, its keyframes, the ends of its entrances and exits) and reports: the timeline (when each element plays, where it sits, what it says), the markers, and ranked problems with the element, the numbers and the fix \u2014 text running off the frame, an element never in frame or never opaque, something on screen too briefly to read, text overlapping text or hidden under a later layer, spans where nothing draws, sources that failed. Nothing is rendered or decoded and the playhead does not move. Run it before and after an edit and diff the two. Exits 1 when an error is found."
+).argument("[scene]", "scene id to inspect (default: the active scene)").option("--all", "inspect every scene of the project, not only one").option("--problems", "print only each scene's verdict and its problems, not the timeline").option("--json", "emit the full result as JSON").action((scene, opts) => inspectCommand(scene, opts));
+program2.command("look").summary("what your collaborator has selected, and their notes to you").description(
+  'What your collaborator is looking at: the active scene, where the playhead is parked, what is selected (with the props an edit starts from), and the markers on the timeline \u2014 those starting `@agent` are notes addressed to you. One call at the start of a turn; "make this bigger" means the selected element at that playhead.'
+).option("--json", "emit JSON").action((opts) => lookCommand(opts));
+program2.command("show").summary("bring the editor to an element, so they can see it").description(
+  "Bring the editor to an element: activate its scene, move the playhead to `--at` (default: the middle of the element's span, where it is sure to be on screen), select it and frame it in the canvas. View only \u2014 nothing in the source changes. Use it to show your collaborator what you changed."
+).argument("<id>", "element id").option("--at <time>", 'scene time to park the playhead on \u2014 seconds ("3.2"), frames ("96f") or "MM:SS"').option("--json", "emit JSON").action((id, opts) => showCommand(id, opts));
+program2.hook("postAction", async (_program, action) => {
+  if (!FEEDBACK_AFTER.has(action.name()) || process.env.POSTERRACT_NO_FEEDBACK === "1") return;
+  try {
+    const note = await feedback()?.since();
+    if (note) process.stderr.write(`
+${note}
+`);
+  } catch {
+  }
+});
+program2.command("read").summary("one element's source, or a range of lines").description(
+  "One part of a composition source, with line numbers: an element by `--id` (children included) or `--lines 120-180`. `outline` says which lines an element spans. Works with the app closed."
+).argument("[target]", "a source file or a project folder (default: the project found from the working directory)").option("--id <id>", "the element to read, by its id").option("--lines <from-to>", "a 1-based line range").option("--project <dir>", "explicit Posterract project directory").option("--json", "emit JSON").action((target, opts) => readCommand(target, opts));
+program2.command("geometry").summary("where things are on the frame, measured").description(
+  "Where elements are on the frame, measured after layout and transforms: x, y, width, height, what a text says, overlaps. At `--at` (default: the playhead) for the elements on screen then; name ids to measure just those."
+).argument("[ids...]", "element ids (default: everything on screen)").option("--at <time>", 'scene time \u2014 seconds ("3.2"), frames ("96f") or "MM:SS"').option("--all", "include elements that are not on screen at that time").option("--json", "emit JSON").action((ids, opts) => geometryCommand(ids, opts));
+var SINCE = "the revision you last saw: refuse if someone changed these elements since (a change elsewhere is no conflict)";
+program2.command("set").summary("set props of an element by id").description(
+  "Set props of an element by id: `posterract set hook y=1200 color=#ffe600 muted=true`. A value is JSON where it parses (numbers, true, null, {\u2026}) and text where it does not. With the app open it shows at once and is one undo step; with it closed the file is edited directly. For anything larger, edit the file yourself: the app shows that too."
+).argument("<id>", "element id").argument("<assignments...>", "prop=value pairs").option("--since <revisionId>", SINCE).option("--project <dir>", "explicit Posterract project directory (used when the app is closed)").option("--json", "emit JSON").action((id, pairs, opts) => {
+  try {
+    return applyEdits([{ op: "set", id, properties: parseAssignments(pairs) }], opts);
+  } catch (error2) {
+    console.error(error2.message);
+    process.exit(1);
+  }
+});
+program2.command("text").summary("change what a <text> says").description('Change what a <text> says: `posterract text hook "Everybody talks about this"`.').argument("<id>", "element id").argument("<text>", "the new text").option("--since <revisionId>", SINCE).option("--project <dir>", "explicit Posterract project directory (used when the app is closed)").option("--json", "emit JSON").action((id, text, opts) => applyEdits([{ op: "text", id, text }], opts));
+program2.command("create").summary("add an element under a parent").description(
+  'Add an element under a parent: `posterract create main --element \'{"tag":"text","props":{"id":"cta","x":90,"y":1500},"text":"Follow"}\'`. The element is `{tag, props?, text?, children?}`; give it an `id`. `--file` reads it from a file (`-` for stdin).'
+).argument("<parentId>", "the element to add it under").option("--element <json>", "the element, as JSON").option("--file <path>", "read the element from a JSON file, or - for stdin").option("--before <id>", "insert in front of this sibling (default: last, which draws on top)").option("--project <dir>", "explicit Posterract project directory (used when the app is closed)").option("--json", "emit JSON").action((parentId, opts) => {
+  try {
+    const element = readJsonArgument(opts.element, opts.file, "The element");
+    return applyEdits([{ op: "create", parentId, ...opts.before ? { beforeId: opts.before } : {}, element }], opts);
+  } catch (error2) {
+    console.error(error2.message);
+    process.exit(1);
+  }
+});
+program2.command("move").summary("move an element, or reorder it among its siblings").description("Move an element under another parent, or among its siblings: later in the file draws on top.").argument("<id>", "element id").argument("<parentId>", "the parent to move it under (its current one to reorder)").option("--before <id>", "place it in front of this sibling (default: last)").option("--since <revisionId>", SINCE).option("--project <dir>", "explicit Posterract project directory (used when the app is closed)").option("--json", "emit JSON").action((id, parentId, opts) => applyEdits([{ op: "move", id, parentId, ...opts.before ? { beforeId: opts.before } : {} }], opts));
+program2.command("delete").summary("remove elements by id").description("Remove elements by id, children included. With the app open the person can undo it; either way the replaced file is kept in Version History.").argument("<ids...>", "element ids").option("--since <revisionId>", SINCE).option("--project <dir>", "explicit Posterract project directory (used when the app is closed)").option("--json", "emit JSON").action((ids, opts) => applyEdits([{ op: "delete", ids }], opts));
+program2.command("duplicate").summary("copy elements in place").description("Copy elements in place, children included. Needs the app open.").argument("<ids...>", "element ids").option("--json", "emit JSON").action((ids, opts) => applyEdits([{ op: "duplicate", ids }], opts));
+program2.command("apply").summary("several edits as one undo step, all or nothing").description(
+  'Several edits as one \u2014 one undo step, one write, all or nothing. Reads a JSON array from a file or stdin: `[{"op":"set","id":"hook","properties":{"y":1200}},{"op":"text","id":"hook","text":"Hi"}]`. Ops: set {id, properties} \xB7 text {id, text} \xB7 create {parentId, beforeId?, element} \xB7 move {id, parentId, beforeId?} \xB7 delete {ids} \xB7 duplicate {ids}. A later edit may name an element an earlier create makes.'
+).argument("[file]", "JSON file of edits (default: stdin)").option("--since <revisionId>", SINCE).option("--project <dir>", "explicit Posterract project directory (used when the app is closed)").option("--json", "emit JSON").action((file, opts) => {
+  try {
+    const edits = readJsonArgument(void 0, file, "The edits");
+    if (!Array.isArray(edits) || !edits.length) throw new Error("The edits must be a non-empty JSON array.");
+    return applyEdits(edits, opts);
+  } catch (error2) {
+    console.error(error2.message);
+    process.exit(1);
+  }
+});
+program2.command("undo").summary("take back the last edit").description("Take back the last edit on the canvas (the person's or yours).").option("--json", "emit JSON").action((opts) => canvasCommand("undo", opts));
+program2.command("redo").summary("put back the last edit undone").description("Put back the last edit that was undone.").option("--json", "emit JSON").action((opts) => canvasCommand("redo", opts));
+program2.command("changes").summary("what changed and who changed it").description(
+  "What changed in the project's source, element by element, and who changed it: the person on the canvas, an agent's tool, a direct edit of the file, or the app's own housekeeping \u2014 `person  text#hook  y  1480 \u2192 1200`. With `--since <revisionId>` (the id an earlier read or edit handed you), everything written after the source last stood there: run it before you write, so you work around what your collaborator decided instead of over it. Without it, the last few writes. Reads the project's journal and the app's source history, so it works with the app closed."
+).option("--since <revisionId>", "a revision id from an earlier read or edit (a prefix is enough)").option("--limit <n>", "without --since: how many writes to show (default 8)").option("--project <dir>", "explicit Posterract project directory").option("--json", "emit JSON").action((opts) => changesCommand(opts));
+program2.command("diff").summary("two versions of a source, element by element").description(
+  "The difference between two versions of a composition source, element by element rather than line by line: which elements came, went, moved or were reordered, and which props of which element changed. Keyframes are counted against the element they move. Works with the app closed."
+).argument("<before>", "the earlier source file").argument("<after>", "the later source file").action((before, after) => diffCommand(before, after));
+program2.command("describe").summary("every element and prop, from the SDK's own types").description(
+  "The composition vocabulary: with no argument, every element in one line plus the common tasks and the element that does each; with an element (`describe text`), the props it takes, their types and allowed values. Generated from the SDK's types, so it is never out of date. Works with the app closed."
+).argument("[element]", "an element name, e.g. text, video, keyframeTrack").option("--json", "emit the vocabulary (or the element) as JSON").action((element, opts) => describeCommand(element, opts));
+program2.command("lint").summary("props and values the editor does not understand").description(
+  "Check a composition source against the vocabulary: a prop an element does not take (with what was probably meant \u2014 `fill` on a <text> is `color`), a value an enumeration does not name, a required prop left out. The runtime ignores what it does not know, so without this such a mistake is silent. Prints `file:line:col` findings and exits 1 on any error. Reads the text only, so it works with the app closed."
+).argument("[target]", "a source file or a project folder (default: the project found from the working directory)").option("--project <dir>", "explicit Posterract project directory").option("--json", "emit the findings as JSON").action((target, opts) => lintCommand(target, opts));
+program2.command("validate").summary("does it compile, and does the editor understand it").description("Compile, evaluate, and candidate-mount the open project without replacing the last valid canvas on failure.").option("--json", "emit the stable JSON result").action(() => validate());
+program2.command("doctor").summary("diagnose the local runtime").description("Verify the CLI, desktop bridge, open project, and composition compiler.").option("--json", "emit only JSON").action((opts) => doctor(Boolean(opts.json)));
+program2.command("version").summary("the version of the app and the CLI").description("Print the installed Posterract CLI version.").action(() => console.log(version));
+var mcp = program2.command("mcp").summary("run the MCP server (agent clients launch this themselves)").description("Run and inspect the official local Posterract MCP connection for coding agents.");
 mcp.command("serve").description("Serve the active Posterract project over MCP stdio. Normally launched by an agent client, not by the user.").option("--project <dir>", "explicit Posterract project directory (default: discover from the process working directory)").action((opts) => servePosterractMcp(opts.project));
-program2.command("capture").description(
+program2.command("capture").summary("frames of a scene as images").description(
   `Render single frames of a scene to PNGs \u2014 each frame is the frame an export of that scene would encode, drawn offscreen at the scene's own size. By default the positions are merged into contact sheets: up to 12 per image, each cell labelled with its timecode (\`08s10f\`, zero segments dropped) and rendered as large as fits, so a few positions arrive as one high-resolution picture instead of a directory to open one by one (\`--separate\` writes a PNG per position, at 720p height). The tool for checking composition ("what plays at time T": layout, overlaps, text, timing) and for verifying frames before an export. Scenes only \u2014 a single element renders inside its scene, so capture the scene at the times it plays. For a video asset's own full-resolution pixels use \`media grab\`.`
 ).argument("<id>", "scene id to capture or `file:id` when two files use the same id").option("-t, --time <time...>", `one or more positions to capture, relative to the export's first frame, the workarea's start (0 = the export's frame 0) \u2014 seconds ("1.5"), frames ("45f"), or "MM:SS" (default: 0)`).option("-S, --separate", "write one PNG per position instead of merging them into contact sheets").option("--per-sheet <n>", "positions per contact sheet, 1-12; fewer means a larger cell each (default: as many as fit)").option("-o, --output <dir>", "directory to write the PNGs into (default: a fresh dir in the system temp dir)").action((id, opts) => captureNode(id, opts));
-program2.command("check").description(
+program2.command("check").summary("timing and visibility problems of one subtree").description(
   `Check a node's subtree for obvious structural mistakes, without rendering (local analysis, no credits): spans where no visual is scheduled (likely black frames), children that never become visible, zero-duration or fully transparent nodes, and assets that failed to load or generate \u2014 plus subtree stats (node count by kind, nesting depth, played duration). Prints one JSON object; times in issue ranges are seconds relative to the node's start \u2014 for a scene whose workarea starts at 0, the same clock \`capture --time\` uses. Exits 1 when an error-severity issue is found. Structural only: a scheduled clip can still render black (dark footage, content smaller than the canvas), so confirm suspicious spans visually with \`capture\`.`
 ).argument("<id>", "node id to check or `file:id` when two files use the same id").option("--json", "emit only the stable JSON result").action((id, opts) => checkNode(id, opts));
-program2.command("export").description("Export one scene to a local file. This never uploads or schedules the result.").argument("<id>", "scene id to export").requiredOption("-o, --output <file>", "local .mp4, .webm, .ogg, or .mov output path").option("-f, --format <format>", "override the format inferred from the output extension").action((id, opts) => exportScene(id, opts));
-var media = program2.command("batch").description(
+program2.command("export").summary("render a scene to a video file").description("Export one scene to a local file. This never uploads or schedules the result. Works with the app closed (see `render`).").argument("<id>", "scene id to export").requiredOption("-o, --output <file>", "local .mp4, .webm, .ogg, or .mov output path").option("-f, --format <format>", "override the format inferred from the output extension").option("--from <time>", "render from this scene time on (default: the scene's work area)").option("--to <time>", "render up to this scene time").option("--scale <fraction>", "output size as a fraction of the scene's, e.g. 0.5 for a quick look").option("--json", "emit JSON").action((id, opts) => exportScene(id, opts));
+program2.command("render").summary("a project's video as a file \u2014 no app needed").description(
+  "Render a video to a local file: `posterract render -o out.mp4` in a project folder. If the app is open it renders there; if not, the CLI starts the engine (the app with no window) for itself, renders, and the engine quits a little later on its own. Same renderer either way, so the file is the one the app's Export makes. The scene can be left out when the project has one. `--from`/`--to`/`--scale` render a part of it, or a smaller version, for a quick look. Progress goes to stderr; the exit code is nonzero when the render failed. Never uploads or posts."
+).argument("[scene]", "scene id (default: the project's only scene)").requiredOption("-o, --output <file>", "local .mp4, .webm, .ogg, or .mov output path").option("-f, --format <format>", "override the format inferred from the output extension").option("--from <time>", "render from this scene time on (default: the scene's work area)").option("--to <time>", "render up to this scene time").option("--scale <fraction>", "output size as a fraction of the scene's, e.g. 0.5 for a quick look").option("--project <dir>", "the project folder (default: the one the command is run in)").option("--json", "emit JSON").action((scene, opts) => renderCommand(scene, opts));
+program2.command("batch").summary("one video per row of a spreadsheet").description(
   "Render one video per row of a CSV or JSON file. Each column whose name matches an `@inspect` variable sets that variable before the row is exported, so a project is a template and the data file is the list of takes. Renders run one at a time and a failed row does not stop the rest."
 ).argument("<id>", "scene id to export for every row").requiredOption("-d, --data <file>", "CSV or JSON file; the first CSV line names the columns").requiredOption(
   "-o, --output <template>",
   'output path per row, e.g. "out/{name}.mp4" \u2014 {column} inserts a cell, {n} the row number; without a placeholder the row number is appended'
 ).option("-f, --format <format>", "override the format inferred from the output extension").action((id, opts) => batchExport(id, opts));
-program2.command("media").alias("m").description(
+var media = program2.command("media").summary("probe, grab, filmstrip, waveform, extract \u2014 local files").alias("m").description(
   "Inspect a media file by path without adding it to the project: probe metadata, grab representative frames, and render local previews. Local files work without an open project; library paths need one."
 );
 media.command("probe").description(
@@ -28063,20 +29152,20 @@ media.command("waveform").alias("wave").description(
   `Render the audio track of a video or audio file as a waveform PNG (local render, no credits) with a timestamp ruler: loudness over time, with silent stretches highlighted in red. A fast, token-efficient audio track preview; the silent spans are also returned as second ranges.`
 ).argument("<path>", "local video or audio file path to preview").option("-s, --start <time>", `start of the window to preview \u2014 seconds, "45f" frames, or "MM:SS" (default: 0)`).option("-e, --end <time>", `end of the window to preview \u2014 seconds, "45f" frames, or "MM:SS" (default: asset duration)`).option("-x, --scale <factor>", "scale factor for the waveform; smaller fits more rows and columns, larger fits fewer (default: 1)").option("-o, --output <path>", "write the PNG here instead of a temp file").action((ref, opts) => mediaWaveform(ref, opts));
 media.command("extract").description("Extract a local time range for agent inspection. Writes MP4 video or OGG audio and never uploads it.").argument("<path>", "local media path or project asset-library path").option("-s, --start <time>", "start of the extracted range").option("-e, --end <time>", "end of the extracted range").option("--audio-only", "discard video and write a mono OGG audio file").requiredOption("-o, --output <file>", "output .mp4 or .ogg file").action((ref, opts) => mediaExtract(ref, opts));
-program2.command("whoami").description(`Print the local editor identity boundary. Publishing credentials are intentionally unavailable to the CLI.`).option("--json", "emit only JSON (the default; retained for agent scripts)").action(() => whoami());
-program2.command("logs").description(
+program2.command("whoami").summary("who this CLI is acting as").description(`Print the local editor identity boundary. Publishing credentials are intentionally unavailable to the CLI.`).option("--json", "emit only JSON (the default; retained for agent scripts)").action(() => whoami());
+program2.command("logs").summary("the app's log").description(
   `Print recent console output from the running app (what the devtools console shows: page logs, worker logs, uncaught errors), oldest first, one line per entry: local time, level, message, source location. The app buffers the last 2000 entries across reloads and project switches, so this replaces relaunching with ELECTRON_ENABLE_LOGGING=1 when debugging renderer-side behavior.`
 ).option("-n, --tail <n>", "output only the last <n> entries").option("-l, --level <level>", `minimum level to include: "debug", "info", "warning", or "error"`).option("-f, --follow", "continue printing new entries until interrupted").action((opts) => showLogs(opts));
-program2.command("screenshot").description(
+program2.command("screenshot").summary("a picture of the editor window").description(
   `Capture the entire application window as a PNG \u2014 the full UI as the user sees it (panels, timeline, asset library, canvas viewport), at the window's current size. The tool for checking what the app itself looks like; to render a node or scene cleanly for composition checks use \`capture\` instead.`
 ).option("-o, --output <dir>", "directory to write the PNG into (default: system temp dir)").action((opts) => appScreenshot(opts));
-program2.command("report").description(
+program2.command("report").summary("a diagnostic bundle to attach to a bug report").description(
   "Create a local sanitized diagnostic ZIP. Nothing is uploaded and no public issue is filed."
 ).option("-o, --output <zip>", "output ZIP path").action((opts) => reportDiagnostics(opts));
-program2.command("fonts").description(
+program2.command("fonts").summary("the fonts this machine can render with").description(
   `List the local fonts available on this machine (macOS only; does not require the app). These family names are valid \`fontFamily\` values on <text>; each family lists its variants.`
 ).option("-f, --family <pattern>", "filter to families whose name contains <pattern> (case-insensitive)").option("-w, --weight <weights...>", "filter to variants with the given CSS weight(s), e.g. -w 400 700").option("-s, --style <style>", `filter to variants with the given style: "normal" or "italic"`).option("-l, --limit <n>", "output at most <n> families").option("-n, --names-only", "output only family names (one per line, no variant detail)").option("--json", "emit JSON Lines (the default; retained for agent scripts)").action((opts) => listFonts(opts));
-program2.command("fetch").description(
+program2.command("fetch").summary("download a video from a URL into the project").description(
   `Download a video with yt-dlp (installed separately; does not require the app). Writes files to disk only (a single URL can yield several, e.g. a playlist).`
 ).argument("<url>", "video or page URL to download").option("-o, --output <path>", "output file path or directory (yt-dlp -o template; default: yt-dlp's default)").option("-f, --format <selector>", `yt-dlp format selector (default: prefer mp4), e.g. "bv*+ba/b"`).option("-a, --audio", "extract audio only (yt-dlp -x)").allowExcessArguments().addHelpText("after", `
 Forward raw yt-dlp flags after --, e.g. posterract fetch <url> -- --sponsorblock-remove all`).action((url2, opts, cmd) => fetch2(url2, opts, cmd.args.slice(1)));
