@@ -788,6 +788,14 @@ export async function servePosterractMcp(explicitProjectDir?: string): Promise<v
       annotations: { readOnlyHint: true },
     }, safelyWith(async (input: Record<string, unknown>) => imageResult(await call("media_waveform", "media.waveform", input, RENDER_TIMEOUT_MS))));
 
+    server.registerTool("posterract_media_beats", {
+      title: "Measure music beats",
+      description:
+        "Measure a music track's tempo and beats. Returns bpm (set it as the scene's `bpm`), downbeat (seconds into the file where beat 1 of a bar is — trim the song by that much with `sourceIn` so its bars sit on the timeline's), meter, confidence and every beat time. With a tempo, times can be written as beats (\"4b\") and bars (\"2bar\").",
+      inputSchema: z.object({ path: z.string(), minBpm: z.number().positive().optional(), maxBpm: z.number().positive().optional(), meter: z.number().int().positive().optional() }),
+      annotations: { readOnlyHint: true },
+    }, safelyWith(async (input: Record<string, unknown>) => jsonResult(await call("media_beats", "media.beats", input, RENDER_TIMEOUT_MS))));
+
     server.registerTool("posterract_export", {
       title: "Export local video",
       description: "Export one video to an explicit local path. This never uploads, posts, or schedules.",

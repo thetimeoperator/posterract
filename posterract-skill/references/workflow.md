@@ -2,9 +2,9 @@
 
 ## Orient
 
-Call `posterract_connection_status`, then `posterract_get_context` with the runtime tree. Read the entry source with `posterract_read_source` and retain the returned revision.
+Call `posterract_connection_status`, then `posterract_look`: the scene the user is in, their playhead, their selection, and any `@agent` notes on the timeline. Call `posterract_outline` for the shape of the source, then read only the part you will change with `posterract_read_source` by `id` or `lines`. Keep the `revisionId` it returns.
 
-Read the project instructions, manifest, entry TSX, and relevant local SDK docs. Identify the active scene ID, dimensions, FPS, duration/work area, source media, and deliverable.
+Read the project instructions, manifest, and relevant local SDK docs. Identify the active scene ID, dimensions, FPS, duration/work area, source media, and deliverable. Ask `posterract_describe` what an element accepts instead of guessing.
 
 ## Inspect source media
 
@@ -22,11 +22,16 @@ For speech, `posterract_media_transcribe` returns word-level timestamps for a pr
 - Preserve stable IDs.
 - Keep each change small enough to diagnose.
 
+Before each write, call `posterract_changes` with the `revisionId` you last saw. If the user changed something since, keep their change.
+
+Edit the TSX with your file tools. Desktop shows the change on the canvas.
+
 After every meaningful change:
 
-Call `posterract_validate`, `posterract_check`, and `posterract_capture` at representative times.
-
-Open every capture. A passing structural check does not prove that footage pixels are visible or attractive.
+1. `posterract_inspect`: facts, then ranked problems with the fix. Fix every `✗`; judge every `⚠`.
+2. `posterract_validate`: compiles, and lints props and values.
+3. `posterract_capture` at representative times, once `inspect` is clean. Open every capture: `inspect` finds layout bugs, a capture is for judging how it looks.
+4. `posterract_show` the element you changed, so the user sees it.
 
 ## Finish
 

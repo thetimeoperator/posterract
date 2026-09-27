@@ -23,7 +23,7 @@ import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { formatSource } from "@posterract/composition/source";
 import { diffSources, formatDiff, readElements } from "@posterract/video-compiler/diff";
-import { formatLint, lintSource } from "@posterract/video-compiler/lint";
+import { formatLint, hiddenMotionRefusal, introducedHiddenMotion, lintSource } from "@posterract/video-compiler/lint";
 import { formatOutline, outlineSource } from "@posterract/video-compiler/outline";
 import { checkProps, checkTree, describeVocabulary, vocabulary } from "@posterract/video-compiler/vocabulary";
 
@@ -438,6 +438,9 @@ export async function edit(projectDir: string, edits: OfflineEdit[]): Promise<Ed
   for (const [path, content] of changed) {
     const before = originals[path] ?? "";
     if (before === content) continue;
+    // An agent may not add motion the timeline cannot show (see lint.ts).
+    const hidden = introducedHiddenMotion(path, before, content);
+    if (hidden.length) throw new Error(hiddenMotionRefusal(hidden));
     keepSnapshot(projectDir, path, before);
     const absolute = join(projectDir, path);
     writeFileSync(`${absolute}.posterract-cli.tmp`, content);

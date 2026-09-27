@@ -282,6 +282,24 @@ async function mediaFilmstrip(ref: string, opts: MediaPreviewOptions): Promise<v
   }
 }
 
+async function mediaBeats(ref: string, opts: { minBpm?: string; maxBpm?: string; meter?: string }): Promise<void> {
+  const target = resolveAssetRef(ref);
+  const stop = startSpinner("Listening for the beat");
+  try {
+    const found = await editor.media.beats.query({
+      ...target,
+      ...(opts.minBpm ? { minBpm: Number(opts.minBpm) } : {}),
+      ...(opts.maxBpm ? { maxBpm: Number(opts.maxBpm) } : {}),
+      ...(opts.meter ? { meter: Number(opts.meter) } : {}),
+    });
+    stop();
+    console.log(JSON.stringify(found));
+  } catch (e) {
+    stop();
+    handleSocketError(e);
+  }
+}
+
 async function mediaWaveform(ref: string, opts: MediaPreviewOptions): Promise<void> {
   const { start, end, scale } = parsePreviewWindow(opts);
   const target = resolveAssetRef(ref);
@@ -1612,6 +1630,17 @@ media
   .option("-x, --scale <factor>", "scale factor for the waveform; smaller fits more rows and columns, larger fits fewer (default: 1)")
   .option("-o, --output <path>", "write the PNG here instead of a temp file")
   .action((ref: string, opts: MediaPreviewOptions) => mediaWaveform(ref, opts));
+
+media
+  .command("beats")
+  .description(
+    `Measure a music track's tempo and beats (local analysis, no credits). Prints bpm — the scene's \`bpm\` — and downbeat, the seconds into the file where beat 1 of a bar falls: trim the song by that much (\`sourceIn\`) and its bars line up with the timeline's, so times written as beats ("4b") and bars ("2bar") land on the music.`,
+  )
+  .argument("<path>", "local music, audio or video file")
+  .option("--min-bpm <bpm>", "slowest tempo to consider (default 70)")
+  .option("--max-bpm <bpm>", "fastest tempo to consider (default 180)")
+  .option("--meter <beats>", "beats in a bar (default 4)")
+  .action((ref: string, opts: { minBpm?: string; maxBpm?: string; meter?: string }) => mediaBeats(ref, opts));
 
 media
   .command("extract")

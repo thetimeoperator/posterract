@@ -147,6 +147,9 @@ importers:
       '@posterract/video-assets':
         specifier: workspace:*
         version: link:../../packages/posterract-video-assets
+      '@posterract/video-compiler':
+        specifier: workspace:*
+        version: link:../../packages/video-compiler
       '@posterract/video-encoder':
         specifier: workspace:*
         version: link:../../packages/posterract-video-encoder
@@ -496,6 +499,9 @@ importers:
         specifier: ^4.5.4
         version: 4.5.4
     devDependencies:
+      '@posterract/video-compiler':
+        specifier: workspace:*
+        version: link:../video-compiler
       '@types/node':
         specifier: ^24.10.1
         version: 24.13.2

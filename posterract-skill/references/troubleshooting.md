@@ -23,7 +23,7 @@ Read diagnostics, the entry TSX, and `.posterract/docs/lifecycle-errors.md`. Fix
 
 ## Source revision conflict
 
-Reread the newest `src/index.tsx`, locate the element by stable ID, and reapply the semantic edit. Never overwrite the newer file wholesale.
+Someone wrote the source after you read it. Call `posterract_changes` with the `revisionId` you hold to see what they changed, reread that part, and reapply your edit to the element by its stable ID. Never overwrite the newer file wholesale.
 
 ## Missing asset
 

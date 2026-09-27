@@ -10,8 +10,8 @@ Canonical hierarchy:
 
 ```tsx
 <stage id="workspace">
-  <scene id="main" name="Main video" width={1080} height={1920} active>
-    <sequence id="hook" start={0} end={3}>
+  <scene id="main" name="Main video" width={1080} height={1920}>
+    <sequence id="hook" name="Hook">
       {/* timed visual and audio elements */}
     </sequence>
   </scene>
@@ -31,6 +31,9 @@ Read these project-local pages before using detailed properties:
 - `.posterract/docs/timing.md`
 - `.posterract/docs/paints-effects.md`
 - `.posterract/docs/keyframes-animations-transitions.md`
+- `.posterract/docs/motion-design.md`
+- `.posterract/docs/vectors.md`
+- `.posterract/docs/timing-relations.md`
 - `.posterract/docs/html-surfaces.md`
 - `.posterract/docs/inspector-variables.md`
 - `.posterract/docs/assets-fonts.md`

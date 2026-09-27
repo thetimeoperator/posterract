@@ -24,6 +24,9 @@ const appleCredentials =
     : undefined;
 
 const config: ForgeConfig = {
+  // POSTERRACT_OUT_DIR builds somewhere other than out/, so a release never
+  // overwrites a copy of the app that is running from there.
+  outDir: process.env.POSTERRACT_OUT_DIR || undefined,
   packagerConfig: {
     name: "Posterract",
     executableName: "Posterract",

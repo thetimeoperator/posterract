@@ -91,7 +91,7 @@ function transport(request: CliRequest, timeoutMs: number, socketPath: string = 
 /** What a renderer has to answer and needs nobody at the editor for. Editing by id is not here: with the app closed the file is edited directly (see ./offline). */
 const ENGINE_PATHS = new Set([
   "context", "validate", "inspect", "geometry", "check", "capture", "export", "exportProgress",
-  "media.probe", "media.frame", "media.filmstrip", "media.waveform", "media.extract",
+  "media.probe", "media.frame", "media.filmstrip", "media.waveform", "media.beats", "media.extract",
 ]);
 
 const notRunning = (error: unknown): boolean => {

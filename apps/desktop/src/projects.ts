@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { watch, type FSWatcher } from "node:fs";
+import { readFileSync, renameSync, watch, type FSWatcher } from "node:fs";
 import {
   cp,
   copyFile,
@@ -26,6 +26,8 @@ import {
   hasViewState,
   lintProject,
   lintSource,
+  introducedHiddenMotion,
+  hiddenMotionRefusal,
   outlineSource,
   patchSources,
   prepareProject,
@@ -545,14 +547,25 @@ async function writeAtomic(path: string, content: string | Uint8Array, expected?
   markSelfWrite(path, content, startedAt);
   await writeFile(temporary, content);
   if (expected !== undefined) {
-    const standing = await readFile(path).then(revision, () => null);
+    // The look and the rename back to back, in one turn of the event loop. An
+    // await between them is a trip through the thread pool, which a busy
+    // machine stretches to milliseconds: a write landing in it is replaced by
+    // the rename unseen. A source file reads in well under one.
+    let standing: string | null;
+    try {
+      standing = revision(readFileSync(path));
+    } catch {
+      standing = null;
+    }
     if (standing !== expected) {
       await rm(temporary, { force: true });
       selfWrites.delete(path);
       throw new StaleWrite(path);
     }
+    renameSync(temporary, path);
+  } else {
+    await rename(temporary, path);
   }
-  await rename(temporary, path);
   markSelfWrite(path, content, Date.now());
   if (typeof content === "string" && SOURCE_FILE.test(path)) lastSeen.set(path, content);
 }
@@ -1310,7 +1323,19 @@ export async function writeProjectSource(request: SourceWriteRequest): Promise<{
   if (revision(current) !== request.expectedRevisionId) {
     throw new Error("This source changed on disk. Reload it before saving your edit.");
   }
-  await writeAtomic(absolute, request.content);
+  // An agent may not add motion the timeline cannot show (see lint.ts).
+  if (request.actor === "agent") {
+    const hidden = introducedHiddenMotion(request.path, current.toString("utf8"), request.content);
+    if (hidden.length) throw new Error(hiddenMotionRefusal(hidden));
+  }
+  // Checked again at the last moment: the person may have saved an edit while
+  // this one was being looked over, and it must not be written over unseen.
+  try {
+    await writeAtomic(absolute, request.content, request.expectedRevisionId);
+  } catch (error) {
+    if (error instanceof StaleWrite) throw new Error("This source changed on disk. Reload it before saving your edit.");
+    throw error;
+  }
   await appendJournal(await requireProjectDir(request.dir), {
     at: Date.now(),
     actor: request.actor ?? "canvas",

@@ -264,6 +264,18 @@ export type MediaFilmstripRequest = AssetRef & { start?: number; end?: number; s
 export type MediaFilmstripResult = { base64: string };
 
 export type MediaWaveformRequest = AssetRef & { start?: number; end?: number; scale?: number };
+
+export type MediaBeatsRequest = AssetRef & { minBpm?: number; maxBpm?: number; meter?: number };
+export type MediaBeatsResult = {
+  /** Tempo, 0 when nothing steady was found. */
+  bpm: number;
+  /** Where beat 1 of a bar is, seconds into the file: trim the song by this much to put its bars on the timeline's. */
+  downbeat: number;
+  meter: number;
+  confidence: number;
+  duration: number;
+  beats: number[];
+};
 export type MediaWaveformResult = {
   base64: string;
   silences: Array<{ start: number; end: number }>;

@@ -1,7 +1,7 @@
 {
   "name": "@posterract/desktop",
   "private": true,
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Agent-native local video editing with Posterract cloud publishing.",
   "author": "Posterract",
   "type": "module",

@@ -145,7 +145,7 @@ other property:
   <lottieSlot name="spin" value={0}>
     <keyframeTrack property="value">
       <keyframe time={0} value={0} />
-      <keyframe time="2s" value={90} />
+      <keyframe time={2} value={90} />
     </keyframeTrack>
   </lottieSlot>
 </lottie>

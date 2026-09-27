@@ -4741,6 +4741,7 @@ var ENGINE_PATHS = /* @__PURE__ */ new Set([
   "media.frame",
   "media.filmstrip",
   "media.waveform",
+  "media.beats",
   "media.extract"
 ]);
 var notRunning = (error2) => {
@@ -27943,6 +27944,12 @@ async function servePosterractMcp(explicitProjectDir) {
       inputSchema: object({ path: string2(), start: number2().nonnegative().optional(), end: number2().nonnegative().optional(), scale: number2().positive().optional() }),
       annotations: { readOnlyHint: true }
     }, safelyWith(async (input) => imageResult(await call("media_waveform", "media.waveform", input, RENDER_TIMEOUT_MS))));
+    server.registerTool("posterract_media_beats", {
+      title: "Measure music beats",
+      description: 'Measure a music track\'s tempo and beats. Returns bpm (set it as the scene\'s `bpm`), downbeat (seconds into the file where beat 1 of a bar is \u2014 trim the song by that much with `sourceIn` so its bars sit on the timeline\'s), meter, confidence and every beat time. With a tempo, times can be written as beats ("4b") and bars ("2bar").',
+      inputSchema: object({ path: string2(), minBpm: number2().positive().optional(), maxBpm: number2().positive().optional(), meter: number2().int().positive().optional() }),
+      annotations: { readOnlyHint: true }
+    }, safelyWith(async (input) => jsonResult(await call("media_beats", "media.beats", input, RENDER_TIMEOUT_MS))));
     server.registerTool("posterract_export", {
       title: "Export local video",
       description: "Export one video to an explicit local path. This never uploads, posts, or schedules.",
@@ -28261,6 +28268,23 @@ async function mediaFilmstrip(ref, opts) {
     stop();
     (0, import_node_fs5.writeFileSync)(path, Buffer.from(base642, "base64"));
     console.log(JSON.stringify({ path, ...rest }));
+  } catch (e) {
+    stop();
+    handleSocketError(e);
+  }
+}
+async function mediaBeats(ref, opts) {
+  const target = resolveAssetRef(ref);
+  const stop = startSpinner("Listening for the beat");
+  try {
+    const found = await editor.media.beats.query({
+      ...target,
+      ...opts.minBpm ? { minBpm: Number(opts.minBpm) } : {},
+      ...opts.maxBpm ? { maxBpm: Number(opts.maxBpm) } : {},
+      ...opts.meter ? { meter: Number(opts.meter) } : {}
+    });
+    stop();
+    console.log(JSON.stringify(found));
   } catch (e) {
     stop();
     handleSocketError(e);
@@ -29151,6 +29175,9 @@ media.command("filmstrip").alias("film").description(
 media.command("waveform").alias("wave").description(
   `Render the audio track of a video or audio file as a waveform PNG (local render, no credits) with a timestamp ruler: loudness over time, with silent stretches highlighted in red. A fast, token-efficient audio track preview; the silent spans are also returned as second ranges.`
 ).argument("<path>", "local video or audio file path to preview").option("-s, --start <time>", `start of the window to preview \u2014 seconds, "45f" frames, or "MM:SS" (default: 0)`).option("-e, --end <time>", `end of the window to preview \u2014 seconds, "45f" frames, or "MM:SS" (default: asset duration)`).option("-x, --scale <factor>", "scale factor for the waveform; smaller fits more rows and columns, larger fits fewer (default: 1)").option("-o, --output <path>", "write the PNG here instead of a temp file").action((ref, opts) => mediaWaveform(ref, opts));
+media.command("beats").description(
+  `Measure a music track's tempo and beats (local analysis, no credits). Prints bpm \u2014 the scene's \`bpm\` \u2014 and downbeat, the seconds into the file where beat 1 of a bar falls: trim the song by that much (\`sourceIn\`) and its bars line up with the timeline's, so times written as beats ("4b") and bars ("2bar") land on the music.`
+).argument("<path>", "local music, audio or video file").option("--min-bpm <bpm>", "slowest tempo to consider (default 70)").option("--max-bpm <bpm>", "fastest tempo to consider (default 180)").option("--meter <beats>", "beats in a bar (default 4)").action((ref, opts) => mediaBeats(ref, opts));
 media.command("extract").description("Extract a local time range for agent inspection. Writes MP4 video or OGG audio and never uploads it.").argument("<path>", "local media path or project asset-library path").option("-s, --start <time>", "start of the extracted range").option("-e, --end <time>", "end of the extracted range").option("--audio-only", "discard video and write a mono OGG audio file").requiredOption("-o, --output <file>", "output .mp4 or .ogg file").action((ref, opts) => mediaExtract(ref, opts));
 program2.command("whoami").summary("who this CLI is acting as").description(`Print the local editor identity boundary. Publishing credentials are intentionally unavailable to the CLI.`).option("--json", "emit only JSON (the default; retained for agent scripts)").action(() => whoami());
 program2.command("logs").summary("the app's log").description(
