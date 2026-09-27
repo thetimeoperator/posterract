@@ -64,7 +64,8 @@ export type LintCode =
   | "deprecated-prop"
   | "literal-type"
   | "placed-and-positioned"
-  | "map-loop";
+  | "map-loop"
+  | "hidden-motion";
 
 export interface LintDiagnostic extends CompileDiagnostic {
   code: LintCode;
@@ -126,6 +127,34 @@ export function lintSource(path: string, content: string): LintDiagnostic[] {
         ? node.getOpeningElement()
         : undefined;
     if (tag) checkTag(tag);
+
+    // Motion that no timeline row can show. A clock read by code, a canvas
+    // drawn through a ref, a trait set from a script: each moves the picture
+    // without anything on the timeline to see or grab. The fix is always the
+    // same — say the moving number as a knob (or a prop) and keyframe it.
+    const hiddenCall = node.asKind(SyntaxKind.CallExpression);
+    if (hiddenCall) {
+      const callee = hiddenCall.getExpression();
+      const called = callee.getText();
+      if (called === "useTicker") {
+        report(
+          callee,
+          "error",
+          "hidden-motion",
+          "`useTicker()` drives motion on its own clock, which nothing on the timeline can show or edit. " +
+            "Give the moving number a name instead — a knob on a `<surface draw knobs>`/`<html knobs>`, or the element's own prop — and keyframe it.",
+        );
+      }
+      const member = callee.asKind(SyntaxKind.PropertyAccessExpression);
+      if (member && (member.getName() === "set" || member.getName() === "add") && member.getExpression().getText().endsWith(".entity")) {
+        report(
+          callee,
+          "error",
+          "hidden-motion",
+          "Setting a runtime trait from code changes the picture behind the timeline's back. Write the value as a prop (keyframed if it moves) instead.",
+        );
+      }
+    }
 
     // Elements rendered by `.map()` share one address in the source, so
     // neither the canvas nor the edit tools can change one of them; a `<For>`
@@ -274,6 +303,19 @@ export function lintSource(path: string, content: string): LintDiagnostic[] {
       }
     }
 
+    // A surface drawn through its ref paints on its own clock; `draw` with
+    // `knobs` paints from the timeline.
+    if ((name === "surface" || name === "surfacePaint") && seen.has("ref") && !seen.has("draw")) {
+      report(
+        tag.getTagNameNode(),
+        "error",
+        "hidden-motion",
+        `${label} is drawn through its \`ref\`, so whatever it animates is invisible on the timeline. ` +
+          "Pass `draw={(ctx, knobs) => …}` and `knobs={{ … }}` instead, and keyframe the knobs (`<keyframeTrack property=\"knob.<name>\">`).",
+        id,
+      );
+    }
+
     if (spreads) return;
     // A warning, not an error: the runtime falls back to something for most of
     // these, so the element may still render — just not as anyone decided.
@@ -287,6 +329,38 @@ export function lintSource(path: string, content: string): LintDiagnostic[] {
 
   visit(sourceFile);
   return diagnostics.sort((a, b) => (a.line ?? 0) - (b.line ?? 0) || (a.column ?? 0) - (b.column ?? 0));
+}
+
+/**
+ * The hidden motion an edit brings: `hidden-motion` findings of `after` that
+ * `before` did not already have. Compared by what they say, not by line —
+ * an edit moves lines, not findings. What an agent's write is refused for:
+ * motion the timeline cannot show is the one thing the editor will not take
+ * from an agent, because nobody could see or change it afterwards.
+ */
+export function introducedHiddenMotion(path: string, before: string, after: string): LintDiagnostic[] {
+  const had = new Map<string, number>();
+  for (const finding of lintSource(path, before)) {
+    if (finding.code !== "hidden-motion") continue;
+    had.set(finding.message, (had.get(finding.message) ?? 0) + 1);
+  }
+  const added: LintDiagnostic[] = [];
+  for (const finding of lintSource(path, after)) {
+    if (finding.code !== "hidden-motion") continue;
+    const left = had.get(finding.message) ?? 0;
+    if (left > 0) had.set(finding.message, left - 1);
+    else added.push(finding);
+  }
+  return added;
+}
+
+/** The refusal an agent's write gets when it adds hidden motion, as one message. */
+export function hiddenMotionRefusal(findings: LintDiagnostic[]): string {
+  return [
+    "Refused: this edit adds motion the timeline cannot show, so nobody could see or change it afterwards.",
+    ...findings.map((finding) => `${finding.file ?? ""}:${finding.line ?? 0}:${finding.column ?? 0} ${finding.message}`),
+    "Nothing was written.",
+  ].join("\n");
 }
 
 /** Lints every source file of a virtual project. */

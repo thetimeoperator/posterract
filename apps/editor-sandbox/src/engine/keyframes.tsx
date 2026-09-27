@@ -25,6 +25,11 @@ import {
   framesToSeconds,
   getNodeLocalFrame,
   getPropertyPaths,
+  isKnobPath,
+  knobName,
+  Knobs,
+  Path,
+  TextPath,
 } from "@posterract/video-runtime";
 
 import type { AnimatableProperty } from "@posterract/composition";
@@ -61,7 +66,15 @@ export function keyframeFrame(target: Entity): number | null {
 function currentValue(world: World, target: Entity, property: AnimatableProperty): number | string | null {
   const path = trackPropertyPath(target, property);
   if (!path) return null;
-  const value = getPropertyPaths(world)[path]?.computed[target.id()];
+  // A knob (or a repeater's number, or a shader uniform) is read by name.
+  if (isKnobPath(path)) {
+    const knob = target.get(Knobs)?.computed[knobName(path)];
+    return typeof knob === "number" ? knob : null;
+  }
+  // A shape keyframe holds the figure as it is drawn right now.
+  if (path === "shape.d") return target.get(Path)?.d ?? null;
+  if (path === "text.path") return target.get(TextPath)?.d ?? null;
+  const value = (getPropertyPaths(world) as Record<string, { computed: unknown[] } | undefined>)[path]?.computed[target.id()];
   if (typeof value !== "number") return null;
   return property === "color" ? colorToHex(value) : value;
 }

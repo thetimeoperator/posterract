@@ -21,7 +21,13 @@ export const KeyframeTrack = trait({
 
 // Keyframe entity: ChildOf its KeyframeTrack. Easing applies to the segment
 // from this keyframe to the next-in-time on the same track.
-export const Keyframe = trait({ time: 0, value: 0, easing: 'linear' });
+export const Keyframe = trait({
+	time: 0,
+	value: 0,
+	easing: 'linear',
+	// A shape keyframe's path data (a `d` or `path` track); empty on numeric ones.
+	text: '',
+});
 
 // Animation entity: one preset in/out animation, ChildOf its target.
 export const Animation = trait({

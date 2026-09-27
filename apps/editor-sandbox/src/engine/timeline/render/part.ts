@@ -7,6 +7,49 @@ import type { RowCursor } from '../layout';
 import type { TimelineSurfaceState } from '../surface';
 import { getResolution, getViewport } from '../view';
 import { truncateText } from '../text';
+import { liveCurve } from '../../live-history';
+
+const CURVE_COLORS = ['#65ff9a', '#7cf7ff', '#ffc15e', '#ff7a6b', '#c9d4ff'];
+
+/**
+ * One line per live prop across the row, each scaled to its own range, from
+ * the values recorded as the editor showed each frame (see live-history).
+ */
+function drawLiveCurves(ctx: CanvasRenderingContext2D, node: TimelineNode, resolution: number, left: number, right: number, height: number): void {
+	const names = (node.name ?? '').split(',').map((name) => name.trim()).filter(Boolean);
+	names.forEach((name, index) => {
+		const curve = liveCurve(node.entity, name);
+		if (curve.length < 2) return;
+		let min = Infinity;
+		let max = -Infinity;
+		for (const [, value] of curve) {
+			if (value < min) min = value;
+			if (value > max) max = value;
+		}
+		const span = max - min || 1;
+		ctx.save();
+		ctx.beginPath();
+		ctx.rect(left, 3, right - left, height);
+		ctx.clip();
+		ctx.strokeStyle = CURVE_COLORS[index % CURVE_COLORS.length]!;
+		ctx.globalAlpha = 0.8;
+		ctx.lineWidth = 1.25;
+		ctx.beginPath();
+		let started = false;
+		let previous = -Infinity;
+		for (const [frame, value] of curve) {
+			const x = frame * resolution;
+			const y = 3 + height - 2 - ((value - min) / span) * (height - 4);
+			// A gap in what has been seen breaks the line rather than bridging it.
+			if (!started || frame - previous > 2) ctx.moveTo(x, y);
+			else ctx.lineTo(x, y);
+			started = true;
+			previous = frame;
+		}
+		ctx.stroke();
+		ctx.restore();
+	});
+}
 
 /** Parts share their layer's clock, but never use media trim gestures. */
 export function renderPart(world: World, scene: Entity, surface: TimelineSurfaceState, node: TimelineNode, row: RowCursor): void {
@@ -18,6 +61,8 @@ export function renderPart(world: World, scene: Entity, surface: TimelineSurface
 	let start = computed.start;
 	let end = computed.end;
 	let label = node.name || node.kind.replace('-', ' ');
+	// A knob row is named by its path; the bar says the knob.
+	if (node.kind === 'knob') label = label.split('.').pop() ?? label;
 	const animation = node.entity.get(Animation);
 	if (animation) {
 		const source = getLocalWindow(owner);
@@ -49,6 +94,8 @@ export function renderPart(world: World, scene: Entity, surface: TimelineSurface
 	ctx.font = '10px Inter, sans-serif';
 	ctx.fillStyle = '#cbd8e9';
 	ctx.textBaseline = 'middle';
+	// Motion from code: draw what it did, as far as the editor has seen it.
+	if (node.kind === 'live') drawLiveCurves(ctx, node, resolution, left, right, height);
 	const fitted = truncateText(ctx, label, right - left - 12, ctx.font);
 	if (fitted) ctx.fillText(fitted, left + 6, row.height / 2);
 	pointer.scope(`part-${node.kind}-${node.entity.id()}`);

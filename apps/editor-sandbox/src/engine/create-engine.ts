@@ -4,6 +4,8 @@
 
 import { assetSystem, renderSystem, transformSystem, playbackSystem, motionSystem, AudioEngine, createRuntimeWorld, Generating, Geometry, Mode, Paint, PaintType, Playback, RenderSurface, Time, ChildOf, store, syncInteractiveState } from '@posterract/video-runtime';
 import { hudSystem } from './hud';
+import { motionBlurPreview } from './motion-blur-preview';
+import { clearLiveHistory, recordLiveValues } from './live-history';
 import { createSignal, type Accessor, type Setter } from 'solid-js';
 import { AssetSelection, Hud, Keys, MODIFIER_KEYS, Pointer, PointerEvents, ProjectConfig, SnapLines } from './traits';
 import { inputSystem } from './input/input-system';
@@ -349,8 +351,10 @@ class Engine {
 		sourceErrorSystem(this.world);
 		playbackSystem(this.world);
 		motionSystem(this.world);
+		recordLiveValues(this.world);
 		transformSystem(this.world);
 		renderSystem(this.world);
+		motionBlurPreview(this.world);
 		hudSystem(this.world);
 		timelineSystem(this.world);
 	}
@@ -396,6 +400,8 @@ class Engine {
 		}
 		window.addEventListener(ENGINE_WAKE_EVENT, this.wake);
 		window.addEventListener('focus', this.wake);
+		// A font arriving changes every text drawn in it, with no edit to say so.
+		document.fonts?.addEventListener('loadingdone', this.wake);
 		document.addEventListener('visibilitychange', this.wake);
 
 		this.resizeObserver.observe(canvas.parentElement!);
@@ -429,6 +435,7 @@ class Engine {
 		// files, and are held outside the world: they go with the engine.
 		clearPeaks();
 		clearMedia();
+		clearLiveHistory();
 
 		this.unsubscribeEventListeners();
 		this.unsubscribe.forEach(unsubscribe => unsubscribe());
@@ -454,6 +461,7 @@ class Engine {
 		}
 		window.removeEventListener(ENGINE_WAKE_EVENT, this.wake);
 		window.removeEventListener('focus', this.wake);
+		document.fonts?.removeEventListener('loadingdone', this.wake);
 		document.removeEventListener('visibilitychange', this.wake);
 		this.resizeObserver.disconnect();
 	}

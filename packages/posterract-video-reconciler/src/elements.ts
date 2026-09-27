@@ -58,6 +58,8 @@ import type {
   SurfaceProps,
   TextProps,
   TextRangeProps,
+  TextAnimatorProps,
+  RepeaterProps,
   VideoProps,
 } from "@posterract/composition";
 
@@ -140,3 +142,5 @@ export const Html = hostElement<HtmlProps>("Html");
 export const ShaderPaint = hostElement<ShaderPaintProps>("ShaderPaint");
 export const SurfacePaint = hostElement<SurfacePaintProps>("SurfacePaint");
 export const Surface = hostElement<SurfaceProps>("Surface");
+export const TextAnimator = hostElement<TextAnimatorProps>("TextAnimator");
+export const Repeater = hostElement<RepeaterProps>("Repeater");

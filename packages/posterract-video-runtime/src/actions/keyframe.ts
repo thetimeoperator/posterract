@@ -5,10 +5,11 @@
 // Keyframe actions (was api/keyframe.ts).
 
 import {
-	ChildOf, Geometry, Group, AdjustmentLayer, KeyframeTrack, Keyframe,
+	ChildOf, Geometry, Group, AdjustmentLayer, KeyframeTrack, Keyframe, Knobs,
 } from '../traits';
 import { getNodeLocalFrame, getParentNode } from '../queries/hierarchy';
-import { getPropertyPaths } from '../systems/motion';
+import { getPropertyPaths, isKnobPath, knobName } from '../systems/motion';
+import { store } from '../world/store';
 import { createEntity, deleteEntity } from './entities';
 import { appendChild } from './hierarchy';
 
@@ -80,7 +81,7 @@ export function syncKeyframeTrack(world: World, entity: Entity, property: Proper
 	const existing = [...world.query(Keyframe, ChildOf(track))]
 		.find(kf => kf.get(Keyframe)!.time === localFrame);
 
-	const currentValue = worldProps[property].authored[entity.id()] ?? 0;
+	const currentValue = authoredValue(world, worldProps, entity, property);
 	if (typeof currentValue !== 'number') return;
 
 	if (existing) {
@@ -117,7 +118,7 @@ export function toggleKeyframeTrack(world: World, entity: Entity, property: Prop
 
 	const existing = trackKeyframes.find(kf => kf.get(Keyframe)!.time === localFrame);
 
-	const currentValue = worldProps[property].authored[entity.id()] ?? 0;
+	const currentValue = authoredValue(world, worldProps, entity, property);
 	if (typeof currentValue !== 'number') return;
 
 	if (existing) {
@@ -186,4 +187,23 @@ export function removeKeyframeTrack(world: World, entity: Entity, property: Prop
 
 	keyframes.forEach(kf => deleteEntity(world, kf));
 	deleteEntity(world, track);
+}
+
+/**
+ * What the source says `property` is on `entity`, the value a new keyframe
+ * starts from: a field's authored slot, or a knob's authored value by name.
+ */
+function authoredValue(
+	world: World,
+	worldProps: ReturnType<typeof getPropertyPaths>,
+	entity: Entity,
+	property: PropertyPath,
+): unknown {
+	if (isKnobPath(property)) {
+		const authored = store(world, Knobs).authored[entity.id()] ?? {};
+		const value = authored[knobName(property)];
+		return typeof value === 'number' ? value : 0;
+	}
+	const channel = worldProps[property as keyof typeof worldProps] as { authored: unknown[] } | undefined;
+	return channel?.authored[entity.id()] ?? 0;
 }

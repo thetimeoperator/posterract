@@ -43,6 +43,21 @@ export const Computed = trait({
 	trimOffset: 0,
 	// How far a path has blended toward its `morphTo`, 0..1.
 	morph: 0,
+	// Shape keyframes, resolved: the two shapes this frame sits between and how
+	// far from one to the other. Undefined when no shape track runs.
+	shapeFrom: undefined as string | undefined,
+	shapeTo: undefined as string | undefined,
+	shapeT: 0,
+	// Text on a path: how far along it, and how far off it.
+	pathOffset: 0,
+	pathShift: 0,
+	// A 3D tilt: degrees about the element's own axes, and the camera distance.
+	tiltX: 0,
+	tiltY: 0,
+	perspective: 2000,
+	// A finishing effect's second and third numbers.
+	effectSize: 0,
+	effectAngle: 0,
 	width: 0,
 	height: 0,
 	chars: undefined as string | undefined,

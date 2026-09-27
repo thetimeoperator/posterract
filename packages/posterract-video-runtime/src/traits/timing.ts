@@ -58,6 +58,8 @@ export const Sequential = trait();
 export const Transition = trait({
 	type: TransitionType.DISSOLVE as TransitionType,
 	duration: 0, // frames
+	// A shape wipe's figure, as path data in a 100×100 box; empty is a circle.
+	shape: '',
 });
 
 // Per-clip user-customized timeline row height (persisted).

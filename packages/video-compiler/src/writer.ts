@@ -811,7 +811,23 @@ class SourceWriter {
     // after the attributes it already has — and the file is reparsed once
     // rather than once per element.
     const changes = tags(sourceFile).flatMap((tag) => {
-      if (!isCompositionTag(tagName(tag)) || idOf(tag)) return [];
+      if (!isCompositionTag(tagName(tag))) return [];
+
+      // An id the author computes (`id={props.id}`) names the element too.
+      // Passes that missed it appended a literal of their own on every open,
+      // and the last one won, so every instance shared it: those copies go.
+      const ids = tag.getAttributes().flatMap((attribute) =>
+        attribute.isKind(SyntaxKind.JsxAttribute) && attribute.getNameNode().getText() === ID_ATTR ? [attribute] : [],
+      );
+      if (ids.length) {
+        if (ids[0]!.getInitializer()?.isKind(SyntaxKind.StringLiteral)) return [];
+        return ids.slice(1)
+          .filter((attribute) => attribute.getInitializer()?.isKind(SyntaxKind.StringLiteral))
+          .map((attribute) => ({
+            span: { start: attribute.getFullStart(), length: attribute.getEnd() - attribute.getFullStart() },
+            newText: "",
+          }));
+      }
 
       const at = (tag.getAttributes().at(-1) ?? tag.getTagNameNode()).getEnd();
       return [{ span: { start: at, length: 0 }, newText: ` ${ID_ATTR}="${nextId()}"` }];

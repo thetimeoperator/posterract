@@ -5,7 +5,9 @@
 import {
 	ChildOf, Keyframe, KeyframeTrack, IsMask, Geometry, Group,
 	AdjustmentLayer, Expanded, Animation, Effect, Paint, Shadow, Stroke, LottieSlot, Component, Live,
+	Knobs, Loop, Host, Scene, MotionBlur, Tempo, Repeater, Shader, TextAnimator,
 } from '../traits';
+import { isKnobPath, knobName } from '../systems/motion';
 import { store } from '../world/store';
 import { isSequence } from './predicates';
 import { sortByItemIndex } from '../utils/sort';
@@ -23,7 +25,10 @@ export type TimelineNodeKind =
 	| 'animation'
 	| 'lottie-slot'
 	| 'component'
-	| 'live';
+	| 'live'
+	| 'knob'
+	| 'setting'
+	| 'animator';
 
 /**
  * How much of the document the timeline indexes.
@@ -58,6 +63,15 @@ function admits(detail: TimelineDetail, kind: TimelineNodeKind): boolean {
 		// wherever animation does.
 		case 'live':
 			return detail !== 'clips';
+		// A knob is motion waiting to happen: canvas code reads it, so it is a
+		// row wherever animation is, keyframed or not.
+		case 'knob':
+		case 'animator':
+			return detail !== 'clips';
+		// How the scene is finished — its motion blur, its tempo — is part of
+		// the complete index, not of the motion summary.
+		case 'setting':
+			return detail === 'everything';
 		case 'sub-item':
 			// An entity with no kind of its own is scaffolding — a gradient's
 			// container, a text range. It earns a row only by holding tracks,
@@ -68,6 +82,7 @@ function admits(detail: TimelineDetail, kind: TimelineNodeKind): boolean {
 
 /** The row kind an entity earns from the traits it carries. */
 function subItemKind(entity: Entity): TimelineNodeKind {
+	if (entity.has(TextAnimator)) return 'animator';
 	if (entity.has(Animation)) return 'animation';
 	if (entity.has(Effect)) return 'effect';
 	if (entity.has(Stroke)) return 'stroke';
@@ -129,6 +144,8 @@ export function buildTimelineLayers(
 
 	const nodes: TimelineNode[] = [];
 
+	if (parent.has(Scene) && admits(detail, 'setting')) nodes.push(...settingRows(parent));
+
 	for (const track of tracks) {
 		nodes.push({
 			entity: track,
@@ -153,6 +170,19 @@ export function buildTimelineLayers(
 	for (const group of groupByComponent(world, geoms)) {
 		if (group.name === null) {
 			for (const geom of group.entities) nodes.push(buildNode(world, geom, 'geometry', detail));
+			continue;
+		}
+		if (group.loop) {
+			// Copies a loop in the code made: one row for all of them, opened
+			// to reach any one.
+			nodes.push({
+				entity: group.entities[0]!,
+				kind: 'component',
+				name: group.name,
+				expanded: group.entities.some((entity) => entity.has(Expanded)),
+				expandable: true,
+				children: group.entities.map((entity) => buildNode(world, entity, 'geometry', detail)),
+			});
 			continue;
 		}
 		nodes.push({
@@ -190,21 +220,78 @@ export function buildTimelineLayers(
 function groupByComponent(
 	world: World,
 	entities: readonly Entity[],
-): Array<{ name: string | null; entities: Entity[] }> {
-	const runs: Array<{ name: string | null; entities: Entity[] }> = [];
+): Array<{ name: string | null; entities: Entity[]; loop?: boolean }> {
+	const runs: Array<{ name: string | null; entities: Entity[]; loop?: string }> = [];
 
 	for (const entity of entities) {
+		// Iterations of one loop in the code group first: forty dots made by a
+		// `.map` are one thing on the timeline, not forty rows.
+		const loop = entity.has(Loop) ? store(world, Loop).value[entity.id()] || undefined : undefined;
 		const name = entity.has(Component) ? store(world, Component).name[entity.id()] || null : null;
 		const last = runs.at(-1);
-		if (last && last.name === name) {
+		if (loop !== undefined) {
+			if (last && last.loop === loop) {
+				last.entities.push(entity);
+			} else {
+				runs.push({ name, entities: [entity], loop });
+			}
+			continue;
+		}
+		if (last && last.loop === undefined && last.name === name) {
 			last.entities.push(entity);
 		} else {
 			runs.push({ name, entities: [entity] });
 		}
 	}
 
-	return runs;
+	// A loop that made one element is just that element.
+	return runs.map((run) => {
+		if (run.loop === undefined) return { name: run.name, entities: run.entities };
+		if (run.entities.length < 2) return { name: run.name, entities: run.entities };
+		const tag = run.entities[0]!.get(Host)?.tag || 'element';
+		return { name: `${run.entities.length} × ${tag} · made by code`, entities: run.entities, loop: true };
+	});
 }
+
+/** The scene's own settings as rows: motion blur and tempo, when it has them. */
+function settingRows(scene: Entity): TimelineNode[] {
+	const rows: TimelineNode[] = [];
+	const blur = scene.get(MotionBlur);
+	if (blur) {
+		rows.push({ entity: scene, kind: 'setting', name: `Motion blur · ${Math.round(blur.shutter)}° · ${blur.samples} samples`, expanded: false, expandable: false, children: [] });
+	}
+	const tempo = scene.get(Tempo);
+	if (tempo && tempo.bpm > 0) {
+		rows.push({ entity: scene, kind: 'setting', name: `Tempo · ${tempo.bpm} BPM · ${tempo.meter}/4`, expanded: false, expandable: false, children: [] });
+	}
+	return rows;
+}
+
+/**
+ * A row for each knob no track drives yet — a knob with a track shows as that
+ * track. Numbers only: a colour knob is set in the inspector.
+ */
+function knobRows(world: World, entity: Entity, detail: TimelineDetail): TimelineNode[] {
+	if (!entity.has(Knobs) || !admits(detail, 'knob')) return [];
+	const authored = store(world, Knobs).authored[entity.id()] ?? {};
+	const keyframeTrack = store(world, KeyframeTrack);
+	const driven = new Set<string>();
+	for (const track of world.query(KeyframeTrack, ChildOf(entity))) {
+		const path = keyframeTrack.property[track.id()] ?? '';
+		if (isKnobPath(path)) driven.add(knobName(path));
+	}
+	const repeater = entity.has(Repeater);
+	const prefix = repeater ? '' : entity.has(Shader) ? 'uniform.' : 'knob.';
+	return Object.entries(authored)
+		.filter(([name, value]) => typeof value === 'number' && !driven.has(name))
+		// A repeater's untouched numbers would be twenty rows of defaults; its
+		// count, layout blend and camera are what it is animated by.
+		.filter(([name]) => !repeater || REPEATER_ROWS.has(name))
+		.map(([name]) => ({ entity, kind: 'knob' as const, name: `${prefix}${name}`, expanded: false, expandable: false, children: [] }));
+}
+
+/** The repeater numbers that get a row of their own before they are keyframed. */
+const REPEATER_ROWS = new Set(['count', 'morph', 'ripplePhase', 'tiltX', 'tiltY', 'zoom', 'cameraZ']);
 
 /**
  * Build one row node. Expanded nodes get their subtree; collapsed ones stay
@@ -226,7 +313,10 @@ function buildNode(
 		};
 	}
 
-	const children = liveRow(world, entity, detail).concat(buildTimelineLayers(world, entity, detail));
+	const children = liveRow(world, entity, detail)
+		.concat(knobRows(world, entity, detail))
+		.concat(paintKnobRows(world, entity, detail))
+		.concat(buildTimelineLayers(world, entity, detail));
 	return {
 		entity,
 		kind,
@@ -249,11 +339,20 @@ function liveRow(world: World, entity: Entity, detail: TimelineDetail): Timeline
 	return [{ entity, kind: 'live', name: props, expanded: false, expandable: false, children: [] }];
 }
 
+/** Knob rows of the shader paints directly on `entity`: their uniforms. */
+function paintKnobRows(world: World, entity: Entity, detail: TimelineDetail): TimelineNode[] {
+	if (!admits(detail, 'knob')) return [];
+	const rows: TimelineNode[] = [];
+	for (const paint of world.query(ChildOf(entity), Paint, Shader)) rows.push(...knobRows(world, paint, detail));
+	return rows;
+}
+
 /**
  * Early-exit probe: check if a layer could be expanded.
  */
 function isExpandable(world: World, parent: Entity, detail: TimelineDetail = 'clips'): boolean {
 	if (liveRow(world, parent, detail).length) return true;
+	if (knobRows(world, parent, detail).length || paintKnobRows(world, parent, detail).length) return true;
 	const sequence = isSequence(parent);
 
 	for (const child of world.query(ChildOf(parent))) {

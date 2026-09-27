@@ -7,27 +7,37 @@
   "after",
   "align",
   "amount",
+  "angle",
   "arrowEnd",
   "arrowStart",
   "attack",
   "background",
   "blendMode",
   "blur",
+  "bpm",
   "by",
   "camera",
+  "cameraZ",
   "cap",
   "clipHeight",
   "color",
+  "colorBy",
+  "colorTo",
   "colors",
+  "columns",
+  "context",
   "cornerRadius",
   "cornerRadiusBottomLeft",
   "cornerRadiusBottomRight",
   "cornerRadiusTopLeft",
   "cornerRadiusTopRight",
+  "count",
   "d",
   "delay",
+  "depthFade",
   "distance",
   "domain",
+  "draw",
   "duration",
   "easing",
   "end",
@@ -47,16 +57,21 @@
   "inset",
   "join",
   "keepAspectRatio",
+  "knobs",
   "label",
+  "layout",
+  "layoutTo",
   "leading",
   "letterSpacing",
   "locked",
   "loop",
   "markers",
   "mask",
+  "meter",
   "miterLimit",
   "morph",
   "morphTo",
+  "motionBlur",
   "muted",
   "name",
   "objectFit",
@@ -64,7 +79,13 @@
   "offsetX",
   "offsetY",
   "opacity",
+  "order",
   "padding",
+  "path",
+  "pathAlign",
+  "pathOffset",
+  "pathShift",
+  "perspective",
   "phase",
   "place",
   "playbackRate",
@@ -72,10 +93,20 @@
   "preset",
   "progress",
   "property",
+  "radius",
   "range",
   "release",
   "removeBackground",
+  "ripple",
+  "rippleCenterX",
+  "rippleCenterY",
+  "rippleFrequency",
+  "rippleMode",
+  "ripplePhase",
+  "roll",
   "rotation",
+  "rotationX",
+  "rotationY",
   "route",
   "scale",
   "scaleX",
@@ -83,13 +114,16 @@
   "seed",
   "selected",
   "shape",
+  "size",
   "skill",
   "smooth",
   "sourceIn",
   "sourceOut",
+  "spacing",
   "speed",
   "src",
   "stagger",
+  "staggerOrder",
   "start",
   "strokeColor",
   "strokeWidth",
@@ -104,11 +138,14 @@
   "textColor",
   "textDecoration",
   "tickCount",
+  "tiltX",
+  "tiltY",
   "time",
   "transition",
   "trimEnd",
   "trimOffset",
   "trimStart",
+  "tube",
   "type",
   "uniforms",
   "upscale",
@@ -121,7 +158,8 @@
   "x",
   "xLabel",
   "y",
-  "yLabel"
+  "yLabel",
+  "zoom"
  ],
  "tags": {
   "stage": {
@@ -137,6 +175,7 @@
    "doc": "A scene: the clipped, playable frame a composition is made in, and the only element allowed directly under `<stage>`.",
    "props": [
     "active",
+    "bpm",
     "children",
     "clipHeight",
     "expanded",
@@ -145,6 +184,8 @@
     "id",
     "keepAspectRatio",
     "locked",
+    "meter",
+    "motionBlur",
     "name",
     "selected",
     "skill",
@@ -176,13 +217,17 @@
     "inset",
     "keepAspectRatio",
     "locked",
+    "motionBlur",
     "name",
     "offsetX",
     "offsetY",
     "opacity",
+    "perspective",
     "place",
     "playbackRate",
     "rotation",
+    "rotationX",
+    "rotationY",
     "scale",
     "scaleX",
     "scaleY",
@@ -220,13 +265,17 @@
     "keepAspectRatio",
     "locked",
     "mask",
+    "motionBlur",
     "name",
     "offsetX",
     "offsetY",
     "opacity",
+    "perspective",
     "place",
     "playbackRate",
     "rotation",
+    "rotationX",
+    "rotationY",
     "scale",
     "scaleX",
     "scaleY",
@@ -263,15 +312,19 @@
     "inset",
     "keepAspectRatio",
     "locked",
+    "motionBlur",
     "muted",
     "name",
     "objectFit",
     "offsetX",
     "offsetY",
     "opacity",
+    "perspective",
     "place",
     "playbackRate",
     "rotation",
+    "rotationX",
+    "rotationY",
     "scale",
     "scaleX",
     "scaleY",
@@ -312,15 +365,19 @@
     "inset",
     "keepAspectRatio",
     "locked",
+    "motionBlur",
     "name",
     "objectFit",
     "offsetX",
     "offsetY",
     "opacity",
+    "perspective",
     "place",
     "playbackRate",
     "removeBackground",
     "rotation",
+    "rotationX",
+    "rotationY",
     "scale",
     "scaleX",
     "scaleY",
@@ -392,13 +449,21 @@
     "leading",
     "letterSpacing",
     "locked",
+    "motionBlur",
     "name",
     "offsetX",
     "offsetY",
     "opacity",
+    "path",
+    "pathAlign",
+    "pathOffset",
+    "pathShift",
+    "perspective",
     "place",
     "playbackRate",
     "rotation",
+    "rotationX",
+    "rotationY",
     "scale",
     "scaleX",
     "scaleY",
@@ -484,9 +549,12 @@
     "name",
     "offsetX",
     "offsetY",
+    "perspective",
     "place",
     "playbackRate",
     "rotation",
+    "rotationX",
+    "rotationY",
     "scale",
     "scaleX",
     "scaleY",
@@ -525,15 +593,19 @@
     "keepAspectRatio",
     "label",
     "locked",
+    "motionBlur",
     "name",
     "offsetX",
     "offsetY",
     "opacity",
     "padding",
+    "perspective",
     "place",
     "playbackRate",
     "progress",
     "rotation",
+    "rotationX",
+    "rotationY",
     "scale",
     "scaleX",
     "scaleY",
@@ -579,14 +651,18 @@
     "keepAspectRatio",
     "label",
     "locked",
+    "motionBlur",
     "name",
     "offsetX",
     "offsetY",
     "opacity",
+    "perspective",
     "place",
     "playbackRate",
     "progress",
     "rotation",
+    "rotationX",
+    "rotationY",
     "route",
     "scale",
     "scaleX",
@@ -630,14 +706,18 @@
     "keepAspectRatio",
     "label",
     "locked",
+    "motionBlur",
     "name",
     "offsetX",
     "offsetY",
     "opacity",
+    "perspective",
     "place",
     "playbackRate",
     "progress",
     "rotation",
+    "rotationX",
+    "rotationY",
     "scale",
     "scaleX",
     "scaleY",
@@ -679,16 +759,20 @@
     "inset",
     "keepAspectRatio",
     "locked",
+    "motionBlur",
     "name",
     "offsetX",
     "offsetY",
     "opacity",
     "padding",
+    "perspective",
     "place",
     "playbackRate",
     "progress",
     "range",
     "rotation",
+    "rotationX",
+    "rotationY",
     "scale",
     "scaleX",
     "scaleY",
@@ -734,17 +818,21 @@
     "label",
     "locked",
     "markers",
+    "motionBlur",
     "name",
     "offsetX",
     "offsetY",
     "opacity",
     "padding",
+    "perspective",
     "place",
     "playbackRate",
     "points",
     "progress",
     "range",
     "rotation",
+    "rotationX",
+    "rotationY",
     "scale",
     "scaleX",
     "scaleY",
@@ -787,15 +875,19 @@
     "keepAspectRatio",
     "label",
     "locked",
+    "motionBlur",
     "name",
     "offsetX",
     "offsetY",
     "opacity",
     "padding",
+    "perspective",
     "place",
     "playbackRate",
     "progress",
     "rotation",
+    "rotationX",
+    "rotationY",
     "scale",
     "scaleX",
     "scaleY",
@@ -917,9 +1009,11 @@
   "effect": {
    "doc": "`<effect>` — a filter over the parent's rendered pixels (its fills, strokes and children together), a sub-entity like a paint.",
    "props": [
+    "angle",
     "children",
     "hidden",
     "id",
+    "size",
     "type",
     "value"
    ]
@@ -1010,13 +1104,17 @@
     "mask",
     "morph",
     "morphTo",
+    "motionBlur",
     "name",
     "offsetX",
     "offsetY",
     "opacity",
+    "perspective",
     "place",
     "playbackRate",
     "rotation",
+    "rotationX",
+    "rotationY",
     "scale",
     "scaleX",
     "scaleY",
@@ -1056,13 +1154,17 @@
     "keepAspectRatio",
     "locked",
     "mask",
+    "motionBlur",
     "name",
     "offsetX",
     "offsetY",
     "opacity",
+    "perspective",
     "place",
     "playbackRate",
     "rotation",
+    "rotationX",
+    "rotationY",
     "scale",
     "scaleX",
     "scaleY",
@@ -1102,14 +1204,18 @@
     "keepAspectRatio",
     "locked",
     "mask",
+    "motionBlur",
     "name",
     "offsetX",
     "offsetY",
     "opacity",
+    "perspective",
     "place",
     "playbackRate",
     "points",
     "rotation",
+    "rotationX",
+    "rotationY",
     "scale",
     "scaleX",
     "scaleY",
@@ -1190,14 +1296,19 @@
     "id",
     "inset",
     "keepAspectRatio",
+    "knobs",
     "locked",
+    "motionBlur",
     "name",
     "offsetX",
     "offsetY",
     "opacity",
+    "perspective",
     "place",
     "playbackRate",
     "rotation",
+    "rotationX",
+    "rotationY",
     "scale",
     "scaleX",
     "scaleY",
@@ -1232,16 +1343,18 @@
    ]
   },
   "surface": {
-   "doc": "`<Surface>` — a rectangle carrying a `<SurfacePaint>`; its `ref`'s `element` is the canvas.",
+   "doc": "`<Surface>` — a rectangle drawn by code.",
    "props": [
     "after",
     "blendMode",
     "clipHeight",
+    "context",
     "cornerRadius",
     "cornerRadiusBottomLeft",
     "cornerRadiusBottomRight",
     "cornerRadiusTopLeft",
     "cornerRadiusTopRight",
+    "draw",
     "end",
     "expanded",
     "height",
@@ -1249,14 +1362,19 @@
     "id",
     "inset",
     "keepAspectRatio",
+    "knobs",
     "locked",
+    "motionBlur",
     "name",
     "offsetX",
     "offsetY",
     "opacity",
+    "perspective",
     "place",
     "playbackRate",
     "rotation",
+    "rotationX",
+    "rotationY",
     "scale",
     "scaleX",
     "scaleY",
@@ -1268,6 +1386,75 @@
     "width",
     "x",
     "y"
+   ]
+  },
+  "textAnimator": {
+   "doc": "`<textAnimator>` — moves a `<text>` one letter, word or line at a time.",
+   "props": [
+    "by",
+    "children",
+    "id",
+    "order",
+    "stagger"
+   ]
+  },
+  "repeater": {
+   "doc": "`<repeater>` — one element drawn many times, laid out by rule.",
+   "props": [
+    "after",
+    "blendMode",
+    "cameraZ",
+    "children",
+    "clipHeight",
+    "colorBy",
+    "colorTo",
+    "columns",
+    "count",
+    "depthFade",
+    "end",
+    "expanded",
+    "hidden",
+    "id",
+    "inset",
+    "layout",
+    "layoutTo",
+    "locked",
+    "morph",
+    "motionBlur",
+    "name",
+    "offsetX",
+    "offsetY",
+    "opacity",
+    "perspective",
+    "place",
+    "playbackRate",
+    "radius",
+    "ripple",
+    "rippleCenterX",
+    "rippleCenterY",
+    "rippleFrequency",
+    "rippleMode",
+    "ripplePhase",
+    "roll",
+    "rotation",
+    "scale",
+    "scaleX",
+    "scaleY",
+    "seed",
+    "selected",
+    "sourceIn",
+    "sourceOut",
+    "spacing",
+    "stagger",
+    "staggerOrder",
+    "start",
+    "tiltX",
+    "tiltY",
+    "transition",
+    "tube",
+    "x",
+    "y",
+    "zoom"
    ]
   }
  },
@@ -1314,7 +1501,8 @@
      "polygon",
      "lottie",
      "html",
-     "surface"
+     "surface",
+     "repeater"
     ],
     "type": "string",
     "doc": "The `id` of an element this one follows: its span begins where that one's ends, and `start` alongside it becomes the gap after it rather than a time in the scene."
@@ -1347,6 +1535,15 @@
     ],
     "type": "number",
     "doc": "How far down, in dB."
+   }
+  ],
+  "angle": [
+   {
+    "tags": [
+     "effect"
+    ],
+    "type": "number",
+    "doc": "A \"directionalBlur\"'s direction, degrees (0 = across)."
    }
   ],
   "arrowEnd": [
@@ -1411,7 +1608,8 @@
      "html",
      "shaderPaint",
      "surfacePaint",
-     "surface"
+     "surface",
+     "repeater"
     ],
     "type": "enum",
     "values": [
@@ -1444,6 +1642,15 @@
     "doc": "Blur radius, px."
    }
   ],
+  "bpm": [
+   {
+    "tags": [
+     "scene"
+    ],
+    "type": "number",
+    "doc": "The scene's tempo, in beats per minute."
+   }
+  ],
   "by": [
    {
     "tags": [
@@ -1452,6 +1659,18 @@
     "type": "string",
     "required": true,
     "doc": "`id` of the element whose span drives the duck."
+   },
+   {
+    "tags": [
+     "textAnimator"
+    ],
+    "type": "enum",
+    "values": [
+     "letter",
+     "word",
+     "line"
+    ],
+    "doc": "What moves as one."
    }
   ],
   "camera": [
@@ -1463,6 +1682,15 @@
     "doc": "The editor's viewport: `[1, 0, 0, 1, 0, 0]` is the origin at 100%.",
     "view": true,
     "deprecated": "Editor view state, not part of the composition: nothing rendered or exported depends on it."
+   }
+  ],
+  "cameraZ": [
+   {
+    "tags": [
+     "repeater"
+    ],
+    "type": "number",
+    "doc": "Moves the camera toward the copies, px; past them it flies through."
    }
   ],
   "cap": [
@@ -1525,7 +1753,7 @@
     ],
     "type": "any",
     "required": true,
-    "doc": "The text content, required; alongside it, `<TextRange>`, paint, `<Stroke>`, `<Shadow>`, `<Effect>`, `<Animation>` and `<KeyframeTrack>` children."
+    "doc": "The text content, required; alongside it, `<TextRange>`, `<TextAnimator>`, paint, `<Stroke>`, `<Shadow>`, `<Effect>`, `<Animation>` and `<KeyframeTrack>` children."
    },
    {
     "tags": [
@@ -1616,6 +1844,20 @@
     ],
     "type": "any",
     "doc": "HTML children — real DOM elements laid out by the browser at the parent geometry's box size and drawn into it (html-in-canvas)."
+   },
+   {
+    "tags": [
+     "textAnimator"
+    ],
+    "type": "any",
+    "doc": "`<keyframeTrack>` children over the unit props listed above."
+   },
+   {
+    "tags": [
+     "repeater"
+    ],
+    "type": "any",
+    "doc": "One element child — the template — plus `<keyframeTrack>` and `<animation>` children."
    }
   ],
   "clipHeight": [
@@ -1641,7 +1883,8 @@
      "polygon",
      "lottie",
      "html",
-     "surface"
+     "surface",
+     "repeater"
     ],
     "type": "number",
     "doc": "Height of the element's row in the timeline, px.",
@@ -1677,6 +1920,20 @@
     "doc": "Any CSS color; defaults to the editor's accent."
    }
   ],
+  "colorBy": [
+   {
+    "tags": [
+     "repeater"
+    ],
+    "type": "enum",
+    "values": [
+     "index",
+     "wave",
+     "depth"
+    ],
+    "doc": "What picks each copy's blend toward `colorTo`: its place in the order, the ripple, or its depth."
+   }
+  ],
   "colors": [
    {
     "tags": [
@@ -1684,6 +1941,38 @@
     ],
     "type": "string[]",
     "doc": "Fills the caption preset's color slots in order; any CSS color, alpha is ignored."
+   }
+  ],
+  "colorTo": [
+   {
+    "tags": [
+     "repeater"
+    ],
+    "type": "string",
+    "doc": "A second colour the copies' fill blends toward, by `colorBy`."
+   }
+  ],
+  "columns": [
+   {
+    "tags": [
+     "repeater"
+    ],
+    "type": "number",
+    "doc": "Columns of a \"grid\" or \"plane\"; 0 picks a square."
+   }
+  ],
+  "context": [
+   {
+    "tags": [
+     "surface"
+    ],
+    "type": "enum",
+    "values": [
+     "2d",
+     "webgl",
+     "webgl2"
+    ],
+    "doc": "The context `draw` receives."
    }
   ],
   "cornerRadius": [
@@ -1803,6 +2092,15 @@
     "type": "number"
    }
   ],
+  "count": [
+   {
+    "tags": [
+     "repeater"
+    ],
+    "type": "number",
+    "doc": "How many copies."
+   }
+  ],
   "d": [
    {
     "tags": [
@@ -1822,6 +2120,15 @@
     "doc": "Gap between the clip edge and the animation: after the head for \"in\", before the tail for \"out\"."
    }
   ],
+  "depthFade": [
+   {
+    "tags": [
+     "repeater"
+    ],
+    "type": "number",
+    "doc": "How much farther copies fade, 0–1."
+   }
+  ],
   "distance": [
    {
     "tags": [
@@ -1838,6 +2145,15 @@
      "diagramPlot"
     ],
     "type": "readonly [min: number, max: number]"
+   }
+  ],
+  "draw": [
+   {
+    "tags": [
+     "surface"
+    ],
+    "type": "SurfaceDraw",
+    "doc": "Paints one frame from the knobs — see `SurfaceDraw`."
    }
   ],
   "duration": [
@@ -1907,7 +2223,8 @@
      "polygon",
      "lottie",
      "html",
-     "surface"
+     "surface",
+     "repeater"
     ],
     "type": "time",
     "doc": "Parent-timeline time at which the node ends."
@@ -1965,7 +2282,8 @@
      "polygon",
      "lottie",
      "html",
-     "surface"
+     "surface",
+     "repeater"
     ],
     "type": "boolean",
     "doc": "Whether the timeline shows this element's keyframe rows below its clip.",
@@ -2177,7 +2495,8 @@
      "html",
      "shaderPaint",
      "surfacePaint",
-     "surface"
+     "surface",
+     "repeater"
     ],
     "type": "boolean",
     "doc": "Excludes the element from rendering (and its audio from the mix) without removing it: it keeps its place in the timeline and its children."
@@ -2228,7 +2547,9 @@
      "html",
      "shaderPaint",
      "surfacePaint",
-     "surface"
+     "surface",
+     "textAnimator",
+     "repeater"
     ],
     "type": "string"
    }
@@ -2252,7 +2573,8 @@
      "ellipse",
      "polygon",
      "html",
-     "surface"
+     "surface",
+     "repeater"
     ],
     "type": "number | [x: number, y: number]",
     "doc": "How far in from the frame's edges a `place` sits, px: one number for both axes, or `[x, y]`."
@@ -2299,6 +2621,21 @@
     "doc": "Locks the box to its authored proportions: a resize of one bound drives the other, so the editor's handles and layout rows keep the ratio `width`:`height` has (or, with neither authored, the ratio the box currently ha…"
    }
   ],
+  "knobs": [
+   {
+    "tags": [
+     "html"
+    ],
+    "type": "Knobs"
+   },
+   {
+    "tags": [
+     "surface"
+    ],
+    "type": "Knobs",
+    "doc": "The named numbers `draw` reads — see `Knobs`."
+   }
+  ],
   "label": [
    {
     "tags": [
@@ -2321,6 +2658,48 @@
     ],
     "type": "string",
     "doc": "Optional caption drawn below the expression."
+   }
+  ],
+  "layout": [
+   {
+    "tags": [
+     "repeater"
+    ],
+    "type": "enum",
+    "values": [
+     "circle",
+     "line",
+     "random",
+     "grid",
+     "plane",
+     "sunflower",
+     "spiral",
+     "sphere",
+     "torus",
+     "cube"
+    ],
+    "doc": "Default \"circle\"."
+   }
+  ],
+  "layoutTo": [
+   {
+    "tags": [
+     "repeater"
+    ],
+    "type": "enum",
+    "values": [
+     "circle",
+     "line",
+     "random",
+     "grid",
+     "plane",
+     "sunflower",
+     "spiral",
+     "sphere",
+     "torus",
+     "cube"
+    ],
+    "doc": "A second layout the copies blend toward, copy for copy."
    }
   ],
   "leading": [
@@ -2365,7 +2744,8 @@
      "polygon",
      "lottie",
      "html",
-     "surface"
+     "surface",
+     "repeater"
     ],
     "type": "boolean",
     "doc": "Protects the element in the editor: a locked layer cannot be dragged on the timeline and is left alone by a delete — a person's or an agent's."
@@ -2430,6 +2810,15 @@
     "doc": "Makes the polygon a mask of its parent — see `RectProps[\"mask\"]`."
    }
   ],
+  "meter": [
+   {
+    "tags": [
+     "scene"
+    ],
+    "type": "number",
+    "doc": "Beats in a bar."
+   }
+  ],
   "miterLimit": [
    {
     "tags": [
@@ -2446,6 +2835,13 @@
     ],
     "type": "number",
     "doc": "How far toward `morphTo`, 0–1."
+   },
+   {
+    "tags": [
+     "repeater"
+    ],
+    "type": "number",
+    "doc": "How far toward `layoutTo`, 0–1."
    }
   ],
   "morphTo": [
@@ -2455,6 +2851,37 @@
     ],
     "type": "string",
     "doc": "A second figure to blend toward, as path data."
+   }
+  ],
+  "motionBlur": [
+   {
+    "tags": [
+     "scene"
+    ],
+    "type": "number | boolean | { shutter?: number | undefined; samples?: number | undefined; }",
+    "doc": "Motion blur, the smear a real camera gives anything that moves while its shutter is open."
+   },
+   {
+    "tags": [
+     "group",
+     "rect",
+     "video",
+     "image",
+     "text",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon",
+     "html",
+     "surface",
+     "repeater"
+    ],
+    "type": "boolean"
    }
   ],
   "muted": [
@@ -2491,7 +2918,8 @@
      "polygon",
      "lottie",
      "html",
-     "surface"
+     "surface",
+     "repeater"
     ],
     "type": "string",
     "doc": "Human-readable node name."
@@ -2560,7 +2988,8 @@
      "polygon",
      "lottie",
      "html",
-     "surface"
+     "surface",
+     "repeater"
     ],
     "type": "number",
     "doc": "Render-time translation on top of `x`/`y`, px — moves the drawn content without changing the layout box (the property slide animations drive)."
@@ -2595,7 +3024,8 @@
      "polygon",
      "lottie",
      "html",
-     "surface"
+     "surface",
+     "repeater"
     ],
     "type": "number"
    }
@@ -2629,10 +3059,27 @@
      "html",
      "shaderPaint",
      "surfacePaint",
-     "surface"
+     "surface",
+     "repeater"
     ],
     "type": "number",
     "doc": "Opacity, 0–1 (out-of-range values clamp, like CSS)."
+   }
+  ],
+  "order": [
+   {
+    "tags": [
+     "textAnimator"
+    ],
+    "type": "enum",
+    "values": [
+     "center",
+     "forward",
+     "reverse",
+     "edges",
+     "random"
+    ],
+    "doc": "Which unit goes first."
    }
   ],
   "padding": [
@@ -2644,6 +3091,79 @@
      "diagramCallout"
     ],
     "type": "number"
+   }
+  ],
+  "path": [
+   {
+    "tags": [
+     "text"
+    ],
+    "type": "string",
+    "doc": "Lays the text along a path instead of in lines, as path data in the element's own coordinates: every glyph sits on the curve, turned to follow it."
+   }
+  ],
+  "pathAlign": [
+   {
+    "tags": [
+     "text"
+    ],
+    "type": "enum",
+    "values": [
+     "center",
+     "start",
+     "end"
+    ],
+    "doc": "Which part of the text sits at `pathOffset`."
+   }
+  ],
+  "pathOffset": [
+   {
+    "tags": [
+     "text"
+    ],
+    "type": "number",
+    "doc": "How far along the path the text sits, as a fraction of its length; wraps on a closed path."
+   }
+  ],
+  "pathShift": [
+   {
+    "tags": [
+     "text"
+    ],
+    "type": "number",
+    "doc": "Moves the text off the path, px — outward is positive on a clockwise circle."
+   }
+  ],
+  "perspective": [
+   {
+    "tags": [
+     "group",
+     "rect",
+     "video",
+     "image",
+     "text",
+     "adjustmentLayer",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon",
+     "html",
+     "surface"
+    ],
+    "type": "number",
+    "doc": "How far the camera a tilt is seen through stands from the element, px (default 2000): nearer is a stronger 3D look, 0 none (the element only foreshortens)."
+   },
+   {
+    "tags": [
+     "repeater"
+    ],
+    "type": "number",
+    "doc": "Focal length, px: 0 is flat (orthographic); around 800 looks natural."
    }
   ],
   "phase": [
@@ -2678,7 +3198,8 @@
      "ellipse",
      "polygon",
      "html",
-     "surface"
+     "surface",
+     "repeater"
     ],
     "type": "enum",
     "values": [
@@ -2719,7 +3240,8 @@
      "polygon",
      "lottie",
      "html",
-     "surface"
+     "surface",
+     "repeater"
     ],
     "type": "number",
     "doc": "Speed multiplier for the node's local time, 1 = normal: at 2, twice the source plays in the same stretch of timeline."
@@ -2785,7 +3307,7 @@
     "tags": [
      "keyframeTrack"
     ],
-    "type": "enum",
+    "type": "enum | other",
     "values": [
      "width",
      "height",
@@ -2801,6 +3323,9 @@
      "offsetX",
      "offsetY",
      "rotation",
+     "rotationX",
+     "rotationY",
+     "perspective",
      "scale",
      "scaleX",
      "scaleY",
@@ -2812,10 +3337,40 @@
      "trimStart",
      "trimEnd",
      "trimOffset",
-     "progress"
+     "progress",
+     "d",
+     "path",
+     "pathOffset",
+     "pathShift",
+     "size",
+     "angle",
+     "count",
+     "spacing",
+     "radius",
+     "tube",
+     "ripple",
+     "rippleFrequency",
+     "ripplePhase",
+     "rippleCenterX",
+     "rippleCenterY",
+     "tiltX",
+     "tiltY",
+     "roll",
+     "zoom",
+     "cameraZ",
+     "depthFade"
     ],
     "required": true,
     "doc": "Which prop of the holding element the track animates."
+   }
+  ],
+  "radius": [
+   {
+    "tags": [
+     "repeater"
+    ],
+    "type": "number",
+    "doc": "Size of a circle, sphere, torus ring, cube (half its edge), spiral or random cloud, px."
    }
   ],
   "range": [
@@ -2845,7 +3400,107 @@
     "doc": "Cuts the subject out, leaving the rest of the picture transparent."
    }
   ],
+  "ripple": [
+   {
+    "tags": [
+     "repeater"
+    ],
+    "type": "number",
+    "doc": "Height of a wave travelling through the copies: px of depth, or a size factor with `rippleMode=\"scale\"`."
+   }
+  ],
+  "rippleCenterX": [
+   {
+    "tags": [
+     "repeater"
+    ],
+    "type": "number",
+    "doc": "Where the wave starts, px from the layout's centre."
+   }
+  ],
+  "rippleCenterY": [
+   {
+    "tags": [
+     "repeater"
+    ],
+    "type": "number"
+   }
+  ],
+  "rippleFrequency": [
+   {
+    "tags": [
+     "repeater"
+    ],
+    "type": "number",
+    "doc": "Wave crests per 1000 px."
+   }
+  ],
+  "rippleMode": [
+   {
+    "tags": [
+     "repeater"
+    ],
+    "type": "enum",
+    "values": [
+     "scale",
+     "z"
+    ],
+    "doc": "What the wave moves: depth (\"z\", the default) or the copies' size (\"scale\")."
+   }
+  ],
+  "ripplePhase": [
+   {
+    "tags": [
+     "repeater"
+    ],
+    "type": "number",
+    "doc": "Where the wave is, in radians — keyframe it to make the wave travel."
+   }
+  ],
+  "roll": [
+   {
+    "tags": [
+     "repeater"
+    ],
+    "type": "number",
+    "doc": "Camera roll, degrees."
+   }
+  ],
   "rotation": [
+   {
+    "tags": [
+     "group",
+     "rect",
+     "video",
+     "image",
+     "text",
+     "adjustmentLayer",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon",
+     "html",
+     "surface",
+     "repeater"
+    ],
+    "type": "number",
+    "doc": "Rotation in degrees."
+   },
+   {
+    "tags": [
+     "linearGradientPaint",
+     "radialGradientPaint"
+    ],
+    "type": "number",
+    "doc": "Gradient rotation in degrees."
+   }
+  ],
+  "rotationX": [
    {
     "tags": [
      "group",
@@ -2867,15 +3522,31 @@
      "surface"
     ],
     "type": "number",
-    "doc": "Rotation in degrees."
-   },
+    "doc": "3D tilt in degrees, about the element's middle: `rotationX` tips the top away (90 is edge-on), `rotationY` turns the right side away."
+   }
+  ],
+  "rotationY": [
    {
     "tags": [
-     "linearGradientPaint",
-     "radialGradientPaint"
+     "group",
+     "rect",
+     "video",
+     "image",
+     "text",
+     "adjustmentLayer",
+     "diagramNode",
+     "diagramArrow",
+     "diagramEquation",
+     "diagramAxis",
+     "diagramPlot",
+     "diagramCallout",
+     "path",
+     "ellipse",
+     "polygon",
+     "html",
+     "surface"
     ],
-    "type": "number",
-    "doc": "Gradient rotation in degrees."
+    "type": "number"
    }
   ],
   "route": [
@@ -2910,7 +3581,8 @@
      "ellipse",
      "polygon",
      "html",
-     "surface"
+     "surface",
+     "repeater"
     ],
     "type": "number",
     "doc": "Uniform scale about the box origin, 1 = natural size."
@@ -2935,7 +3607,8 @@
      "ellipse",
      "polygon",
      "html",
-     "surface"
+     "surface",
+     "repeater"
     ],
     "type": "number",
     "doc": "Per-axis scale, 1 = natural size."
@@ -2960,7 +3633,8 @@
      "ellipse",
      "polygon",
      "html",
-     "surface"
+     "surface",
+     "repeater"
     ],
     "type": "number"
    }
@@ -2972,6 +3646,13 @@
     ],
     "type": "number",
     "doc": "Transcription seed."
+   },
+   {
+    "tags": [
+     "repeater"
+    ],
+    "type": "number",
+    "doc": "Seed of the \"random\" layout and the \"random\" stagger order."
    }
   ],
   "selected": [
@@ -2997,7 +3678,8 @@
      "polygon",
      "lottie",
      "html",
-     "surface"
+     "surface",
+     "repeater"
     ],
     "type": "boolean",
     "doc": "Whether the editor has this element selected.",
@@ -3018,6 +3700,15 @@
      "diamond",
      "hexagon"
     ]
+   }
+  ],
+  "size": [
+   {
+    "tags": [
+     "effect"
+    ],
+    "type": "number",
+    "doc": "The second number the finishing effects take: the grain's size in px, how far a vignette reaches (0–1), a glow's radius in px."
    }
   ],
   "skill": [
@@ -3060,7 +3751,8 @@
      "polygon",
      "lottie",
      "html",
-     "surface"
+     "surface",
+     "repeater"
     ],
     "type": "time",
     "doc": "Source in point: where playback begins within the source, trimming the head."
@@ -3088,10 +3780,20 @@
      "polygon",
      "lottie",
      "html",
-     "surface"
+     "surface",
+     "repeater"
     ],
     "type": "time",
     "doc": "Source out point: where playback ends within the source."
+   }
+  ],
+  "spacing": [
+   {
+    "tags": [
+     "repeater"
+    ],
+    "type": "number",
+    "doc": "Distance between neighbours, px — the pitch of a line, grid, plane, sunflower or spiral."
    }
   ],
   "speed": [
@@ -3139,6 +3841,37 @@
     ],
     "type": "time",
     "doc": "How far apart the group's children's motion runs, as a `Time`."
+   },
+   {
+    "tags": [
+     "textAnimator"
+    ],
+    "type": "time",
+    "doc": "Time between one unit starting and the next."
+   },
+   {
+    "tags": [
+     "repeater"
+    ],
+    "type": "time",
+    "doc": "Time between one copy's animation and the next."
+   }
+  ],
+  "staggerOrder": [
+   {
+    "tags": [
+     "repeater"
+    ],
+    "type": "enum",
+    "values": [
+     "center",
+     "reverse",
+     "edges",
+     "random",
+     "index",
+     "radial"
+    ],
+    "doc": "Which copy goes first when staggered."
    }
   ],
   "start": [
@@ -3163,7 +3896,8 @@
      "polygon",
      "lottie",
      "html",
-     "surface"
+     "surface",
+     "repeater"
     ],
     "type": "time",
     "doc": "Parent-timeline time at which the node begins."
@@ -3340,6 +4074,24 @@
     "type": "number"
    }
   ],
+  "tiltX": [
+   {
+    "tags": [
+     "repeater"
+    ],
+    "type": "number",
+    "doc": "Camera pitch, degrees."
+   }
+  ],
+  "tiltY": [
+   {
+    "tags": [
+     "repeater"
+    ],
+    "type": "number",
+    "doc": "Camera yaw, degrees — keyframe it to spin a sphere."
+   }
+  ],
   "time": [
    {
     "tags": [
@@ -3377,7 +4129,8 @@
      "ellipse",
      "polygon",
      "html",
-     "surface"
+     "surface",
+     "repeater"
     ],
     "type": "TransitionSpec | null",
     "doc": "Transition into the next clip, rendered centered on the cut, set on the outgoing clip."
@@ -3416,6 +4169,15 @@
     "doc": "Where the drawn part begins, 0–1 of the whole figure."
    }
   ],
+  "tube": [
+   {
+    "tags": [
+     "repeater"
+    ],
+    "type": "number",
+    "doc": "A torus's tube radius, px."
+   }
+  ],
   "type": [
    {
     "tags": [
@@ -3430,7 +4192,12 @@
      "hueRotate",
      "invert",
      "saturate",
-     "sepia"
+     "sepia",
+     "grain",
+     "vignette",
+     "glow",
+     "chromaticAberration",
+     "directionalBlur"
     ],
     "required": true,
     "doc": "Which filter to apply."
@@ -3486,7 +4253,7 @@
     ],
     "type": "number",
     "required": true,
-    "doc": "The amount: px for \"blur\", degrees for \"hueRotate\", 0–1 otherwise."
+    "doc": "The amount: px for \"blur\", \"chromaticAberration\" and \"directionalBlur\", degrees for \"hueRotate\", 0–2 for \"glow\", 0–1 otherwise."
    },
    {
     "tags": [
@@ -3494,7 +4261,7 @@
     ],
     "type": "string | number",
     "required": true,
-    "doc": "The value at `time`: a number, or any CSS color on a `color` track."
+    "doc": "The value at `time`: a number, any CSS color on a `color` track, or path data on a `d`/`path` track."
    },
    {
     "tags": [
@@ -3625,7 +4392,8 @@
      "polygon",
      "lottie",
      "html",
-     "surface"
+     "surface",
+     "repeater"
     ],
     "type": "number",
     "doc": "Position relative to the parent, px."
@@ -3661,7 +4429,8 @@
      "polygon",
      "lottie",
      "html",
-     "surface"
+     "surface",
+     "repeater"
     ],
     "type": "number"
    }
@@ -3672,6 +4441,15 @@
      "diagramAxis"
     ],
     "type": "string"
+   }
+  ],
+  "zoom": [
+   {
+    "tags": [
+     "repeater"
+    ],
+    "type": "number",
+    "doc": "Scales the positions and the copies together."
    }
   ]
  }

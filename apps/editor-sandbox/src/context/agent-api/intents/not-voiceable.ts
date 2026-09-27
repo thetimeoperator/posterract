@@ -30,10 +30,54 @@ export const NOT_VOICEABLE_TAGS: NotVoiceable[] = [
   { what: 'diagramAxis', why: 'Diagrams are written as code — work for the connected agent.' },
   { what: 'diagramPlot', why: 'Diagrams are written as code — work for the connected agent.' },
   { what: 'diagramCallout', why: 'Diagrams are written as code — work for the connected agent.' },
+  // The motion tools (Sep 26 2026) are set up in code for now.
+  { what: 'textAnimator', why: 'A letter animator is set up in code — work for the connected agent.' },
+  { what: 'repeater', why: 'A repeater is set up in code — work for the connected agent.' },
 ];
+
+/** The motion tools' settings (beats, blur, 3D tilt, letter animators, repeaters, text on a path) are set up in code for now. */
+const MOTION_TOOL = 'A motion-tool setting, set up in code — work for the connected agent.';
 
 /** Props with no intent. */
 export const NOT_VOICEABLE_PROPS: NotVoiceable[] = [
+  // The motion tools (Sep 26 2026).
+  { what: 'angle', why: MOTION_TOOL },
+  { what: 'bpm', why: MOTION_TOOL },
+  { what: 'cameraZ', why: MOTION_TOOL },
+  { what: 'colorBy', why: MOTION_TOOL },
+  { what: 'colorTo', why: MOTION_TOOL },
+  { what: 'columns', why: MOTION_TOOL },
+  { what: 'context', why: MOTION_TOOL },
+  { what: 'count', why: MOTION_TOOL },
+  { what: 'depthFade', why: MOTION_TOOL },
+  { what: 'draw', why: MOTION_TOOL },
+  { what: 'knobs', why: MOTION_TOOL },
+  { what: 'layout', why: MOTION_TOOL },
+  { what: 'layoutTo', why: MOTION_TOOL },
+  { what: 'meter', why: MOTION_TOOL },
+  { what: 'motionBlur', why: MOTION_TOOL },
+  { what: 'order', why: MOTION_TOOL },
+  { what: 'pathAlign', why: MOTION_TOOL },
+  { what: 'pathOffset', why: MOTION_TOOL },
+  { what: 'pathShift', why: MOTION_TOOL },
+  { what: 'perspective', why: MOTION_TOOL },
+  { what: 'radius', why: MOTION_TOOL },
+  { what: 'ripple', why: MOTION_TOOL },
+  { what: 'rippleCenterX', why: MOTION_TOOL },
+  { what: 'rippleCenterY', why: MOTION_TOOL },
+  { what: 'rippleFrequency', why: MOTION_TOOL },
+  { what: 'rippleMode', why: MOTION_TOOL },
+  { what: 'ripplePhase', why: MOTION_TOOL },
+  { what: 'roll', why: MOTION_TOOL },
+  { what: 'rotationX', why: MOTION_TOOL },
+  { what: 'rotationY', why: MOTION_TOOL },
+  { what: 'size', why: MOTION_TOOL },
+  { what: 'spacing', why: MOTION_TOOL },
+  { what: 'staggerOrder', why: MOTION_TOOL },
+  { what: 'tiltX', why: MOTION_TOOL },
+  { what: 'tiltY', why: MOTION_TOOL },
+  { what: 'tube', why: MOTION_TOOL },
+  { what: 'zoom', why: MOTION_TOOL },
   // The pipeline is not here.
   { what: 'removeBackground', why: 'Cutting the subject out needs a hosted pipeline the desktop app does not have yet.' },
   { what: 'upscale', why: 'Upscaling needs a hosted pipeline the desktop app does not have yet.' },

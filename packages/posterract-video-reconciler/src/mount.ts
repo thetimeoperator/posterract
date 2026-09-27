@@ -31,7 +31,21 @@ export interface Mount {
  * is what `useTicker` subscribes to.
  */
 export function mount(code: string, world: World): Mount {
+	return prepareMount(code)(world);
+}
+
+/**
+ * `mount` in two steps: the bundle is evaluated now, and rendered into a world
+ * by the function this returns. Code that cannot run — a file read half
+ * written, one with no default export — throws here, before the caller has
+ * torn down the render it is replacing, so that render can stay on the stage.
+ */
+export function prepareMount(code: string): (world: World) => Mount {
 	const { result: component, entries } = collectInspect(() => evaluate(code));
+	return (world) => render(component, entries, world);
+}
+
+function render(component: () => unknown, entries: InspectEntry[], world: World): Mount {
 	const document = createRuntimeDocument(world);
 
 	let dispose: () => void;

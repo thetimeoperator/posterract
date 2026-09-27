@@ -12,7 +12,7 @@ import {
 	ColorStop, StrokeStyle, Size, Computed, Active, Stage, IsMask, Diagram,
 	ImageDecoderHandle, VideoDecoderHandle,
 	AudioDecoderHandle, CaptionDecoderHandle, LottieHandle, WaveformHandle,
-	ShaderHostHandle, AudioBusHandle,
+	ShaderHostHandle, AudioBusHandle, TextPath, Tilt,
 } from '../traits';
 import { getParentEntity } from '../queries/hierarchy';
 import { clamp } from '../math/common';
@@ -254,7 +254,26 @@ export function observeWorld(world: World): () => void {
 	});
 
 	mirror(Effect, (entity) => {
-		store(world, Computed).value[entity.id()] = entity.get(Effect)!.value;
+		const computed = store(world, Computed);
+		const { value, size, angle } = entity.get(Effect)!;
+		computed.value[entity.id()] = value;
+		computed.effectSize[entity.id()] = size;
+		computed.effectAngle[entity.id()] = angle;
+	});
+
+	mirror(Tilt, (entity) => {
+		const computed = store(world, Computed);
+		const { x, y, perspective } = entity.get(Tilt)!;
+		computed.tiltX[entity.id()] = x;
+		computed.tiltY[entity.id()] = y;
+		computed.perspective[entity.id()] = perspective;
+	});
+
+	mirror(TextPath, (entity) => {
+		const computed = store(world, Computed);
+		const { offset, shift } = entity.get(TextPath)!;
+		computed.pathOffset[entity.id()] = offset;
+		computed.pathShift[entity.id()] = shift;
 	});
 
 	// A Lottie slot shares that channel: its scalar (or packed colour) is the

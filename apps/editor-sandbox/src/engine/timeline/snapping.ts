@@ -22,6 +22,8 @@ import {
 	getActiveEntity,
 	getParentEntity,
 	store,
+	FrameRate,
+	Tempo,
 } from '@posterract/video-runtime';
 import { Or } from 'koota';
 
@@ -91,7 +93,26 @@ export function getSnapFrames(world: World): number[] {
 		frames.add(computed.end[entity.id()] ?? 0);
 	}
 
+	// A scene with a tempo snaps to its beats: timing to the music is the
+	// point of having one.
+	for (const frame of beatFrames(world, scene, computed.end[scene.id()] ?? 0)) frames.add(frame);
+
 	return [...frames];
+}
+
+/**
+ * The frames the scene's beats fall on, 0 to `until`, rounded to whole frames
+ * (a beat at 128 BPM is 14.06 frames at 30 fps; a clip edge can only sit on a
+ * frame). Empty for a scene without a tempo.
+ */
+export function beatFrames(world: World, scene: Entity, until: number): number[] {
+	const tempo = scene.get(Tempo);
+	if (!tempo || !(tempo.bpm > 0)) return [];
+	const fps = world.get(FrameRate)?.value ?? 30;
+	const beat = (60 / tempo.bpm) * fps;
+	const frames: number[] = [];
+	for (let i = 0; i * beat <= until && i < 20_000; i++) frames.push(Math.round(i * beat));
+	return frames;
 }
 
 /**

@@ -112,6 +112,13 @@ export enum EffectType {
   INVERT,
   SATURATE,
   SEPIA,
+  // The finishing effects, drawn over the rendered layer rather than as CSS
+  // filters. Appended, never reordered.
+  GRAIN,
+  VIGNETTE,
+  GLOW,
+  CHROMATIC_ABERRATION,
+  DIRECTIONAL_BLUR,
 }
 
 export enum MotionType {
@@ -182,6 +189,18 @@ export enum TransitionType {
   SLIDE_FROM_LEFT,
   FADE_TO_BLACK,
   FADE_TO_WHITE,
+  // Appended, never reordered.
+  IRIS,
+  SHAPE_WIPE,
+  WIPE_LEFT,
+  WIPE_RIGHT,
+  WIPE_UP,
+  WIPE_DOWN,
+  ZOOM_THROUGH,
+  WHIP_LEFT,
+  WHIP_RIGHT,
+  WHIP_UP,
+  WHIP_DOWN,
 }
 
 export enum CaptionType {

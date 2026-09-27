@@ -12,6 +12,7 @@ import {
 	UniformScale, Position, Offset, Rotation, Scale, Skew, Size, Opacity,
 	Color, Blur, Volume, Effect, StrokeStyle, CornerRadius, MixedCornerRadius,
 	ColorStop, Diagram, LottieSlot, Path, PathTrim,
+	Knobs, TextAnimator, TextPath, Tilt, DEFAULT_TILT_PERSPECTIVE,
 } from '../traits';
 import { AnimationType, AnimationPhase, TrackLoop } from '../constants';
 import { animationParams } from '../utils/animation-params';
@@ -65,6 +66,16 @@ export function resetAnimatedValues(world: World, entity: Entity | null, ignore?
 	computed.trimEnd[eid] = clamp01(read(PathTrim, 'end', 1));
 	computed.trimOffset[eid] = read(PathTrim, 'offset', 0);
 	computed.morph[eid] = clamp01(read(Path, 'morph', 0));
+	computed.shapeFrom[eid] = undefined;
+	computed.shapeTo[eid] = undefined;
+	computed.shapeT[eid] = 0;
+	computed.tiltX[eid] = read(Tilt, 'x', 0);
+	computed.tiltY[eid] = read(Tilt, 'y', 0);
+	computed.perspective[eid] = read(Tilt, 'perspective', DEFAULT_TILT_PERSPECTIVE);
+	computed.pathOffset[eid] = read(TextPath, 'offset', 0);
+	computed.pathShift[eid] = read(TextPath, 'shift', 0);
+	computed.effectSize[eid] = read(Effect, 'size', 0);
+	computed.effectAngle[eid] = read(Effect, 'angle', 0);
 	// A Lottie slot's authored value seeds the same channel effects use, so a
 	// track over it interpolates like any other number. The fallback is the
 	// current value rather than 0, which leaves every non-slot entity alone.
@@ -226,10 +237,14 @@ const RATIO_PROPERTIES = new Set<PropertyPath>(['diagram.progress', 'trim.start'
 
 export function motionSystem(world: World): void {
 	const computed = store(world, Computed);
-	const cache = store(world, Cache);
-	const animation = store(world, Animation);
-	const keyframeTrack = store(world, KeyframeTrack);
-	const worldProps = getPropertyPaths(world);
+
+	// Knobs start every frame from what the source says; their tracks, run
+	// below with every other track, write over that.
+	const knobs = store(world, Knobs);
+	for (const entity of world.query(Knobs)) {
+		const kid = entity.id();
+		knobs.computed[kid] = { ...(knobs.authored[kid] ?? {}) };
+	}
 
 	for (const entity of world.query(
 		Or(Geometry, Group, AdjustmentLayer), Not(Hidden), Not(Culled),
@@ -238,18 +253,35 @@ export function motionSystem(world: World): void {
 
 		if (computed.visibility[eid] === 0) continue;
 
+		// A staggering ancestor shifts this node's motion clock without moving
+		// the node: the nth child simply samples its own tracks that much
+		// earlier in their span.
+		applyMotion(world, entity, computed.localTime[eid]! - getStaggerOffset(entity));
+	}
+}
+
+/**
+ * Runs one node's preset animations and keyframe tracks at `localFrame` (its
+ * own clock, in frames — fractional frames sample between keyframes). The
+ * motion system calls it for every visible node at the playhead; a repeater
+ * calls it again for its template at each copy's own delayed clock.
+ */
+export function applyMotion(world: World, entity: Entity, localFrame: number): void {
+	const computed = store(world, Computed);
+	const cache = store(world, Cache);
+	const animation = store(world, Animation);
+	const keyframeTrack = store(world, KeyframeTrack);
+	const worldProps = getPropertyPaths(world);
+	const eid = entity.id();
+
+	{
 		const animations = cache.animations[eid] ?? [];
 		const keyframeTracks = cache.keyframeTracks[eid] ?? [];
-		if (animations.length === 0 && keyframeTracks.length === 0) continue;
+		if (animations.length === 0 && keyframeTracks.length === 0) return;
 
 		resetAnimatedValues(world, entity);
 
 		const source = getLocalWindow(entity);
-
-		// A staggering ancestor shifts this node's motion clock without moving
-		// the node: the nth child simply samples its own tracks that much
-		// earlier in their span.
-		const localFrame = computed.localTime[eid]! - getStaggerOffset(entity);
 
 		// 1: Preset animations (FADE/GAIN/GROW/SHRINK/BLUR/SLIDE)
 		for (const anim of animations) {
@@ -276,13 +308,34 @@ export function motionSystem(world: World): void {
 			const property = keyframeTrack.property[tid] as PropertyPath;
 			const target = keyframeTrack.target[tid];
 			const keyframes = cache.keyframes[tid] ?? [];
+			// A text animator's tracks play once per letter, word or line, each
+			// at its own clock; the text renderer samples them (sampleTrackAt).
+			if (target == null || target.has(TextAnimator)) continue;
+			const loop = keyframeTrack.loop[tid] ?? TrackLoop.NONE;
+			// Knobs and uniforms are named, not fixed fields: the value lands in
+			// the target's computed knobs under the part of the path after the dot.
+			if (isKnobPath(property)) {
+				const value = sampleTrack(world, keyframes, localFrame, property, loop);
+				if (value === null) continue;
+				if (!target.has(Knobs)) target.add(Knobs);
+				const holder = store(world, Knobs);
+				const knobs = holder.computed[target.id()] ?? (holder.computed[target.id()] = {});
+				knobs[knobName(property)] = value;
+				continue;
+			}
+			// Shape keyframes carry path data rather than numbers: what the frame
+			// needs is the two shapes it sits between and how far along.
+			if (property === 'shape.d' || property === 'text.path') {
+				sampleShapeTrack(world, keyframes, localFrame, loop, target);
+				continue;
+			}
 			// A track whose property the runtime does not know is skipped, not
 			// fatal: an unrecognised name should leave the frame alone rather
 			// than take the whole composition down.
 			const channel = worldProps[property] as { computed: number[] } | undefined;
 			if (channel === undefined) continue;
-			const result = sampleTrack(world, keyframes, localFrame, property, keyframeTrack.loop[tid] ?? TrackLoop.NONE);
-			if (result === null || target == null) continue;
+			const result = sampleTrack(world, keyframes, localFrame, property, loop);
+			if (result === null) continue;
 			// A reveal is a ratio, so a track that overshoots (a spring, a
 			// keyframe authored past the end) still reads as fully drawn.
 			channel.computed[target.id()] = RATIO_PROPERTIES.has(property)
@@ -326,6 +379,18 @@ export function getPropertyPaths(world: World) {
 		'rotation': {
 			computed: computed.rotation,
 			authored: store(world, Rotation).value,
+		},
+		'rotation.x': {
+			computed: computed.tiltX,
+			authored: store(world, Tilt).x,
+		},
+		'rotation.y': {
+			computed: computed.tiltY,
+			authored: store(world, Tilt).y,
+		},
+		'perspective': {
+			computed: computed.perspective,
+			authored: store(world, Tilt).perspective,
 		},
 		'scale.x': {
 			computed: computed.scaleX,
@@ -427,6 +492,22 @@ export function getPropertyPaths(world: World) {
 			computed: computed.progress,
 			authored: store(world, Diagram).progress,
 		},
+		'textPath.offset': {
+			computed: computed.pathOffset,
+			authored: store(world, TextPath).offset,
+		},
+		'textPath.shift': {
+			computed: computed.pathShift,
+			authored: store(world, TextPath).shift,
+		},
+		'effect.size': {
+			computed: computed.effectSize,
+			authored: store(world, Effect).size,
+		},
+		'effect.angle': {
+			computed: computed.effectAngle,
+			authored: store(world, Effect).angle,
+		},
 		'chars': {
 			computed: computed.chars,
 			authored: store(world, Chars).value,
@@ -434,7 +515,91 @@ export function getPropertyPaths(world: World) {
 	};
 }
 
-export type PropertyPath = keyof ReturnType<typeof getPropertyPaths>;
+/**
+ * Every path a keyframe track can drive: the fixed fields above, a knob or a
+ * uniform by name (`knob.tilt`, `uniform.amount`), and shape keyframes.
+ */
+export type PropertyPath =
+	| keyof ReturnType<typeof getPropertyPaths>
+	| `knob.${string}`
+	| `uniform.${string}`
+	| 'shape.d'
+	| 'text.path';
+
+/** Whether a track drives a named knob (or a shader uniform) rather than a field. */
+export function isKnobPath(path: string): path is `knob.${string}` | `uniform.${string}` {
+	return path.startsWith('knob.') || path.startsWith('uniform.');
+}
+
+/** The knob a knob path names: `knob.tilt` is `tilt`. */
+export function knobName(path: string): string {
+	return path.slice(path.indexOf('.') + 1);
+}
+
+/**
+ * One track, sampled at `frame` of its holder's clock: what a text animator
+ * asks for each letter, at that letter's own delayed clock. Null for a track
+ * with no keyframes.
+ */
+export function sampleTrackAt(world: World, track: Entity, frame: number): number | null {
+	const tid = track.id();
+	const keyframes = store(world, Cache).keyframes[tid] ?? [];
+	const keyframeTrack = store(world, KeyframeTrack);
+	return sampleTrack(world, keyframes, frame, keyframeTrack.property[tid] as PropertyPath, keyframeTrack.loop[tid] ?? TrackLoop.NONE);
+}
+
+/**
+ * Samples a shape track: finds the two keyframes the frame sits between and
+ * writes them, with the eased progress between them, to the target's
+ * `Computed.shapeFrom/shapeTo/shapeT`. The blend itself happens where the
+ * figure is drawn (see `morphPathData`), cached per pair of shapes.
+ */
+function sampleShapeTrack(world: World, keyframes: Entity[], frame: number, loop: TrackLoop, target: Entity): void {
+	const computed = store(world, Computed);
+	const keyframe = store(world, Keyframe);
+	const tid = target.id();
+	const shaped = keyframes.filter((key) => (keyframe.text[key.id()] ?? '') !== '');
+	if (shaped.length === 0) return;
+
+	const first = shaped[0]!;
+	const last = shaped[shaped.length - 1]!;
+	if (shaped.length === 1) {
+		computed.shapeFrom[tid] = keyframe.text[first.id()];
+		computed.shapeTo[tid] = keyframe.text[first.id()];
+		computed.shapeT[tid] = 0;
+		return;
+	}
+
+	const firstFrame = keyframe.time[first.id()]!;
+	const lastFrame = keyframe.time[last.id()]!;
+	const at = loopedFrame(frame, firstFrame, lastFrame, loop);
+
+	if (at <= firstFrame || at >= lastFrame) {
+		const held = at <= firstFrame ? first : last;
+		computed.shapeFrom[tid] = keyframe.text[held.id()];
+		computed.shapeTo[tid] = keyframe.text[held.id()];
+		computed.shapeT[tid] = 0;
+		return;
+	}
+
+	for (let i = 0; i < shaped.length - 1; i++) {
+		const from = shaped[i]!;
+		const to = shaped[i + 1]!;
+		const start = keyframe.time[from.id()]!;
+		const end = keyframe.time[to.id()]!;
+		if (at < start || at > end || end <= start) continue;
+
+		let progress = (at - start) / (end - start);
+		const easingFn = resolveEasing(keyframe.easing[from.id()]);
+		if (easingFn) progress = easingFn(progress);
+
+		computed.shapeFrom[tid] = keyframe.text[from.id()];
+		computed.shapeTo[tid] = keyframe.text[to.id()];
+		// A spring may overshoot; a shape cannot go past its target.
+		computed.shapeT[tid] = Math.max(0, Math.min(1, progress));
+		return;
+	}
+}
 
 // ─── Easing ─────────────────────────────────────────────────
 

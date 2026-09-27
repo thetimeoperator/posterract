@@ -6,6 +6,7 @@ import { outputSize } from './output-size';
 import {
 	setActive, framesToSeconds, formatTimecode, assert, store, getEntityTree,
 	assetSystem, playbackSystem, motionSystem, transformSystem, renderSystem,
+	renderMotionBlurredFrame, sceneMotionBlur,
 	Muted, Workarea, Playback, Computed,
 	Time, FrameRate, RenderSurface, AudioEngine,
 } from '@posterract/video-runtime';
@@ -127,6 +128,14 @@ export async function createImageEncoder(world: World, config: ImageEncoderConfi
 				normalizeSceneTransform(world, sceneId);
 				transformSystem(world);
 				renderSystem(world);
+				// A capture is the frame an export would write, blur included.
+				const motionBlur = sceneMotionBlur(scene);
+				if (motionBlur) {
+					renderMotionBlurredFrame(
+						world, scene, computed.localTime[sceneId]!, motionBlur,
+						(target) => normalizeSceneTransform(target, sceneId),
+					);
+				}
 
 				images.set(frame, {
 					base64: await toBase64Png(canvas),

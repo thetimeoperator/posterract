@@ -447,7 +447,10 @@ function readsSomething(node: t.Expression | t.JSXEmptyExpression): boolean {
  * The props on this element written as code rather than as literals.
  *
  * `children` and the compile step's own stamps are excluded: neither is a
- * property of the element that anything could show or bake.
+ * property of the element that anything could show or bake. The one
+ * exception is what a `<text>` says: `{count()}` between its tags is text the
+ * code keeps changing — a counter, a clock — and it is named `text`, so the
+ * timeline has a row for it like any other motion from code.
  */
 function livePropNames(path: NodePath<t.JSXElement>, types: typeof import("@babel/core").types): string[] {
   const names: string[] = [];
@@ -458,6 +461,14 @@ function livePropNames(path: NodePath<t.JSXElement>, types: typeof import("@babe
     const value = attribute.value;
     if (!value || !types.isJSXExpressionContainer(value)) continue;
     if (readsSomething(value.expression)) names.push(name);
+  }
+  const tag = jsxTagName(path.node);
+  if (tag === "text" || tag === "Text") {
+    const changing = path.node.children.some((child) =>
+      types.isJSXExpressionContainer(child)
+      && !types.isJSXEmptyExpression(child.expression)
+      && readsSomething(child.expression as t.Expression));
+    if (changing) names.push("text");
   }
   return names;
 }

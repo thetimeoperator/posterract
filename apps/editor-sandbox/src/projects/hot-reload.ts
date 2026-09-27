@@ -42,12 +42,17 @@ const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.str
  *
  * `muted` brackets the part during which the editor reports edits: they are
  * already in the file, so whoever writes edits to the file must not hear them.
+ *
+ * `owed` names what the person changed after the file was read — a value still
+ * on its way to the file, which will be written over whatever this says. The
+ * canvas keeps it: showing the file's value there would put back the value
+ * before theirs, and leave the canvas one step behind once theirs lands.
  */
 export function applySourcePatch(
 	world: World,
 	ops: PatchOp[],
 	muted: (apply: () => void) => void,
-	options: { record?: boolean } = {},
+	options: { record?: boolean; owed?: (op: PatchOp) => boolean } = {},
 ): boolean {
 	if (!ops.length) return true;
 
@@ -76,8 +81,10 @@ export function applySourcePatch(
 	// What the canvas already shows is not a change to it. The file can be ahead
 	// of the canvas by the person's own edit (written on top of someone else's,
 	// see the editor page): applying that again would be a step that undoes nothing.
-	const targets = all.filter((entity, index) => !holds(entity, ops[index]!));
-	ops = ops.filter((op, index) => !holds(all[index]!, op));
+	// Nor is what the person has changed since: theirs is the newer value.
+	const shows = (entity: Entity, op: PatchOp): boolean => holds(entity, op) || options.owed?.(op) === true;
+	const targets = all.filter((entity, index) => !shows(entity, ops[index]!));
+	ops = ops.filter((op, index) => !shows(all[index]!, op));
 	if (!ops.length) return true;
 
 	const editor = getDocumentEditor(world);

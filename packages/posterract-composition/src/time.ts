@@ -8,6 +8,27 @@ import type { Time } from "./types.js";
 export const TIME_FPS = 30;
 
 /**
+ * A musical `Time` ("4b", "2bar", "1.5beats") as the beats and bars it
+ * spells, or undefined for any other form. Musical time needs the scene's
+ * tempo to become seconds, so `parseTime` does not read it; whoever knows the
+ * tempo turns it into seconds with `musicalSeconds`.
+ */
+export function parseMusicalTime(value: unknown): { beats: number; bars: number } | undefined {
+  if (typeof value !== "string") return undefined;
+  const match = value.trim().match(/^(-?\d+(?:\.\d+)?)\s*(b|beat|beats|bar|bars)$/i);
+  if (!match) return undefined;
+  const amount = parseFloat(match[1]!);
+  if (!Number.isFinite(amount)) return undefined;
+  return match[2]!.toLowerCase().startsWith("bar") ? { beats: 0, bars: amount } : { beats: amount, bars: 0 };
+}
+
+/** Musical time in seconds at `bpm` with `meter` beats to the bar. */
+export function musicalSeconds(time: { beats: number; bars: number }, bpm: number, meter = 4): number {
+  if (!(bpm > 0)) return 0;
+  return ((time.beats + time.bars * (meter > 0 ? meter : 4)) * 60) / bpm;
+}
+
+/**
  * Parses a `Time` value into seconds: plain numbers are seconds, "30f" is
  * frames at `TIME_FPS`, "MM:SS" / "HH:MM:SS" are clock strings. Values may be
  * negative. Returns undefined for anything unparsable.

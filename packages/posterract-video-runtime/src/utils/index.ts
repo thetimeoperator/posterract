@@ -13,3 +13,7 @@ export * from './vector';
 export * from './placement';
 export * from './loop';
 export * from './animation-params';
+export * from './morph';
+export * from './repeater';
+export * from './text-path';
+export * from './beats';

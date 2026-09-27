@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SliderInput } from "@/components/ui/slider-input";
+import { TextField, TextFieldInput } from "@/components/ui/text-field";
 import { useHas, useTrait, useWorld } from "@posterract/koota-solid";
 import { FrameRate, Transition, framesToSeconds } from "@posterract/video-runtime";
 import { useEditor } from "@/engine/hooks";
@@ -69,8 +70,15 @@ export function TransitionSettings(props: TransitionSettingsProps) {
     framesToSeconds(transition()?.duration ?? 0, frameRate()?.value ?? 30),
   );
 
-  const write = (type: TransitionOption, seconds: number) => {
-    editor.editProperty(entity(), "transition", { type: type.name, duration: seconds });
+  // The shape of a shape wipe travels with the transition, so every write
+  // carries it along rather than dropping it.
+  const shape = () => transition()?.shape ?? "";
+  const write = (type: TransitionOption, seconds: number, figure = shape()) => {
+    editor.editProperty(entity(), "transition", {
+      type: type.name,
+      duration: seconds,
+      ...(type.name === "shapeWipe" && figure ? { shape: figure } : {}),
+    });
   };
 
   const handleAddTransition = () => {
@@ -175,7 +183,19 @@ export function TransitionSettings(props: TransitionSettingsProps) {
             </Tooltip>
           </FloatingInspectorHeader>
           <FloatingInspectorSeparator />
-          <FloatingInspectorContent class="p-4">
+          <FloatingInspectorContent class="flex flex-col gap-2 p-4">
+            <Show when={option().name === "shapeWipe"}>
+              <ControlRow label="Shape">
+                <TextField class="w-full min-w-0">
+                  <TextFieldInput
+                    uiSize="compact"
+                    placeholder="Path in a 100×100 box (circle if empty)"
+                    value={shape()}
+                    onChange={(event) => write(option(), duration(), event.currentTarget.value.trim())}
+                  />
+                </TextField>
+              </ControlRow>
+            </Show>
             <ControlRow label="Duration">
               <SliderInput
                 value={duration()}

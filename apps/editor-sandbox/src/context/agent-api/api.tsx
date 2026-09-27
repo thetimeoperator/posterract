@@ -11,7 +11,7 @@ import { editorSession, requireEditorSession, setEditorSession } from "./session
 import { handleContextGet } from "./context";
 import { handleGenerateImage, handleGenerateVideo, handleGenerateVoice } from "./generate";
 import { createAssetResolver, handleMediaProbe, handleMediaExtract,
-  handleMediaTranscribe, handleMediaFrame, handleMediaFilmstrip, handleMediaWaveform } from "./media";
+  handleMediaTranscribe, handleMediaFrame, handleMediaFilmstrip, handleMediaWaveform, handleMediaBeats } from "./media";
 import { handleCapture } from "./capture";
 import { handleCheck } from "./check";
 import { handleLogs } from "./logs";
@@ -389,6 +389,7 @@ function createAppRouter({ navigate }: AppRouterDeps) {
       frame: q(handleMediaFrame(resolveAsset)),
       filmstrip: q(handleMediaFilmstrip(resolveAsset)),
       waveform: q(handleMediaWaveform(resolveAsset)),
+      beats: q(handleMediaBeats(resolveAsset)),
       extract: q(handleMediaExtract(resolveAsset)),
       transcribe: q(handleMediaTranscribe(resolveAsset, () => editorSession()?.project.dir() ?? "")),
     }),

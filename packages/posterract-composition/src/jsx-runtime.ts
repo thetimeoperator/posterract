@@ -45,6 +45,8 @@ import type {
   PathProps,
   EllipseProps,
   PolygonProps,
+  RepeaterProps,
+  TextAnimatorProps,
   LottieProps,
   LottieSlotProps,
   MarkerProps,
@@ -134,5 +136,7 @@ export declare namespace JSX {
     shaderPaint: ShaderPaintProps & SourceProps;
     surfacePaint: SurfacePaintProps & SourceProps;
     surface: SurfaceProps & SourceProps;
+    textAnimator: TextAnimatorProps & SourceProps;
+    repeater: RepeaterProps & SourceProps;
   }
 }

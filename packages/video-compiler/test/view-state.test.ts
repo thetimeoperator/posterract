@@ -70,3 +70,43 @@ test("a source with no view state and every id in place is not written to", asyn
   assert.equal(written.size, 0);
   assert.equal(hasViewState(view), false);
 });
+
+const COMPUTED_IDS = `/** @jsxImportSource @posterract/composition */
+function Bracket(props: { id: string }) {
+  return <path id={props.id} d="M0 0 L10 0" trimEnd={0} id="bumuuv" id="maclkz" />;
+}
+
+function Corner(props: { id: string }) {
+  return <rect id={props.id} width={10} height={10} />;
+}
+
+export default function Project() {
+  return (
+    <stage id="stage">
+      <scene id="one" width={100} height={100}>
+        <Bracket id="left" />
+        <Bracket id="right" />
+        <Corner id="corner" />
+      </scene>
+    </stage>
+  );
+}
+`;
+
+test("an id the author computes is kept, and the copies older passes appended to it go", async () => {
+  const written = new Map<string, string>();
+  await prepareProject({ files: { "src/index.tsx": COMPUTED_IDS }, onWrite: (path, content) => written.set(path, content) });
+
+  const next = written.get("src/index.tsx");
+  assert.ok(next, "the stacked ids are cleaned up");
+  assert.match(next, /<path id=\{props\.id\} d="M0 0 L10 0" trimEnd=\{0\} \/>/);
+  assert.match(next, /<rect id=\{props\.id\} width=\{10\} height=\{10\} \/>/);
+
+  // Opening it again adds nothing.
+  const again = new Map<string, string>();
+  await prepareProject({ files: { "src/index.tsx": next }, onWrite: (path, content) => again.set(path, content) });
+  assert.equal(again.size, 0);
+
+  const compiled = await compileVirtualProject([{ path: "src/index.tsx", content: next }], "src/index.tsx");
+  assert.equal(compiled.ok, true);
+});

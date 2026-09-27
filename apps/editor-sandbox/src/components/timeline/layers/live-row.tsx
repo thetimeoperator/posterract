@@ -20,7 +20,7 @@ import type { LayerRowProps } from './layer';
  * is still worth naming on the row, but there is no track to turn it into.
  */
 const BAKEABLE = new Set<string>([
-  'x', 'y', 'rotation', 'scale', 'scaleX', 'scaleY', 'opacity', 'width', 'height',
+  'x', 'y', 'rotation', 'rotationX', 'rotationY', 'perspective', 'scale', 'scaleX', 'scaleY', 'opacity', 'width', 'height',
   'blur', 'volume', 'cornerRadius', 'progress', 'morph', 'trimStart', 'trimEnd', 'trimOffset',
 ]);
 

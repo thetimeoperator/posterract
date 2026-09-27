@@ -20,7 +20,7 @@ import { useEditorApi } from "@/context/agent-api";
 import { RULER_HEIGHT } from "@/engine/timeline";
 import { toast } from 'somoto';
 import { useWorld } from '@posterract/koota-solid';
-import { mount } from '@posterract/video-reconciler';
+import { prepareMount } from '@posterract/video-reconciler';
 import { getDocumentEditor } from '@/engine/editor';
 import { getProject, readProjectSource } from '@/projects';
 import { loadUndoCache, saveUndoCache } from '@/projects/undo-cache';
@@ -341,9 +341,13 @@ export function EditorPage() {
         ? { steps: getEditHistory(world).serialize(), renames: carry.renames }
         : undefined;
       carry = undefined;
+      // Evaluated while the old render is still up: code that cannot run (an
+      // agent's write read half done, no default export) throws here and the
+      // last good render stays on the stage, as a broken compile's does.
+      const render = prepareMount(code);
       // The old render goes first: there is only one stage per world.
       unmount();
-      mounted = mount(code, world);
+      mounted = render(world);
       mountedCode = code;
       shown.clear();
       for (const [path, revision] of Object.entries(revisions ?? {})) shown.set(path, revision);
@@ -534,6 +538,9 @@ export function EditorPage() {
           return load();
         }
 
+        // The person kept working while the file was read: what they changed
+        // since is on its way to the file, and stays on the canvas.
+        const owing = writer;
         const applied = applySourcePatch(world, patch.ops, (apply) => {
           showingFileChange = true;
           try {
@@ -541,12 +548,19 @@ export function EditorPage() {
           } finally {
             showingFileChange = false;
           }
-        }, { record });
+        }, { record, owed: (op) => owing?.owes(op.source, op.kind === 'text' ? undefined : op.name) ?? false });
         if (!applied) {
           console.info(`[projects] ${path} changed on disk; the change could not be shown in place, mounting it again`);
           return load();
         }
 
+        // A write of the person's landed while the file was read and moved this
+        // on from a revision the patch knows nothing of: setting it back would
+        // say the canvas is behind its own edit. One more look settles it.
+        if (shown.get(path) !== base) {
+          void hotReload(path, record);
+          return;
+        }
         shown.set(path, revisionId);
         persistUndo();
         // The bundle on the stage was compiled from the older source. Compile

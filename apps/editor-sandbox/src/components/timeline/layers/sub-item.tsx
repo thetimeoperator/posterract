@@ -19,6 +19,8 @@ import {
   Selected,
   Shadow,
   Stroke,
+  TextAnimator,
+  TextAnimatorUnit,
 } from '@posterract/video-runtime';
 import { Icon } from '@/components/ui/icon';
 import { useDerived, useEditor } from '@/engine/hooks';
@@ -121,6 +123,11 @@ function describe(entity: Entity, frameRate: number): string {
   if (name) return name;
 
   if (entity.has(Stroke)) return 'Stroke';
+  const animator = entity.get(TextAnimator);
+  if (animator) {
+    const unit = animator.by === TextAnimatorUnit.WORD ? 'word' : animator.by === TextAnimatorUnit.LINE ? 'line' : 'letter';
+    return `Animate each ${unit}`;
+  }
   if (entity.has(Shadow)) return 'Shadow';
   if (entity.has(ColorStop)) return 'Stop';
 

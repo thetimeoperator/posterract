@@ -11,6 +11,7 @@ import { ALL_FORMATS, AudioSampleSink, BlobSource, BufferTarget, CanvasSink, Con
 import { assert } from '../utils/assert';
 import { formatTimestamp } from '../utils/time';
 import { getAssetFile } from '../actions/assets';
+import { detectBeats, type BeatAnalysis, type BeatOptions } from '../utils/beats';
 
 import type { StreamTargetChunk } from 'mediabunny';
 import type { Asset, VideoAsset, AudioAsset } from '@posterract/video-assets';
@@ -515,4 +516,74 @@ async function downsampleAudio(track: InputAudioTrack, options: SamplerOptions) 
 	if (frameCursor > 0) peaks.push(Math.floor(255 * peakMax));
 
 	return Uint8ClampedArray.from(peaks);
+}
+
+/** What `beatsAsset` finds: the analysis, plus where in the file the first beat of a bar is. */
+export type AssetBeats = BeatAnalysis & { duration: number };
+
+/**
+ * Measures a music track's tempo and beats: its primary audio track decoded
+ * to mono at about 22 kHz and run through `detectBeats`. What the editor's
+ * "Detect beats" and `posterract media beats` report — the tempo to give a
+ * scene's `bpm`, and the downbeat to trim the song to so its bar lines fall
+ * on the timeline's.
+ */
+export async function beatsAsset(asset: Asset, options?: BeatOptions): Promise<AssetBeats> {
+	assert(asset.type === "VIDEO" || asset.type === "AUDIO", "Beats are found in a video or audio asset.");
+	const blob = await getAssetFile(asset);
+	const input = new Input({ formats: ALL_FORMATS, source: new BlobSource(blob) });
+	try {
+		const track = await input.getPrimaryAudioTrack();
+		assert(track, "No audio track found, so no beats can be found.");
+		assert(
+			await track.canDecode(),
+			`This browser's audio decoder can't handle the "${track.getCodec() ?? "unknown"}" codec, so no beats can be found.`,
+		);
+
+		// Averaged down to about 22 kHz as it decodes: the analysis never looks
+		// above that, and a ten-minute song stays a few megabytes.
+		const step = Math.max(1, Math.round(track.sampleRate / 22050));
+		const rate = track.sampleRate / step;
+		const chunks: Float32Array[] = [];
+		let total = 0;
+		let carry = 0;
+		let carried = 0;
+		for await (const sample of new AudioSampleSink(track).samples()) {
+			try {
+				const size = sample.allocationSize({ format: 'f32', planeIndex: 0 });
+				const floats = new Float32Array(size / Float32Array.BYTES_PER_ELEMENT);
+				sample.copyTo(floats, { format: 'f32', planeIndex: 0 });
+				const channels = sample.numberOfChannels;
+				const frames = floats.length / channels;
+				const out = new Float32Array(Math.ceil((frames + carried) / step));
+				let written = 0;
+				for (let frame = 0; frame < frames; frame++) {
+					let mono = 0;
+					for (let ch = 0; ch < channels; ch++) mono += floats[frame * channels + ch]!;
+					carry += mono / channels;
+					carried += 1;
+					if (carried === step) {
+						out[written++] = carry / step;
+						carry = 0;
+						carried = 0;
+					}
+				}
+				const chunk = out.subarray(0, written);
+				chunks.push(chunk);
+				total += chunk.length;
+			} finally {
+				sample.close();
+			}
+		}
+
+		const samples = new Float32Array(total);
+		let offset = 0;
+		for (const chunk of chunks) {
+			samples.set(chunk, offset);
+			offset += chunk.length;
+		}
+		return { ...detectBeats(samples, rate, options), duration: total / rate };
+	} finally {
+		input.dispose();
+	}
 }

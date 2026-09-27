@@ -6,7 +6,7 @@ import {
   AdjustmentLayer, Animation, AnimationPhase, AnimationType, Audio, Caption, Computed, Cue, Diagram,
   DiagramKindType, Effect, Fonts, FrameRate, Geometry, GeometryType, Group, IsMask, Keyframe, KeyframeTrack,
   Component, Live, Lottie, LottieSlot, Marker, Name, Path, PathTrim, Polygon,
-  PaintType, Scene, SceneSkill, Sequential, Shadow, Source, Stage, Stroke, getActiveEntity,
+  PaintType, Scene, SceneSkill, Sequential, Shadow, Source, Stage, Stroke, getActiveEntity, Tempo, MotionBlur,
   getEntityChildren, getIntrinsicPaint, isText,
 } from "@posterract/video-runtime";
 import { ANIMATION_TYPES, authoredElement, trackProperty } from "@posterract/video-reconciler";
@@ -97,7 +97,15 @@ function detailOf(entity: Entity, frameRate: number): RuntimeTreeNode["detail"] 
   // folder is when it is installed on this machine.
   if (entity.has(Scene)) {
     const skill = entity.get(SceneSkill)?.value;
-    if (skill) return { skill, skillPath: findSkill(skill)?.path ?? null };
+    const tempo = entity.get(Tempo);
+    const blur = entity.get(MotionBlur);
+    const detail = {
+      ...(skill ? { skill, skillPath: findSkill(skill)?.path ?? null } : {}),
+      // The beat grid the scene is timed to, and whether its frames are blurred.
+      ...(tempo && tempo.bpm > 0 ? { bpm: tempo.bpm, meter: tempo.meter, beatSeconds: Number((60 / tempo.bpm).toFixed(4)) } : {}),
+      ...(blur ? { motionBlur: `${blur.shutter}° shutter, ${blur.samples} samples` } : {}),
+    };
+    if (Object.keys(detail).length) return detail;
   }
 
   const cue = entity.get(Cue);
@@ -167,8 +175,9 @@ function detailOf(entity: Entity, frameRate: number): RuntimeTreeNode["detail"] 
  */
 const CORE_PROPS = [
   "x", "y", "width", "height", "start", "end", "after", "src", "sourceIn", "sourceOut",
-  "rotation", "scale", "opacity", "hidden", "fill", "color", "fontFamily", "fontSize", "fontWeight",
+  "rotation", "rotationX", "rotationY", "perspective", "scale", "opacity", "hidden", "fill", "color", "fontFamily", "fontSize", "fontWeight",
   "textAlign", "objectFit", "volume", "muted", "workarea", "skill", "preset", "type", "phase", "duration", "delay",
+  "bpm", "meter", "motionBlur", "layout", "layoutTo", "count", "path", "by", "stagger",
 ] as const;
 
 function coreProps(entity: Entity): Record<string, unknown> | undefined {

@@ -29,7 +29,7 @@ export type {
   GenerateVideoOptions,
   GenerateVoiceOptions,
 } from "./generate.js";
-export { parseTime, TIME_FPS } from "./time.js";
+export { musicalSeconds, parseMusicalTime, parseTime, TIME_FPS } from "./time.js";
 export {
   COMPOSITION_TAGS,
   ID_ATTR,
@@ -104,6 +104,12 @@ export type {
   StrokeProps,
   SurfacePaintProps,
   SurfaceProps,
+  SurfaceDraw,
+  SurfaceDrawInfo,
+  Knobs,
+  TextAnimatorProps,
+  RepeaterProps,
+  RepeaterLayout,
   TextCase,
   TextProps,
   TextRangeProps,

@@ -163,6 +163,8 @@ export const COMPOSITION_TAGS = [
   "shaderPaint",
   "surfacePaint",
   "surface",
+  "textAnimator",
+  "repeater",
 ] as const;
 
 export type CompositionTag = (typeof COMPOSITION_TAGS)[number];

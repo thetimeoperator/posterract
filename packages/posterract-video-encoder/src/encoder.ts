@@ -14,6 +14,7 @@ import {
 	setActive, framesToSeconds,
 	assert, store, isScene,
 	assetSystem, playbackSystem, motionSystem, transformSystem, renderSystem,
+	renderMotionBlurredFrame, sceneMotionBlur,
 	AudioBus, AudioBusHandle,
 	ChildOf, Geometry, Paint, Workarea, Playback,
 	AudioPlayback, Computed,
@@ -267,6 +268,7 @@ export async function createEncoder(world: World, config: EncoderConfig) {
 			}
 
 			let lastAudioSampleCount = 0;
+			const motionBlur = sceneMotionBlur(scene);
 
 			for (let frame = 0; frame < totalFrames; frame++) {
 				if (canceled) {
@@ -298,6 +300,14 @@ export async function createEncoder(world: World, config: EncoderConfig) {
 					// only visual systems
 					transformSystem(world);
 					renderSystem(world);
+					// A scene with motion blur is redrawn as the average of the
+					// moments inside its shutter (see renderMotionBlurredFrame).
+					if (motionBlur) {
+						renderMotionBlurredFrame(
+							world, scene, computed.localTime[sceneId]!, motionBlur,
+							(target) => normalizeSceneTransform(target, sceneId),
+						);
+					}
 				}
 
 				if (videoEnabled) {

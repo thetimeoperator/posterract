@@ -19,6 +19,9 @@ import type { World } from 'koota';
  */
 const DEBOUNCE = 120;
 
+/** What a write carries of a `<text>`'s words, beside its props (see `EditWriter.owes`); no prop is named this. */
+const TEXT = '\0text';
+
 /**
  * What the editor can honestly say about the user's work reaching disk.
  * `saving` covers both queued and in-flight edits: from the user's side the
@@ -95,6 +98,9 @@ class EditWriter {
 	private variables = new Map<string, VariableEdit>();
 	// Pending sources a write is out for: edits to them wait for the answer.
 	private inflight = new Set<string>();
+	// The props (and texts, under `TEXT`) each write that is out carries, by
+	// element: until it answers, the canvas is ahead of the file there.
+	private readonly out = new Set<Map<string, Set<string>>>();
 	// The unrolls a write is out for. One the write declines is taken back
 	// (its entities go back to the loop) rather than discarded like a failed
 	// insert: the loop still renders them, it just cannot be written to.
@@ -162,6 +168,22 @@ class EditWriter {
 			this.waiters.delete(waiter);
 			waiter.resolve({ ...waiter.outcome, skipped: [...new Set(waiter.outcome.skipped)] });
 		}
+	}
+
+	/**
+	 * Whether the canvas's value of this prop of `source` — its text, without
+	 * `name` — is one the file has not been given yet: queued here, or in a write
+	 * that has not answered. A change read from the file does not show there (see
+	 * `applySourcePatch`): it was read before the person's value reached the file,
+	 * which that value is on its way to overwrite.
+	 */
+	public owes(source: string, name?: string): boolean {
+		if (name === undefined ? this.texts.has(source) : Object.hasOwn(this.pending.get(source) ?? {}, name)) return true;
+		const key = name ?? TEXT;
+		for (const write of this.out) {
+			if (write.get(source)?.has(key)) return true;
+		}
+		return false;
 	}
 
 	/**
@@ -367,15 +389,27 @@ class EditWriter {
 		const note = this.note;
 		this.note = undefined;
 
+		// What this write carries, for `owes` until it answers.
+		const carried = new Map<string, Set<string>>();
+		for (const edit of edits) {
+			if (edit.kind !== 'set') continue;
+			const keys = new Set(Object.keys(edit.props));
+			if (edit.text !== undefined) keys.add(TEXT);
+			carried.set(edit.source, keys);
+		}
+		this.out.add(carried);
+
 		this.writing += 1;
 		writeProject(this.dir, edits, writer, note)
 			.then((result) => {
 				this.writing -= 1;
+				this.out.delete(carried);
 				this.report(result);
 				this.settle(result);
 			})
 			.catch((error: unknown) => {
 				this.writing -= 1;
+				this.out.delete(carried);
 				this.setState({ status: 'failed', message: message(error) });
 				toast.error('Could not write to the project', { description: message(error) });
 				this.settle({ error: message(error) });

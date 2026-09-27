@@ -4,7 +4,9 @@
 
 Keyframeable properties include transform (`x`, `y`, `offsetX`, `offsetY`, `width`, `height`, `rotation`, `scale`, `scaleX`, `scaleY`), appearance (`opacity`, `color`, `blur`, `cornerRadius` and the four per-corner radii), `volume`, a gradient stop's `offset`, an effect's `value`, and `progress` — a diagram element's 0–1 draw-on reveal, which is how `<diagramArrow>` and `<diagramPlot>` get a native line-reveal animation. A track takes precedence over the same property written as a static prop for as long as the element carries the track; outside the keyframe range the track holds its first or last value rather than falling back to the prop.
 
-Preset in/out animations provide common fades, slides, scale, blur, text reveals, and audio gain. Clip transitions belong at cuts and include a type and duration. Always capture before, during, and after a transition.
+Tracks can also drive a knob by name (`knob.<name>` on a `<surface>` or `<html>`, `uniform.<name>` on a `<shaderPaint>`), a repeater's numbers by name, and shapes: a `d` track on a `<path>` (or `path` on a `<text>`) holds path data per keyframe and blends any shape into any other. See [motion-design.md](motion-design.md).
+
+Preset in/out animations provide common fades, slides, scale, blur, text reveals, and audio gain; `<textAnimator>` moves a text a letter, word or line at a time. Clip transitions belong at cuts and include a type and duration — `iris`, `shapeWipe`, `wipe*`, `zoomThrough` and `whip*` among them. Always capture before, during, and after a transition.
 
 
 ## Motion written in code

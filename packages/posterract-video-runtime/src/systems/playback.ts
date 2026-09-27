@@ -18,7 +18,7 @@ import {
 	AudioPlayback, Computed,
 	AudioDecoderHandle, AudioBusHandle, Host,
 	Mode, FrameRate, Time, AudioEngine, FramePromises, Tickers,
-	Root,
+	Root, NoMotionBlur,
 } from '../traits';
 import { getParentNode } from '../queries/hierarchy';
 import { resolveRelativeTiming } from '../actions/relative-timing';
@@ -299,27 +299,54 @@ function forwardDecoders(world: World, scene: Entity, entity: Entity): void {
 	}
 }
 
-function updateVisibility(world: World, scene: Entity, entity: Entity): void {
+/**
+ * How a scene is put at a moment: `exact` keeps the fractions of a frame the
+ * scene's time has (a motion-blur sample sits between two frames) instead of
+ * rounding every node to a whole one; `pinned`, when given, is the frame that
+ * nodes opting out of motion blur stay at while the rest move through the
+ * shutter.
+ */
+type TimePlacement = { exact: boolean; pinned: number | null };
+
+const ROUNDED: TimePlacement = { exact: false, pinned: null };
+
+function updateVisibility(world: World, scene: Entity, entity: Entity, placement: TimePlacement = ROUNDED): void {
 	const computed = store(world, Computed);
 	const eid = entity.id();
+
+	// Under a node that stays sharp, everything does: the whole subtree reads
+	// the pinned frame.
+	const at = placement.pinned !== null && entity.has(NoMotionBlur)
+		? { ...placement, pinned: null, frame: placement.pinned }
+		: null;
+	const own = at ? { exact: placement.exact, pinned: null } : placement;
 
 	// Root or dragging entity is always visible
 	if (entity === scene || entity.has(Dragging)) {
 		computed.visibility[eid] = 1;
 	} else {
-		const globalFrame = computed.localTime[scene.id()]!;
+		const globalFrame = at?.frame ?? computed.localTime[scene.id()]!;
 		const origin = computed.origin[eid] ?? 0;
 		const playbackRate = computed.playbackRate[eid] || 1;
 
 		const start = computed.start[eid]!;
 		const end = computed.end[eid]!;
 
-		computed.localTime[eid] = Math.round((globalFrame - origin) * playbackRate);
+		const local = (globalFrame - origin) * playbackRate;
+		computed.localTime[eid] = placement.exact ? local : Math.round(local);
 		computed.visibility[eid] = globalFrame >= start && globalFrame < end ? 1 : 0;
 	}
 
 	for (const child of world.query(Or(Geometry, Group, AdjustmentLayer), ChildOf(entity))) {
-		updateVisibility(world, scene, child);
+		if (at) {
+			// A child of a pinned node: its own clock runs from the pinned frame.
+			const saved = computed.localTime[scene.id()]!;
+			computed.localTime[scene.id()] = at.frame;
+			updateVisibility(world, scene, child, own);
+			computed.localTime[scene.id()] = saved;
+		} else {
+			updateVisibility(world, scene, child, own);
+		}
 	}
 }
 
@@ -335,15 +362,21 @@ function updateVisibility(world: World, scene: Entity, entity: Entity): void {
  * thrash the media the author is looking at. The caller puts the playhead
  * back when it is done, and the next tick resyncs the rest.
  */
-export function placeInTime(world: World, scene: Entity, frame: number): void {
+export function placeInTime(
+	world: World,
+	scene: Entity,
+	frame: number,
+	options: { exact?: boolean; pinned?: number } = {},
+): void {
 	const computed = store(world, Computed);
 	const fps = world.get(FrameRate)?.value ?? 30;
 	const sid = scene.id();
-	const clamped = Math.max(0, Math.round(frame));
+	const exact = options.exact === true;
+	const clamped = Math.max(0, exact ? frame : Math.round(frame));
 
 	computed.localTime[sid] = clamped;
 	computed.localTimeInSeconds[sid] = clamped / fps;
-	updateVisibility(world, scene, scene);
+	updateVisibility(world, scene, scene, { exact, pinned: options.pinned ?? null });
 }
 
 function resetDecoders(world: World, entity: Entity): void {

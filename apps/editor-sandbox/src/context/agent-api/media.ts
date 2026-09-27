@@ -6,7 +6,7 @@ import { ALL_FORMATS, BlobSource, CanvasSink, Input } from 'mediabunny';
 import { pickInformativeTimes } from './frame-triage';
 import { composeSheet, planSheet, planSheetSizes, sheetTimecode } from '@posterract/video-encoder';
 import { assert } from '@/utils';
-import { filmstripAsset, formatTimecode, getAssetFile, getLibrary, transcodeForAnalysis, waveformAsset } from '@posterract/video-runtime';
+import { beatsAsset, filmstripAsset, formatTimecode, getAssetFile, getLibrary, transcodeForAnalysis, waveformAsset } from '@posterract/video-runtime';
 import { AssetLibrary, assetName, isAbsoluteSource, isUrlSource } from '@posterract/video-assets';
 import { createProjectFS } from '@/projects/fs';
 import { ElectronWritableFileHandle } from '@/lib/electron-file-writable';
@@ -15,7 +15,7 @@ import { mainBridge } from '@/lib/ipc';
 import type { Accessor } from 'solid-js';
 import type { Asset } from '@posterract/video-assets';
 import type { EditorSession } from './session';
-import type { MediaExtractRequest, MediaExtractResult, MediaFrameRequest, MediaFrameResult, TimecodedImage, MediaProbeRequest, MediaTranscribeRequest, MediaTranscribeResult, MediaFilmstripRequest, MediaFilmstripResult, MediaWaveformRequest, MediaWaveformResult } from "@posterract/cli/channels";
+import type { MediaExtractRequest, MediaExtractResult, MediaFrameRequest, MediaFrameResult, TimecodedImage, MediaProbeRequest, MediaTranscribeRequest, MediaTranscribeResult, MediaFilmstripRequest, MediaFilmstripResult, MediaWaveformRequest, MediaWaveformResult, MediaBeatsRequest, MediaBeatsResult } from "@posterract/cli/channels";
 import type { StreamTargetChunk } from 'mediabunny';
 
 type ResolveAsset = (path: string) => Promise<Asset>;
@@ -308,6 +308,21 @@ export function handleMediaFilmstrip(resolve: ResolveAsset) {
     const { dataUrl, ...rest } = await filmstripAsset(asset, { start: req.start, end: req.end, scale: req.scale });
     const base64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
     return { base64, ...rest };
+  };
+}
+
+export function handleMediaBeats(resolve: ResolveAsset) {
+  return async (req: MediaBeatsRequest): Promise<MediaBeatsResult> => {
+    const asset = await resolve(req.path);
+    const found = await beatsAsset(asset, { minBpm: req.minBpm, maxBpm: req.maxBpm, meter: req.meter });
+    return {
+      bpm: found.bpm,
+      downbeat: Math.round(found.downbeat * 1000) / 1000,
+      meter: found.meter,
+      confidence: Math.round(found.confidence * 1000) / 1000,
+      duration: Math.round(found.duration * 1000) / 1000,
+      beats: found.beats.map((beat) => Math.round(beat * 1000) / 1000),
+    };
   };
 }
 

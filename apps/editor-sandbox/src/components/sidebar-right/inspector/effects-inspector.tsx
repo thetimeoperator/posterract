@@ -66,6 +66,14 @@ export function EffectsInspector(props: EffectsInspectorProps) {
     syncKeyframe(world, editor, props.effect, "value", next);
   };
 
+  // The finishing effects' second and third numbers, resolved like `value`.
+  const sizeValue = useDerived(() => props.effect.get(Computed)?.effectSize ?? 0);
+  const angleValue = useDerived(() => props.effect.get(Computed)?.effectAngle ?? 0);
+  const editNumber = (name: "size" | "angle", next: number) => {
+    editor.editProperty(props.effect, name, next);
+    syncKeyframe(world, editor, props.effect, name, next);
+  };
+
   /**
    * Switches the filter. A value only means the same thing across types of
    * the same unit; crossing one (a 4px blur becoming 4 turns of sepia) takes
@@ -81,6 +89,13 @@ export function EffectsInspector(props: EffectsInspectorProps) {
     editor.editProperty(props.effect, "type", next.name);
     if (next.unit !== previous.unit) {
       editor.editProperty(props.effect, "value", next.value);
+    }
+    // A size means something else to each finishing effect, so it is reset.
+    if (previous.size || next.size) {
+      editor.editProperty(props.effect, "size", next.size?.value ?? false);
+    }
+    if (previous.angle && !next.angle) {
+      editor.editProperty(props.effect, "angle", false);
     }
   };
 
@@ -156,8 +171,21 @@ export function EffectsInspector(props: EffectsInspectorProps) {
           </ControlRow>
         </Show>
 
+        <Show when={option().unit === "strength"}>
+          <ControlRow label="Strength">
+            <SliderInput
+              value={Math.round(Math.max(0, value()) * 100)}
+              min={0}
+              max={200}
+              onChange={(next) => editValue(Math.max(0, next / 100))}
+              format={(next) => `${next}%`}
+              keyframe={<Keyframe target={props.effect} property="value" />}
+            />
+          </ControlRow>
+        </Show>
+
         <Show when={option().unit === "px"}>
-          <ControlRow label="Radius" contentClass="grid grid-cols-2 gap-2">
+          <ControlRow label={option().valueLabel ?? "Radius"} contentClass="grid grid-cols-2 gap-2">
             <ControlledTextField
               value={value()}
               onNumber={(next) => editValue(Math.max(0, next))}
@@ -172,6 +200,52 @@ export function EffectsInspector(props: EffectsInspectorProps) {
               onIncrement={() => editValue(value() + 1)}
               decrementLabel="Decrease blur radius"
               incrementLabel="Increase blur radius"
+            />
+          </ControlRow>
+        </Show>
+
+        <Show when={option().size} keyed>
+          {(size) => (
+            <ControlRow label={size.label}>
+              <Show
+                when={size.unit === "amount"}
+                fallback={
+                  <ControlledTextField
+                    value={sizeValue() || size.value}
+                    onNumber={(next) => editNumber("size", Math.max(0, next))}
+                    min={0}
+                    autoSelect
+                    sliderEnabled
+                    limitEvents
+                    keyframe={<Keyframe target={props.effect} property="size" />}
+                  />
+                }
+              >
+                <SliderInput
+                  value={Math.round(clampUnit(sizeValue() || size.value) * 100)}
+                  min={0}
+                  max={100}
+                  onChange={(next) => editNumber("size", clampUnit(next / 100))}
+                  format={(next) => `${next}%`}
+                  keyframe={<Keyframe target={props.effect} property="size" />}
+                />
+              </Show>
+            </ControlRow>
+          )}
+        </Show>
+
+        <Show when={option().angle}>
+          <ControlRow label="Direction">
+            <ControlledTextField
+              icon={<Icon name="rotate-angle" class="size-6" />}
+              value={angleValue()}
+              onNumber={(next) => editNumber("angle", next)}
+              unit="deg"
+              step={1}
+              autoSelect
+              sliderEnabled
+              limitEvents
+              keyframe={<Keyframe target={props.effect} property="angle" />}
             />
           </ControlRow>
         </Show>

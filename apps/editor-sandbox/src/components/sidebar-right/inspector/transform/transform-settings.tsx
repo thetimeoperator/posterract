@@ -29,6 +29,9 @@ import {
   Computed,
   PLACEMENTS,
   Place,
+  Tilt,
+  Cache,
+  KeyframeTrack,
   getParentEntity,
   getSceneAncestor,
   isAdjustmentLayer,
@@ -43,6 +46,7 @@ import { AnchorRow } from "./anchor-row";
 import { OffsetRow } from "./offset-row";
 import { ScaleRow } from "./scale-row";
 import { SkewRow } from "./skew-row";
+import { TiltRow } from "./tilt-row";
 import { ConstraintsRow } from "./constraints-row";
 import { createStoredSignal } from "@/lib/store";
 import { store } from "@/init";
@@ -71,7 +75,10 @@ const PLACE_OPTIONS: PlaceOption[] = [
   { value: "bottom-right", label: "Bottom right" },
 ];
 
-type TransformAddon = 'rotate' | 'anchor' | 'offset' | 'scale' | 'skew' | 'constraints';
+type TransformAddon = 'rotate' | 'tilt' | 'anchor' | 'offset' | 'scale' | 'skew' | 'constraints';
+
+/** The paths a 3D tilt's tracks drive. */
+const TILT_PATHS = new Set(['rotation.x', 'rotation.y', 'perspective']);
 type TransformAddons = Partial<Record<TransformAddon, boolean>>;
 
 /**
@@ -158,7 +165,17 @@ export function TransformSettings(props: TransformSettingsProps) {
     return parent !== null && isScene(parent);
   });
 
-  const showAddon = (addon: TransformAddon) => addons()[addon] === true;
+  // A tilt the source already has — as a prop or as a track — shows its row
+  // whether or not it was added here: a 3D turn is easy to miss otherwise.
+  const tilted = useDerived(() => {
+    const node = entity();
+    if (node.has(Tilt)) return true;
+    return (node.get(Cache)?.keyframeTracks ?? []).some((track) => {
+      const settings = track.get(KeyframeTrack);
+      return settings?.target === node && TILT_PATHS.has(settings.property);
+    });
+  });
+  const showAddon = (addon: TransformAddon) => addons()[addon] === true || (addon === 'tilt' && tilted());
   const toggleAddon = (addon: TransformAddon, on: boolean) => {
     setAddons({ ...addons(), [addon]: on });
   };
@@ -167,7 +184,7 @@ export function TransformSettings(props: TransformSettingsProps) {
     <PanelSection
       title="Transform"
       actions={
-        <Show when={!showAddon('rotate') || !showAddon('anchor') || !showAddon('offset') || !showAddon('scale') || !showAddon('skew') || !showAddon('constraints')}>
+        <Show when={!showAddon('rotate') || !showAddon('tilt') || !showAddon('anchor') || !showAddon('offset') || !showAddon('scale') || !showAddon('skew') || !showAddon('constraints')}>
           <DropdownMenu placement="bottom-end">
             <Tooltip>
               <TooltipTrigger<typeof DropdownMenuTrigger>
@@ -188,6 +205,11 @@ export function TransformSettings(props: TransformSettingsProps) {
               <Show when={!showAddon('rotate')}>
                 <DropdownMenuItem onSelect={() => toggleAddon('rotate', true)}>
                   Rotate
+                </DropdownMenuItem>
+              </Show>
+              <Show when={!showAddon('tilt')}>
+                <DropdownMenuItem onSelect={() => toggleAddon('tilt', true)}>
+                  3D tilt
                 </DropdownMenuItem>
               </Show>
               <Show when={!showAddon('constraints')}>
@@ -287,6 +309,10 @@ export function TransformSettings(props: TransformSettingsProps) {
 
       <Show when={showAddon('rotate')}>
         <RotateRow node={entity()} onRemoveAddon={() => toggleAddon('rotate', false)} />
+      </Show>
+
+      <Show when={showAddon('tilt')}>
+        <TiltRow node={entity()} onRemoveAddon={() => toggleAddon('tilt', false)} />
       </Show>
 
       <Show when={showAddon('anchor')}>

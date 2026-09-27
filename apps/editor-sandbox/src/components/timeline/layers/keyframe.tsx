@@ -94,6 +94,10 @@ export function KeyframeLayer(props: LayerRowProps) {
     const next = loop() === TrackLoop.NONE ? true : loop() === TrackLoop.REPEAT ? 'pingpong' : false;
     editor.editProperty(entity(), 'loop', next);
   };
+  // Deep in the tree the row's name and its buttons compete for one narrow
+  // column, and the name must win: stepping between keyframes shows on the
+  // row you point at, the loop only when the track has one.
+  const showControls = () => hovering() || selected();
   const loopLabel = () =>
     loop() === TrackLoop.REPEAT ? 'Repeats — click for there and back'
       : loop() === TrackLoop.PINGPONG ? 'There and back — click to play once'
@@ -129,54 +133,60 @@ export function KeyframeLayer(props: LayerRowProps) {
         </div>
       </div>
       <div class="flex items-center gap-0.5 shrink-0">
-        <Tooltip placement="top">
-          <TooltipTrigger
-            as={Button}
-            variant="ghost"
-            size="icon"
-            aria-label={loopLabel()}
-            classList={{ 'text-foreground': loop() !== TrackLoop.NONE, 'opacity-40': loop() === TrackLoop.NONE }}
-            onClick={cycleLoop}
-          >
-            <Show when={loop() === TrackLoop.PINGPONG} fallback={<Icon name={loop() === TrackLoop.NONE ? 'no-loop' : 'loop'} class="size-6" />}>
-              <span class="text-[11px] leading-none" aria-hidden="true">⇄</span>
-            </Show>
-          </TooltipTrigger>
-          <TooltipPortal>
-            <TooltipContent>{loopLabel()}</TooltipContent>
-          </TooltipPortal>
-        </Tooltip>
-        <Tooltip placement="top">
-          <TooltipTrigger
-            as={Button}
-            variant="ghost"
-            size="icon"
-            disabled={previous() === undefined}
-            onClick={() => goTo(previous())}
-          >
-            <Icon name="caret-left" class="size-6" />
-          </TooltipTrigger>
-          <TooltipPortal>
-            <TooltipContent>Previous keyframe</TooltipContent>
-          </TooltipPortal>
-        </Tooltip>
+        <Show when={showControls() || loop() !== TrackLoop.NONE}>
+          <Tooltip placement="top">
+            <TooltipTrigger
+              as={Button}
+              variant="ghost"
+              size="icon"
+              aria-label={loopLabel()}
+              classList={{ 'text-foreground': loop() !== TrackLoop.NONE, 'opacity-40': loop() === TrackLoop.NONE }}
+              onClick={cycleLoop}
+            >
+              <Show when={loop() === TrackLoop.PINGPONG} fallback={<Icon name={loop() === TrackLoop.NONE ? 'no-loop' : 'loop'} class="size-6" />}>
+                <span class="text-[11px] leading-none" aria-hidden="true">⇄</span>
+              </Show>
+            </TooltipTrigger>
+            <TooltipPortal>
+              <TooltipContent>{loopLabel()}</TooltipContent>
+            </TooltipPortal>
+          </Tooltip>
+        </Show>
+        <Show when={showControls()}>
+          <Tooltip placement="top">
+            <TooltipTrigger
+              as={Button}
+              variant="ghost"
+              size="icon"
+              disabled={previous() === undefined}
+              onClick={() => goTo(previous())}
+            >
+              <Icon name="caret-left" class="size-6" />
+            </TooltipTrigger>
+            <TooltipPortal>
+              <TooltipContent>Previous keyframe</TooltipContent>
+            </TooltipPortal>
+          </Tooltip>
+        </Show>
         <Show when={property() && target()}>
           {(holder) => <Keyframe property={property()!} target={holder() as Entity} />}
         </Show>
-        <Tooltip placement="top">
-          <TooltipTrigger
-            as={Button}
-            variant="ghost"
-            size="icon"
-            disabled={next() === undefined}
-            onClick={() => goTo(next())}
-          >
-            <Icon name="caret-right" class="size-6" />
-          </TooltipTrigger>
-          <TooltipPortal>
-            <TooltipContent>Next keyframe</TooltipContent>
-          </TooltipPortal>
-        </Tooltip>
+        <Show when={showControls()}>
+          <Tooltip placement="top">
+            <TooltipTrigger
+              as={Button}
+              variant="ghost"
+              size="icon"
+              disabled={next() === undefined}
+              onClick={() => goTo(next())}
+            >
+              <Icon name="caret-right" class="size-6" />
+            </TooltipTrigger>
+            <TooltipPortal>
+              <TooltipContent>Next keyframe</TooltipContent>
+            </TooltipPortal>
+          </Tooltip>
+        </Show>
       </div>
     </div>
   )
@@ -197,6 +207,9 @@ const PROPERTY_NAMES: Partial<Record<PropertyPath, string>> = {
   'skew.x': 'Skew X',
   'skew.y': 'Skew Y',
   'rotation': 'Rotation',
+  'rotation.x': 'Tilt X',
+  'rotation.y': 'Tilt Y',
+  'perspective': 'Perspective',
   'width': 'Width',
   'height': 'Height',
   'opacity': 'Opacity',
@@ -213,6 +226,12 @@ const PROPERTY_NAMES: Partial<Record<PropertyPath, string>> = {
   'effect.value': 'Value',
   'diagram.progress': 'Reveal',
   'chars': 'Text',
+  'shape.d': 'Shape',
+  'text.path': 'Path',
+  'textPath.offset': 'Along path',
+  'textPath.shift': 'Off path',
+  'effect.size': 'Size',
+  'effect.angle': 'Direction',
 };
 
 /**

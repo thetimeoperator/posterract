@@ -11,3 +11,4 @@ export * from './derived';
 export * from './media';
 export * from './interaction';
 export * from './world';
+export * from './design';

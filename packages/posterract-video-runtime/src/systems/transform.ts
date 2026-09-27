@@ -9,8 +9,10 @@ import {
 	ChildOf, Geometry, Group, Hidden, IsMask, Sequential, AdjustmentLayer,
 	Culled, Flip, Anchor, Computed, Cache, LocalTransform, WorldTransform,
 	WorldBounds, RenderSurface, Size, Place, Chars, Scale, UniformScale,
-	Root,
+	Root, Repeater,
 } from '../traits';
+import { computeInstances } from '../utils/repeater';
+import { repeaterInput } from '../queries/repeater';
 import { getParentNode, getSceneAncestor } from '../queries/hierarchy';
 import { isText } from '../queries/predicates';
 import { isVectorGeometry, vectorSubPaths } from '../queries/vector';
@@ -305,6 +307,29 @@ export function computeGroupBounds(world: World, entity: Entity): void {
 			computed.width[eid] = 0;
 			computed.height[eid] = 0;
 			return;
+		}
+
+		// A repeater's box is every copy's, not the template's alone: the
+		// template's box is carried to each copy's point at the copy's scale.
+		if (entity.has(Repeater)) {
+			const halfWidth = (maxX - minX) / 2;
+			const halfHeight = (maxY - minY) / 2;
+			let found = false;
+			for (const instance of computeInstances(repeaterInput(world, entity))) {
+				if (!instance.visible) continue;
+				const hw = halfWidth * instance.scale;
+				const hh = halfHeight * instance.scale;
+				if (!found) {
+					minX = instance.x - hw; maxX = instance.x + hw;
+					minY = instance.y - hh; maxY = instance.y + hh;
+					found = true;
+					continue;
+				}
+				minX = Math.min(minX, instance.x - hw);
+				maxX = Math.max(maxX, instance.x + hw);
+				minY = Math.min(minY, instance.y - hh);
+				maxY = Math.max(maxY, instance.y + hh);
+			}
 		}
 
 		computed.width[eid] = Math.max(0, maxX - minX);

@@ -5,3 +5,4 @@ export * from './motion';
 export * from './gradients';
 export * from './playback';
 export * from './render';
+export * from './motion-blur';

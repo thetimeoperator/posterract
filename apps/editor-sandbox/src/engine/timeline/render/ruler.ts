@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { ChildOf, Marker, Playback, setPlayhead } from '@posterract/video-runtime';
+import { ChildOf, Marker, Playback, Tempo, setPlayhead } from '@posterract/video-runtime';
 
 import { assert } from '@/utils';
 import { RULER_INTERVALS } from '../constants';
@@ -108,8 +108,64 @@ export function renderRuler(world: World, scene: Entity, surface: TimelineSurfac
 	ctx.lineTo(maxX, RULER_HEIGHT - 0.5);
 	ctx.stroke();
 
+	drawBeats(world, scene, surface, minX, maxX);
 	drawMarkers(world, scene, surface);
 
+	ctx.restore();
+}
+
+/** The accent the beat grid is drawn in: the product's green, so it reads as music, not time. */
+const BEAT_COLOR = '#65ff9a';
+
+/**
+ * A scene with a tempo gets its bars and beats along the bottom of the ruler:
+ * a tall tick and the bar number on every downbeat, a short one on every
+ * other beat — thinned out when they would crowd, so a zoomed-out timeline
+ * shows bars and a zoomed-in one shows every beat.
+ */
+function drawBeats(world: World, scene: Entity, surface: TimelineSurfaceState, minX: number, maxX: number): void {
+	const { ctx } = surface;
+	const tempo = scene.get(Tempo);
+	if (!ctx || !tempo || !(tempo.bpm > 0)) return;
+
+	const resolution = getResolution(world, scene);
+	const fps = getFrameRate(world);
+	const beat = (60 / tempo.bpm) * fps;
+	const meter = tempo.meter > 0 ? tempo.meter : 4;
+	const beatWidth = framesToPixels(beat, resolution);
+	if (!(beatWidth > 0)) return;
+
+	const showBeats = beatWidth >= 6;
+	const barWidth = beatWidth * meter;
+	// Label every bar, or every 2nd, 4th… when bars are narrow.
+	let labelEvery = 1;
+	while (barWidth * labelEvery < 28 && labelEvery < 1024) labelEvery *= 2;
+
+	const first = Math.max(0, Math.floor(pixelsToFrames(minX, resolution) / beat));
+	const last = Math.ceil(pixelsToFrames(maxX, resolution) / beat);
+
+	ctx.save();
+	ctx.strokeStyle = BEAT_COLOR;
+	ctx.fillStyle = BEAT_COLOR;
+	ctx.font = '600 9px JetBrains Mono';
+	ctx.textAlign = 'left';
+	ctx.textBaseline = 'bottom';
+	for (let i = first; i <= last; i++) {
+		const downbeat = i % meter === 0;
+		if (!downbeat && !showBeats) continue;
+		const x = Math.round(framesToPixels(i * beat, resolution)) + 0.5;
+		ctx.globalAlpha = downbeat ? 0.85 : 0.4;
+		ctx.lineWidth = 1;
+		ctx.beginPath();
+		ctx.moveTo(x, RULER_HEIGHT - (downbeat ? 9 : 4));
+		ctx.lineTo(x, RULER_HEIGHT);
+		ctx.stroke();
+		const bar = i / meter;
+		if (downbeat && bar % labelEvery === 0) {
+			ctx.globalAlpha = 0.9;
+			ctx.fillText(String(bar + 1), x + 3, RULER_HEIGHT - 1);
+		}
+	}
 	ctx.restore();
 }
 

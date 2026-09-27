@@ -12,8 +12,14 @@ import {
 import {
 	Size, Hidden, Paint, Color, Blur, Offset, Opacity, BlendMode,
 	Chars, TextStyle, TextRange, TextCache, Cache, Computed, Camera,
-	RenderSurface, Root,
+	RenderSurface, Root, ChildOf, KeyframeTrack,
+	TextAnimator, TextAnimatorUnit, TextAnimatorOrder, TextPath, TextPathAlign,
 } from '../traits';
+import { sampleTrackAt } from '../systems/motion';
+import { textPathSubPaths } from '../queries/vector';
+import { placeGlyphsOnPath } from './text-path';
+import { boundsOf } from './vector';
+import { getStaggerOffset } from './time';
 import { clamp } from '../math/common';
 import { colorToHex } from './color';
 import { applyStrokeStyle, findWidestStroke } from './stroke';
@@ -265,11 +271,23 @@ function tokenizeText(world: World, entity: Entity) {
 }
 
 /** Renders text tokens directly to the given canvas context. */
-function renderTokens(ctx: Ctx, world: World, entity: Entity): void {
+function renderTokens(ctx: Ctx, world: World, entity: Entity, plan: GlyphPlan | null = null): void {
 	const eid = entity.id();
 	const lines = store(world, TextCache).tokens[eid];
 	if (!lines) return;
 	const words = lines.flat();
+
+	// A word is drawn whole, unless it is moving (or laid on a path) a letter at
+	// a time — then each of its units is drawn at its own pose.
+	const paint = (word: Token, mode: 'fill' | 'stroke') => {
+		const units = plan?.units.get(word);
+		if (!plan || !units) {
+			if (mode === 'fill') ctx.fillText(word.chars, word.x, word.y);
+			else ctx.strokeText(word.chars, word.x, word.y);
+			return;
+		}
+		drawUnits(ctx, plan, word, units, mode);
+	};
 
 	const computed = store(world, Computed);
 	const offsetStore = store(world, Offset);
@@ -319,11 +337,7 @@ function renderTokens(ctx: Ctx, world: World, entity: Entity): void {
 				ctx.fillStyle = colorToHex(colorStore.value[sid] ?? 0x000000);
 				ctx.globalAlpha = savedAlpha * (shadow.has(Opacity) ? opacityStore.value[sid] ?? 1 : 1);
 
-				if (widest !== null) {
-					ctx.strokeText(word.chars, word.x, word.y);
-				} else {
-					ctx.fillText(word.chars, word.x, word.y);
-				}
+				paint(word, widest !== null ? 'stroke' : 'fill');
 			}
 
 			// Reset shadow properties if any shadows are applied
@@ -372,7 +386,7 @@ function renderTokens(ctx: Ctx, world: World, entity: Entity): void {
 				} else {
 					ctx.strokeStyle = colorToHex(colorStore.value[sid] ?? 0x000000);
 				}
-				ctx.strokeText(word.chars, word.x, word.y);
+				paint(word, 'stroke');
 				ctx.globalCompositeOperation = savedCO;
 			}
 		}
@@ -403,8 +417,8 @@ function renderTokens(ctx: Ctx, world: World, entity: Entity): void {
 			if (intrinsicFill !== null) {
 				ctx.globalAlpha = savedAlpha;
 				ctx.fillStyle = intrinsicFill;
-				ctx.fillText(word.chars, word.x, word.y);
-				drawDecoration(ctx, word.chars, word.x, word.y, decoration, size);
+				paint(word, 'fill');
+				if (!plan) drawDecoration(ctx, word.chars, word.x, word.y, decoration, size);
 			}
 
 			for (const fill of fills) {
@@ -428,8 +442,8 @@ function renderTokens(ctx: Ctx, world: World, entity: Entity): void {
 				} else {
 					ctx.fillStyle = colorToHex(colorStore.value[fid] ?? 0x000000);
 				}
-				ctx.fillText(word.chars, word.x, word.y);
-				drawDecoration(ctx, word.chars, word.x, word.y, decoration, size);
+				paint(word, 'fill');
+				if (!plan) drawDecoration(ctx, word.chars, word.x, word.y, decoration, size);
 				ctx.globalCompositeOperation = savedCO;
 			}
 		}
@@ -446,6 +460,24 @@ function renderTokens(ctx: Ctx, world: World, entity: Entity): void {
 export function measureText(world: World, entity: Entity): void {
 	tokenizeText(world, entity);
 	shapeTokens(world, entity);
+	fitPathBox(world, entity);
+}
+
+/**
+ * A text on a path takes the path's box, not the box its words would fill in
+ * a line: that is where it is drawn, so it is what selecting, measuring and
+ * `inspect` have to see.
+ */
+function fitPathBox(world: World, entity: Entity): void {
+	if (!entity.has(TextPath)) return;
+	const eid = entity.id();
+	const computed = store(world, Computed);
+	const subpaths = textPathSubPaths(world, entity, store(world, TextPath).d[eid] ?? '');
+	const bounds = subpaths ? boundsOf(subpaths) : null;
+	if (!bounds) return;
+	if (entity.has(Size) && computed.width[eid] && computed.height[eid]) return;
+	computed.width[eid] = Math.max(1, Math.ceil(bounds.x + bounds.width));
+	computed.height[eid] = Math.max(1, Math.ceil(bounds.y + bounds.height));
 }
 
 /** Render text tokens directly to the world's render surface. */
@@ -454,7 +486,209 @@ export function renderText(world: World, entity: Entity) {
 	if (!ctx) return;
 	tokenizeText(world, entity);
 	shapeTokens(world, entity);
-	renderTokens(ctx, world, entity);
+	renderTokens(ctx, world, entity, planGlyphs(world, entity));
+}
+
+// ── Letters that move on their own, and text on a path ──────
+
+/** One piece of a word drawn at its own pose: a letter, or the whole word. */
+type Unit = {
+	chars: string;
+	/** Where it starts inside its word, px. */
+	dx: number;
+	advance: number;
+	/** Which pose it takes (see GlyphPlan.poses). */
+	pose: number;
+	/** Where it sits on the path, when there is one (see GlyphPlan.placements). */
+	glyph: number;
+};
+
+type Pose = { x: number; y: number; rotation: number; scaleX: number; scaleY: number; opacity: number; blur: number };
+
+type GlyphPlan = {
+	units: Map<Token, Unit[]>;
+	poses: Pose[];
+	placements: { x: number; y: number; angle: number; visible: boolean }[] | null;
+};
+
+const REST: Pose = { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, opacity: 1, blur: 0 };
+
+/** A deterministic shuffle of 0..n-1, for the random order. */
+function shuffledRanks(count: number): number[] {
+	const order = Array.from({ length: count }, (_, i) => i);
+	let state = 0x2545F491 ^ count;
+	for (let i = count - 1; i > 0; i--) {
+		state = (Math.imul(state ^ (state >>> 15), 0x2C1B3C6D) + 0x6D2B79F5) >>> 0;
+		const j = state % (i + 1);
+		[order[i], order[j]] = [order[j]!, order[i]!];
+	}
+	const ranks: number[] = [];
+	order.forEach((unit, rank) => { ranks[unit] = rank; });
+	return ranks;
+}
+
+function rankOf(index: number, count: number, order: TextAnimatorOrder, shuffled: number[] | null): number {
+	const middle = (count - 1) / 2;
+	switch (order) {
+		case TextAnimatorOrder.REVERSE: return count - 1 - index;
+		case TextAnimatorOrder.CENTER: return Math.abs(index - middle);
+		case TextAnimatorOrder.EDGES: return middle - Math.abs(index - middle);
+		case TextAnimatorOrder.RANDOM: return shuffled?.[index] ?? index;
+		default: return index;
+	}
+}
+
+/**
+ * Works out, for a text with a `<textAnimator>` or a `path`, how its words
+ * break into units and where each unit is this frame. Null for an ordinary
+ * text, which draws word by word as it always has.
+ */
+function planGlyphs(world: World, entity: Entity): GlyphPlan | null {
+	const eid = entity.id();
+	const animator = [...world.query(TextAnimator, ChildOf(entity))][0] ?? null;
+	const onPath = entity.has(TextPath);
+	if (!animator && !onPath) return null;
+
+	const lines = store(world, TextCache).tokens[eid];
+	if (!lines) return null;
+
+	const by = animator ? store(world, TextAnimator).by[animator.id()] ?? TextAnimatorUnit.LETTER : TextAnimatorUnit.LETTER;
+	const splitLetters = onPath || by === TextAnimatorUnit.LETTER;
+	const measure = getMeasureCtx();
+
+	const units = new Map<Token, Unit[]>();
+	const advances: number[] = [];
+	let poseCount = 0;
+	lines.forEach((line, lineIndex) => {
+		const lineUnit = by === TextAnimatorUnit.LINE ? poseCount + lineIndex : -1;
+		for (const word of line) {
+			const blank = word.chars.trim() === '';
+			applyFont(measure, world, entity, word.ranges);
+			const list: Unit[] = [];
+			if (splitLetters) {
+				const letters = Array.from(word.chars);
+				let before = 0;
+				let prefix = '';
+				// A whole word's unit is shared by its letters when the animator
+				// moves words, but each letter still sits on the path alone.
+				const wordUnit = by === TextAnimatorUnit.WORD && !blank ? poseCount++ : -1;
+				for (const letter of letters) {
+					prefix += letter;
+					const after = measure.measureText(prefix).width;
+					const advance = after - before;
+					const letterBlank = letter.trim() === '';
+					const pose = by === TextAnimatorUnit.LINE
+						? lineUnit
+						: by === TextAnimatorUnit.WORD
+							? wordUnit
+							: letterBlank ? -1 : poseCount++;
+					list.push({ chars: letter, dx: before, advance, pose, glyph: advances.length });
+					advances.push(advance);
+					before = after;
+				}
+			} else {
+				const pose = by === TextAnimatorUnit.LINE ? lineUnit : blank ? -1 : poseCount++;
+				list.push({ chars: word.chars, dx: 0, advance: word.width, pose, glyph: -1 });
+			}
+			units.set(word, list);
+		}
+	});
+	if (by === TextAnimatorUnit.LINE) poseCount += lines.length;
+
+	// Poses: each unit samples the animator's tracks at its own delayed clock.
+	const poses: Pose[] = Array.from({ length: poseCount }, () => ({ ...REST }));
+	if (animator) {
+		const keyframeTrack = store(world, KeyframeTrack);
+		const tracks = (store(world, Cache).keyframeTracks[eid] ?? [])
+			.filter((track) => keyframeTrack.target[track.id()] === animator);
+		const settings = store(world, TextAnimator);
+		const stagger = settings.stagger[animator.id()] ?? 0;
+		const order = settings.order[animator.id()] ?? TextAnimatorOrder.FORWARD;
+		const shuffled = order === TextAnimatorOrder.RANDOM ? shuffledRanks(poseCount) : null;
+		const localFrame = (store(world, Computed).localTime[eid] ?? 0) - getStaggerOffset(entity);
+		for (let i = 0; i < poseCount; i++) {
+			const frame = localFrame - rankOf(i, poseCount, order, shuffled) * stagger;
+			const pose = poses[i]!;
+			for (const track of tracks) {
+				const value = sampleTrackAt(world, track, frame);
+				if (value === null) continue;
+				switch (keyframeTrack.property[track.id()]) {
+					case 'offset.x': case 'position.x': pose.x = value; break;
+					case 'offset.y': case 'position.y': pose.y = value; break;
+					case 'rotation': pose.rotation = value; break;
+					case 'scale': pose.scaleX = value; pose.scaleY = value; break;
+					case 'scale.x': pose.scaleX = value; break;
+					case 'scale.y': pose.scaleY = value; break;
+					case 'opacity': pose.opacity = clamp(value, 0, 1); break;
+					case 'blur': pose.blur = Math.max(0, value); break;
+				}
+			}
+		}
+	}
+
+	let placements: GlyphPlan['placements'] = null;
+	if (onPath) {
+		const settings = store(world, TextPath);
+		const computed = store(world, Computed);
+		const subpaths = textPathSubPaths(world, entity, settings.d[eid] ?? '');
+		if (subpaths) {
+			const align = settings.align[eid] ?? TextPathAlign.START;
+			placements = placeGlyphsOnPath(subpaths, advances, {
+				offset: computed.pathOffset[eid] ?? 0,
+				align: align === TextPathAlign.CENTER ? 'center' : align === TextPathAlign.END ? 'end' : 'start',
+				baselineShift: computed.pathShift[eid] ?? 0,
+			});
+			// The box is the path's, so selecting the text selects the ring.
+			fitPathBox(world, entity);
+		}
+	}
+
+	return { units, poses, placements };
+}
+
+function drawUnits(ctx: Ctx, plan: GlyphPlan, word: Token, units: Unit[], mode: 'fill' | 'stroke'): void {
+	const draw = (chars: string, x: number, y: number) => {
+		if (mode === 'fill') ctx.fillText(chars, x, y);
+		else ctx.strokeText(chars, x, y);
+	};
+	const middle = word.metrics.fontBoundingBoxAscent / 2;
+
+	for (const unit of units) {
+		if (unit.chars.trim() === '') continue;
+		const pose = unit.pose >= 0 ? plan.poses[unit.pose] ?? REST : REST;
+		if (pose.opacity <= 0 || pose.scaleX === 0 || pose.scaleY === 0) continue;
+
+		ctx.save();
+		if (pose.opacity < 1) ctx.globalAlpha *= pose.opacity;
+		if (pose.blur > 0) ctx.filter = `${ctx.filter === 'none' ? '' : `${ctx.filter} `}blur(${pose.blur}px)`;
+
+		const placed = plan.placements && unit.glyph >= 0 ? plan.placements[unit.glyph] : null;
+		if (plan.placements) {
+			// On a path: the glyph's baseline centre sits on the curve, turned
+			// to follow it; the animator's pose moves it from there.
+			if (!placed || !placed.visible) {
+				ctx.restore();
+				continue;
+			}
+			ctx.translate(placed.x, placed.y);
+			ctx.rotate(placed.angle);
+			ctx.translate(pose.x, pose.y);
+			ctx.rotate((pose.rotation * Math.PI) / 180);
+			ctx.scale(pose.scaleX, pose.scaleY);
+			ctx.textBaseline = 'alphabetic';
+			draw(unit.chars, -unit.advance / 2, 0);
+		} else {
+			// In its line: the unit turns and scales about its own middle.
+			const cx = word.x + unit.dx + unit.advance / 2;
+			const cy = word.y + middle;
+			ctx.translate(cx + pose.x, cy + pose.y);
+			ctx.rotate((pose.rotation * Math.PI) / 180);
+			ctx.scale(pose.scaleX, pose.scaleY);
+			ctx.translate(-cx, -cy);
+			draw(unit.chars, word.x + unit.dx, word.y);
+		}
+		ctx.restore();
+	}
 }
 
 /**

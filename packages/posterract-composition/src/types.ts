@@ -7,11 +7,19 @@ import type { Entity } from "koota";
 import type { AssetRef } from "./generate.js";
 
 /**
- * Composition-relative time: seconds (number), frames ("30f"), or a
- * "MM:SS" / "HH:MM:SS" clock string. The canonical internal unit is frames
- * at 30 fps; all formats are converted on import. Values may be negative.
+ * Composition-relative time: seconds (number), frames ("30f"), a
+ * "MM:SS" / "HH:MM:SS" clock string, or musical time — beats ("4b") and bars
+ * ("2bar") at the scene's `bpm` and `meter`. The canonical internal unit is
+ * frames at 30 fps; all formats are converted on import. Values may be
+ * negative.
+ *
+ * Musical time is a length, like every other form: "4b" is four beats long,
+ * so `start="4b"` is four beats into the parent's timeline and a keyframe at
+ * `time="1b"` is one beat into its clip. Trim the music so its first downbeat
+ * sits at 0 (`posterract media beats` reports where it is) and the beats of
+ * the song and the beats of the timeline are the same beats.
  */
-export type Time = number | `${number}f` | `${string}:${string}`;
+export type Time = number | `${number}f` | `${string}:${string}` | `${number}b` | `${number}bar`;
 
 export type Fit = "cover" | "contain" | "fill";
 
@@ -44,9 +52,21 @@ export type BlendMode =
   | "luminosity";
 
 /**
- * An `<effect>`'s filter — the CSS filter functions, applied to the parent's
- * rendered pixels. `blur` takes a radius in px, `hueRotate` degrees, the
- * rest an amount 0–1.
+ * An `<effect>`'s filter, applied to the parent's rendered pixels. The first
+ * eight are the CSS filter functions: `blur` takes a radius in px, `hueRotate`
+ * degrees, the rest an amount 0–1. The finishing effects work on the whole
+ * rendered layer, so one on a `<scene>` finishes everything in it:
+ *
+ * - `grain` — film grain, a fresh pattern every frame. `value` 0–1 is how
+ *   strong, `size` the grain in px (default 1.5).
+ * - `vignette` — darkens toward the edges. `value` 0–1, `size` 0–1 how far in
+ *   the darkening reaches (default 0.5).
+ * - `glow` — a bloom of the layer's own light. `value` how strong (0–2),
+ *   `size` its radius in px (default 24).
+ * - `chromaticAberration` — red and blue pulled apart, the colour fringe of a
+ *   cheap lens. `value` the offset in px.
+ * - `directionalBlur` — smears along one direction, the streak of a whip.
+ *   `value` the length in px, `angle` the direction in degrees (0 = across).
  */
 export type EffectType =
   | "blur"
@@ -56,7 +76,12 @@ export type EffectType =
   | "hueRotate"
   | "invert"
   | "saturate"
-  | "sepia";
+  | "sepia"
+  | "grain"
+  | "vignette"
+  | "glow"
+  | "chromaticAberration"
+  | "directionalBlur";
 
 /**
  * Easing for the segment from a keyframe to the next one: a named preset or
@@ -91,6 +116,9 @@ export type AnimatableProperty =
   | "width"
   | "height"
   | "rotation"
+  /** 3D tilt, degrees — see `TransformProps`. `perspective` is further down. */
+  | "rotationX"
+  | "rotationY"
   | "scale"
   | "scaleX"
   | "scaleY"
@@ -117,15 +145,75 @@ export type AnimatableProperty =
    * the value, `<diagramPlot>` draws that fraction of its points. A track
    * from 0 to 1 is the native DrawSVG-style line reveal.
    */
-  | "progress";
+  | "progress"
+  /**
+   * Shape keyframes: each keyframe's `value` is path data, and the figure
+   * blends from one to the next — any shape into any shape. `d` on a
+   * `<path>`, `path` on a `<text>` laid along a path.
+   */
+  | "d"
+  | "path"
+  /** A `<text>` on a path: how far along it the text sits, and how far off it. */
+  | "pathOffset"
+  | "pathShift"
+  /** An `<effect>`'s second and third numbers — see `EffectType`. */
+  | "size"
+  | "angle"
+  /** A `<repeater>`'s numbers — see `RepeaterProps`. */
+  | "count"
+  | "spacing"
+  | "radius"
+  | "tube"
+  | "ripple"
+  | "rippleFrequency"
+  | "ripplePhase"
+  | "rippleCenterX"
+  | "rippleCenterY"
+  | "tiltX"
+  | "tiltY"
+  | "roll"
+  | "zoom"
+  /** A `<repeater>`'s camera distance, or the camera any element's 3D tilt is seen through. */
+  | "perspective"
+  | "cameraZ"
+  | "depthFade"
+  /**
+   * A knob of a `<surface>` or `<html>` (`knob.tilt` drives `knobs.tilt`), or
+   * a uniform of a `<shaderPaint>` (`uniform.amount`). Canvas code reads the
+   * knob; the timeline drives it.
+   */
+  | `knob.${string}`
+  | `uniform.${string}`;
 
-/** Transition styles — the editor's transition inspector options. */
+/**
+ * Transition styles — the editor's transition inspector options.
+ *
+ * - `iris` — the next clip opens in a circle growing from the middle.
+ * - `shapeWipe` — the same through any shape: `shape` is its path data.
+ * - `wipeLeft` / `wipeRight` / `wipeUp` / `wipeDown` — a hard edge sweeps
+ *   the next clip in, travelling that way.
+ * - `zoomThrough` — the camera pushes into the outgoing clip and comes out
+ *   of the incoming one.
+ * - `whipLeft` / `whipRight` / `whipUp` / `whipDown` — a whip pan: both clips
+ *   rush past, smeared along the move.
+ */
 export type TransitionType =
   | "dissolve"
   | "slideFromRight"
   | "slideFromLeft"
   | "fadeToBlack"
-  | "fadeToWhite";
+  | "fadeToWhite"
+  | "iris"
+  | "shapeWipe"
+  | "wipeLeft"
+  | "wipeRight"
+  | "wipeUp"
+  | "wipeDown"
+  | "zoomThrough"
+  | "whipLeft"
+  | "whipRight"
+  | "whipUp"
+  | "whipDown";
 
 /** The `transition` prop's value — see `SequenceItemProps["transition"]`. */
 export type TransitionSpec = {
@@ -133,6 +221,12 @@ export type TransitionSpec = {
   type?: TransitionType;
   /** Length of the transition, centered on the cut. Any `Time` format. Default 1 second. */
   duration?: Time;
+  /**
+   * For `shapeWipe`: the shape the next clip opens through, as path data in a
+   * 100×100 box. It grows from the middle of the frame until it covers it.
+   * Default a circle.
+   */
+  shape?: string;
 };
 
 /**
@@ -288,6 +382,20 @@ type SizeProps = {
 type TransformProps = PositionProps & PlacementProps & OffsetProps & SizeProps & {
   /** Rotation in degrees. */
   rotation?: number;
+  /**
+   * 3D tilt in degrees, about the element's middle: `rotationX` tips the top
+   * away (90 is edge-on), `rotationY` turns the right side away. The element
+   * is drawn flat and turned as a picture, so a tilted group turns as one
+   * card. Keyframeable; with motion blur the turn smears like any move.
+   */
+  rotationX?: number;
+  rotationY?: number;
+  /**
+   * How far the camera a tilt is seen through stands from the element, px
+   * (default 2000): nearer is a stronger 3D look, 0 none (the element only
+   * foreshortens). On a `<repeater>` it is the camera of the copies.
+   */
+  perspective?: number;
   /** Uniform scale about the box origin, 1 = natural size. Overrides `scaleX`/`scaleY` while set. */
   scale?: number;
   /** Per-axis scale, 1 = natural size. */
@@ -317,6 +425,15 @@ type CompositeProps = {
    * means shown.
    */
   hidden?: boolean;
+};
+
+/**
+ * Opting one element out of its scene's motion blur. `false` keeps it sharp —
+ * a frame counter, a HUD, a logo that must never smear — while everything
+ * around it blurs. Absent, the element blurs whenever its scene does.
+ */
+type MotionBlurOptOutProps = {
+  motionBlur?: boolean;
 };
 
 type TimingProps = {
@@ -464,7 +581,39 @@ type FontProps = {
 };
 
 /** What every visual node accepts on top of its own props. */
-type CommonProps = IdentityProps & TransformProps & CompositeProps & TimingProps & SequenceItemProps;
+type CommonProps = IdentityProps & TransformProps & CompositeProps & MotionBlurOptOutProps & TimingProps & SequenceItemProps;
+
+/**
+ * Named numbers (or colours) that canvas code reads and the timeline drives.
+ * Each knob is a timeline row: keyframe it with `<keyframeTrack
+ * property="knob.<name>">`, and the code receives the value at every frame.
+ * This is what keeps code-drawn motion visible and editable — the code draws,
+ * the knobs move.
+ */
+export type Knobs = Record<string, number | string>;
+
+/**
+ * What a `<surface>`'s `draw` is told besides its knobs: the box it fills and
+ * the canvas behind the context (for a library, like Three.js, that wants the
+ * canvas itself).
+ */
+export type SurfaceDrawInfo = {
+  /** The element's box, px. The canvas is this times `pixelRatio`, and the context is scaled to it. */
+  width: number;
+  height: number;
+  pixelRatio: number;
+  canvas: HostCanvas;
+};
+
+/**
+ * Draws one frame of a `<surface>` from its knobs. Called by the renderer
+ * whenever a knob or the box changes — never on its own clock, and never with
+ * the time: anything that should move is a knob, keyframed on the timeline.
+ * `context` is the canvas context the surface's `context` prop asks for
+ * (a 2D context by default), cleared before each call.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type SurfaceDraw = (context: any, knobs: Readonly<Knobs>, info: SurfaceDrawInfo) => void;
 
 /** What every paint accepts on top of its own props. */
 type PaintProps = OpacityProps & CompositeProps;
@@ -562,6 +711,26 @@ export type SceneProps = IdentityProps & PositionProps & Required<Pick<SizeProps
    * is read wherever the file is: what it says is what comes out of a render.
    */
   workarea?: [inPoint: Time, outPoint: Time] | null;
+  /**
+   * Motion blur, the smear a real camera gives anything that moves while its
+   * shutter is open. `true` is a 180° shutter with 8 samples; a number is the
+   * shutter angle in degrees (0–360, the fraction of a frame the shutter is
+   * open); an object sets both. Each exported frame is that many in-between
+   * moments blended, so fast moves read as one continuous motion instead of
+   * a string of sharp jumps — and the export takes about that many times as
+   * long. Shown in the editor while paused and scrubbing; an element opts out
+   * with `motionBlur={false}`. Absent or `false`, frames are sharp.
+   */
+  motionBlur?: boolean | number | { shutter?: number; samples?: number };
+  /**
+   * The scene's tempo, in beats per minute. Puts bars and beats on the
+   * timeline, lets clips and keyframes snap to them, and gives every time prop
+   * musical units: "4b" is four beats, "2bar" two bars (see `Time`). Set it
+   * from the music — `posterract media beats` measures it.
+   */
+  bpm?: number;
+  /** Beats in a bar. Default 4. */
+  meter?: number;
   children?: SolidJSX.Element;
 };
 
@@ -662,12 +831,16 @@ type TrimProps = {
  * `<rect>`.
  */
 export type PathProps = CommonProps & FillProps & TrimProps & {
-  /** SVG path data: `M`, `L`, `H`, `V`, `C`, `S`, `Q`, `T`, `A`, `Z`. */
+  /**
+   * SVG path data: `M`, `L`, `H`, `V`, `C`, `S`, `Q`, `T`, `A`, `Z`.
+   * Keyframeable as `d` — each keyframe's `value` a shape — so a figure can
+   * turn into any other and then another, circle → square → triangle.
+   */
   d: string;
   /**
-   * A second figure to blend toward, as path data. Only shapes whose command
-   * sequences match can blend; when they do not, the target replaces the
-   * source at the halfway point rather than folding through it.
+   * A second figure to blend toward, as path data. Shapes whose command
+   * sequences match blend command for command; any other pair blends through
+   * matched outlines, so any shape can turn into any other.
    */
   morphTo?: string;
   /** How far toward `morphTo`, 0–1. Keyframeable as `morph`. Default 0. */
@@ -832,8 +1005,19 @@ export type ShadowProps = ColorProps & OpacityProps & Pick<CompositeProps, "hidd
 export type EffectProps = Pick<CompositeProps, "hidden"> & TrackChildren & {
   /** Which filter to apply. */
   type: EffectType;
-  /** The amount: px for "blur", degrees for "hueRotate", 0–1 otherwise. */
+  /**
+   * The amount: px for "blur", "chromaticAberration" and "directionalBlur",
+   * degrees for "hueRotate", 0–2 for "glow", 0–1 otherwise. Keyframeable as
+   * `value`.
+   */
   value: number;
+  /**
+   * The second number the finishing effects take: the grain's size in px, how
+   * far a vignette reaches (0–1), a glow's radius in px. Keyframeable as `size`.
+   */
+  size?: number;
+  /** A "directionalBlur"'s direction, degrees (0 = across). Keyframeable as `angle`. */
+  angle?: number;
 };
 
 /**
@@ -997,7 +1181,7 @@ export type MarkerProps = {
 export type KeyframeProps = {
   /** Node-local time: 0 is where the clip begins (its `start`). Any `Time` format. */
   time: Time;
-  /** The value at `time`: a number, or any CSS color on a `color` track. */
+  /** The value at `time`: a number, any CSS color on a `color` track, or path data on a `d`/`path` track. */
   value: number | string;
   /** Shapes the segment to the next keyframe; ignored on the last. Default "linear". */
   easing?: Easing;
@@ -1075,8 +1259,15 @@ export type HtmlPaintProps = PaintProps & {
   children?: SolidJSX.Element;
 };
 
-/** `<Html>` — a rectangle whose intrinsic paint draws the given DOM children. */
-export type HtmlProps = CommonProps & Pick<HtmlPaintProps, "children">;
+/**
+ * `<Html>` — a rectangle whose intrinsic paint draws the given DOM children.
+ * `knobs` reach the DOM as CSS custom properties on its root (`--tilt`), set
+ * every frame, so the content can move with `calc(var(--tilt) * 1deg)` while
+ * the timeline drives the knob.
+ */
+export type HtmlProps = CommonProps & Pick<HtmlPaintProps, "children"> & {
+  knobs?: Knobs;
+};
 
 // HTMLCanvasElement without requiring the DOM lib (this package also
 // type-checks in node contexts): the real type when present, a structural
@@ -1097,7 +1288,8 @@ export type ShaderPaintProps = PaintProps & {
   /**
    * Values for the shader's `@group(1)` uniform declarations, matched by
    * name: numbers bind to `f32`, arrays of 2-4 to `vec2f`-`vec4f`, CSS
-   * color strings to `vec3f`/`vec4f`.
+   * color strings to `vec3f`/`vec4f`. Each number is keyframeable as
+   * `uniform.<name>` and shows as its own timeline row.
    */
   uniforms?: Record<string, number | number[] | string>;
 };
@@ -1139,8 +1331,132 @@ export interface SceneNode<E = HostCanvas> {
 /** `<surfacePaint>` — a canvas the element's `ref` draws into (`element` on the received node). Takes no children. */
 export type SurfacePaintProps = PaintProps;
 
-/** `<Surface>` — a rectangle carrying a `<SurfacePaint>`; its `ref`'s `element` is the canvas. */
-export type SurfaceProps = CommonProps;
+/**
+ * `<Surface>` — a rectangle drawn by code.
+ *
+ * The way to write one is `draw` and `knobs`: `draw` paints a frame from the
+ * knob values, and every knob is a timeline row that can be keyframed. The
+ * renderer calls `draw` whenever a knob moves, so the code never runs on a
+ * clock of its own and everything that moves is visible — and editable — on
+ * the timeline. A surface driven through its `ref` and `useTicker` instead
+ * still works, but its motion is invisible to the timeline and `lint` reports
+ * it as hidden motion.
+ */
+export type SurfaceProps = CommonProps & {
+  /** The named numbers `draw` reads — see `Knobs`. */
+  knobs?: Knobs;
+  /** Paints one frame from the knobs — see `SurfaceDraw`. */
+  draw?: SurfaceDraw;
+  /** The context `draw` receives. Default "2d". */
+  context?: "2d" | "webgl" | "webgl2";
+};
+
+/**
+ * `<textAnimator>` — moves a `<text>` one letter, word or line at a time.
+ *
+ * Its `<keyframeTrack>` children animate `offsetX`, `offsetY`, `rotation`,
+ * `scale`, `opacity` and `blur`, and each unit plays them from its own start,
+ * `stagger` after the one before — so one track written once arrives as
+ * letters rising in a wave. Keyframe times are the unit's own: 0 is when that
+ * letter begins to move.
+ */
+export type TextAnimatorProps = {
+  /** What moves as one. Default "letter". */
+  by?: "letter" | "word" | "line";
+  /** Time between one unit starting and the next. Any `Time` format. Default 0.04 s. */
+  stagger?: Time;
+  /** Which unit goes first. Default "forward". */
+  order?: "forward" | "reverse" | "center" | "edges" | "random";
+  /** `<keyframeTrack>` children over the unit props listed above. */
+  children?: SolidJSX.Element;
+};
+
+/** How a `<repeater>` lays its copies out — see `RepeaterProps`. */
+export type RepeaterLayout =
+  | "line"
+  | "grid"
+  | "plane"
+  | "circle"
+  | "sunflower"
+  | "spiral"
+  | "sphere"
+  | "torus"
+  | "cube"
+  | "random";
+
+/**
+ * `<repeater>` — one element drawn many times, laid out by rule.
+ *
+ * Its single element child is the template; the repeater draws `count` copies
+ * of it in a `layout` — a ring, a grid, a sunflower, a sphere, a donut, the
+ * edges of a cube — and can blend toward a second layout (`layoutTo`, `morph`),
+ * send a ripple through the copies, and view them in 3D through a camera
+ * (`tiltX`, `tiltY`, `roll`, `zoom`, `perspective`, `cameraZ`). Every number
+ * is keyframeable by name, so one timeline row holds what would otherwise be
+ * hundreds, and a `stagger` plays the template's own animation one copy after
+ * another.
+ */
+export type RepeaterProps = IdentityProps & PositionProps & PlacementProps & OffsetProps
+  & Pick<TransformProps, "rotation" | "scale" | "scaleX" | "scaleY" | "opacity">
+  & CompositeProps & MotionBlurOptOutProps & TimingProps & SequenceItemProps & {
+    /** How many copies. Default 12. */
+    count?: number;
+    /** Default "circle". 2D layouts lie in the frame; "plane" is a grid lying flat (edge-on until tilted); "sphere", "torus" and "cube" are 3D. */
+    layout?: RepeaterLayout;
+    /** A second layout the copies blend toward, copy for copy. */
+    layoutTo?: RepeaterLayout;
+    /** How far toward `layoutTo`, 0–1. */
+    morph?: number;
+    /** Columns of a "grid" or "plane"; 0 picks a square. Default 0. */
+    columns?: number;
+    /** Distance between neighbours, px — the pitch of a line, grid, plane, sunflower or spiral. Default 40. */
+    spacing?: number;
+    /** Size of a circle, sphere, torus ring, cube (half its edge), spiral or random cloud, px. Default 200. */
+    radius?: number;
+    /** A torus's tube radius, px. Default 60. */
+    tube?: number;
+    /** Seed of the "random" layout and the "random" stagger order. Default 1. */
+    seed?: number;
+    /** Height of a wave travelling through the copies: px of depth, or a size factor with `rippleMode="scale"`. Default 0. */
+    ripple?: number;
+    /** Wave crests per 1000 px. Default 2. */
+    rippleFrequency?: number;
+    /** Where the wave is, in radians — keyframe it to make the wave travel. */
+    ripplePhase?: number;
+    /** What the wave moves: depth ("z", the default) or the copies' size ("scale"). */
+    rippleMode?: "z" | "scale";
+    /** Where the wave starts, px from the layout's centre. */
+    rippleCenterX?: number;
+    rippleCenterY?: number;
+    /**
+     * Camera pitch, degrees. Positive tips the top away from the viewer, as CSS
+     * `rotateX` does: a "grid" at 60 leans back into a floor. A "plane" or a
+     * "torus" lies flat already and is seen from above with a negative tilt.
+     */
+    tiltX?: number;
+    /** Camera yaw, degrees — keyframe it to spin a sphere. */
+    tiltY?: number;
+    /** Camera roll, degrees. */
+    roll?: number;
+    /** Scales the positions and the copies together. Default 1. */
+    zoom?: number;
+    /** Focal length, px: 0 is flat (orthographic); around 800 looks natural. Default 0. */
+    perspective?: number;
+    /** Moves the camera toward the copies, px; past them it flies through. */
+    cameraZ?: number;
+    /** How much farther copies fade, 0–1. Default 0. */
+    depthFade?: number;
+    /** Time between one copy's animation and the next. Any `Time` format. */
+    stagger?: Time;
+    /** Which copy goes first when staggered. Default "index". */
+    staggerOrder?: "index" | "reverse" | "center" | "edges" | "random" | "radial";
+    /** A second colour the copies' fill blends toward, by `colorBy`. */
+    colorTo?: string;
+    /** What picks each copy's blend toward `colorTo`: its place in the order, the ripple, or its depth. Default "wave". */
+    colorBy?: "index" | "wave" | "depth";
+    /** One element child — the template — plus `<keyframeTrack>` and `<animation>` children. */
+    children?: SolidJSX.Element;
+  };
 
 /**
  * `<audio>` — a clip with a sound and no picture. It draws nothing inside a
@@ -1170,9 +1486,23 @@ export type TextProps = CommonProps & Partial<ColorProps> & FontProps & {
   /** Line height as a multiple of each line's natural height. Default 1. */
   leading?: number;
   /**
-   * The text content, required; alongside it, `<TextRange>`, paint,
-   * `<Stroke>`, `<Shadow>`, `<Effect>`, `<Animation>` and `<KeyframeTrack>`
-   * children.
+   * Lays the text along a path instead of in lines, as path data in the
+   * element's own coordinates: every glyph sits on the curve, turned to follow
+   * it. A closed path (a circle) lets the text run round and round. Keyframeable
+   * as `path` — shape keyframes — so a straight line of text can bend into a
+   * ring.
+   */
+  path?: string;
+  /** How far along the path the text sits, as a fraction of its length; wraps on a closed path. Keyframe it to scroll. Default 0. */
+  pathOffset?: number;
+  /** Which part of the text sits at `pathOffset`. Default "start". */
+  pathAlign?: "start" | "center" | "end";
+  /** Moves the text off the path, px — outward is positive on a clockwise circle. Default 0. */
+  pathShift?: number;
+  /**
+   * The text content, required; alongside it, `<TextRange>`, `<TextAnimator>`,
+   * paint, `<Stroke>`, `<Shadow>`, `<Effect>`, `<Animation>` and
+   * `<KeyframeTrack>` children.
    */
   children: SolidJSX.Element;
 };

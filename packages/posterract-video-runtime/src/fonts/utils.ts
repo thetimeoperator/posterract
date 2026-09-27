@@ -25,6 +25,25 @@ function getFontFaceSet(): FontFaceSet | null {
 	return scope.document?.fonts ?? scope.fonts ?? null;
 }
 
+let fontLoads = 0;
+let watchingFonts = false;
+
+/**
+ * Goes up each time the font set finishes loading faces. A canvas drawn once
+ * and kept (a `<surface draw>`) compares it, so text it drew in the fallback
+ * face is redrawn in the real one.
+ */
+export function fontEpoch(): number {
+	if (!watchingFonts) {
+		const set = getFontFaceSet();
+		if (set) {
+			watchingFonts = true;
+			set.addEventListener('loadingdone', () => { fontLoads++; });
+		}
+	}
+	return fontLoads;
+}
+
 /**
  * Where a face is actually loaded from.
  *
@@ -94,15 +113,17 @@ export async function loadWebFont(
 	}
 
 	const fontFace = new FontFace(family, source, { weight, style: STYLE_MAP[style] });
+	// In the set before it loads, so the set announces the load (`loadingdone`)
+	// and anything drawn in the fallback face meanwhile is redrawn.
+	const set = getFontFaceSet();
+	set?.add(fontFace);
 
 	await new Promise((resolve, reject) => {
 		fontFace
 			.load()
-			.then((loaded) => {
-				getFontFaceSet()?.add(loaded);
-				resolve(null);
-			})
+			.then(() => resolve(null))
 			.catch((error) => {
+				set?.delete(fontFace);
 				world.set(Fonts, {
 					list: fonts.filter((f) => f.source !== font.source && f.weight !== font.weight),
 				});

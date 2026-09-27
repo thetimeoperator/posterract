@@ -19,6 +19,17 @@ export const TRANSITION_OPTIONS: TransitionOption[] = [
   { name: "slideFromLeft", label: "Slide From Left" },
   { name: "fadeToBlack", label: "Fade To Black" },
   { name: "fadeToWhite", label: "Fade To White" },
+  { name: "iris", label: "Circle Wipe" },
+  { name: "shapeWipe", label: "Shape Wipe" },
+  { name: "wipeLeft", label: "Wipe Left" },
+  { name: "wipeRight", label: "Wipe Right" },
+  { name: "wipeUp", label: "Wipe Up" },
+  { name: "wipeDown", label: "Wipe Down" },
+  { name: "zoomThrough", label: "Zoom Through" },
+  { name: "whipLeft", label: "Whip Left" },
+  { name: "whipRight", label: "Whip Right" },
+  { name: "whipUp", label: "Whip Up" },
+  { name: "whipDown", label: "Whip Down" },
 ];
 
 /** What the panel's plus authors: a one second dissolve, the prop's own defaults. */

@@ -20,6 +20,7 @@ import {
   isSequence,
   isShape,
   isText,
+  Repeater,
 } from "@posterract/video-runtime";
 import { useAssetSelection, useSelection, useTool } from "@/engine/hooks";
 import { useLayout } from '@/context/layout';
@@ -56,6 +57,10 @@ import { DiagramSettings } from "./diagram";
 import { LottieSettings } from "./lottie";
 import { VectorSettings } from "./vector";
 import { ShapeSettings } from "./shape";
+import { SceneMotionSettings } from "./scene-motion";
+import { KnobsSettings } from "./knobs";
+import { RepeaterSettings } from "./repeater";
+import { TextMotionSettings } from "./text-motion";
 
 import type { Entity } from "koota";
 
@@ -75,6 +80,7 @@ export type SelectionTarget =
   | "text"
   | "shape"
   | "group"
+  | "repeater"
   | "stage";
 
 function classifyNode(entity: Entity): SelectionTarget {
@@ -89,6 +95,7 @@ function classifyNode(entity: Entity): SelectionTarget {
   if (isAdjustmentLayer(entity)) return "adjustment";
   if (isText(entity)) return "text";
   if (isShape(entity)) return "shape";
+  if (entity.has(Repeater)) return "repeater";
   if (isGroup(entity)) return "group";
   return "stage";
 }
@@ -162,6 +169,7 @@ export function Inspector() {
 
           <Show when={includesTarget("scene") && !isNested()}>
             <SceneSkillPanel selection={nodes()} />
+            <SceneMotionSettings selection={nodes()} />
             <ExportPanel selection={nodes()} />
           </Show>
 
@@ -176,20 +184,28 @@ export function Inspector() {
             <VariablesSettings />
           </Show>
 
-          <Show when={includesTarget("shape", "diagram", "lottie", "vector", "text", "audio", "scene", "caption", "group", "mask", "adjustment", "sequence")}>
+          <Show when={includesTarget("shape", "diagram", "lottie", "vector", "text", "audio", "scene", "caption", "group", "repeater", "mask", "adjustment", "sequence")}>
             <TimeSettings selection={nodes()} />
           </Show>
 
-          <Show when={includesTarget("shape", "diagram", "lottie", "vector", "text", "audio", "scene", "caption", "group", "mask", "adjustment", "sequence")}>
+          <Show when={includesTarget("shape", "diagram", "lottie", "vector", "text", "audio", "scene", "caption", "group", "repeater", "mask", "adjustment", "sequence")}>
             <TransformSettings selection={nodes()} />
+          </Show>
+
+          <Show when={includesTarget("repeater")}>
+            <RepeaterSettings selection={nodes()} />
           </Show>
 
           <Show when={includesTarget("shape", "diagram", "text", "audio", "scene", "mask")}>
             <LayoutPanel selection={nodes()} />
           </Show>
 
-          <Show when={includesTarget("shape", "diagram", "lottie", "vector", "text", "scene", "caption", "group", "audio", "mask")}>
+          <Show when={includesTarget("shape", "diagram", "lottie", "vector", "text", "scene", "caption", "group", "repeater", "audio", "mask")}>
             <AppearanceSettings selection={nodes()} />
+          </Show>
+
+          <Show when={includesTarget("shape", "vector", "text")}>
+            <KnobsSettings selection={nodes()} />
           </Show>
 
           <Show when={includesTarget("caption")}>
@@ -217,6 +233,10 @@ export function Inspector() {
             <TextPanel selection={nodes()} />
           </Show>
 
+          <Show when={includesTarget("text")}>
+            <TextMotionSettings selection={nodes()} />
+          </Show>
+
           <Show when={includesTarget("shape", "vector", "text", "scene")}>
             <FillsSettings selection={nodes()} />
           </Show>
@@ -233,11 +253,11 @@ export function Inspector() {
             <ShadowsSettings selection={nodes()} />
           </Show>
 
-          <Show when={includesTarget("shape", "text", "scene", "caption")}>
+          <Show when={includesTarget("shape", "vector", "text", "scene", "caption", "group", "repeater")}>
             <EffectsSettings selection={nodes()} />
           </Show>
 
-          <Show when={includesTarget("shape", "diagram", "lottie", "vector", "text", "caption", "group", "mask")}>
+          <Show when={includesTarget("shape", "diagram", "lottie", "vector", "text", "caption", "group", "repeater", "mask")}>
             <div class="px-4 py-3 border-t border-border"><Button variant="outline" class="w-full" onClick={() => setInspectorTab('motion')}>Edit animation →</Button></div>
           </Show>
 

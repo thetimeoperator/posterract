@@ -32,6 +32,7 @@ import {
 	Marker, Name, Position, Scene, Shadow, Size, Source, Stroke, Transition, Workarea, WorldBounds,
 	getActiveEntity, getEntityBounds, getEntityChildren, isText, measureText, motionSystem, placeInTime, playbackSystem,
 	setPlayhead, store, transformSystem,
+	TextPath,
 } from '@posterract/video-runtime';
 import { parseSource } from '@posterract/composition';
 
@@ -332,7 +333,9 @@ export function handleInspect(session: () => EditorSession) {
 
 			// Text off the frame. An entrance may begin off-frame on purpose, so
 			// one bad moment is not a finding: most of them, or the middle, is.
-			if (isWords) {
+			// Text on a path is laid along it — a marquee runs off the frame on
+			// purpose — so its box says nothing about glyphs being cut.
+			if (isWords && !item.entity.has(TextPath)) {
 				const worst = { left: 0, top: 0, right: 0, bottom: 0, frame: samples[0]!.frame, count: 0 };
 				for (const sample of samples) {
 					const over = overflow(sample.box, width, height);

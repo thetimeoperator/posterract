@@ -5,3 +5,4 @@ export * from './timeline-index';
 export * from './hit-test';
 export * from './vector';
 export * from './interaction';
+export * from './repeater';

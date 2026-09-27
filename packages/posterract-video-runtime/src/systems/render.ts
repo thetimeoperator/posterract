@@ -25,7 +25,9 @@ import {
 	HitRegions,
 	Root,
 	TextEditing,
+	Knobs, SurfaceDraw, Repeater, Anchor, DEFAULT_TILT_PERSPECTIVE,
 } from '../traits';
+import { fontEpoch } from '../fonts/utils';
 import { getParentNode } from '../queries/hierarchy';
 import { getViewMatrix } from '../queries/camera';
 import { colorToHex } from '../utils/color';
@@ -34,7 +36,17 @@ import { applyStrokeStyle } from '../utils/stroke';
 import { measureText, renderText } from '../utils/text';
 import { getTransitionWindow } from '../utils/transition';
 import { getIntrinsicPaint } from '../utils/time';
-import { flattenPath, trimPath, type SubPath } from '../utils/vector';
+import { flattenPath, parsePath, trimPath, type SubPath } from '../utils/vector';
+import { computeInstances, staggerRanks, type StaggerOrder } from '../utils/repeater';
+import { repeaterInput } from '../queries/repeater';
+import {
+	acquireLayer, applyChromaticAberration, applyDirectionalBlur, applyGlow, applyGrain, applyVignette, type Layer,
+} from '../media/post-effects';
+import { drawTilted } from '../media/tilt';
+import { isTilted } from '../utils/tilt';
+import { applyMotion } from './motion';
+import { computeLocalMatrix } from './transform';
+import { getEntityTree } from '../queries/hierarchy';
 import { isVectorGeometry, vectorCommands, vectorSubPaths } from '../queries/vector';
 import { createLinearGradient, createRadialGradient } from './gradients';
 import {
@@ -222,6 +234,7 @@ export function renderIntrinsicFill(world: World, entity: Entity): void {
 			const ctx = getCtx(world);
 			const computed = store(world, Computed);
 			const eid = entity.id();
+			drawSurface(world, entity, canvas);
 			ctx.save();
 			ctx.clip();
 			ctx.drawImage(canvas, 0, 0, computed.width[eid]!, computed.height[eid]!);
@@ -280,6 +293,12 @@ function renderHtmlFill(world: World, entity: Entity, source: Entity): void {
 	const height = computed.height[eid]!;
 	root.style.width = `${width}px`;
 	root.style.height = `${height}px`;
+	// Knobs reach the DOM as custom properties, so CSS can move with them.
+	if (source.has(Knobs)) {
+		for (const [name, value] of Object.entries(store(world, Knobs).computed[source.id()] ?? {})) {
+			root.style.setProperty(`--${name}`, String(value));
+		}
+	}
 
 	try {
 		(ctx as DrawElementContext).drawElementImage(root, 0, 0, width, height);
@@ -505,7 +524,12 @@ function renderShaderFill(world: World, entity: Entity, fills: Entity[], index: 
 
 	ctx.save();
 	ctx.clip();
-	host.draw(ctx, w, h, input?.source ?? null, input?.width ?? 1, input?.height ?? 1, fit, time, store(world, Shader).uniforms[fills[index]!.id()] ?? null);
+	// Keyframed uniforms (`uniform.<name>` tracks) arrive as the paint's knobs.
+	const paint = fills[index]!;
+	const authored = store(world, Shader).uniforms[paint.id()] ?? null;
+	const knobs = paint.has(Knobs) ? store(world, Knobs).computed[paint.id()] : undefined;
+	const uniforms = knobs && Object.keys(knobs).length ? { ...(authored ?? {}), ...knobs } : authored;
+	host.draw(ctx, w, h, input?.source ?? null, input?.width ?? 1, input?.height ?? 1, fit, time, uniforms);
 	ctx.restore();
 }
 
@@ -1101,6 +1125,55 @@ function renderDiagram(world: World, entity: Entity): void {
 
 // ── Transition rendering ─────────────────────────────────────
 
+function easeInCubic(t: number): number {
+	return t * t * t;
+}
+
+function easeOutCubic(t: number): number {
+	return 1 - (1 - t) ** 3;
+}
+
+function easeInOutCubic(t: number): number {
+	return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
+}
+
+function easeInOutExpo(t: number): number {
+	if (t <= 0) return 0;
+	if (t >= 1) return 1;
+	return t < 0.5 ? 2 ** (20 * t - 10) / 2 : (2 - 2 ** (-20 * t + 10)) / 2;
+}
+
+/**
+ * Draws through a layer of its own — `draw` renders into it at the current
+ * transform, `finish` works on it as a picture — and composites the result
+ * where it would have been drawn.
+ */
+function drawThroughLayer(world: World, draw: () => void, finish: (layer: Layer) => void): void {
+	const surface = world.get(RenderSurface);
+	const main = surface?.ctx;
+	const canvas = surface?.canvas;
+	if (!main || !canvas || canvas.width === 0 || canvas.height === 0) {
+		draw();
+		return;
+	}
+	const layer = acquireLayer(world, layerDepth, canvas.width, canvas.height);
+	layer.ctx.setTransform(main.getTransform());
+	layer.ctx.globalAlpha = 1;
+	layerDepth += 1;
+	world.set(RenderSurface, { ctx: layer.ctx as CanvasRenderingContext2D });
+	try {
+		draw();
+	} finally {
+		world.set(RenderSurface, { ctx: main });
+		layerDepth -= 1;
+	}
+	finish(layer);
+	main.save();
+	main.setTransform(1, 0, 0, 1, 0, 0);
+	main.drawImage(layer.canvas, 0, 0);
+	main.restore();
+}
+
 function renderTransition(world: World, scene: Entity, left: Entity): void {
 	const ctx = getCtx(world);
 	const computed = store(world, Computed);
@@ -1175,6 +1248,111 @@ function renderTransition(world: World, scene: Entity, left: Entity): void {
 			ctx.restore();
 			break;
 		}
+		case TransitionType.IRIS:
+		case TransitionType.SHAPE_WIPE: {
+			renderNode(world, left);
+			const p = easeInOutCubic(completion);
+			ctx.save();
+			ctx.beginPath();
+			const shape = type === TransitionType.SHAPE_WIPE ? store(world, Transition).shape[left.id()] ?? '' : '';
+			if (shape) {
+				// The shape's 100×100 box, centred on the frame and grown until it
+				// covers it: at its full size the box is well past the corners.
+				const k = p * (Math.hypot(width, height) / 100) * 1.8;
+				for (const subpath of flattenPath(parsePath(shape))) {
+					const { points } = subpath;
+					for (let i = 0; i < points.length; i += 2) {
+						const x = width / 2 + (points[i]! - 50) * k;
+						const y = height / 2 + (points[i + 1]! - 50) * k;
+						if (i === 0) ctx.moveTo(x, y);
+						else ctx.lineTo(x, y);
+					}
+					ctx.closePath();
+				}
+			} else {
+				ctx.arc(width / 2, height / 2, Math.max(0, p * Math.hypot(width, height) / 2), 0, Math.PI * 2);
+			}
+			ctx.clip();
+			renderNode(world, right);
+			ctx.restore();
+			break;
+		}
+		case TransitionType.WIPE_LEFT:
+		case TransitionType.WIPE_RIGHT:
+		case TransitionType.WIPE_UP:
+		case TransitionType.WIPE_DOWN: {
+			renderNode(world, left);
+			const p = easeInOutCubic(completion);
+			ctx.save();
+			ctx.beginPath();
+			if (type === TransitionType.WIPE_LEFT) ctx.rect(width * (1 - p), 0, width * p, height);
+			else if (type === TransitionType.WIPE_RIGHT) ctx.rect(0, 0, width * p, height);
+			else if (type === TransitionType.WIPE_UP) ctx.rect(0, height * (1 - p), width, height * p);
+			else ctx.rect(0, 0, width, height * p);
+			ctx.clip();
+			renderNode(world, right);
+			ctx.restore();
+			break;
+		}
+		case TransitionType.ZOOM_THROUGH: {
+			// The camera pushes into the outgoing clip, then comes out of the
+			// incoming one: each half is one clip, scaled about the centre.
+			ctx.save();
+			if (completion < 0.5) {
+				const q = easeInCubic(completion * 2);
+				const zoom = 1 + q * 3;
+				ctx.translate(width / 2, height / 2);
+				ctx.scale(zoom, zoom);
+				ctx.translate(-width / 2, -height / 2);
+				ctx.globalAlpha *= 1 - q;
+				renderNode(world, left);
+			} else {
+				const q = easeOutCubic((completion - 0.5) * 2);
+				const zoom = 0.4 + 0.6 * q;
+				ctx.translate(width / 2, height / 2);
+				ctx.scale(zoom, zoom);
+				ctx.translate(-width / 2, -height / 2);
+				ctx.globalAlpha *= q;
+				renderNode(world, right);
+			}
+			ctx.restore();
+			break;
+		}
+		case TransitionType.WHIP_LEFT:
+		case TransitionType.WHIP_RIGHT:
+		case TransitionType.WHIP_UP:
+		case TransitionType.WHIP_DOWN: {
+			const horizontal = type === TransitionType.WHIP_LEFT || type === TransitionType.WHIP_RIGHT;
+			const sign = type === TransitionType.WHIP_LEFT || type === TransitionType.WHIP_UP ? -1 : 1;
+			const span = horizontal ? width : height;
+			const e = easeInOutExpo(completion);
+			// How far the picture travels in one frame, which is how long the
+			// smear of a camera whipping that fast is.
+			const step = 1 / Math.max(1, duration);
+			const speed = Math.abs(easeInOutExpo(Math.min(1, completion + step)) - easeInOutExpo(Math.max(0, completion - step))) / 2 * span;
+			// Whatever context is current: inside the layer, the layer's.
+			const move = (clip: Entity, offset: number) => {
+				const target = getCtx(world);
+				target.save();
+				if (horizontal) target.translate(offset, 0);
+				else target.translate(0, offset);
+				renderNode(world, clip);
+				target.restore();
+			};
+			const draw = () => {
+				move(left, sign * e * span);
+				move(right, sign * (e - 1) * span);
+			};
+			const t = ctx.getTransform();
+			const deviceScale = Math.hypot(t.a, t.b) || 1;
+			const rotation = Math.atan2(t.b, t.a) + (horizontal ? 0 : Math.PI / 2);
+			if (speed * deviceScale < 1) {
+				draw();
+			} else {
+				drawThroughLayer(world, draw, (layer) => applyDirectionalBlur(layer, speed * deviceScale * 1.5, rotation));
+			}
+			break;
+		}
 		default: {
 			// Dissolve (default)
 			renderNode(world, left);
@@ -1193,7 +1371,6 @@ function renderTransition(world: World, scene: Entity, left: Entity): void {
 }
 
 export function renderNode(world: World, entity: Entity): void {
-	const ctx = getCtx(world);
 	const computed = store(world, Computed);
 	const eid = entity.id();
 
@@ -1206,6 +1383,24 @@ export function renderNode(world: World, entity: Entity): void {
 	}
 
 	if (entity.has(IsMask) || entity.has(Hidden)) return;
+
+	// A finishing effect works on the element as a picture: it is drawn alone
+	// into a layer, finished there, and the layer composited in its place. A
+	// 3D tilt is drawn the same way, and the layer turned as it goes in.
+	const post = postEffectsOf(world, entity);
+	const tilted = isTilted({ rotationX: computed.tiltX[eid] ?? 0, rotationY: computed.tiltY[eid] ?? 0 });
+	if (post.length > 0 || tilted) {
+		renderIsolated(world, entity, post, tilted);
+		return;
+	}
+
+	renderNodeBody(world, entity);
+}
+
+function renderNodeBody(world: World, entity: Entity): void {
+	const ctx = getCtx(world);
+	const computed = store(world, Computed);
+	const eid = entity.id();
 
 	ctx.save();
 
@@ -1273,7 +1468,10 @@ export function renderNode(world: World, entity: Entity): void {
 
 	// Clip and render children
 	const children = store(world, Cache).children[eid] ?? [];
-	if (children.length) {
+	if (entity.has(Repeater)) {
+		// A repeater's element child is a template, drawn once per copy.
+		renderRepeater(world, entity, children);
+	} else if (children.length) {
 		if (entity.has(ClipsContent)) {
 			ctx.save();
 			ctx.clip();
@@ -1300,6 +1498,312 @@ export function renderNode(world: World, entity: Entity): void {
 	}
 
 	ctx.restore();
+}
+
+// ── Code-drawn surfaces ──────────────────────────────────
+
+// Surfaces whose draw threw, so a broken draw logs once rather than every frame.
+const failedSurfaces = new WeakSet<object>();
+
+/**
+ * Lets a `<surface draw>` paint its canvas for this frame: sized to the box
+ * at the surface's resolution, cleared, and handed the knobs. Called only
+ * when a knob or the size changed since the canvas was last drawn (or a font
+ * finished loading, so text drawn in the fallback face is redrawn) — which is
+ * both what keeps it cheap and what makes the surface a function of the
+ * timeline, never of a clock.
+ */
+function drawSurface(world: World, entity: Entity, canvas: HTMLCanvasElement): void {
+	if (!entity.has(SurfaceDraw)) return;
+	const holder = store(world, SurfaceDraw);
+	const eid = entity.id();
+	const draw = holder.draw[eid];
+	if (typeof draw !== 'function') return;
+
+	const computed = store(world, Computed);
+	const width = Math.max(1, computed.width[eid] ?? 1);
+	const height = Math.max(1, computed.height[eid] ?? 1);
+	const pixelRatio = Math.max(1, Math.min(4, world.get(RenderSurface)?.resolution ?? 1));
+	const knobs = entity.has(Knobs) ? store(world, Knobs).computed[eid] ?? {} : {};
+	const key = `${width}x${height}@${pixelRatio}|${fontEpoch()}|${JSON.stringify(knobs)}`;
+	if (holder.drawn[eid] === key) return;
+	holder.drawn[eid] = key;
+
+	const pixelWidth = Math.round(width * pixelRatio);
+	const pixelHeight = Math.round(height * pixelRatio);
+	if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
+	if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
+
+	const kind = holder.context[eid] ?? '2d';
+	const context = canvas.getContext(kind, kind === '2d' ? undefined : { preserveDrawingBuffer: true });
+	if (!context) return;
+	if (kind === '2d') {
+		const ctx = context as CanvasRenderingContext2D;
+		ctx.setTransform(1, 0, 0, 1, 0, 0);
+		ctx.clearRect(0, 0, pixelWidth, pixelHeight);
+		ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+	} else {
+		const gl = context as WebGLRenderingContext;
+		gl.viewport(0, 0, pixelWidth, pixelHeight);
+		gl.clearColor(0, 0, 0, 0);
+		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+	}
+
+	try {
+		draw(context, knobs, { width, height, pixelRatio, canvas });
+		failedSurfaces.delete(canvas);
+	} catch (error) {
+		if (!failedSurfaces.has(canvas)) {
+			failedSurfaces.add(canvas);
+			console.error(`Error in <surface draw>: ${error instanceof Error ? `${error.name}: ${error.message}` : error}`);
+		}
+	}
+}
+
+// ── Finishing effects ─────────────────────────────────────
+
+const POST_EFFECTS: ReadonlySet<EffectType> = new Set([
+	EffectType.GRAIN, EffectType.VIGNETTE, EffectType.GLOW,
+	EffectType.CHROMATIC_ABERRATION, EffectType.DIRECTIONAL_BLUR,
+]);
+
+/** The element's visible finishing effects, in document order. */
+function postEffectsOf(world: World, entity: Entity): Entity[] {
+	const effects = store(world, Cache).effects[entity.id()];
+	if (!effects?.length) return [];
+	const types = store(world, Effect).type;
+	return effects.filter((effect) => !effect.has(Hidden) && POST_EFFECTS.has(types[effect.id()] ?? EffectType.DROP_SHADOW));
+}
+
+// How deep the isolated layers go right now: an effect inside an effect draws
+// into a layer of its own.
+let layerDepth = 0;
+
+function renderIsolated(world: World, entity: Entity, post: Entity[], tilted = false): void {
+	const surface = world.get(RenderSurface);
+	const main = surface?.ctx;
+	const canvas = surface?.canvas;
+	if (!main || !canvas || canvas.width === 0 || canvas.height === 0) {
+		renderNodeBody(world, entity);
+		return;
+	}
+
+	const layer = acquireLayer(world, layerDepth, canvas.width, canvas.height);
+	const parent = main.getTransform();
+	layer.ctx.setTransform(parent);
+	layerDepth += 1;
+	world.set(RenderSurface, { ctx: layer.ctx as CanvasRenderingContext2D });
+	try {
+		renderNodeBody(world, entity);
+	} finally {
+		world.set(RenderSurface, { ctx: main });
+		layerDepth -= 1;
+	}
+
+	applyPostEffects(world, entity, layer, post);
+
+	if (tilted) {
+		compositeTilted(world, entity, main, layer.canvas, parent);
+		return;
+	}
+
+	main.save();
+	main.setTransform(1, 0, 0, 1, 0, 0);
+	main.drawImage(layer.canvas, 0, 0);
+	main.restore();
+}
+
+/**
+ * Composites a tilted element's layer, turned about the element's middle —
+ * the anchor of its box, and a group's box starts where its children do —
+ * in the frame it was drawn with: the transform it was under, times its own.
+ */
+function compositeTilted(
+	world: World,
+	entity: Entity,
+	main: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+	layer: HTMLCanvasElement | OffscreenCanvas,
+	parent: DOMMatrix,
+): void {
+	const computed = store(world, Computed);
+	const local = store(world, LocalTransform);
+	const eid = entity.id();
+	const la = local.a[eid] ?? 1;
+	const lb = local.b[eid] ?? 0;
+	const lc = local.c[eid] ?? 0;
+	const ld = local.d[eid] ?? 1;
+	const le = local.e[eid] ?? 0;
+	const lf = local.f[eid] ?? 0;
+	const a = parent.a * la + parent.c * lb;
+	const b = parent.b * la + parent.d * lb;
+	const c = parent.a * lc + parent.c * ld;
+	const d = parent.b * lc + parent.d * ld;
+	const e = parent.a * le + parent.c * lf + parent.e;
+	const f = parent.b * le + parent.d * lf + parent.f;
+
+	const anchor = entity.has(Anchor) ? store(world, Anchor) : null;
+	const px = (computed.originX[eid] ?? 0) + (anchor?.x[eid] ?? 0.5) * (computed.width[eid] ?? 0);
+	const py = (computed.originY[eid] ?? 0) + (anchor?.y[eid] ?? 0.5) * (computed.height[eid] ?? 0);
+
+	drawTilted(
+		main,
+		layer,
+		{
+			rotationX: computed.tiltX[eid] ?? 0,
+			rotationY: computed.tiltY[eid] ?? 0,
+			perspective: computed.perspective[eid] ?? DEFAULT_TILT_PERSPECTIVE,
+		},
+		[a, b, c, d],
+		{ x: a * px + c * py + e, y: b * px + d * py + f },
+	);
+}
+
+function applyPostEffects(world: World, entity: Entity, layer: Layer, post: Entity[]): void {
+	const computed = store(world, Computed);
+	const types = store(world, Effect).type;
+	const eid = entity.id();
+
+	// The element's box and scale in device pixels, which is what the layer
+	// is in: sizes are authored in the composition's pixels.
+	const wt = store(world, WorldTransform);
+	const a = wt.a[eid] ?? 1;
+	const b = wt.b[eid] ?? 0;
+	const c = wt.c[eid] ?? 0;
+	const d = wt.d[eid] ?? 1;
+	const e = wt.e[eid] ?? 0;
+	const f = wt.f[eid] ?? 0;
+	const scale = Math.hypot(a, b) || 1;
+	const rotation = Math.atan2(b, a);
+	const w = computed.width[eid] ?? 0;
+	const h = computed.height[eid] ?? 0;
+	const xs = [e, a * w + e, c * h + e, a * w + c * h + e];
+	const ys = [f, b * w + f, d * h + f, b * w + d * h + f];
+	const box = {
+		x: Math.min(...xs),
+		y: Math.min(...ys),
+		width: Math.max(...xs) - Math.min(...xs),
+		height: Math.max(...ys) - Math.min(...ys),
+	};
+	const frame = computed.localTime[eid] ?? 0;
+
+	for (const effect of post) {
+		const fid = effect.id();
+		const value = computed.value[fid] ?? 0;
+		const size = computed.effectSize[fid] ?? 0;
+		const angle = computed.effectAngle[fid] ?? 0;
+		switch (types[fid]) {
+			case EffectType.GRAIN:
+				applyGrain(layer, value, (size > 0 ? size : 1.5) * scale, frame);
+				break;
+			case EffectType.VIGNETTE:
+				applyVignette(layer, value, size > 0 ? size : 0.5, box);
+				break;
+			case EffectType.GLOW:
+				applyGlow(layer, value, (size > 0 ? size : 24) * scale);
+				break;
+			case EffectType.CHROMATIC_ABERRATION:
+				applyChromaticAberration(layer, value * scale, rotation);
+				break;
+			case EffectType.DIRECTIONAL_BLUR:
+				applyDirectionalBlur(layer, value * scale, rotation + (angle * Math.PI) / 180);
+				break;
+		}
+	}
+}
+
+// ── Repeater ──────────────────────────────────────────────
+
+function blendColor(from: number, to: number, t: number): number {
+	const k = Math.max(0, Math.min(1, t));
+	const r = Math.round(((from >> 16) & 0xFF) + ((((to >> 16) & 0xFF) - ((from >> 16) & 0xFF)) * k));
+	const g = Math.round(((from >> 8) & 0xFF) + ((((to >> 8) & 0xFF) - ((from >> 8) & 0xFF)) * k));
+	const bl = Math.round((from & 0xFF) + (((to & 0xFF) - (from & 0xFF)) * k));
+	return (r << 16) | (g << 8) | bl;
+}
+
+/**
+ * Draws a repeater's template once per copy: centred on the copy's point,
+ * scaled by its depth, tinted toward `colorTo`, and — when staggered — with
+ * the template's own motion played at the copy's delayed clock. The template
+ * is put back as it was afterwards, so selecting it or reading its geometry
+ * sees the template, not the last copy.
+ */
+function renderRepeater(world: World, entity: Entity, children: readonly Entity[]): void {
+	const template = children.find((child) => !child.has(IsMask));
+	if (!template) return;
+
+	const ctx = getCtx(world);
+	const computed = store(world, Computed);
+	const settings = entity.get(Repeater)!;
+	const input = repeaterInput(world, entity);
+	if (input.count === 0) return;
+	const instances = computeInstances(input);
+	const tid = template.id();
+
+	const stagger = settings.stagger;
+	const ranks = stagger !== 0 ? staggerRanks(input, settings.staggerOrder as StaggerOrder) : null;
+	const subtree = ranks ? getEntityTree(world, template).filter((node) => node.has(Geometry) || node.has(Group)) : [];
+	const baseTimes = subtree.map((node) => computed.localTime[node.id()] ?? 0);
+
+	const baseColor = computed.color[tid] ?? 0;
+	const tint = settings.colorTo >= 0;
+	// Colour by the wave comes in with the wave: with no ripple running there is
+	// nothing to colour by, and the copies keep the template's own fill.
+	const waveStrength = Math.min(1, Math.abs(input.ripple) / (input.rippleMode === 'scale' ? 0.5 : 20));
+	const depths = instances.map((instance) => instance.depth);
+	const nearest = Math.min(...depths);
+	const farthest = Math.max(...depths);
+	const fade = store(world, Knobs).computed[entity.id()]?.depthFade;
+	const depthFade = Math.max(0, Math.min(1, typeof fade === 'number' ? fade : 0));
+
+	// The template's box centre, in the repeater's space: what each copy's point is.
+	const local = store(world, LocalTransform);
+	const w = computed.width[tid] ?? 0;
+	const h = computed.height[tid] ?? 0;
+	const centerX = (local.a[tid] ?? 1) * w / 2 + (local.c[tid] ?? 0) * h / 2 + (local.e[tid] ?? 0);
+	const centerY = (local.b[tid] ?? 0) * w / 2 + (local.d[tid] ?? 1) * h / 2 + (local.f[tid] ?? 0);
+
+	for (const instance of instances) {
+		if (!instance.visible || instance.scale <= 0) continue;
+
+		if (ranks) {
+			const delay = (ranks[instance.index] ?? 0) * stagger;
+			subtree.forEach((node, i) => {
+				computed.localTime[node.id()] = baseTimes[i]! - delay;
+				applyMotion(world, node, baseTimes[i]! - delay);
+				computeLocalMatrix(world, node);
+			});
+		}
+
+		if (tint) {
+			const by = settings.colorBy;
+			const t = by === 'index'
+				? instance.index / Math.max(1, input.count - 1)
+				: by === 'depth'
+					? (farthest > nearest ? (instance.depth - nearest) / (farthest - nearest) : 0)
+					: ((instance.wave + 1) / 2) * waveStrength;
+			computed.color[tid] = blendColor(baseColor, settings.colorTo, t);
+		}
+
+		ctx.save();
+		if (depthFade > 0 && farthest > nearest) {
+			ctx.globalAlpha *= 1 - depthFade * ((instance.depth - nearest) / (farthest - nearest));
+		}
+		ctx.translate(instance.x, instance.y);
+		ctx.scale(instance.scale, instance.scale);
+		ctx.translate(-centerX, -centerY);
+		renderNode(world, template);
+		ctx.restore();
+	}
+
+	if (tint) computed.color[tid] = baseColor;
+	if (ranks) {
+		subtree.forEach((node, i) => {
+			computed.localTime[node.id()] = baseTimes[i]!;
+			applyMotion(world, node, baseTimes[i]!);
+			computeLocalMatrix(world, node);
+		});
+	}
 }
 
 /**

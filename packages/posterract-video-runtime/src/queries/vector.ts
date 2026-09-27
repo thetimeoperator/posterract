@@ -15,7 +15,8 @@
 import { store } from '../world/store';
 import { GeometryType } from '../constants';
 import { Computed, Geometry, Path, Polygon } from '../traits';
-import { flattenPath, morphPath, parsePath, parsePoints, type PathCommand, type SubPath } from '../utils/vector';
+import { flattenPath, parsePath, parsePoints, type PathCommand, type SubPath } from '../utils/vector';
+import { morphPathData } from '../utils/morph';
 
 import type { Entity, World } from 'koota';
 
@@ -65,6 +66,18 @@ export function vectorCommands(world: World, entity: Entity): PathCommand[] {
 	}
 
 	if (!entity.has(Path)) return [];
+
+	// Shape keyframes win over the authored figure while they run: the frame
+	// sits between two of them, this far along.
+	const shapeFrom = computed.shapeFrom[eid];
+	if (shapeFrom !== undefined) {
+		const shapeTo = computed.shapeTo[eid] ?? shapeFrom;
+		const t = shapeTo === shapeFrom ? 0 : Math.round((computed.shapeT[eid] ?? 0) * 1000) / 1000;
+		return read(eid, `k:${shapeFrom}|${shapeTo}|${t}`, () => (
+			t > 0 ? morphPathData(shapeFrom, shapeTo, t) : parsePath(shapeFrom)
+		));
+	}
+
 	const paths = store(world, Path);
 	const d = paths.d[eid] ?? '';
 	const morphTo = paths.morphTo[eid] ?? '';
@@ -73,8 +86,35 @@ export function vectorCommands(world: World, entity: Entity): PathCommand[] {
 	const morph = morphTo ? Math.round((computed.morph[eid] ?? 0) * 1000) / 1000 : 0;
 
 	return read(eid, `p:${d}|${morphTo}|${morph}`, () => (
-		morph > 0 ? morphPath(parsePath(d), parsePath(morphTo), morph) : parsePath(d)
+		morph > 0 ? morphPathData(d, morphTo, morph) : parsePath(d)
 	));
+}
+
+/**
+ * A text's path for this frame, flattened: its authored `path`, or where its
+ * shape keyframes are. Null for a text that is not on a path.
+ */
+export function textPathSubPaths(world: World, entity: Entity, authored: string): SubPath[] | null {
+	const eid = entity.id();
+	const computed = store(world, Computed);
+	const shapeFrom = computed.shapeFrom[eid];
+	let commands: PathCommand[];
+	if (shapeFrom !== undefined) {
+		const shapeTo = computed.shapeTo[eid] ?? shapeFrom;
+		const t = shapeTo === shapeFrom ? 0 : Math.round((computed.shapeT[eid] ?? 0) * 1000) / 1000;
+		commands = read(eid, `tk:${shapeFrom}|${shapeTo}|${t}`, () => (
+			t > 0 ? morphPathData(shapeFrom, shapeTo, t) : parsePath(shapeFrom)
+		));
+	} else if (authored) {
+		commands = read(eid, `t:${authored}`, () => parsePath(authored));
+	} else {
+		return null;
+	}
+	const entry = cache.get(eid);
+	if (entry && entry.commands === commands && entry.subpaths) return entry.subpaths;
+	const subpaths = flattenPath(commands);
+	if (entry) entry.subpaths = subpaths;
+	return subpaths;
 }
 
 /** The same figure, flattened into polylines — what trim and bounds need. */

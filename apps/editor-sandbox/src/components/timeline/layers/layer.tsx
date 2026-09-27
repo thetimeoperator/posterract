@@ -11,6 +11,7 @@ import { NodeLayer } from './node';
 import { SubItemLayer } from './sub-item';
 import { ComponentLayer } from './component-row';
 import { LiveLayer } from './live-row';
+import { KnobLayer, SettingLayer } from './knob-row';
 
 import type { Component } from 'solid-js';
 import type { TimelineNode, TimelineNodeKind } from '@posterract/video-runtime';
@@ -42,6 +43,9 @@ const LAYER_ROWS: Record<TimelineNodeKind, Component<LayerRowProps>> = {
   'lottie-slot': SubItemLayer,
   'component': ComponentLayer,
   'live': LiveLayer,
+  'knob': KnobLayer,
+  'setting': SettingLayer,
+  'animator': SubItemLayer,
 };
 
 /**

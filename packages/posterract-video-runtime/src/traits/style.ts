@@ -35,6 +35,11 @@ export const ScaleMode = trait({ value: ScaleModeType.COVER as ScaleModeType });
 export const Effect = trait({
 	type: EffectType.DROP_SHADOW as EffectType,
 	value: 0,
+	// The finishing effects' second and third numbers (see EffectType): a
+	// grain's size, a vignette's reach, a glow's radius; a directional blur's
+	// angle. 0 is the effect's own default.
+	size: 0,
+	angle: 0,
 });
 
 // Single gradient stop: its position along the gradient (0-1). Its color and

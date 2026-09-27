@@ -3,8 +3,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 
-import { Active, AdjustmentLayer, Animation, AnimationPhase, AnimationType, appendChild, AssetId, Audio, Background, bindAsset, BlendMode, BlendModeType, Blur, Caption, CaptionAlign, CAPTION_PRESET_FILLS, CAPTION_PRESET_STYLES, CaptionType, Chars, ClipHeight, ClipsContent, Computed, CornerRadius, createEntity, DEFAULT_BACKGROUND, Color, ColorStop, Delay, Diagram, DiagramKindType, Effect, EffectType, Expanded, FontStyle, FramePromises, FrameRate, Generating, GenerationRequest, getActiveEntity, Loop, LoadRequest, Geometry, GeometryType, getEntityTree, getParentEntity, getParentNode, Component, Cue, Hidden, Host, Live, Locked, Lottie, LottieSlot, Path, PathTrim, Place, PLACEMENTS, isPlacement, Polygon, After, Stagger, Duck, Marker, IsMask, isText, ItemIndex, KeepAspectRatio, Keyframe, KeyframeTrack, MixedCornerRadius, Muted, Name, Offset, Opacity, Paint, PaintType, parseColor, PendingSource, PendingSync, Playback, PlaybackRate, Position, removeChild, RenderSurface, resizeEntity, Scale, ScaleMode, ScaleModeType, secondsToFrames, getAsset, getEntityChildren, Group, Sequential, Shader, Size, Stage, Root, Rotation, Scene, SceneSkill, Selected, Shadow, Source, SourceError, SourceFrameRate, SourceModifiers, hasModifier, setCameraMatrix, Stroke, StrokeCap, StrokeJoin, StrokeStyle, SyncRequest, TextAlign, TextBaseline, TextCase, TextDecorationType, TextRange, TextStyle, TrackLoop, TranscriptionRequest, Transition, TransitionType, Trim, UniformScale, Volume, Workarea } from '@posterract/video-runtime';
-import { COMPONENT_ATTR, LIVE_ATTR, LOOP_ATTR, parseTime, SOURCE_ATTR } from '@posterract/composition';
+import { Active, AdjustmentLayer, Animation, AnimationPhase, AnimationType, appendChild, AssetId, Audio, Background, bindAsset, BlendMode, BlendModeType, Blur, Caption, CaptionAlign, CAPTION_PRESET_FILLS, CAPTION_PRESET_STYLES, CaptionType, Chars, ClipHeight, ClipsContent, Computed, CornerRadius, createEntity, DEFAULT_BACKGROUND, Color, ColorStop, Delay, Diagram, DiagramKindType, Effect, EffectType, Expanded, FontStyle, FramePromises, FrameRate, Generating, GenerationRequest, getActiveEntity, Loop, LoadRequest, Geometry, GeometryType, getEntityTree, getParentEntity, getParentNode, Component, Cue, Hidden, Host, Live, Locked, Lottie, LottieSlot, Path, PathTrim, Place, PLACEMENTS, isPlacement, Polygon, After, Stagger, Duck, Marker, IsMask, isText, ItemIndex, KeepAspectRatio, Keyframe, KeyframeTrack, MixedCornerRadius, Muted, Name, Offset, Opacity, Paint, PaintType, parseColor, PendingSource, PendingSync, Playback, PlaybackRate, Position, removeChild, RenderSurface, resizeEntity, Scale, ScaleMode, ScaleModeType, secondsToFrames, getAsset, getEntityChildren, Group, Sequential, Shader, Size, Stage, Root, Rotation, Scene, SceneSkill, Selected, Shadow, Source, SourceError, SourceFrameRate, SourceModifiers, hasModifier, setCameraMatrix, Stroke, StrokeCap, StrokeJoin, StrokeStyle, SyncRequest, TextAlign, TextBaseline, TextCase, TextDecorationType, TextRange, TextStyle, TrackLoop, TranscriptionRequest, Transition, TransitionType, Trim, UniformScale, Volume, Workarea, Knobs, MotionBlur, NoMotionBlur, Tempo, SurfaceDraw, TextAnimator, TextAnimatorUnit, TextAnimatorOrder, Repeater, REPEATER_KNOBS, TextPath, TextPathAlign, Tilt, DEFAULT_TILT_PERSPECTIVE, store, WebFonts, loadWebFont } from '@posterract/video-runtime';
+import { COMPONENT_ATTR, LIVE_ATTR, LOOP_ATTR, musicalSeconds, parseMusicalTime, parseTime, SOURCE_ATTR } from '@posterract/composition';
 import { createSignal } from 'solid-js';
 import { SVGElements } from 'solid-js/web';
 import { IsExcluded } from 'koota';
@@ -149,6 +149,17 @@ export const TRANSITION_TYPES: Record<string, TransitionType> = {
 	slideFromLeft: TransitionType.SLIDE_FROM_LEFT,
 	fadeToBlack: TransitionType.FADE_TO_BLACK,
 	fadeToWhite: TransitionType.FADE_TO_WHITE,
+	iris: TransitionType.IRIS,
+	shapeWipe: TransitionType.SHAPE_WIPE,
+	wipeLeft: TransitionType.WIPE_LEFT,
+	wipeRight: TransitionType.WIPE_RIGHT,
+	wipeUp: TransitionType.WIPE_UP,
+	wipeDown: TransitionType.WIPE_DOWN,
+	zoomThrough: TransitionType.ZOOM_THROUGH,
+	whipLeft: TransitionType.WHIP_LEFT,
+	whipRight: TransitionType.WHIP_RIGHT,
+	whipUp: TransitionType.WHIP_UP,
+	whipDown: TransitionType.WHIP_DOWN,
 };
 
 /** The canvas composite operations, spelled camelCase like the other enums. */
@@ -183,6 +194,9 @@ const TRACK_PROPERTIES: Record<string, PropertyPath> = {
 	width: 'width',
 	height: 'height',
 	rotation: 'rotation',
+	rotationX: 'rotation.x',
+	rotationY: 'rotation.y',
+	perspective: 'perspective',
 	scale: 'scale',
 	scaleX: 'scale.x',
 	scaleY: 'scale.y',
@@ -202,6 +216,12 @@ const TRACK_PROPERTIES: Record<string, PropertyPath> = {
 	trimStart: 'trim.start',
 	trimEnd: 'trim.end',
 	trimOffset: 'trim.offset',
+	d: 'shape.d',
+	path: 'text.path',
+	pathOffset: 'textPath.offset',
+	pathShift: 'textPath.shift',
+	size: 'effect.size',
+	angle: 'effect.angle',
 };
 
 /**
@@ -210,6 +230,10 @@ const TRACK_PROPERTIES: Record<string, PropertyPath> = {
  * holder: a stroke's is its line width.
  */
 export function trackPropertyPath(holder: Entity | null, property: string): PropertyPath | undefined {
+	// Knobs and uniforms are named by the project, so they pass through as
+	// they are written; a repeater's numbers are knobs of its own.
+	if (/^(knob|uniform)\.[A-Za-z_$][\w$]*$/.test(property)) return property as PropertyPath;
+	if (holder?.has(Repeater) && property in REPEATER_KNOBS) return `knob.${property}` as PropertyPath;
 	const path = TRACK_PROPERTIES[property];
 	if (path === 'width' && holder?.has(Stroke)) return 'stroke.width';
 	// `value` is the generic numeric channel; which trait it is authored from
@@ -235,6 +259,7 @@ const TRACK_PROPERTY_NAMES = {
  * the file's own names.
  */
 export function trackProperty(path: string): AnimatableProperty | undefined {
+	if (/^(knob|uniform)\./.test(path)) return path as AnimatableProperty;
 	return TRACK_PROPERTY_NAMES[path as PropertyPath];
 }
 
@@ -305,6 +330,11 @@ export const EFFECT_TYPES: Record<string, EffectType> = {
 	invert: EffectType.INVERT,
 	saturate: EffectType.SATURATE,
 	sepia: EffectType.SEPIA,
+	grain: EffectType.GRAIN,
+	vignette: EffectType.VIGNETTE,
+	glow: EffectType.GLOW,
+	chromaticAberration: EffectType.CHROMATIC_ABERRATION,
+	directionalBlur: EffectType.DIRECTIONAL_BLUR,
 };
 
 const STROKE_JOINS: Record<string, StrokeJoin> = {
@@ -397,6 +427,40 @@ function toNumber(value: unknown) {
 
 	const number = Number(value);
 	return Number.isFinite(number) ? number : undefined;
+}
+
+/** Whether a prop value says a musical time anywhere in it: itself, an array entry, an object field. */
+function holdsMusicalTime(value: unknown): boolean {
+	if (parseMusicalTime(value) !== undefined) return true;
+	if (Array.isArray(value)) return value.some((entry) => parseMusicalTime(entry) !== undefined);
+	if (typeof value === 'object' && value !== null) {
+		return Object.values(value).some((entry) => parseMusicalTime(entry) !== undefined);
+	}
+	return false;
+}
+
+/**
+ * A scene's `motionBlur` as shutter and samples, or null for none: `true` is
+ * 180° at 8 samples, a number is the shutter angle, an object sets either.
+ */
+function motionBlurSettings(value: unknown): { shutter: number; samples: number } | null {
+	if (value === undefined || value === null || value === false) return null;
+	if (value === true) return { shutter: 180, samples: 8 };
+	if (typeof value === 'number') {
+		return value > 0 ? { shutter: Math.min(360, value), samples: 8 } : null;
+	}
+	if (typeof value === 'object') {
+		const spec = value as { shutter?: unknown; samples?: unknown };
+		const shutter = toNumber(spec.shutter) ?? 180;
+		const samples = Math.round(toNumber(spec.samples) ?? 8);
+		return shutter > 0 && samples > 1 ? { shutter: Math.min(360, shutter), samples: Math.min(32, samples) } : null;
+	}
+	return null;
+}
+
+/** A 0xRRGGBB colour, or -1 for none. */
+function colorOrNone(value: unknown): number {
+	return parseColor(value) ?? -1;
 }
 
 function toSeconds(value: unknown): number | undefined {
@@ -780,6 +844,24 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 				entity.add(Geometry);
 				entity.set(Geometry, { value: GeometryType.POLYGON });
 				entity.add(Polygon);
+				break;
+			}
+			case 'textAnimator': {
+				entity = createEntity(this.world);
+				entity.add(TextAnimator);
+				entity.set(TextAnimator, { stagger: this.toExactFrames(0.04) });
+				break;
+			}
+			case 'repeater': {
+				// A group whose one element child is drawn many times; the group
+				// gives it a transform, a timeline row and a box to select.
+				entity = createEntity(this.world);
+				entity.add(Group);
+				entity.add(Position);
+				entity.set(Position, { x: 0, y: 0 });
+				entity.add(Repeater);
+				entity.add(Knobs);
+				store(this.world, Knobs).authored[entity.id()] = { ...REPEATER_KNOBS };
 				break;
 			}
 			case 'lottie': {
@@ -1239,13 +1321,16 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 					entity.set(Transition, { type: TransitionType.DISSOLVE, duration: this.toFrames(1) });
 				}
 
-				const spec = value as { type?: unknown; duration?: unknown };
+				const spec = value as { type?: unknown; duration?: unknown; shape?: unknown };
+				if ('shape' in spec) {
+					entity.set(Transition, { shape: typeof spec.shape === 'string' ? spec.shape : '' });
+				}
 				if ('type' in spec) {
 					const type = typeof spec.type === 'string' ? TRANSITION_TYPES[spec.type] : undefined;
 					entity.set(Transition, { type: type ?? TransitionType.DISSOLVE });
 				}
 				if ('duration' in spec) {
-					entity.set(Transition, { duration: this.toFrames(toSeconds(spec.duration) ?? 1) });
+					entity.set(Transition, { duration: this.toFrames(this.seconds(node, spec.duration) ?? 1) });
 				}
 				return;
 			}
@@ -1260,6 +1345,14 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 					? { ...(value as Record<string, number | number[] | string>) }
 					: null;
 				entity.set(Shader, { uniforms });
+				// Every numeric uniform is a knob, so a `uniform.<name>` track has
+				// the authored value to start from and a row to show on.
+				const numbers: Record<string, number> = {};
+				for (const [key, entry] of Object.entries(uniforms ?? {})) {
+					if (typeof entry === 'number') numbers[key] = entry;
+				}
+				if (!entity.has(Knobs)) entity.add(Knobs);
+				store(this.world, Knobs).authored[entity.id()] = numbers;
 				return;
 			}
 			case 'width':
@@ -1324,7 +1417,7 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 			case 'duration':
 			case 'delay': {
 				if (!entity.has(Animation)) return;
-				const seconds = toSeconds(value);
+				const seconds = this.seconds(node, value);
 				entity.set(Animation, { [name]: this.toFrames(seconds ?? (name === 'duration' ? 1 : 0)) });
 				return;
 			}
@@ -1339,6 +1432,10 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 				return;
 			}
 			case 'morph': {
+				if (entity.has(Repeater)) {
+					this.setKnob(entity, name, ratio(toNumber(value) ?? 0));
+					return;
+				}
 				if (!entity.has(Path)) return;
 				entity.set(Path, { morph: ratio(toNumber(value) ?? 0) });
 				return;
@@ -1371,8 +1468,15 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 					return;
 				}
 				if (entity.has(Keyframe)) {
+					// Path data (a shape keyframe on a `d`/`path` track) always opens
+					// with a moveto; it is checked first because the colour parser is
+					// lenient enough to read one as a colour.
+					if (typeof value === 'string' && /^\s*[Mm]/.test(value)) {
+						entity.set(Keyframe, { value: 0, text: value });
+						return;
+					}
 					// A number, or a color on a color track; either is a number to the trait.
-					entity.set(Keyframe, { value: toNumber(value) ?? parseColor(value) ?? 0 });
+					entity.set(Keyframe, { value: toNumber(value) ?? parseColor(value) ?? 0, text: '' });
 					return;
 				}
 				if (!entity.has(Effect)) return;
@@ -1385,7 +1489,7 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 				return;
 			}
 			case 'time': {
-				const seconds = toSeconds(value);
+				const seconds = this.seconds(node, value);
 				if (entity.has(Marker)) {
 					entity.set(Marker, { time: this.toFrames(seconds ?? 0) });
 					return;
@@ -1423,7 +1527,7 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 			case 'sourceOut': {
 				// A cue's start/end are scene-local times, like a keyframe's.
 				if (entity.has(Cue) && (name === 'start' || name === 'end')) {
-					entity.set(Cue, { [name]: this.toFrames(toSeconds(value) ?? 0) });
+					entity.set(Cue, { [name]: this.toFrames(this.seconds(node, value) ?? 0) });
 					return;
 				}
 				if (entity.has(TextRange)) {
@@ -1440,7 +1544,7 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 				}
 
 				if (entity.has(After) && name === 'start') {
-					entity.set(After, { gap: this.toFrames(toSeconds(value) ?? 0) });
+					entity.set(After, { gap: this.toFrames(this.seconds(node, value) ?? 0) });
 					return;
 				}
 				this.syncTiming(node);
@@ -1448,6 +1552,14 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 			}
 			case 'target':
 			case 'by': {
+				// A text animator's `by` is what moves as one; a duck's, what drives it.
+				if (name === 'by' && entity.has(TextAnimator)) {
+					const units: Record<string, TextAnimatorUnit> = {
+						letter: TextAnimatorUnit.LETTER, word: TextAnimatorUnit.WORD, line: TextAnimatorUnit.LINE,
+					};
+					entity.set(TextAnimator, { by: typeof value === 'string' ? units[value] ?? TextAnimatorUnit.LETTER : TextAnimatorUnit.LETTER });
+					return;
+				}
 				if (!entity.has(Duck)) return;
 				entity.set(Duck, { [name]: typeof value === 'string' ? value : '' });
 				return;
@@ -1470,7 +1582,7 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 			case 'attack':
 			case 'release': {
 				if (!entity.has(Duck)) return;
-				const seconds = toSeconds(value);
+				const seconds = this.seconds(node, value);
 				entity.set(Duck, {
 					[name]: this.toFrames(seconds ?? (name === 'attack' ? 0.1 : 0.4)),
 				});
@@ -1485,11 +1597,19 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 					return;
 				}
 				entity.add(After);
-				entity.set(After, { id: value, gap: this.toFrames(toSeconds(node.props.start) ?? 0) });
+				entity.set(After, { id: value, gap: this.toFrames(this.seconds(node, node.props.start) ?? 0) });
 				return;
 			}
 			case 'stagger': {
-				const seconds = toSeconds(value);
+				const seconds = this.seconds(node, value);
+				if (entity.has(TextAnimator)) {
+					entity.set(TextAnimator, { stagger: this.toExactFrames(seconds ?? 0.04) });
+					return;
+				}
+				if (entity.has(Repeater)) {
+					entity.set(Repeater, { stagger: this.toExactFrames(seconds ?? 0) });
+					return;
+				}
 				if (seconds === undefined || seconds === 0) {
 					entity.remove(Stagger);
 					return;
@@ -1650,6 +1770,7 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 			}
 			case 'fontFamily': {
 				const family = typeof value === 'string' ? value.trim() : '';
+				this.loadBundledFont(family);
 				if (entity.has(Diagram)) {
 					if (family) entity.set(Diagram, { fontFamily: family });
 					return;
@@ -1797,6 +1918,10 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 				return;
 			}
 			case 'seed': {
+				if (entity.has(Repeater)) {
+					this.setKnob(entity, name, Math.round(toNumber(value) ?? 1));
+					return;
+				}
 				if (!entity.has(Caption)) return;
 				// An authored src mounts a transcript directly; there is no
 				// transcription for the seed to key.
@@ -1812,7 +1937,7 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 			case 'workarea': {
 				// Two times or none: a half-authored range says nothing, and
 				// `false` is what the editor writes to take the brackets off.
-				const range = Array.isArray(value) ? value.map(toSeconds) : [];
+				const range = Array.isArray(value) ? value.map((entry) => this.seconds(node, entry)) : [];
 				const [start, end] = range;
 				if (range.length !== 2 || start === undefined || end === undefined) {
 					entity.remove(Workarea);
@@ -1837,6 +1962,156 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 				}
 				return;
 			}
+			case 'motionBlur': {
+				if (entity.has(Scene)) {
+					const settings = motionBlurSettings(value);
+					if (settings === null) {
+						entity.remove(MotionBlur);
+						return;
+					}
+					entity.add(MotionBlur);
+					entity.set(MotionBlur, settings);
+					return;
+				}
+				// On any other element, `false` keeps it sharp.
+				if (value === false) entity.add(NoMotionBlur);
+				else entity.remove(NoMotionBlur);
+				return;
+			}
+			case 'bpm':
+			case 'meter': {
+				if (!entity.has(Scene)) return;
+				const bpm = toNumber(node.props.bpm);
+				if (bpm === undefined || bpm <= 0) {
+					entity.remove(Tempo);
+				} else {
+					const meter = toNumber(node.props.meter);
+					entity.add(Tempo);
+					entity.set(Tempo, { bpm, meter: meter !== undefined && meter > 0 ? Math.round(meter) : 4 });
+				}
+				// Every beat and bar in the scene is counted at the new tempo.
+				if (this.musical.size > 0) this.resolveMusical(node);
+				return;
+			}
+			case 'knobs': {
+				const knobs: Record<string, number | string> = {};
+				if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+					for (const [key, entry] of Object.entries(value)) {
+						if (typeof entry === 'number' && Number.isFinite(entry)) knobs[key] = entry;
+						else if (typeof entry === 'string') knobs[key] = entry;
+					}
+				}
+				if (!entity.has(Knobs)) entity.add(Knobs);
+				store(this.world, Knobs).authored[entity.id()] = knobs;
+				return;
+			}
+			case 'draw':
+			case 'context': {
+				const draw = node.props.draw;
+				if (typeof draw !== 'function') {
+					entity.remove(SurfaceDraw);
+					return;
+				}
+				const context = node.props.context === 'webgl' || node.props.context === 'webgl2' ? node.props.context : '2d';
+				entity.add(SurfaceDraw);
+				const holder = store(this.world, SurfaceDraw);
+				holder.draw[entity.id()] = draw as never;
+				holder.context[entity.id()] = context;
+				// Whatever it last drew for is stale: a new function draws anew.
+				holder.drawn[entity.id()] = '';
+				return;
+			}
+			case 'size':
+			case 'angle': {
+				if (!entity.has(Effect)) return;
+				entity.set(Effect, { [name]: toNumber(value) ?? 0 });
+				return;
+			}
+			case 'order': {
+				if (!entity.has(TextAnimator)) return;
+				const orders: Record<string, TextAnimatorOrder> = {
+					forward: TextAnimatorOrder.FORWARD,
+					reverse: TextAnimatorOrder.REVERSE,
+					center: TextAnimatorOrder.CENTER,
+					edges: TextAnimatorOrder.EDGES,
+					random: TextAnimatorOrder.RANDOM,
+				};
+				entity.set(TextAnimator, { order: typeof value === 'string' ? orders[value] ?? TextAnimatorOrder.FORWARD : TextAnimatorOrder.FORWARD });
+				return;
+			}
+			case 'layout':
+			case 'layoutTo':
+			case 'rippleMode':
+			case 'staggerOrder':
+			case 'colorBy': {
+				if (!entity.has(Repeater)) return;
+				const fallback: Record<string, string> = {
+					layout: 'circle', layoutTo: '', rippleMode: 'z', staggerOrder: 'index', colorBy: 'wave',
+				};
+				entity.set(Repeater, { [name]: typeof value === 'string' && value ? value : fallback[name]! });
+				return;
+			}
+			case 'colorTo': {
+				if (!entity.has(Repeater)) return;
+				entity.set(Repeater, { colorTo: colorOrNone(value) });
+				return;
+			}
+			case 'count':
+			case 'columns':
+			case 'spacing':
+			case 'radius':
+			case 'tube':
+			case 'ripple':
+			case 'rippleFrequency':
+			case 'ripplePhase':
+			case 'rippleCenterX':
+			case 'rippleCenterY':
+			case 'tiltX':
+			case 'tiltY':
+			case 'roll':
+			case 'zoom':
+			case 'perspective':
+			case 'cameraZ':
+			case 'depthFade': {
+				if (entity.has(Repeater)) {
+					this.setKnob(entity, name, toNumber(value) ?? REPEATER_KNOBS[name]!);
+					return;
+				}
+				// On anything else, the camera its 3D tilt is seen through.
+				if (name !== 'perspective' || entity.has(Sequential)) return;
+				entity.add(Tilt);
+				entity.set(Tilt, { perspective: Math.max(0, toNumber(value) ?? DEFAULT_TILT_PERSPECTIVE) });
+				return;
+			}
+			case 'rotationX':
+			case 'rotationY': {
+				if (entity.has(Sequential)) return;
+				entity.add(Tilt);
+				entity.set(Tilt, { [name === 'rotationX' ? 'x' : 'y']: toNumber(value) ?? 0 });
+				return;
+			}
+			case 'path':
+			case 'pathOffset':
+			case 'pathShift':
+			case 'pathAlign': {
+				if (!isText(entity)) return;
+				const d = node.props.path;
+				if (typeof d !== 'string' || d.trim() === '') {
+					entity.remove(TextPath);
+					return;
+				}
+				const aligns: Record<string, TextPathAlign> = {
+					start: TextPathAlign.START, center: TextPathAlign.CENTER, end: TextPathAlign.END,
+				};
+				entity.add(TextPath);
+				entity.set(TextPath, {
+					d,
+					offset: toNumber(node.props.pathOffset) ?? 0,
+					shift: toNumber(node.props.pathShift) ?? 0,
+					align: typeof node.props.pathAlign === 'string' ? aligns[node.props.pathAlign] ?? TextPathAlign.START : TextPathAlign.START,
+				});
+				return;
+			}
 			default:
 				// children/ref and anything from a richer vocabulary: ignored, so
 				// such a project still renders what this host understands.
@@ -1844,9 +2119,92 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 		}
 	}
 
+	/**
+	 * Loads a face the app ships (Montserrat, Inter, …) the moment a source
+	 * names it. Only choosing one in the inspector used to load it, so a text
+	 * an agent wrote in Montserrat drew in the fallback serif until someone
+	 * clicked the font picker. An offline world waits for it before its first
+	 * frame, so an export never catches the fallback.
+	 */
+	private loadBundledFont(family: string): void {
+		if (!family || !(family in WebFonts)) return;
+		const loading = loadWebFont(this.world, family as keyof typeof WebFonts).catch(() => null);
+		this.world.get(FramePromises)?.list?.push(loading);
+	}
+
+	/** Writes one of an element's authored knobs (a repeater's numbers are knobs). */
+	private setKnob(entity: Entity, name: string, value: number): void {
+		if (!entity.has(Knobs)) entity.add(Knobs);
+		const holder = store(this.world, Knobs);
+		const authored = holder.authored[entity.id()] ?? (holder.authored[entity.id()] = {});
+		authored[name] = value;
+	}
+
 	/** Seconds as frames of this project. */
 	private toFrames(seconds: number): number {
 		return secondsToFrames(seconds, this.world.get(FrameRate)?.value ?? 30);
+	}
+
+	/**
+	 * Seconds as frames, not rounded to one: the gap between letters or copies
+	 * is a spacing, not a moment, and 0.02s and 0.04s are both one frame at 30.
+	 */
+	private toExactFrames(seconds: number): number {
+		return seconds * (this.world.get(FrameRate)?.value ?? 30);
+	}
+
+	/**
+	 * Nodes holding a musical time ("4b", "2bar"): the props that say one have
+	 * to be worked out again when the node lands under a scene, or its scene's
+	 * tempo changes, because Solid sets props before it has a parent.
+	 */
+	private readonly musical = new Set<SceneNode>();
+
+	/** The tempo of the scene `node` is in, or null outside one (or in one with no `bpm`). */
+	private tempoOf(node: SceneNode): { bpm: number; meter: number } | null {
+		for (let at: SceneNode | null = node; at; at = at.parent) {
+			if (at.tag !== 'scene') continue;
+			const bpm = toNumber(at.props.bpm);
+			if (bpm === undefined || bpm <= 0) return null;
+			const meter = toNumber(at.props.meter);
+			return { bpm, meter: meter !== undefined && meter > 0 ? meter : 4 };
+		}
+		return null;
+	}
+
+	/**
+	 * A `Time` prop as seconds, musical time included: beats and bars at the
+	 * tempo of `node`'s scene. Until the node is in a scene with a tempo a
+	 * beat counts at 120 BPM, and it is remembered so the real tempo replaces
+	 * that the moment there is one (see `resolveMusical`).
+	 */
+	private seconds(node: SceneNode, value: unknown): number | undefined {
+		const musical = parseMusicalTime(value);
+		if (musical === undefined) return toSeconds(value);
+		this.musical.add(node);
+		const tempo = this.tempoOf(node);
+		return musicalSeconds(musical, tempo?.bpm ?? 120, tempo?.meter ?? 4);
+	}
+
+	/** Re-applies the musical props of every remembered node under `root`. */
+	private resolveMusical(root: SceneNode): void {
+		for (const node of [...this.musical]) {
+			if (!node.entity.isAlive()) {
+				this.musical.delete(node);
+				continue;
+			}
+			let under = false;
+			for (let at: SceneNode | null = node; at; at = at.parent) {
+				if (at === root) {
+					under = true;
+					break;
+				}
+			}
+			if (!under) continue;
+			for (const [name, value] of Object.entries(node.props)) {
+				if (holdsMusicalTime(value)) this.setProperty(node, name, value);
+			}
+		}
 	}
 
 	/**
@@ -1868,10 +2226,10 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 		const { entity, props } = node;
 
 		const rate = toNumber(props.playbackRate) || 1;
-		const start = toSeconds(props.start);
-		const end = toSeconds(props.end);
-		const sourceIn = toSeconds(props.sourceIn);
-		const sourceOut = toSeconds(props.sourceOut);
+		const start = this.seconds(node, props.start);
+		const end = this.seconds(node, props.end);
+		const sourceIn = this.seconds(node, props.sourceIn);
+		const sourceOut = this.seconds(node, props.sourceOut);
 
 		const startFrames = start === undefined ? 0 : this.toFrames(start);
 		const sourceInFrames = sourceIn === undefined ? 0 : this.toFrames(sourceIn);
@@ -2056,9 +2414,13 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 			sibling.entity.add(ItemIndex);
 			sibling.entity.set(ItemIndex, { value: index++ });
 		}
+
+		// Beats and bars under this node can be counted at the scene's tempo now.
+		if (this.musical.size > 0) this.resolveMusical(node);
 	}
 
 	private destroySubtree(node: SceneNode): void {
+		this.musical.delete(node);
 		for (const child of [...node.children]) {
 			this.destroySubtree(child);
 		}

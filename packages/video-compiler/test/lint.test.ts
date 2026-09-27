@@ -8,6 +8,8 @@ import {
   lintSource,
   propDefinition,
   suggestProp,
+  introducedHiddenMotion,
+  hiddenMotionRefusal,
 } from "../src/index.ts";
 
 const wrap = (body: string): string => `export default () => (
@@ -23,11 +25,13 @@ const messages = (body: string) => lintSource("index.tsx", wrap(body)).map((entr
 test("a name nothing reads is an error, with what was meant", () => {
   const found = lintSource("index.tsx", wrap(`      <text id="title" size={72} wdth={400}>Hi</text>`));
   assert.equal(found.length, 2);
+  // `size` is a name the runtime reads (an effect's second number), so on a
+  // <text> it is a warning — still pointing at the prop that was meant.
   assert.deepEqual(found.map((entry) => [entry.severity, entry.code, entry.element, entry.line]), [
-    ["error", "unknown-prop", "title", 4],
+    ["warning", "undeclared-prop", "title", 4],
     ["error", "unknown-prop", "title", 4],
   ]);
-  assert.match(found[0]!.message, /<text#title> has no prop `size`, and nothing in the runtime reads it, so it is ignored\. Did you mean `fontSize`\?/);
+  assert.match(found[0]!.message, /`size` is not a documented prop of <text#title>.*Use `fontSize`\./);
   assert.match(found[1]!.message, /no prop `wdth`.*Did you mean `width`\?/);
 
   assert.match(messages(`      <rect id="box" banana={5} width={10} height={10} />`)[0]!, /^error unknown-prop: .*so it is ignored\.$/);
@@ -181,4 +185,46 @@ test("a placement that names nothing is an error, and x/y beside a placement are
   // A scene is placed on the stage, not in a frame: it does not take the prop.
   const scene = lintSource("index.tsx", '<stage id="s"><scene id="m" width={1080} height={1920} place="center" /></stage>');
   assert.ok(scene.some((entry) => /place/.test(entry.message)), "a scene was let through with a placement");
+});
+
+// ── Hidden motion ─────────────────────────────────────────
+
+const project = (body: string) => `/** @jsxImportSource @posterract/composition */
+import { useTicker } from "@posterract/composition";
+export default function Project() {
+  ${body}
+}
+`;
+
+test("motion on a clock of its own is hidden motion", () => {
+  const ticker = lintSource("index.tsx", project(`const tick = useTicker();
+  return <stage><scene id="s" width={100} height={100}><rect id="r" x={tick.time() * 10} /></scene></stage>;`));
+  assert.ok(ticker.some((finding) => finding.code === "hidden-motion" && finding.severity === "error"));
+
+  const referenced = lintSource("index.tsx", project(`return <stage><scene id="s" width={100} height={100}><surface id="c" ref={(node) => node} /></scene></stage>;`));
+  assert.ok(referenced.some((finding) => finding.code === "hidden-motion" && finding.message.includes("draw")));
+
+  const traits = lintSource("index.tsx", project(`return <stage><scene id="s" width={100} height={100}><rect id="r" ref={(node) => node.entity.set(null as never, {})} /></scene></stage>;`));
+  assert.ok(traits.some((finding) => finding.code === "hidden-motion"));
+});
+
+test("a surface drawn from knobs is not hidden motion", () => {
+  const findings = lintSource("index.tsx", project(`return <stage><scene id="s" width={100} height={100}>
+    <surface id="c" width={100} height={100} knobs={{ phase: 0 }} draw={(ctx, knobs) => ctx.fillRect(0, 0, Number(knobs.phase), 10)}>
+      <keyframeTrack property="knob.phase"><keyframe time={0} value={0} /><keyframe time={1} value={100} /></keyframeTrack>
+    </surface>
+  </scene></stage>;`));
+  assert.deepEqual(findings.filter((finding) => finding.code === "hidden-motion"), []);
+});
+
+test("an edit is held to the hidden motion it adds, not what the file had", () => {
+  const before = project(`const tick = useTicker();
+  return <stage><scene id="s" width={100} height={100}><rect id="r" x={tick.time()} /></scene></stage>;`);
+  const same = before.replace('<rect id="r"', '<rect id="r" y={4}');
+  assert.deepEqual(introducedHiddenMotion("index.tsx", before, same), []);
+
+  const more = before.replace("</scene>", '<surface id="c" ref={(node) => node} /></scene>');
+  const added = introducedHiddenMotion("index.tsx", before, more);
+  assert.equal(added.length, 1);
+  assert.match(hiddenMotionRefusal(added), /^Refused: .*Nothing was written\.$/s);
 });

@@ -13,7 +13,7 @@ import type { EffectType } from "@posterract/video-runtime";
  * and `hueRotate` an angle in degrees. Within a unit the value carries over,
  * across one it cannot.
  */
-export type EffectUnit = "amount" | "px" | "deg";
+export type EffectUnit = "amount" | "px" | "deg" | "strength";
 
 export type EffectOption = {
   name: EffectName;
@@ -21,6 +21,12 @@ export type EffectOption = {
   unit: EffectUnit;
   /** What "Add effect", and a switch into this type, authors. */
   value: number;
+  /** What the value row is called when "Amount"/"Radius"/"Angle" would not say it. */
+  valueLabel?: string;
+  /** The finishing effects' second number (`size`): its row, and what it means. */
+  size?: { label: string; unit: "px" | "amount"; value: number };
+  /** Whether the effect has a direction (`angle`). */
+  angle?: boolean;
 };
 
 /** The effect types, in menu order. */
@@ -33,6 +39,11 @@ export const EFFECT_OPTIONS: EffectOption[] = [
   { name: "invert", label: "Invert", unit: "amount", value: 0.5 },
   { name: "saturate", label: "Saturate", unit: "amount", value: 0.8 },
   { name: "sepia", label: "Sepia", unit: "amount", value: 0.5 },
+  { name: "grain", label: "Film Grain", unit: "amount", value: 0.15, size: { label: "Size", unit: "px", value: 1.5 } },
+  { name: "vignette", label: "Vignette", unit: "amount", value: 0.5, size: { label: "Reach", unit: "amount", value: 0.5 } },
+  { name: "glow", label: "Glow", unit: "strength", value: 0.6, size: { label: "Radius", unit: "px", value: 24 } },
+  { name: "chromaticAberration", label: "Colour Fringe", unit: "px", value: 4, valueLabel: "Offset" },
+  { name: "directionalBlur", label: "Directional Blur", unit: "px", value: 24, valueLabel: "Length", angle: true },
 ];
 
 /** What the panel's plus inserts, spelled out. */

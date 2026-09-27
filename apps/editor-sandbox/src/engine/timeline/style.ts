@@ -21,6 +21,7 @@ import {
 	isSequence,
 	isText,
 	isVector,
+	Repeater,
 } from '@posterract/video-runtime';
 
 import { COLORS } from './constants';
@@ -88,6 +89,7 @@ export function getClipFallbackName(world: World, entity: Entity): string {
 	if (isText(entity)) return 'Text';
 	if (isScene(entity)) return 'Scene';
 	if (isSequence(entity)) return 'Sequence';
+	if (entity.has(Repeater)) return 'Repeater';
 	if (isGroup(entity)) return 'Group';
 	if (isMask(entity)) return 'Mask';
 	if (isAdjustmentLayer(entity)) return 'Adjustment';
