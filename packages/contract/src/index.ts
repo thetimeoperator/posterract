@@ -26,6 +26,11 @@ export const ANALYTICS_PLATFORM_IDS = ["instagram", "tiktok", "facebook", "threa
 export const COMING_SOON_PLATFORM_IDS = ["youtube", "x"] as const satisfies readonly PlatformId[];
 
 export type PublishingPlatformId = (typeof PUBLISHING_PLATFORM_IDS)[number];
+
+/** Platforms where one post can go to several accounts at once (e.g. two Instagram accounts). The rest take one. */
+export const MULTI_ACCOUNT_PLATFORMS = ["instagram", "facebook", "threads"] as const satisfies readonly PlatformId[];
+export const allowsSeveralAccounts = (platform: PlatformId): boolean =>
+  (MULTI_ACCOUNT_PLATFORMS as readonly PlatformId[]).includes(platform);
 export type AnalyticsPlatformId = (typeof ANALYTICS_PLATFORM_IDS)[number];
 
 export function isPlatformId(value: string): value is PlatformId {
@@ -111,6 +116,8 @@ export type TransmissionDTO = {
   /** Epoch ms. Unset for drafts. */
   scheduledFor?: number;
   source: "ui" | "api";
+  /** The business it was posted from, if any. */
+  businessId?: string;
   createdAt: number;
   updatedAt: number;
 };
@@ -154,11 +161,18 @@ export type PortalDTO = {
   windowUsage?: { used: number; cap: number; windowHours: number };
 };
 
-/** A reusable publishing target with at most one connected account per platform. */
-export type AccountSetDTO = {
+/**
+ * A group of connected accounts the user made (a brand, a client), with an
+ * optional small round logo. Any accounts can be in it, several on one
+ * platform, and one account can be in several businesses. Posting to a
+ * business posts to every account in it.
+ */
+export type BusinessDTO = {
   id: string;
   workspaceId: string;
   name: string;
+  logoUrl?: string;
+  accountIds: string[];
   accounts: PortalDTO[];
   createdAt: number;
   updatedAt: number;
@@ -453,6 +467,54 @@ export type PlatformAnalyticsDTO = {
   posts: AnalyticsPostDTO[];
   /** Same-length period immediately preceding the selected range. */
   previousPeriod?: AnalyticsPeriodSummaryDTO;
+};
+
+/** One account's stats for a period (the Businesses tab adds these up per business). */
+export type AccountAnalyticsDTO = {
+  accountId: string;
+  provider: AnalyticsPlatformId;
+  handle: string;
+  displayName?: string;
+  avatarUrl?: string;
+  status: PortalStatus;
+  /** Followers now, and the change during the period. */
+  audience?: number;
+  audienceDelta: number;
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  saves?: number;
+  watchMinutes?: number;
+  /** Likes + comments + shares. */
+  interactions: number;
+  /** interactions ÷ views, when there were views. */
+  engagementRate?: number;
+  publishedPosts: number;
+  /** Epoch ms of its most recent live post (any time). */
+  lastPostAt?: number;
+  points: number;
+  /** Posts that failed or need a reconnect during the period. */
+  failedPosts: number;
+  daily: Array<{ date: string; views: number }>;
+  /** The same stats for the period just before (not for "total"). */
+  previous?: { views: number; interactions: number; audienceDelta: number; publishedPosts: number; points: number };
+  lastSyncedAt?: number;
+};
+
+export type AccountAnalyticsResponseDTO = { rangeDays: AnalyticsRangeDays; accounts: AccountAnalyticsDTO[] };
+
+/** The calendar's numbers for the month or week on screen (local dates, inclusive). */
+export type PeriodStatsDTO = {
+  from: string;
+  to: string;
+  timeZone: string;
+  views: number;
+  previousViews: number;
+  dailyViews: Array<{ date: string; views: number }>;
+  points: number;
+  previousPoints: number;
+  streak: { days: number; postedToday: boolean; next?: { days: number; points: number } };
 };
 
 export type AnalyticsDashboardDTO = {

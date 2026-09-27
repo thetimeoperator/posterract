@@ -88,23 +88,22 @@ export function parseCreatePost(body, now = new Date()) {
   if (typeof body.caption !== "string") {
     throw new RequestValidationError("invalid_caption");
   }
-  const accountSetId = body.accountSetId;
-  if (accountSetId !== undefined && (typeof accountSetId !== "string" || !uuidPattern.test(accountSetId))) {
-    throw new RequestValidationError("invalid_account_set_id");
+  // The business the post is made for: without accountIds it posts to every
+  // account in it; with them, to exactly those (which must be in it).
+  const businessId = body.businessId;
+  if (businessId !== undefined && (typeof businessId !== "string" || !uuidPattern.test(businessId))) {
+    throw new RequestValidationError("invalid_business_id");
   }
   const accountIds = body.accountIds;
   if (
     accountIds !== undefined &&
     (!Array.isArray(accountIds) ||
       accountIds.length === 0 ||
-      accountIds.length > 6 ||
+      accountIds.length > 60 ||
       accountIds.some((id) => typeof id !== "string" || !uuidPattern.test(id)) ||
       new Set(accountIds).size !== accountIds.length)
   ) {
     throw new RequestValidationError("invalid_account_ids");
-  }
-  if (accountSetId && accountIds) {
-    throw new RequestValidationError("ambiguous_account_target");
   }
   if (
     !Array.isArray(body.platforms) ||
@@ -180,7 +179,7 @@ export function parseCreatePost(body, now = new Date()) {
     scheduleMode: scheduled.mode,
     scheduledFor: scheduled.at,
     status: scheduled.mode === "now" ? "scheduled" : "scheduled",
-    accountSetId,
+    businessId,
     accountIds,
     projections,
   };
@@ -226,11 +225,13 @@ export function publicPost(row, projections) {
     mediaId: row.media_asset_id,
     scheduledFor: row.scheduled_for?.toISOString?.() ?? row.scheduled_for,
     source: row.source,
+    businessId: row.business_id ?? undefined,
     createdAt: row.created_at?.toISOString?.() ?? row.created_at,
     updatedAt: row.updated_at?.toISOString?.() ?? row.updated_at,
     projections: projections.map((projection) => ({
       id: projection.id,
       provider: projection.provider,
+      accountId: projection.social_account_id ?? undefined,
       status: projection.status,
       attemptCount: projection.attempt_count,
       platformPostId: projection.platform_post_id ?? undefined,

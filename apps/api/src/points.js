@@ -691,6 +691,15 @@ async function loadStreak(database, workspaceId, timeZone, now = Date.now()) {
   return streakState(runs, localDay(now, timeZone));
 }
 
+/** The streak as the calendar shows it: its days, whether today's post is in yet, and the next bonus. */
+export async function loadStreakSummary(database, workspaceId, now = Date.now()) {
+  const timeZone = await loadTimeZone(database, workspaceId);
+  const runs = streakRuns(await loadPostingDays(database, workspaceId, timeZone));
+  const today = localDay(now, timeZone);
+  const state = streakState(runs, today);
+  return { days: state.current, postedToday: runs.at(-1)?.end === today, next: state.next };
+}
+
 async function loadBadges(database, workspaceId, streak) {
   const result = await database.query(
     `select
@@ -824,6 +833,50 @@ export async function loadPointsDashboard(database, workspaceId, now = Date.now(
     recent: recent.rows.map(entryFromRow),
     badges: await loadBadges(database, workspaceId, streak),
     timeZone,
+  };
+}
+
+/**
+ * One post's points on each platform, rule by rule, for a post (transmission)
+ * in the workspace. Undefined when the post isn't there.
+ */
+export async function loadPostPoints(database, workspaceId, transmissionId) {
+  const result = await database.query(
+    `select t.title, p.id as projection_id, p.provider, p.status, p.platform_post_url,
+            coalesce(p.published_at, p.created_at) as published_at,
+            pp.source, pp.points, pp.metric_value
+     from transmissions t
+     join projections p on p.transmission_id = t.id
+     left join post_points pp on pp.projection_id = p.id
+     where t.id = $1 and t.workspace_id = $2
+     order by p.created_at asc, pp.points desc nulls last`,
+    [transmissionId, workspaceId],
+  );
+  if (result.rows.length === 0) return undefined;
+  const platforms = new Map();
+  for (const row of result.rows) {
+    let platform = platforms.get(row.projection_id);
+    if (!platform) {
+      platform = {
+        provider: row.provider,
+        status: row.status,
+        url: row.platform_post_url ?? undefined,
+        publishedAt: row.published_at ? new Date(row.published_at).getTime() : undefined,
+        total: 0,
+        parts: [],
+      };
+      platforms.set(row.projection_id, platform);
+    }
+    if (row.source && Number(row.points) > 0) {
+      platform.total = round2(platform.total + Number(row.points));
+      platform.parts.push({ source: row.source, points: Number(row.points), value: optionalNumber(row.metric_value) });
+    }
+  }
+  const list = [...platforms.values()];
+  return {
+    title: result.rows[0].title,
+    total: round2(list.reduce((sum, platform) => sum + platform.total, 0)),
+    platforms: list,
   };
 }
 

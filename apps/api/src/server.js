@@ -39,7 +39,7 @@ import {
 } from "./email.js";
 import { registerOAuthRoutes } from "./oauth.js";
 import { registerAiRoutes } from "./ai/routes.js";
-import { loadAnalyticsDashboard } from "./analytics.js";
+import { loadAccountAnalytics, loadAnalyticsDashboard, loadPeriodStats, periodProblem } from "./analytics.js";
 import { registerMetaRoutes } from "./meta.js";
 import {
   executeAgentRun,
@@ -60,11 +60,13 @@ import {
 // the whole editor package graph into this server's runtime, which does not
 // belong on the VPS.
 import { registerDesktopAuthRoutes } from "./desktopAuth.js";
-import { loadAccountSets, registerAccountSetRoutes } from "./accountSets.js";
-import { loadPointsSummary, registerPointsRoutes } from "./points.js";
+import { BusinessError, loadBusinesses, parseScopeQuery, registerBusinessRoutes, resolveScopeAccounts } from "./businesses/index.js";
+import { isValidTimeZone, loadPointsSummary, registerPointsRoutes } from "./points.js";
+import { registerMcpRoutes } from "./mcp/index.js";
+import { registerConnectorAuthRoutes, verifyConnectorToken } from "./mcp/auth.js";
 import { registerTikTokRoutes } from "./tiktok.js";
 import { registerTikTokMediaRoute, cleanupTikTokMedia } from "./tiktokMedia.js";
-import { loadExplicitPostAccounts } from "./postTargets.js";
+import { resolvePostTargets } from "./postTargets.js";
 import { loadVaultMedia, registerMediaDeleteRoute } from "./media.js";
 
 const env = process.env;
@@ -78,6 +80,9 @@ const cleanupIntervalMs =
   Number(env.MEDIA_CLEANUP_INTERVAL_SECONDS ?? 900) * 1_000;
 const outboxIntervalMs = Number(env.OUTBOX_INTERVAL_MS ?? 1_000);
 const apiRateLimitPerMinute = Number(env.API_RATE_LIMIT_PER_MINUTE ?? 120);
+// Where connectors and images reach the API (…/v1/mcp, business logos). It
+// isn't PUBLIC_API_URL, which is the website's /api path in production.
+const connectorApiUrl = (env.CONNECTOR_API_URL || "https://api.posterract.app").replace(/\/+$/, "");
 const allowedMimeTypes = new Map([
   ["video/mp4", ".mp4"],
   ["video/quicktime", ".mov"],
@@ -225,6 +230,31 @@ async function authenticate(request, reply, requiredScope) {
   const token = bearerToken(request);
   if (constantTimeEqual(token, env.INTERNAL_API_KEY)) {
     request.authContext = { kind: "internal" };
+    return;
+  }
+
+  if (token.startsWith("pr_oat_")) {
+    // A connector signed in with OAuth (e.g. Meta Muse): acts like an API key
+    // limited to the permissions the user approved.
+    const grant = await verifyConnectorToken(postgres, token);
+    if (!grant) return reply.code(401).send({ error: "unauthorized" });
+    if (requiredScope && !grant.scopes.includes(requiredScope)) {
+      return reply.code(403).send({ error: "insufficient_scope" });
+    }
+    request.authContext = {
+      kind: "api_key",
+      connectorGrantId: grant.id,
+      workspaceId: grant.workspaceId,
+      scopes: grant.scopes,
+    };
+    const minute = Math.floor(Date.now() / 60_000);
+    const rateKey = `posterract:api-rate:grant:${grant.id}:${minute}`;
+    const rateCount = await redis.incr(rateKey);
+    if (rateCount === 1) await redis.expire(rateKey, 120);
+    if (rateCount > apiRateLimitPerMinute) {
+      reply.header("retry-after", 60);
+      return reply.code(429).send({ error: "rate_limit_exceeded" });
+    }
     return;
   }
 
@@ -454,9 +484,10 @@ function idempotencyKey(request, reply) {
 }
 
 function idempotencyActor(request) {
-  return request.authContext.kind === "api_key"
+  if (request.authContext.kind !== "api_key") return `user:${request.authContext.userId}`;
+  return request.authContext.apiKeyId
     ? `api:${request.authContext.apiKeyId}`
-    : `user:${request.authContext.userId}`;
+    : `connector:${request.authContext.connectorGrantId}`;
 }
 
 async function claimIdempotency(client, request, key, payload) {
@@ -1007,6 +1038,7 @@ app.get("/v1/openapi.json", async () => ({
     "/v1/points/dashboard": { get: { summary: "Read points, level, rank, streak, follower milestones and top posts" } },
     "/v1/points/ledger": { get: { summary: "Read the immutable points ledger" } },
     "/v1/leaderboard": { get: { summary: "Rank everyone on the base plan or above by points (period=week|month|all)" } },
+    "/v1/mcp": { post: { summary: "MCP server (Streamable HTTP) for AI agents such as Meta Muse: post, schedule, analytics and the points game" } },
     "/v1/accounts": { get: { summary: "List connected social accounts" } },
     "/v1/uploads/multipart": { post: { summary: "Start a direct R2 multipart upload" } },
     "/v1/posts": { post: { summary: "Publish now or schedule a post" } },
@@ -1503,7 +1535,7 @@ app.get(
 );
 
 registerOAuthRoutes(app, { postgres, requireScope, requiredWorkspace });
-registerAccountSetRoutes(app, { postgres, requireScope, requiredWorkspace });
+registerBusinessRoutes(app, { postgres, requireScope, requiredWorkspace, publicApiUrl: connectorApiUrl });
 registerTikTokRoutes(app, { postgres, requireScope, requiredWorkspace });
 registerTikTokMediaRoute(app, { postgres, r2 });
 registerMetaRoutes(app, { postgres });
@@ -1525,11 +1557,51 @@ app.get(
     if (rangeDays !== "total" && ![7, 30, 90].includes(rangeDays)) {
       return reply.code(400).send({ error: "invalid_analytics_range" });
     }
-    return loadAnalyticsDashboard(
-      postgres,
-      requiredWorkspace(request),
-      rangeDays,
-    );
+    // ?business=<id>&accounts=<id>,<id> narrows it to a business or picked accounts.
+    const workspaceId = requiredWorkspace(request);
+    let accountIds;
+    try {
+      accountIds = await resolveScopeAccounts(postgres, workspaceId, parseScopeQuery(request.query));
+    } catch (error) {
+      if (error instanceof BusinessError) return reply.code(error.status).send({ error: error.code });
+      throw error;
+    }
+    return loadAnalyticsDashboard(postgres, workspaceId, rangeDays, { accountIds });
+  },
+);
+
+// The Businesses tab: every account's stats for the period, added up per business in the app.
+app.get(
+  "/v1/analytics/accounts",
+  { preHandler: requireScope("analytics:read") },
+  async (request, reply) => {
+    const requestedRange = request.query?.rangeDays ?? "total";
+    const rangeDays = requestedRange === "total" ? "total" : Number(requestedRange);
+    if (rangeDays !== "total" && ![7, 30, 90].includes(rangeDays)) {
+      return reply.code(400).send({ error: "invalid_analytics_range" });
+    }
+    return loadAccountAnalytics(postgres, requiredWorkspace(request), rangeDays);
+  },
+);
+
+// The calendar's numbers for the month or week on screen: ?from&to (local dates), &tz, &business / &accounts.
+app.get(
+  "/v1/stats/period",
+  { preHandler: requireScope("analytics:read") },
+  async (request, reply) => {
+    const { from, to, tz } = request.query ?? {};
+    const problem = periodProblem(from, to);
+    if (problem) return reply.code(400).send({ error: problem });
+    const timeZone = typeof tz === "string" && isValidTimeZone(tz) ? tz : "UTC";
+    const workspaceId = requiredWorkspace(request);
+    let accountIds;
+    try {
+      accountIds = await resolveScopeAccounts(postgres, workspaceId, parseScopeQuery(request.query));
+    } catch (error) {
+      if (error instanceof BusinessError) return reply.code(error.status).send({ error: error.code });
+      throw error;
+    }
+    return loadPeriodStats(postgres, workspaceId, { from, to, timeZone, accountIds });
   },
 );
 
@@ -1578,6 +1650,19 @@ app.get(
 );
 
 registerPointsRoutes(app, { postgres, requireScope, requireSession, requiredWorkspace });
+// The Meta Muse connector (and any MCP client), and its sign-in: see src/mcp.
+registerConnectorAuthRoutes(app, {
+  postgres,
+  requireSession,
+  requiredWorkspace,
+  publicApiUrl: connectorApiUrl,
+  siteUrl: (env.SITE_URL || "https://www.posterract.app").replace(/\/+$/, ""),
+});
+registerMcpRoutes(app, {
+  postgres,
+  authenticate: (request, reply) => authenticateProductAccess(request, reply),
+  resourceMetadataUrl: `${connectorApiUrl}/.well-known/oauth-protected-resource/v1/mcp`,
+});
 
 app.get(
   "/v1/bootstrap",
@@ -1590,7 +1675,7 @@ app.get(
       projectionsResult,
       eventsResult,
       accountsResult,
-      accountSets,
+      businesses,
       points,
     ] =
       await Promise.all([
@@ -1620,7 +1705,7 @@ app.get(
            where workspace_id = $1 order by created_at asc`,
           [workspaceId],
         ),
-        loadAccountSets(postgres, workspaceId),
+        loadBusinesses(postgres, workspaceId, { publicApiUrl: connectorApiUrl }),
         loadPointsSummary(postgres, workspaceId),
       ]);
 
@@ -1670,6 +1755,7 @@ app.get(
           ? new Date(row.scheduled_for).getTime()
           : undefined,
         source: row.source === "api" ? "api" : "ui",
+        businessId: row.business_id ?? undefined,
         createdAt: new Date(row.created_at).getTime(),
         updatedAt: new Date(row.updated_at).getTime(),
       })),
@@ -1724,7 +1810,9 @@ app.get(
           : undefined,
         windowUsage: row.metadata?.windowUsage,
       })),
-      accountSets,
+      businesses,
+      // Installed desktop apps from before businesses still read this.
+      accountSets: [],
       points,
     };
   },
@@ -1837,61 +1925,17 @@ app.post(
       }
 
       const providers = input.projections.map((item) => item.provider);
-      let accounts;
-      if (input.accountSetId) {
-        const accountSet = await client.query(
-          `select id from account_sets
-           where id = $1 and workspace_id = $2`,
-          [input.accountSetId, workspaceId],
-        );
-        if (!accountSet.rows[0]) {
-          await client.query("rollback");
-          return reply.code(404).send({ error: "account_set_not_found" });
-        }
-        accounts = await client.query(
-          `select a.id, a.provider, a.status
-           from account_set_members m
-           join social_accounts a on a.id = m.social_account_id
-           where m.account_set_id = $1 and a.workspace_id = $2
-             and a.provider = any($3::text[])`,
-          [input.accountSetId, workspaceId, providers],
-        );
-      } else if (input.accountIds) {
-        try { accounts = await loadExplicitPostAccounts(client, workspaceId, input.accountIds, providers); }
-        catch (error) {
-          if (!error.statusCode) throw error;
-          await client.query("rollback");
-          return reply.code(error.statusCode).send({ error: error.message });
-        }
-      } else {
-        accounts = await client.query(
-          `select distinct on (provider) id, provider, status
-           from social_accounts
-           where workspace_id = $1
-             and status = 'connected'
-             and provider = any($2::text[])
-           order by provider, updated_at desc`,
-          [workspaceId, providers],
-        );
-      }
-      if (new Set(accounts.rows.map((account) => account.provider)).size !== accounts.rows.length) {
-        await client.query("rollback");
-        return reply.code(400).send({ error: "duplicate_account_provider" });
-      }
-      const accountByProvider = new Map(
-        accounts.rows
-          .filter((account) => account.status === "connected")
-          .map((account) => [account.provider, account.id]),
-      );
-      const unavailable = providers.filter(
-        (provider) => !accountByProvider.has(provider),
-      );
-      if (unavailable.length > 0) {
-        await client.query("rollback");
-        return reply.code(409).send({
-          error: "account_not_connected",
-          platforms: unavailable,
+      let targets;
+      try {
+        targets = await resolvePostTargets(client, workspaceId, {
+          businessId: input.businessId,
+          accountIds: input.accountIds,
+          providers,
         });
+      } catch (error) {
+        if (!error.statusCode) throw error;
+        await client.query("rollback");
+        return reply.code(error.statusCode).send({ error: error.message, ...error.details });
       }
 
       const transmissionId = randomUUID();
@@ -1899,8 +1943,9 @@ app.post(
       await client.query(
         `insert into transmissions
           (id, workspace_id, media_asset_id, title, base_caption, hashtags,
-           status, schedule_mode, scheduled_for, source, temporal_workflow_id)
-         values ($1, $2, $3, $4, $5, $6, 'scheduled', $7, $8, $9, $10)`,
+           status, schedule_mode, scheduled_for, source, temporal_workflow_id,
+           business_id)
+         values ($1, $2, $3, $4, $5, $6, 'scheduled', $7, $8, $9, $10, $11)`,
         [
           transmissionId,
           workspaceId,
@@ -1912,45 +1957,52 @@ app.post(
           input.scheduledFor,
           source,
           workflowId,
+          input.businessId ?? null,
         ],
       );
 
+      // One platform post per account: a post to two Instagram accounts is two
+      // Instagram platform posts sharing that platform's caption and options.
       const projections = [];
       for (const projection of input.projections) {
-        const projectionId = randomUUID();
-        if (projection.provider === "tiktok" && projection.options.mode === "direct") {
-          projection.options = {
-            ...projection.options,
-            authorization: {
-              userId: request.authContext.userId ?? null,
-              actor: actorKey,
-              accountId: accountByProvider.get("tiktok"),
-              authorizedAt: new Date().toISOString(),
-              declarationVersion: "tiktok-direct-v1",
-            },
-          };
+        for (const target of targets.filter((item) => item.provider === projection.provider)) {
+          const projectionId = randomUUID();
+          let options = projection.options;
+          if (projection.provider === "tiktok" && options.mode === "direct") {
+            options = {
+              ...options,
+              authorization: {
+                userId: request.authContext.userId ?? null,
+                actor: actorKey,
+                accountId: target.id,
+                authorizedAt: new Date().toISOString(),
+                declarationVersion: "tiktok-direct-v1",
+              },
+            };
+          }
+          await client.query(
+            `insert into projections
+              (id, transmission_id, workspace_id, social_account_id, provider,
+               caption, hashtags, platform_options, status)
+             values ($1, $2, $3, $4, $5, $6, $7, $8, 'scheduled')`,
+            [
+              projectionId,
+              transmissionId,
+              workspaceId,
+              target.id,
+              projection.provider,
+              projection.caption,
+              projection.hashtags,
+              JSON.stringify(options),
+            ],
+          );
+          projections.push({
+            id: projectionId,
+            provider: projection.provider,
+            accountId: target.id,
+            status: "scheduled",
+          });
         }
-        await client.query(
-          `insert into projections
-            (id, transmission_id, workspace_id, social_account_id, provider,
-             caption, hashtags, platform_options, status)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, 'scheduled')`,
-          [
-            projectionId,
-            transmissionId,
-            workspaceId,
-            accountByProvider.get(projection.provider),
-            projection.provider,
-            projection.caption,
-            projection.hashtags,
-            JSON.stringify(projection.options),
-          ],
-        );
-        projections.push({
-          id: projectionId,
-          provider: projection.provider,
-          status: "scheduled",
-        });
       }
 
       await client.query(
@@ -1969,7 +2021,7 @@ app.post(
           input.scheduleMode === "now"
             ? "Post accepted for immediate publishing"
             : "Post scheduled",
-          JSON.stringify({ providers, source, accountSetId: input.accountSetId }),
+          JSON.stringify({ providers, source, businessId: input.businessId, accounts: targets.length }),
         ],
       );
       await client.query(
@@ -2016,7 +2068,7 @@ app.post(
       response.id,
       {
         platforms: response.projections.map((item) => item.provider),
-        accountSetId: input.accountSetId,
+        businessId: input.businessId,
       },
     ).catch((error) => app.log.warn({ err: error }, "API audit write failed"));
     void dispatchOutbox().catch((error) =>
@@ -2153,12 +2205,13 @@ app.post(
            and status = 'connected'`,
         [workspaceId, originalAccountIds],
       );
-      const accountByProvider = new Map(
-        accounts.rows.map((row) => [row.provider, row.id]),
-      );
-      const unavailable = providers.filter(
-        (provider) => !accountByProvider.has(provider),
-      );
+      // Each platform post keeps its own account (a post can reach two Instagram accounts).
+      const connectedIds = new Set(accounts.rows.map((row) => row.id));
+      const unavailable = [...new Set(
+        originalProjections.rows
+          .filter((row) => !row.social_account_id || !connectedIds.has(row.social_account_id))
+          .map((row) => row.provider),
+      )];
       if (unavailable.length > 0) {
         await client.query("rollback");
         return reply.code(409).send({
@@ -2174,8 +2227,9 @@ app.post(
       await client.query(
         `insert into transmissions
           (id, workspace_id, media_asset_id, title, base_caption, hashtags,
-           status, schedule_mode, scheduled_for, source, temporal_workflow_id)
-         values ($1, $2, $3, $4, $5, $6, 'scheduled', 'at', $7, $8, $9)`,
+           status, schedule_mode, scheduled_for, source, temporal_workflow_id,
+           business_id)
+         values ($1, $2, $3, $4, $5, $6, 'scheduled', 'at', $7, $8, $9, $10)`,
         [
           transmissionId,
           workspaceId,
@@ -2186,6 +2240,7 @@ app.post(
           scheduledFor,
           source,
           workflowId,
+          original.business_id ?? null,
         ],
       );
       const projections = [];
@@ -2200,7 +2255,7 @@ app.post(
             projectionId,
             transmissionId,
             workspaceId,
-            accountByProvider.get(originalProjection.provider),
+            originalProjection.social_account_id,
             originalProjection.provider,
             originalProjection.caption,
             originalProjection.hashtags,
@@ -2211,6 +2266,7 @@ app.post(
           id: projectionId,
           projectionId,
           provider: originalProjection.provider,
+          accountId: originalProjection.social_account_id,
           status: "scheduled",
         });
       }

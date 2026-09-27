@@ -27,14 +27,14 @@ test("post input is normalized without accepting duplicate platforms", () => {
         },
       },
       scheduledFor: "now",
-      accountSetId: "00000000-0000-4000-8000-000000000090",
+      businessId: "00000000-0000-4000-8000-000000000090",
     },
     new Date("2026-08-13T12:00:00.000Z"),
   );
   assert.deepEqual(parsed.hashtags, ["one", "two"]);
   assert.equal(parsed.projections[1].caption, "Threads caption");
   assert.equal(parsed.scheduleMode, "now");
-  assert.equal(parsed.accountSetId, "00000000-0000-4000-8000-000000000090");
+  assert.equal(parsed.businessId, "00000000-0000-4000-8000-000000000090");
 
   assert.throws(
     () =>
@@ -46,15 +46,18 @@ test("post input is normalized without accepting duplicate platforms", () => {
     RequestValidationError,
   );
 
+  // A business with some of its accounts, and several accounts on one platform, are both fine.
+  const narrowed = parseCreatePost({
+    artifactId,
+    caption: "hello",
+    platforms: ["instagram"],
+    businessId: "00000000-0000-4000-8000-000000000090",
+    accountIds: Array.from({ length: 8 }, (_, index) => `00000000-0000-4000-8000-00000000009${index}`),
+  });
+  assert.equal(narrowed.accountIds.length, 8);
   assert.throws(
-    () => parseCreatePost({
-      artifactId,
-      caption: "hello",
-      platforms: ["instagram"],
-      accountSetId: "00000000-0000-4000-8000-000000000090",
-      accountIds: ["00000000-0000-4000-8000-000000000091"],
-    }),
-    (error) => error instanceof RequestValidationError && error.code === "ambiguous_account_target",
+    () => parseCreatePost({ artifactId, caption: "hello", platforms: ["instagram"], businessId: "not-a-uuid" }),
+    (error) => error instanceof RequestValidationError && error.code === "invalid_business_id",
   );
 
   assert.throws(

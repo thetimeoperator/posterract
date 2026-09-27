@@ -6,7 +6,7 @@ const [, , filePath, platformsValue, caption = "", scheduleValue = "now", title]
   process.argv;
 const apiUrl = process.env.POSTERRACT_API_URL?.replace(/\/+$/, "");
 const apiKey = process.env.POSTERRACT_API_KEY;
-const accountSetId = process.env.POSTERRACT_ACCOUNT_SET_ID;
+const businessId = process.env.POSTERRACT_BUSINESS_ID;
 
 if (!apiUrl || !apiKey || !filePath || !platformsValue) {
   throw new Error(
@@ -92,7 +92,7 @@ const post = await api("/v1/posts", {
     artifactId: completed.mediaId,
     title: title || basename(filePath, extname(filePath)),
     caption,
-    accountSetId: accountSetId || undefined,
+    businessId: businessId || undefined,
     platforms,
     scheduledFor: scheduleValue,
   }),
