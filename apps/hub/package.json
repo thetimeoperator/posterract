@@ -1,0 +1,17 @@
+{
+  "name": "@posterract/hub",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env --import tsx src/server.js",
+    "test": "node --import tsx --test test/*.test.js"
+  },
+  "dependencies": {
+    "@clerk/backend": "^2.0.0",
+    "fastify": "^5.5.0",
+    "pg": "^8.16.3",
+    "stripe": "^22.5.0",
+    "svix": "^1.68.0",
+    "tsx": "^4.23.12"
+  }
+}
