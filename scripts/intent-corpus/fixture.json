@@ -1,0 +1,345 @@
+{
+ "command": "",
+ "scene": {
+  "id": "main",
+  "name": "Storm teaser",
+  "width": 1080,
+  "height": 1920,
+  "duration": 12,
+  "fps": 30
+ },
+ "playhead": 3,
+ "selected": [],
+ "fonts": [
+  "Inter",
+  "Montserrat",
+  "Urbanist",
+  "Figtree"
+ ],
+ "markers": [
+  {
+   "id": "index.tsx:31",
+   "name": "drop",
+   "time": 6
+  }
+ ],
+ "assets": [
+  {
+   "path": "assets/storm.mp4",
+   "name": "storm.mp4",
+   "type": "video",
+   "duration": 12,
+   "width": 1080,
+   "height": 1920
+  },
+  {
+   "path": "assets/drone.mp4",
+   "name": "drone.mp4",
+   "type": "video",
+   "duration": 8,
+   "width": 1920,
+   "height": 1080
+  },
+  {
+   "path": "assets/logo.png",
+   "name": "logo.png",
+   "type": "image",
+   "width": 512,
+   "height": 512
+  },
+  {
+   "path": "assets/beach.jpg",
+   "name": "beach.jpg",
+   "type": "image",
+   "width": 1600,
+   "height": 900
+  },
+  {
+   "path": "assets/music.mp3",
+   "name": "music.mp3",
+   "type": "audio",
+   "duration": 30
+  }
+ ],
+ "scenes": [
+  {
+   "id": "main",
+   "name": "Storm teaser",
+   "width": 1080,
+   "height": 1920,
+   "active": true
+  },
+  {
+   "id": "outro",
+   "name": "Outro",
+   "width": 1080,
+   "height": 1920,
+   "active": false
+  }
+ ],
+ "variables": [
+  {
+   "key": "index.tsx#headline",
+   "name": "Headline",
+   "type": "text",
+   "value": "Wild storm"
+  },
+  {
+   "key": "index.tsx#accent",
+   "name": "Accent colour",
+   "type": "color",
+   "value": "#34c759"
+  }
+ ],
+ "view": {
+  "playing": false,
+  "snapping": true
+ },
+ "range": null,
+ "elements": [
+  {
+   "id": "main",
+   "tag": "scene",
+   "name": "Storm teaser",
+   "start": 0,
+   "end": 12,
+   "shown": true,
+   "order": 0,
+   "box": {
+    "x": 0,
+    "y": 0,
+    "width": 1080,
+    "height": 1920
+   },
+   "color": "#000000",
+   "props": {
+    "x": 0,
+    "y": 0,
+    "width": 1080,
+    "height": 1920,
+    "scale": 1
+   },
+   "animations": []
+  },
+  {
+   "id": "footage",
+   "tag": "video",
+   "name": "Storm footage",
+   "media": "storm.mp4",
+   "start": 0,
+   "end": 12,
+   "shown": true,
+   "order": 1,
+   "box": {
+    "x": 0,
+    "y": 0,
+    "width": 1080,
+    "height": 1920
+   },
+   "props": {
+    "x": 0,
+    "y": 0,
+    "width": 1080,
+    "height": 1920,
+    "scale": 1,
+    "volume": 0,
+    "playbackRate": 1
+   },
+   "animations": [],
+   "inSequence": true
+  },
+  {
+   "id": "title",
+   "tag": "text",
+   "name": "Title",
+   "text": "Wild storm",
+   "start": 0,
+   "end": 6,
+   "shown": true,
+   "order": 4,
+   "box": {
+    "x": 120,
+    "y": 400,
+    "width": 840,
+    "height": 116
+   },
+   "color": "#ffffff",
+   "props": {
+    "x": 120,
+    "y": 400,
+    "width": 840,
+    "height": 116,
+    "scale": 1,
+    "fontSize": 96
+   },
+   "animations": []
+  },
+  {
+   "id": "subtitle",
+   "tag": "text",
+   "name": "Subtitle",
+   "text": "Tonight at 9",
+   "start": 1,
+   "end": 6,
+   "shown": true,
+   "order": 5,
+   "box": {
+    "x": 120,
+    "y": 560,
+    "width": 840,
+    "height": 60
+   },
+   "color": "#cccccc",
+   "props": {
+    "x": 120,
+    "y": 560,
+    "width": 840,
+    "height": 60,
+    "scale": 1,
+    "fontSize": 48
+   },
+   "animations": [
+    {
+     "id": "index.tsx:14",
+     "type": "fade",
+     "phase": "in",
+     "duration": 0.5
+    }
+   ]
+  },
+  {
+   "id": "logo",
+   "tag": "image",
+   "name": "Logo",
+   "media": "logo.png",
+   "start": 0,
+   "end": 12,
+   "place": "top-right",
+   "shown": true,
+   "order": 6,
+   "box": {
+    "x": 852,
+    "y": 48,
+    "width": 180,
+    "height": 180
+   },
+   "props": {
+    "x": 852,
+    "y": 48,
+    "width": 180,
+    "height": 180,
+    "scale": 1
+   },
+   "animations": []
+  },
+  {
+   "id": "badge",
+   "tag": "rect",
+   "shape": "rectangle",
+   "name": "Live badge",
+   "start": 0,
+   "end": 12,
+   "shown": true,
+   "order": 3,
+   "box": {
+    "x": 60,
+    "y": 80,
+    "width": 160,
+    "height": 56
+   },
+   "color": "#ff3b30",
+   "props": {
+    "x": 60,
+    "y": 80,
+    "width": 160,
+    "height": 56,
+    "scale": 1
+   },
+   "animations": [],
+   "effects": [
+    {
+     "id": "index.tsx:40",
+     "type": "blur"
+    }
+   ]
+  },
+  {
+   "id": "cta",
+   "tag": "text",
+   "name": "Call to action",
+   "text": "Follow for updates",
+   "start": 8,
+   "end": 12,
+   "shown": false,
+   "order": 7,
+   "box": {
+    "x": 140,
+    "y": 1500,
+    "width": 800,
+    "height": 70
+   },
+   "color": "#ffffff",
+   "props": {
+    "x": 140,
+    "y": 1500,
+    "width": 800,
+    "height": 70,
+    "scale": 1,
+    "fontSize": 56
+   },
+   "animations": [
+    {
+     "id": "index.tsx:22",
+     "type": "slideUp",
+     "phase": "in"
+    }
+   ]
+  },
+  {
+   "id": "music",
+   "tag": "audio",
+   "name": "Music",
+   "media": "music.mp3",
+   "start": 0,
+   "end": 12,
+   "shown": true,
+   "order": 2,
+   "props": {
+    "volume": -3
+   },
+   "animations": []
+  },
+  {
+   "id": "captions",
+   "tag": "captions",
+   "name": "Captions",
+   "start": 0,
+   "end": 12,
+   "shown": true,
+   "order": 8,
+   "preset": "classic",
+   "props": {},
+   "animations": []
+  }
+ ],
+ "skills": [
+  {
+   "name": "talking-head",
+   "what": "A talking head piece: one person speaking to camera, with captions."
+  },
+  {
+   "name": "captioned-clip",
+   "what": "A captioned clip: footage with big captions on it."
+  }
+ ],
+ "voices": [
+  {
+   "id": "4ce7e917cedd4bc2bb2e6ff3a46acaa1",
+   "label": "Atlas \u2014 deep announcer"
+  },
+  {
+   "id": "e58b0d7efca34eb38d5c4985e378abcb",
+   "label": "Juniper \u2014 warm, conversational"
+  }
+ ]
+}

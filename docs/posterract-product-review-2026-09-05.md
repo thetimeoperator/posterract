@@ -60,7 +60,7 @@ No posts were submitted, no new agent permissions were granted, and no deploymen
 | Scheduling | Month/week calendar, drag reschedule, per-platform captions, account sets, Temporal jobs | Improve readiness, time semantics, and status presentation |
 | Analytics | Account/post analytics paths and periodic refresh workflow | Connect results back to creative variants without overstating causality |
 
-Representative sources: [editor page](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/apps/editor-sandbox/src/pages/editor.tsx), [composition types](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/packages/posterract-composition/src/types.ts), [MCP tools](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/packages/posterract-cli/src/mcp.ts), [runtime motion](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/packages/posterract-video-runtime/src/systems/motion.ts), [publishing workflow](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/apps/orchestrator/src/workflows.js).
+Representative sources: [editor page](</Users/sinapahlevan/CODING PROJECTS/vidtryx/apps/editor-sandbox/src/pages/editor.tsx>), [composition types](</Users/sinapahlevan/CODING PROJECTS/vidtryx/packages/posterract-composition/src/types.ts>), [MCP tools](</Users/sinapahlevan/CODING PROJECTS/vidtryx/packages/posterract-cli/src/mcp.ts>), [runtime motion](</Users/sinapahlevan/CODING PROJECTS/vidtryx/packages/posterract-video-runtime/src/systems/motion.ts>), [publishing workflow](</Users/sinapahlevan/CODING PROJECTS/vidtryx/apps/orchestrator/src/workflows.js>).
 
 ## 4. What the upstream projects do better
 
@@ -70,9 +70,9 @@ Representative sources: [editor page](/Users/sinapahlevan/CODING%20PROJECTS/vidt
 
 ### Lottie: concrete advantages to borrow
 
-**Typed, intentional controls.** The upstream player exposes scalar, color, vector, and text controls. Its metadata supplies labels, ranges, order, and linked control targets. Posterract currently enumerates scalar/color/text slot names and infers UI treatment from an authored override. That produces a weaker template-customization experience. Bring in a typed slot descriptor with the original value, meaningful label, constraints, and supported operations. [Upstream controls](https://github.com/diffusionstudio/lottie/blob/3c72912fad543897f90045ed4d355813837927fc/src/components/sidebar-right.tsx), [Posterract Lottie inspector](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/apps/editor-sandbox/src/components/sidebar-right/inspector/lottie.tsx).
+**Typed, intentional controls.** The upstream player exposes scalar, color, vector, and text controls. Its metadata supplies labels, ranges, order, and linked control targets. Posterract currently enumerates scalar/color/text slot names and infers UI treatment from an authored override. That produces a weaker template-customization experience. Bring in a typed slot descriptor with the original value, meaningful label, constraints, and supported operations. [Upstream controls](https://github.com/diffusionstudio/lottie/blob/3c72912fad543897f90045ed4d355813837927fc/src/components/sidebar-right.tsx), [Posterract Lottie inspector](</Users/sinapahlevan/CODING PROJECTS/vidtryx/apps/editor-sandbox/src/components/sidebar-right/inspector/lottie.tsx>).
 
-**Font and image asset loading.** The upstream canvas constructs a managed animation with an asset map. Posterract's current constructor passes the JSON without a corresponding managed asset map. This is a concrete compatibility gap for animations requiring external fonts or images; a particular file may still work when it embeds everything it needs. Add local asset resolution and representative font/image fixtures. [Upstream canvas](https://github.com/diffusionstudio/lottie/blob/3c72912fad543897f90045ed4d355813837927fc/src/context/canvas.tsx), [Posterract player](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/packages/posterract-video-runtime/src/media/lottie.ts).
+**Font and image asset loading.** The upstream canvas constructs a managed animation with an asset map. Posterract's current constructor passes the JSON without a corresponding managed asset map. This is a concrete compatibility gap for animations requiring external fonts or images; a particular file may still work when it embeds everything it needs. Add local asset resolution and representative font/image fixtures. [Upstream canvas](https://github.com/diffusionstudio/lottie/blob/3c72912fad543897f90045ed4d355813837927fc/src/context/canvas.tsx), [Posterract player](</Users/sinapahlevan/CODING PROJECTS/vidtryx/packages/posterract-video-runtime/src/media/lottie.ts>).
 
 **Portable animation output.** Upstream bundles animations, images, and fonts into a project ZIP. Posterract's main delivery path is rendered media. An optional motion-component package/export would help users reuse assets outside a particular video. This should be scoped to supported animation formats; arbitrary Posterract scenes cannot automatically become equivalent Lottie JSON. [Upstream export](https://github.com/diffusionstudio/lottie/blob/3c72912fad543897f90045ed4d355813837927fc/src/lib/export.ts).
 
@@ -82,7 +82,7 @@ Posterract has broader product scope: footage, audio, captions, editable video s
 
 ### Diffusion Studio editor: stay close selectively
 
-The upstream editor shares the code-as-document foundation, agent media tools, preview/export approach, and much of the editing UI. Its README also describes headless operation; Posterract contains its own headless connection state, so headless support should **not** be presented as an upstream-only feature. [Upstream editor README](https://github.com/diffusionstudio/editor/blob/d4faad7155cfc450c439fe0bc3745a90d8aa7593/README.md), [local CLI server](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/apps/desktop/src/cli-server.ts).
+The upstream editor shares the code-as-document foundation, agent media tools, preview/export approach, and much of the editing UI. Its README also describes headless operation; Posterract contains its own headless connection state, so headless support should **not** be presented as an upstream-only feature. [Upstream editor README](https://github.com/diffusionstudio/editor/blob/d4faad7155cfc450c439fe0bc3745a90d8aa7593/README.md), [local CLI server](</Users/sinapahlevan/CODING PROJECTS/vidtryx/apps/desktop/src/cli-server.ts>).
 
 One concrete current upstream addition worth evaluating is its timeline viewport read/write representation: zoom and horizontal position are expressed in time-based units to survive FPS changes. Posterract has its own timeline view helpers, but the corresponding upstream runtime files are absent. Compare the semantics before porting. [Upstream view read](https://github.com/diffusionstudio/editor/blob/d4faad7155cfc450c439fe0bc3745a90d8aa7593/packages/runtime/src/queries/timeline-view.ts), [view write](https://github.com/diffusionstudio/editor/blob/d4faad7155cfc450c439fe0bc3745a90d8aa7593/packages/runtime/src/actions/timeline-view.ts).
 
@@ -115,7 +115,7 @@ Several important operations are visually or structurally hard to discover:
 - The agent control opens setup/client choices and prompt recipes; a recipe copies text for use elsewhere.
 - Controls can dim after the pointer rests on the canvas, reducing visibility during deliberate inspection.
 
-Sources: [layout defaults](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/apps/editor-sandbox/src/context/layout.tsx), [command bar](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/apps/editor-sandbox/src/components/shell/command-bar.tsx), [inspector](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/apps/editor-sandbox/src/components/sidebar-right/inspector/inspector.tsx), [agent launcher](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/apps/editor-sandbox/src/components/posterract-code-panel.tsx).
+Sources: [layout defaults](</Users/sinapahlevan/CODING PROJECTS/vidtryx/apps/editor-sandbox/src/context/layout.tsx>), [command bar](</Users/sinapahlevan/CODING PROJECTS/vidtryx/apps/editor-sandbox/src/components/shell/command-bar.tsx>), [inspector](</Users/sinapahlevan/CODING PROJECTS/vidtryx/apps/editor-sandbox/src/components/sidebar-right/inspector/inspector.tsx>), [agent launcher](</Users/sinapahlevan/CODING PROJECTS/vidtryx/apps/editor-sandbox/src/components/posterract-code-panel.tsx>).
 
 ### Keep the floating design; introduce three useful workspace modes
 
@@ -222,7 +222,7 @@ The initial view can collapse most of this. Selecting an entrance should reveal 
 
 ### Component identity needs to become stronger
 
-The existing component grouping uses the component definition's name and adjacent sibling runs. The source explicitly notes that two adjacent calls to the same component can read as one group. A heading is not yet a full component-instance editing model. [Timeline component grouping](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/packages/posterract-video-runtime/src/queries/timeline-index.ts:174).
+The existing component grouping uses the component definition's name and adjacent sibling runs. The source explicitly notes that two adjacent calls to the same component can read as one group. A heading is not yet a full component-instance editing model. [Timeline component grouping](</Users/sinapahlevan/CODING PROJECTS/vidtryx/packages/posterract-video-runtime/src/queries/timeline-index.ts:174>).
 
 Introduce distinct identities for:
 
@@ -270,7 +270,7 @@ The document index is derived. It must not become a second saved source of truth
 
 Keep the user's own agent and model relationship. Posterract should provide context, operations, visibility, and recovery. An embedded chat interface is optional; it is not a prerequisite for a much better agent experience.
 
-The current launcher offers clients and copies recipes. Improve it with three explicit states: **Client available**, **Tools connected to this project**, and **Task running / awaiting review**. App installation or an open process is not proof of a working tool session. Show a project name, last successful handshake, and last completed operation. [Current launcher behavior](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/apps/editor-sandbox/src/components/posterract-code-panel.tsx).
+The current launcher offers clients and copies recipes. Improve it with three explicit states: **Client available**, **Tools connected to this project**, and **Task running / awaiting review**. App installation or an open process is not proof of a working tool session. Show a project name, last successful handshake, and last completed operation. [Current launcher behavior](</Users/sinapahlevan/CODING PROJECTS/vidtryx/apps/editor-sandbox/src/components/posterract-code-panel.tsx>).
 
 Add **Ask agent about selection** beside the inspector title and in the canvas context menu. The request should carry the actual selection and time, not merely generic prose. If a client supports message handoff, use a supported adapter. Otherwise label the action **Copy request with context** and make the next step explicit. Do not show a fake “working” state when only the clipboard changed.
 
@@ -294,7 +294,7 @@ Return stable IDs and source paths together. Give the agent a compact neighborho
 
 ### Make semantic edits complete operations
 
-Current canvas mutations operate through the document editor, while persistence is debounced. Their immediate responses primarily describe canvas state. Source writes already include a file revision check. Extend this into an operation contract; do not discard those protections. [Canvas methods](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/apps/editor-sandbox/src/context/agent-api/canvas.ts), [edit writer](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/apps/editor-sandbox/src/projects/edits.ts), [source host](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/apps/desktop/src/projects.ts).
+Current canvas mutations operate through the document editor, while persistence is debounced. Their immediate responses primarily describe canvas state. Source writes already include a file revision check. Extend this into an operation contract; do not discard those protections. [Canvas methods](</Users/sinapahlevan/CODING PROJECTS/vidtryx/apps/editor-sandbox/src/context/agent-api/canvas.ts>), [edit writer](</Users/sinapahlevan/CODING PROJECTS/vidtryx/apps/editor-sandbox/src/projects/edits.ts>), [source host](</Users/sinapahlevan/CODING PROJECTS/vidtryx/apps/desktop/src/projects.ts>).
 
 Proposed transaction fields:
 
@@ -330,7 +330,7 @@ Build a loop around the existing geometry and capture tools:
 
 Use geometry for exact questions and images for visual judgment. Rectangle overlap is not automatically a design failure: text intentionally sits over footage. Add semantic roles, clipping relationships, intentional-overlap annotations, and protected areas so the agent can distinguish intended composition from collisions.
 
-`readGeometry({time})` currently moves the live playhead to make its measurement. Offer an offline observation path or save/restore the user's view state for background audits. The agent should not unexpectedly take over scrubbing while the user works. [Geometry implementation](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/apps/editor-sandbox/src/context/agent-api/geometry.ts:100).
+`readGeometry({time})` currently moves the live playhead to make its measurement. Offer an offline observation path or save/restore the user's view state for background audits. The agent should not unexpectedly take over scrubbing while the user works. [Geometry implementation](</Users/sinapahlevan/CODING PROJECTS/vidtryx/apps/editor-sandbox/src/context/agent-api/geometry.ts:100>).
 
 ### A concrete request that should feel excellent
 
@@ -342,7 +342,7 @@ This is more valuable than making the user rewrite a prompt with file paths, sce
 
 ### Start from the capabilities already present
 
-Posterract already has preset animation, spring/easing parsing, stagger, keyframes, vector trim/morph, diagram progress, and keyframe baking. Do not turn the roadmap into “add springs” or “add keyframes” as though none exist. Improve their discoverability, expressiveness, and consistency. [Motion system](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/packages/posterract-video-runtime/src/systems/motion.ts), [baking](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/apps/editor-sandbox/src/engine/bake.tsx).
+Posterract already has preset animation, spring/easing parsing, stagger, keyframes, vector trim/morph, diagram progress, and keyframe baking. Do not turn the roadmap into “add springs” or “add keyframes” as though none exist. Improve their discoverability, expressiveness, and consistency. [Motion system](</Users/sinapahlevan/CODING PROJECTS/vidtryx/packages/posterract-video-runtime/src/systems/motion.ts>), [baking](</Users/sinapahlevan/CODING PROJECTS/vidtryx/apps/editor-sandbox/src/engine/bake.tsx>).
 
 ### Build an animation inspector people can understand
 
@@ -453,27 +453,30 @@ Test random seeks, forward playback, backward scrubbing, fresh export, and reope
 
 ### Present the actual publishing capability
 
-The current composer exposes Instagram, TikTok, Facebook, and Threads. YouTube and X are explicitly “coming soon.” There is broader capability/connector code, but it is not equivalent to availability in the current product flow. Keep product copy, docs, agent capabilities, and UI driven by the same availability registry. [Current platform IDs](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/packages/contract/src/index.ts:24), [composer](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/apps/web/src/routes/_app/compose.tsx).
+The current composer exposes Instagram, TikTok, Facebook, and Threads. YouTube and X are explicitly “coming soon.” There is broader capability/connector code, but it is not equivalent to availability in the current product flow. Keep product copy, docs, agent capabilities, and UI driven by the same availability registry. [Current platform IDs](</Users/sinapahlevan/CODING PROJECTS/vidtryx/packages/contract/src/index.ts:24>), [composer](</Users/sinapahlevan/CODING PROJECTS/vidtryx/apps/web/src/routes/_app/compose.tsx>).
 
-TikTok currently uses inbox draft upload and can return `awaiting_user`; the transmissions UI already has “Finish in TikTok.” Show that distinction before scheduling, on the calendar item, and after delivery. A scheduled draft delivery is not a promise that the post is public at that time. [Connector dispatch](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/apps/orchestrator/src/worker.js:448), [transmissions UI](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/apps/web/src/routes/_app/transmissions.tsx:31).
+TikTok currently uses inbox draft upload and can return `awaiting_user`; the transmissions UI already has “Finish in TikTok.” Show that distinction before scheduling, in the calendar post-details popup, and after delivery. A scheduled draft delivery is not a promise that the post is public at that time. [Connector dispatch](</Users/sinapahlevan/CODING PROJECTS/vidtryx/apps/orchestrator/src/worker.js:448>), [transmissions UI](</Users/sinapahlevan/CODING PROJECTS/vidtryx/apps/web/src/routes/_app/transmissions.tsx:31>).
 
 ### Improve the calendar
 
 The inspected calendar has a large introductory header and separate New post block above the working grid. On the observed laptop-sized window, that pushes useful calendar rows below the visible area.
 
-Use a compact working header: month/week navigation, Today, account filter, timezone, and New post. Reserve the larger explanation for an empty or first-use state. Post cards should show thumbnail, short title, exact account, platform, scheduled time, and status. Add an agenda/list mode for dense schedules or small windows.
+Use a compact working header: month/week navigation, Today, account filter, timezone, and New post. Reserve the larger explanation for an empty or first-use state. Keep calendar entries minimal and recognizable, with a short label/thumbnail and time. The founder prefers details on click rather than additional information packed into the grid.
 
-Show per-destination status for partial success. A grouped campaign may contain one live Reel, one failed destination, and one TikTok draft requiring action. One generic green card loses essential information.
+Clicking either a scheduled or already published post should open a post-details popup. Show the media preview, full caption, exact destination accounts, scheduled/published time with timezone, and per-destination status there. Scheduled posts expose applicable edit, reschedule, and cancel actions; published posts expose the live-post link when available. Keep the calendar position when the popup closes, and support Escape and keyboard focus return.
+
+Show partial success inside the popup. A grouped campaign may contain one live Reel, one failed destination, and one TikTok draft requiring action. Present those outcomes separately, with any necessary next action, without adding a list of statuses to each calendar entry.
 
 Preserve the current drag-reschedule functionality, adding a concise destination/time preview and an undo action. Use calendar-date operations for navigation; store UTC instants plus the user's chosen IANA timezone when preserving wall-clock scheduling intent.
 
 ### Improve the composer
 
-Replace internal lore with direct labels at decision points: **Video**, **Caption**, **Accounts**, **Schedule**, **Publish**, and **Save draft**. The brand can remain expressive without making users decode “Containment field,” “Projection targets,” “Initiate Transmission,” or “Lock Trajectory.”
+Replace internal lore with direct labels at decision points: **Video**, **Caption**, **Accounts**, **Schedule**, and **Publish**. The brand can remain expressive without making users decode “Containment field,” “Projection targets,” “Initiate Transmission,” or “Lock Trajectory.”
+
+Founder decision: automatic saving of unfinished social-post drafts is excluded from this plan. Editor source saving and TikTok's platform draft-delivery behavior are separate existing capabilities.
 
 Specific changes:
 
-- Durable drafts, including base caption, overrides, media, exact destinations, chosen time, and unsent edits. The inspected composer primarily uses component state.
 - Exact account identity on each destination card. “Most recently connected account” is a weak default for creators managing several brands.
 - Platform-specific preview, caption length, media constraints, and applicable options in one card.
 - A clearly displayed timezone and explicit handling of nonexistent/ambiguous local times.
@@ -482,13 +485,13 @@ Specific changes:
 - Preserve captions and account choices while replacing/re-exporting media.
 - Reveal the source project and render revision from a scheduled post.
 
-Existing preflight checks cover captions, some duration/size checks, and connection warnings. Extend this with capability-backed checks such as aspect ratio, codec, asset readiness, and exact destination validity. Backend rules remain authoritative. Disconnected destinations currently produce warnings in the frontend; decide explicitly whether a user can schedule a blocked draft or must resolve the account before submission. [Preflight implementation](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/apps/web/src/engine/useEngine.ts:68).
+Existing preflight checks cover captions, some duration/size checks, and connection warnings. Extend this with capability-backed checks such as aspect ratio, codec, asset readiness, and exact destination validity. Backend rules remain authoritative. Disconnected destinations currently produce warnings in the frontend; require invalid destination accounts to be resolved before submission. [Preflight implementation](</Users/sinapahlevan/CODING PROJECTS/vidtryx/apps/web/src/engine/useEngine.ts:68>).
 
 ### Make export-to-publishing feel like one continuous workflow
 
 Keep local export as a first-class action. For a user choosing Schedule, let them select a verified export and carry project/scene/version information into the composer automatically.
 
-The handoff should read: **Render ready → upload complete → destination checks → schedule saved.** Show which step is in progress. Support retry without losing the draft or creating another scheduled post.
+The handoff should read: **Render ready → upload complete → destination checks → schedule saved.** Show which step is in progress. Support retry within the active posting flow without clearing current form entries or creating another scheduled post.
 
 For variants, store a relationship between the source scene and each format/hook render. A campaign could have a 9:16 Reel, a square feed version, and three hook alternatives. Each scheduled post must reference an immutable render, not a moving “latest export.”
 
@@ -517,13 +520,13 @@ This is a proposed hardening matrix, not a claim that duplicate publication was 
 | P2 | **Selecting a skill does not instantiate its starter.** Current installation writes a scene attribute and marker; discovery can report `hasStarter`, but that operation does not insert the starter. | Distinguish Attach guidance from Insert starter; implement a real previewed insertion path |
 | P2 | **Export errors can look like an empty library.** Exports list catches errors and returns an empty array; recording errors are also suppressed in the completion path. | Show recoverable error/retry states; retain export success separately from metadata-recording success |
 
-Sources: [timeline filter](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/packages/posterract-video-runtime/src/queries/timeline-index.ts:111), [inspector conditions](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/apps/editor-sandbox/src/components/sidebar-right/inspector/inspector.tsx:153), [export completion](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/apps/editor-sandbox/src/context/export.tsx:127), [provenance](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/apps/editor-sandbox/src/projects/provenance.ts), [agent context](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/apps/editor-sandbox/src/context/agent-api/context.ts:234), [calendar arithmetic](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/apps/web/src/routes/_app/continuum.tsx:15), [source locator](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/apps/desktop/src/projects.ts:845), [skill installation](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/apps/editor-sandbox/src/engine/skill-deck.tsx), [exports library](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/apps/editor-sandbox/src/components/sidebar-left/exports-view.tsx).
+Sources: [timeline filter](</Users/sinapahlevan/CODING PROJECTS/vidtryx/packages/posterract-video-runtime/src/queries/timeline-index.ts:111>), [inspector conditions](</Users/sinapahlevan/CODING PROJECTS/vidtryx/apps/editor-sandbox/src/components/sidebar-right/inspector/inspector.tsx:153>), [export completion](</Users/sinapahlevan/CODING PROJECTS/vidtryx/apps/editor-sandbox/src/context/export.tsx:127>), [provenance](</Users/sinapahlevan/CODING PROJECTS/vidtryx/apps/editor-sandbox/src/projects/provenance.ts>), [agent context](</Users/sinapahlevan/CODING PROJECTS/vidtryx/apps/editor-sandbox/src/context/agent-api/context.ts:234>), [calendar arithmetic](</Users/sinapahlevan/CODING PROJECTS/vidtryx/apps/web/src/routes/_app/continuum.tsx:15>), [source locator](</Users/sinapahlevan/CODING PROJECTS/vidtryx/apps/desktop/src/projects.ts:845>), [skill installation](</Users/sinapahlevan/CODING PROJECTS/vidtryx/apps/editor-sandbox/src/engine/skill-deck.tsx>), [exports library](</Users/sinapahlevan/CODING PROJECTS/vidtryx/apps/editor-sandbox/src/components/sidebar-left/exports-view.tsx>).
 
 P1 means high priority within this improvement program; it does not mean a verified production outage. Apart from the two isolated reproductions and stated UI observations, these are source-backed findings whose full user-visible impact should be reproduced in fixtures before implementation.
 
 ## 12. Cross-platform release quality
 
-The goal is one predictable product on three operating systems, with platform-appropriate shell behavior. Existing packaging uses Electron makers for macOS, Windows, and Linux; the current release workflow builds Windows/Linux, while macOS signing/notarization is handled separately. [Packaging](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/apps/desktop/forge.config.ts), [release workflow](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/.github/workflows/desktop-release.yml).
+The goal is one predictable product on three operating systems, with platform-appropriate shell behavior. Existing packaging uses Electron makers for macOS, Windows, and Linux; the current release workflow builds Windows/Linux, while macOS signing/notarization is handled separately. [Packaging](</Users/sinapahlevan/CODING PROJECTS/vidtryx/apps/desktop/forge.config.ts>), [release workflow](</Users/sinapahlevan/CODING PROJECTS/vidtryx/.github/workflows/desktop-release.yml>).
 
 | Test area | macOS | Windows | Linux |
 | --- | --- | --- | --- |
@@ -567,7 +570,7 @@ Exit: several genuinely useful components can be inserted by a human or agent, e
 
 ### Phase 4 — Delivery and campaign workflow: approximately 2–4 weeks
 
-Deliver durable composer drafts, exact-account cards, platform-specific readiness, immutable render/variant associations, clear TikTok draft states, compact calendar/agenda, and publication failure recovery. Preserve existing Temporal architecture.
+Deliver exact-account cards, platform-specific readiness, immutable render/variant associations, clear TikTok draft states, a compact calendar with details popups for scheduled and published posts, and publication failure recovery. Automatic saving of unfinished social-post drafts is excluded. Preserve existing Temporal architecture.
 
 Exit: a user can produce variants, schedule exact renders, understand partial success, and return to the source project from a post.
 
@@ -630,4 +633,4 @@ Resolve these questions before deep investment:
 
 The recommended immediate investment remains clear even before those answers: make the existing editor easier to operate, make motion visible, make agent completion trustworthy, and connect source revisions to published media.
 
-The companion prioritized task list is [posterract-next-level-backlog-2026-09-05.md](/Users/sinapahlevan/CODING%20PROJECTS/vidtryx/docs/posterract-next-level-backlog-2026-09-05.md).
+The companion prioritized task list is [posterract-next-level-backlog-2026-09-05.md](</Users/sinapahlevan/CODING PROJECTS/vidtryx/docs/posterract-next-level-backlog-2026-09-05.md>).

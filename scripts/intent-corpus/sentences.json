@@ -1,0 +1,766 @@
+{
+  "about": "About 146 spoken and typed commands for the voice bar's intent catalog, said against scripts/intent-corpus/fixture.json (the 1080x1920 Storm teaser), each with the intent, targets and slots it must come to; none of them is a catalog example.",
+  "sentences": [
+    {
+      "say": "Stick a yellow triangle right in the middle of the frame.",
+      "tags": ["create"],
+      "expect": {"steps": [{"intent": "create.shape", "slots": {"shape_kind": "triangle", "color": "yellow", "spot": "center"}}]}
+    },
+    {
+      "say": "ok so can you drop a hexagon in the bottom right about two hundred pixels wide",
+      "tags": ["create", "spoken"],
+      "expect": {"steps": [{"intent": "create.shape", "slots": {"shape_kind": "hexagon", "spot": "bottom-right", "side": 200}}]}
+    },
+    {
+      "say": "I want a giant circle sitting on screen.",
+      "tags": ["create"],
+      "expect": {"steps": [{"intent": "create.shape", "slots": {"shape_kind": "circle", "size": "huge"}}]}
+    },
+    {
+      "say": "Drop a diamond in the top left and make it gold.",
+      "tags": ["create", "style"],
+      "expect": {
+        "anyOf": [
+          {"steps": [{"intent": "create.shape", "slots": {"shape_kind": "diamond", "spot": "top-left", "color": "gold"}}]},
+          {"steps": [{"intent": "create.shape", "slots": {"shape_kind": "diamond", "spot": "top-left"}}, {"intent": "style.color", "slots": {"color": "gold"}}]}
+        ]
+      }
+    },
+    {
+      "say": "i need a line of text down in the lower third that reads swipe up",
+      "tags": ["create", "spoken"],
+      "expect": {"steps": [{"intent": "create.text", "slots": {"words": "swipe up", "spot": "lower-third"}}]}
+    },
+    {
+      "say": "I want the words LIVE NOW across the top, in bold.",
+      "tags": ["create", "style"],
+      "expect": {"steps": [{"intent": "create.text", "slots": {"words": "LIVE NOW", "spot": "top"}}, {"intent": "style.bold", "slots": {"bold": true}}]}
+    },
+    {
+      "say": "start another frame in that instagram feed shape the four by five one",
+      "tags": ["create", "spoken"],
+      "expect": {"steps": [{"intent": "create.scene", "slots": {"format": "portrait45"}}]}
+    },
+    {
+      "say": "Throw the beach photo in down at the bottom.",
+      "tags": ["create"],
+      "expect": {"steps": [{"intent": "create.from-asset", "slots": {"asset": "beach.jpg", "spot": "bottom"}}]}
+    },
+    {
+      "say": "Drop music.mp3 onto the timeline starting at eight seconds.",
+      "tags": ["create"],
+      "expect": {"steps": [{"intent": "create.from-asset", "slots": {"asset": "music.mp3", "when": 8}}]}
+    },
+    {
+      "say": "Take drone.mp4 and give it a scene of its own, sized to it.",
+      "tags": ["create"],
+      "expect": {"steps": [{"intent": "create.scene-from-asset", "slots": {"asset": "drone.mp4"}}]}
+    },
+    {
+      "say": "Pop a marker at eleven seconds and call it outro hit.",
+      "tags": ["create"],
+      "expect": {"steps": [{"intent": "create.marker", "slots": {"when": 11, "words": "outro hit"}}]}
+    },
+    {
+      "say": "Give the logo a round mask so its corners are cut off.",
+      "tags": ["create"],
+      "expect": {"steps": [{"intent": "create.mask", "targets": ["logo"], "slots": {"mask_shape": "ellipse"}}]}
+    },
+    {
+      "say": "Put a layer over the whole scene that mutes all the colour underneath.",
+      "tags": ["create"],
+      "expect": {"steps": [{"intent": "create.adjustment-layer", "slots": {"effect_type": "saturate"}}]}
+    },
+
+    {
+      "say": "Chop the footage in two right where the drop marker sits, then hop to the next cut.",
+      "tags": ["time"],
+      "expect": {"steps": [{"intent": "time.split", "targets": ["footage"], "slots": {"when": 6}}, {"intent": "time.cut-jump", "slots": {"direction": "later"}}]}
+    },
+    {
+      "say": "Shave the first three seconds off the storm clip and stop it at ten.",
+      "tags": ["time"],
+      "expect": {"steps": [{"intent": "time.trim-start", "targets": ["footage"], "slots": {"by": 3}}, {"intent": "time.trim-end", "targets": ["footage"], "slots": {"when": 10}}]}
+    },
+    {
+      "say": "Start the subtitle the moment the title disappears, and keep the call to action up for two and a half seconds.",
+      "tags": ["time"],
+      "expect": {"steps": [{"intent": "time.move-to", "targets": ["subtitle"], "slots": {"when": 6}}, {"intent": "time.set-length", "targets": ["cta"], "slots": {"length": 2.5}}]}
+    },
+    {
+      "say": "umm can you nudge the live badge for frames later",
+      "tags": ["time", "spoken"],
+      "expect": {"steps": [{"intent": "time.shift", "targets": ["badge"], "slots": {"by": 4, "direction": "later"}}]}
+    },
+    {
+      "say": "The logo should stay up from the very first frame right through to the last.",
+      "tags": ["time"],
+      "expect": {"steps": [{"intent": "time.fill", "targets": ["logo"]}]}
+    },
+    {
+      "say": "Slip the storm footage a second forward so a different bit of it plays.",
+      "tags": ["time"],
+      "expect": {"steps": [{"intent": "time.slip", "targets": ["footage"], "slots": {"by": 1, "direction": "later"}}]}
+    },
+    {
+      "say": "Slide this clip ten frames earlier and let the ones either side take up the slack.",
+      "tags": ["time"],
+      "expect": {"steps": [{"intent": "time.slide", "slots": {"by": 10, "direction": "earlier"}}]}
+    },
+    {
+      "say": "Drop the footage down to a quarter of the speed.",
+      "tags": ["time"],
+      "expect": {"steps": [{"intent": "time.speed", "targets": ["footage"], "slots": {"rate": 0.25}}]}
+    },
+    {
+      "say": "Put a half second crossfade on the front of this clip.",
+      "tags": ["time"],
+      "expect": {"steps": [{"intent": "time.transition", "slots": {"transition_type": "dissolve", "length": 0.5}}]}
+    },
+    {
+      "say": "umm ok so take me right to the end of the video and then play it",
+      "tags": ["time", "spoken"],
+      "expect": {"steps": [{"intent": "time.go-to", "slots": {"when": 12}}, {"intent": "time.play"}]}
+    },
+    {
+      "say": "freeze it there and jump back to seconds",
+      "tags": ["time", "spoken"],
+      "expect": {"steps": [{"intent": "time.pause"}, {"intent": "time.skip", "slots": {"by": 2, "direction": "earlier"}}]}
+    },
+    {
+      "say": "Wind it backwards for me, then race forward to the end.",
+      "tags": ["time"],
+      "expect": {"steps": [{"intent": "time.play-backwards"}, {"intent": "time.fast-forward"}]}
+    },
+    {
+      "say": "I only want the bit between one and nine seconds to come out.",
+      "tags": ["time"],
+      "expect": {"steps": [{"intent": "time.range", "slots": {"from": 1, "to": 9}}]}
+    },
+    {
+      "say": "Scrap the in and out points, I want the whole thing to render.",
+      "tags": ["time"],
+      "expect": {"steps": [{"intent": "time.range-clear"}]}
+    },
+    {
+      "say": "That marker at six seconds can go.",
+      "tags": ["time"],
+      "expect": {"steps": [{"intent": "time.marker-remove", "slots": {"marker": "index.tsx:31"}}]}
+    },
+    {
+      "say": "Change the name on the six second marker to big hit.",
+      "tags": ["time"],
+      "expect": {"steps": [{"intent": "time.marker-rename", "slots": {"marker": "index.tsx:31", "words": "big hit"}}]}
+    },
+
+    {
+      "say": "Shove the live badge into the top left corner and keep it twenty pixels off the edge.",
+      "tags": ["arrange"],
+      "expect": {"steps": [{"intent": "arrange.place", "targets": ["badge"], "slots": {"spot": "top-left"}}, {"intent": "arrange.inset", "targets": ["badge"], "slots": {"inset": 20}}]}
+    },
+    {
+      "say": "bump the call to action up thirty pixels and stick the badge at x sixty y nine hundred",
+      "tags": ["arrange", "spoken"],
+      "expect": {"steps": [{"intent": "arrange.move", "targets": ["cta"], "slots": {"direction": "up", "by": 30}}, {"intent": "arrange.position", "targets": ["badge"], "slots": {"x": 60, "y": 900}}]}
+    },
+    {
+      "say": "Sit the subtitle just under the title with a thirty pixel gap.",
+      "tags": ["arrange"],
+      "expect": {"steps": [{"intent": "arrange.next-to", "targets": ["subtitle"], "slots": {"anchor": "title", "relation": "below", "gap": 30}}]}
+    },
+    {
+      "say": "Line the title and the subtitle up on their left edges, then spread the texts out evenly down the frame.",
+      "tags": ["arrange"],
+      "expect": {"steps": [{"intent": "arrange.align", "targets": ["title", "subtitle"], "slots": {"align_how": "left"}}, {"intent": "arrange.distribute", "slots": {"axis": "y"}}]}
+    },
+    {
+      "say": "Make the logo twice the size it is now and hold its proportions.",
+      "tags": ["arrange"],
+      "expect": {"steps": [{"intent": "arrange.size", "targets": ["logo"], "slots": {"scale": 2}}, {"intent": "arrange.keep-ratio", "targets": ["logo"], "slots": {"keep_ratio": true}}]}
+    },
+    {
+      "say": "Swap the storm clip for drone.mp4 and blow it up to cover the whole frame.",
+      "tags": ["arrange"],
+      "expect": {"steps": [{"intent": "arrange.replace-media", "targets": ["footage"], "slots": {"asset": "drone.mp4"}}, {"intent": "arrange.fill-frame", "targets": ["footage"], "slots": {"fill_how": "fill"}}]}
+    },
+    {
+      "say": "The live badge should be a hexagon, and tipped fifteen degrees clockwise.",
+      "tags": ["arrange"],
+      "expect": {"steps": [{"intent": "arrange.change-shape", "targets": ["badge"], "slots": {"shape_kind": "hexagon"}}, {"intent": "arrange.rotate", "targets": ["badge"], "slots": {"degrees": 15, "spin": "clockwise"}}]}
+    },
+    {
+      "say": "Make two more copies of the badge and send them behind the logo.",
+      "tags": ["arrange"],
+      "expect": {"steps": [{"intent": "arrange.duplicate", "targets": ["badge"], "slots": {"count": 2}}, {"intent": "arrange.layer", "slots": {"layer_how": "behind", "anchor": "logo"}}]}
+    },
+    {
+      "say": "Lift the badge to the clipboard, and shove the call to action into the outro scene.",
+      "tags": ["arrange"],
+      "expect": {"steps": [{"intent": "arrange.cut", "targets": ["badge"]}, {"intent": "arrange.into", "targets": ["cta"], "slots": {"container": "outro"}}]}
+    },
+    {
+      "say": "i dont want the call to action in here at all any more",
+      "tags": ["arrange", "spoken"],
+      "expect": {"steps": [{"intent": "arrange.delete", "targets": ["cta"]}]}
+    },
+    {
+      "say": "Take the second clip out and drag everything after it back to close the hole.",
+      "tags": ["arrange"],
+      "expect": {"steps": [{"intent": "arrange.ripple-delete"}]}
+    },
+    {
+      "say": "Split that group back up, and break the sequence apart as well.",
+      "tags": ["arrange"],
+      "expect": {"steps": [{"intent": "arrange.ungroup"}, {"intent": "arrange.unwrap-sequence"}]}
+    },
+    {
+      "say": "Chain the two clips together so one runs straight into the next.",
+      "tags": ["arrange"],
+      "expect": {"steps": [{"intent": "arrange.wrap-sequence"}]}
+    },
+    {
+      "say": "Roll the title and the badge up into one new scene.",
+      "tags": ["arrange"],
+      "expect": {"steps": [{"intent": "arrange.wrap-scene", "targets": ["title", "badge"]}]}
+    },
+    {
+      "say": "Put the logo on the clipboard and then paste it back in.",
+      "tags": ["arrange"],
+      "expect": {
+        "anyOf": [
+          {"steps": [{"intent": "arrange.copy", "targets": ["logo"]}, {"intent": "arrange.paste"}]},
+          {"steps": [{"intent": "arrange.duplicate", "targets": ["logo"]}]}
+        ]
+      }
+    },
+    {
+      "say": "rename the live badge to alert switch the logo off and lock the storm footage",
+      "tags": ["arrange", "spoken"],
+      "expect": {"steps": [{"intent": "arrange.rename", "targets": ["badge"], "slots": {"words": "alert"}}, {"intent": "arrange.visibility", "targets": ["logo"], "slots": {"hide": true}}, {"intent": "arrange.lock", "targets": ["footage"], "slots": {"lock": true}}]}
+    },
+
+    {
+      "say": "Paint the live badge a deep purple instead of that red.",
+      "tags": ["style"],
+      "expect": {"steps": [{"intent": "style.color", "targets": ["badge"], "slots": {"color": "purple"}}]}
+    },
+    {
+      "say": "The badge should fade from teal into navy, straight across.",
+      "tags": ["style"],
+      "expect": {"steps": [{"intent": "style.gradient", "targets": ["badge"], "slots": {"gradient_kind": "linear"}}]}
+    },
+    {
+      "say": "Fill the badge with the beach photo and round its top corners twelve pixels.",
+      "tags": ["style"],
+      "expect": {"steps": [{"intent": "style.fill-media", "targets": ["badge"], "slots": {"asset": "beach.jpg"}}, {"intent": "style.corners", "targets": ["badge"], "slots": {"radius": 12, "which_corners": "top"}}]}
+    },
+    {
+      "say": "Crop the logo so it fills its box, and give it a four pixel black border.",
+      "tags": ["style"],
+      "expect": {"steps": [{"intent": "style.fit", "targets": ["logo"], "slots": {"fit": "cover"}}, {"intent": "style.outline", "targets": ["logo"], "slots": {"outline_how": "add", "color": "black", "stroke_width": 4}}]}
+    },
+    {
+      "say": "umm the call to action needs a shadow behind it",
+      "tags": ["style", "spoken"],
+      "expect": {"steps": [{"intent": "style.shadow", "targets": ["cta"], "slots": {"shadow_how": "add"}}]}
+    },
+    {
+      "say": "Take the blur off the badge, and soften the storm footage with ten pixels of blur instead.",
+      "tags": ["style"],
+      "expect": {"steps": [{"intent": "style.filter-remove", "targets": ["badge"], "slots": {"effect_type": "blur"}}, {"intent": "style.filter", "targets": ["footage"], "slots": {"effect_type": "blur", "strength": 10}}]}
+    },
+    {
+      "say": "Make the logo forty percent see through and blend it with screen.",
+      "tags": ["style"],
+      "expect": {"steps": [{"intent": "style.opacity", "targets": ["logo"], "slots": {"opacity": 40}}, {"intent": "style.blend", "targets": ["logo"], "slots": {"blend": "screen"}}]}
+    },
+    {
+      "say": "Put a deep black behind everything in this scene.",
+      "tags": ["style"],
+      "expect": {"steps": [{"intent": "style.background", "slots": {"color": "black"}}]}
+    },
+    {
+      "say": "set the subtitle in montserrat and knock the letters down to thirty two",
+      "tags": ["style", "spoken"],
+      "expect": {"steps": [{"intent": "style.font", "targets": ["subtitle"], "slots": {"font": "Montserrat"}}, {"intent": "style.text-size", "targets": ["subtitle"], "slots": {"font_size": 32}}]}
+    },
+    {
+      "say": "The headline should be heavy and slanted.",
+      "tags": ["style"],
+      "expect": {"steps": [{"intent": "style.bold", "targets": ["title"], "slots": {"bold": true}}, {"intent": "style.italic", "targets": ["title"], "slots": {"italic": true}}]}
+    },
+    {
+      "say": "Line the words of the call to action up on the right inside its box.",
+      "tags": ["style"],
+      "expect": {"steps": [{"intent": "style.text-align", "targets": ["cta"], "slots": {"text_align": "right"}}]}
+    },
+    {
+      "say": "The title should be shouting in capitals with a line under it.",
+      "tags": ["style"],
+      "expect": {"steps": [{"intent": "style.text-case", "targets": ["title"], "slots": {"text_case": "upper"}}, {"intent": "style.decoration", "targets": ["title"], "slots": {"decoration": "underline"}}]}
+    },
+    {
+      "say": "umm space the title letters out a bit and squeeze the lines closer together",
+      "tags": ["style", "spoken"],
+      "expect": {"steps": [{"intent": "style.letter-spacing", "targets": ["title"], "slots": {"spacing_how": "wider"}}, {"intent": "style.line-spacing", "targets": ["title"], "slots": {"leading_how": "less"}}]}
+    },
+    {
+      "say": "Sit the call to action in the middle of its line and let its box grow with the words.",
+      "tags": ["style"],
+      "expect": {"steps": [{"intent": "style.baseline", "targets": ["cta"], "slots": {"baseline": "middle"}}, {"intent": "style.text-box", "targets": ["cta"], "slots": {"text_box": "auto"}}]}
+    },
+    {
+      "say": "The subtitle should read doors open at eight.",
+      "tags": ["style"],
+      "expect": {"steps": [{"intent": "style.words", "targets": ["subtitle"], "slots": {"words": "doors open at eight"}}]}
+    },
+    {
+      "say": "Just the word storm in the title should be gold, not the rest of it.",
+      "tags": ["style"],
+      "expect": {
+        "anyOf": [
+          {"steps": [{"intent": "style.word", "targets": ["title"], "slots": {"words": "storm"}}]},
+          {"steps": [{"intent": "style.word", "targets": ["title"], "slots": {"words": "storm"}}, {"intent": "style.color", "targets": ["title"], "slots": {"color": "gold"}}]}
+        ]
+      }
+    },
+
+    {
+      "say": "Have the live badge fade up over three quarters of a second.",
+      "tags": ["motion"],
+      "expect": {"steps": [{"intent": "motion.add", "targets": ["badge"], "slots": {"anim_type": "fade", "anim_phase": "in", "duration": 0.75}}]}
+    },
+    {
+      "say": "The call to action should drop off the bottom of the frame when it leaves.",
+      "tags": ["motion"],
+      "expect": {"steps": [{"intent": "motion.add", "targets": ["cta"], "slots": {"anim_type": "slideDown", "anim_phase": "out"}}]}
+    },
+    {
+      "say": "I want the title to spell itself out letter by letter.",
+      "tags": ["motion"],
+      "expect": {"steps": [{"intent": "motion.add", "targets": ["title"], "slots": {"anim_type": "appearChar"}}]}
+    },
+    {
+      "say": "stretch the subtitles fade in out to a full second and make it bouncy",
+      "tags": ["motion", "spoken"],
+      "expect": {"steps": [{"intent": "motion.change", "targets": ["subtitle"], "slots": {"duration": 1, "easing": "bouncy"}}]}
+    },
+    {
+      "say": "Hold the call to action's entrance back by half a second.",
+      "tags": ["motion"],
+      "expect": {"steps": [{"intent": "motion.change", "targets": ["cta"], "slots": {"delay": 0.5}}]}
+    },
+    {
+      "say": "Strip every entrance and exit off the subtitle.",
+      "tags": ["motion"],
+      "expect": {"steps": [{"intent": "motion.remove", "targets": ["subtitle"], "slots": {"remove_what": "all"}}]}
+    },
+    {
+      "say": "Group the title and the subtitle, then have them come in a fifth of a second apart.",
+      "tags": ["motion", "arrange"],
+      "expect": {"steps": [{"intent": "arrange.group", "targets": ["title", "subtitle"]}, {"intent": "motion.stagger", "slots": {"stagger": 0.2}}]}
+    },
+    {
+      "say": "pop a scale keyframe on the logo right here",
+      "tags": ["motion", "spoken"],
+      "expect": {"steps": [{"intent": "motion.keyframe-add", "targets": ["logo"], "slots": {"property": "scale", "when": 3}}]}
+    },
+    {
+      "say": "Wipe the opacity keyframes off the badge.",
+      "tags": ["motion"],
+      "expect": {"steps": [{"intent": "motion.keyframe-remove", "targets": ["badge"], "slots": {"property": "opacity"}}]}
+    },
+    {
+      "say": "Have that motion run back and forth for as long as it's on screen.",
+      "tags": ["motion"],
+      "expect": {"steps": [{"intent": "motion.loop", "slots": {"loop_how": "pingpong"}}]}
+    },
+    {
+      "say": "Turn the rotation that's written in the code into keyframes I can drag.",
+      "tags": ["motion"],
+      "expect": {"steps": [{"intent": "motion.bake", "slots": {"property": "rotation"}}]}
+    },
+    {
+      "say": "The motion between the keyframes should start fast and settle gently.",
+      "tags": ["motion"],
+      "expect": {"steps": [{"intent": "motion.keyframe-easing", "slots": {"easing": "easeOut"}}]}
+    },
+    {
+      "say": "umm can you fade the logo in and blow it up a bit while youre at it",
+      "tags": ["motion", "arrange", "spoken"],
+      "expect": {
+        "anyOf": [
+          {"steps": [{"intent": "motion.add", "targets": ["logo"], "slots": {"anim_type": "fade", "anim_phase": "in"}}, {"intent": "arrange.size", "targets": ["logo"], "slots": {"size_dir": "bigger"}}]},
+          {"steps": [{"intent": "motion.add", "targets": ["logo"], "slots": {"anim_type": "fade", "anim_phase": "in"}}, {"intent": "motion.add", "targets": ["logo"], "slots": {"anim_type": "grow", "anim_phase": "in"}}]}
+        ]
+      }
+    },
+
+    {
+      "say": "Bring the music down to about twenty percent.",
+      "tags": ["sound"],
+      "expect": {"steps": [{"intent": "sound.volume", "targets": ["music"], "slots": {"volume": 20}}]}
+    },
+    {
+      "say": "ok the storm clip is way too quiet push it up a lot",
+      "tags": ["sound", "spoken"],
+      "expect": {"steps": [{"intent": "sound.volume", "targets": ["footage"], "slots": {"loudness": "louder", "amount": 2}}]}
+    },
+    {
+      "say": "Kill the sound on the storm footage.",
+      "tags": ["sound"],
+      "expect": {"steps": [{"intent": "sound.mute", "targets": ["footage"], "slots": {"mute": true}}]}
+    },
+    {
+      "say": "bring the music back in i muted it earlier",
+      "tags": ["sound", "spoken"],
+      "expect": {"steps": [{"intent": "sound.mute", "targets": ["music"], "slots": {"mute": false}}]}
+    },
+    {
+      "say": "Let the song come up over the first two seconds.",
+      "tags": ["sound"],
+      "expect": {"steps": [{"intent": "sound.fade", "targets": ["music"], "slots": {"anim_phase": "in", "duration": 2}}]}
+    },
+    {
+      "say": "Drop the storm clip by six db.",
+      "tags": ["sound"],
+      "expect": {"steps": [{"intent": "sound.volume", "targets": ["footage"], "slots": {"volume": -6}}]}
+    },
+    {
+      "say": "Pull the music down underneath the storm clip whenever that plays.",
+      "tags": ["sound"],
+      "expect": {"steps": [{"intent": "sound.duck", "targets": ["music"], "slots": {"under": "footage"}}]}
+    },
+    {
+      "say": "Turn the whole scene down a touch.",
+      "tags": ["sound"],
+      "expect": {"steps": [{"intent": "sound.volume", "slots": {"whole_scene": true, "loudness": "quieter", "amount": 0}}]}
+    },
+    {
+      "say": "so the music is fighting the voice can you duck it by about twelve db",
+      "tags": ["sound", "spoken"],
+      "expect": {"steps": [{"intent": "sound.duck", "targets": ["music"], "slots": {"volume": -12}}]}
+    },
+    {
+      "say": "Let the music drop away at the end, and cut the footage at nine seconds.",
+      "tags": ["sound", "time"],
+      "expect": {"steps": [{"intent": "sound.fade", "targets": ["music"], "slots": {"anim_phase": "out"}}, {"intent": "time.split", "targets": ["footage"], "slots": {"when": 9}}]}
+    },
+
+    {
+      "say": "listen to the audio and write the subtitles for me",
+      "tags": ["captions", "spoken"],
+      "expect": {"steps": [{"intent": "captions.add"}]}
+    },
+    {
+      "say": "Caption the whole thing in the karaoke style and sit them at the top.",
+      "tags": ["captions"],
+      "expect": {"steps": [{"intent": "captions.add", "slots": {"preset": "karaoke", "position": "top"}}]}
+    },
+    {
+      "say": "Switch the captions over to the punch look.",
+      "tags": ["captions"],
+      "expect": {"steps": [{"intent": "captions.style", "slots": {"preset": "punch"}}]}
+    },
+    {
+      "say": "the subtitles are sitting too low can you push them into the middle of the frame",
+      "tags": ["captions", "spoken"],
+      "expect": {"steps": [{"intent": "captions.position", "slots": {"position": "center"}}]}
+    },
+    {
+      "say": "The word being said should light up in teal.",
+      "tags": ["captions"],
+      "expect": {"steps": [{"intent": "captions.colors", "slots": {"color": "teal", "color_role": "highlight"}}]}
+    },
+    {
+      "say": "The caption words themselves need to be white.",
+      "tags": ["captions"],
+      "expect": {"steps": [{"intent": "captions.colors", "slots": {"color": "white", "color_role": "text"}}]}
+    },
+    {
+      "say": "Break the captions out into lines I can type into.",
+      "tags": ["captions"],
+      "expect": {"steps": [{"intent": "captions.unpack"}]}
+    },
+    {
+      "say": "The line at four seconds ought to read take cover now.",
+      "tags": ["captions"],
+      "expect": {"steps": [{"intent": "captions.fix", "slots": {"when": 4, "words": "take cover now"}}]}
+    },
+    {
+      "say": "Save me an SRT of the subtitles.",
+      "tags": ["captions"],
+      "expect": {"steps": [{"intent": "captions.export", "slots": {"subtitle_format": "srt"}}]}
+    },
+    {
+      "say": "umm i need a vtt file for the web player",
+      "tags": ["captions", "spoken"],
+      "expect": {"steps": [{"intent": "captions.export", "slots": {"subtitle_format": "vtt"}}]}
+    },
+    {
+      "say": "Turn the captions green and put them in Figtree.",
+      "tags": ["captions", "style"],
+      "expect": {"steps": [{"intent": "captions.colors", "slots": {"color": "green"}}, {"intent": "style.font", "targets": ["captions"], "slots": {"font": "Figtree"}}]}
+    },
+
+    {
+      "say": "Take the canvas up to a hundred and fifty percent.",
+      "tags": ["view"],
+      "expect": {"steps": [{"intent": "view.zoom", "slots": {"zoom_how": "percent", "percent": 150}}]}
+    },
+    {
+      "say": "Grab the title and the subtitle, both of them.",
+      "tags": ["view"],
+      "expect": {"steps": [{"intent": "view.select", "targets": ["title", "subtitle"], "slots": {"select_what": "named"}}]}
+    },
+    {
+      "say": "pick out every bit of text in this scene",
+      "tags": ["view", "spoken"],
+      "expect": {"steps": [{"intent": "view.select", "slots": {"select_what": "kind"}}]}
+    },
+    {
+      "say": "Open up the outro.",
+      "tags": ["view"],
+      "expect": {"steps": [{"intent": "view.scene", "slots": {"scene": "outro"}}]}
+    },
+    {
+      "say": "tuck the timeline away i need more room",
+      "tags": ["view", "spoken"],
+      "expect": {"steps": [{"intent": "view.panel", "slots": {"panel": "timeline", "panel_show": false}}]}
+    },
+    {
+      "say": "Throw me into the motion workspace.",
+      "tags": ["view"],
+      "expect": {"steps": [{"intent": "view.workspace", "slots": {"workspace": "motion"}}]}
+    },
+    {
+      "say": "Flip the inspector over to its history tab.",
+      "tags": ["view"],
+      "expect": {"steps": [{"intent": "view.inspector-tab", "slots": {"tab": "history"}}]}
+    },
+    {
+      "say": "Squeeze the whole video into the timeline so I can see it all at once.",
+      "tags": ["view"],
+      "expect": {"steps": [{"intent": "view.timeline-zoom", "slots": {"timeline_zoom": "fit"}}]}
+    },
+    {
+      "say": "Let the timeline show the effects and the strokes as well, not just the clips.",
+      "tags": ["view"],
+      "expect": {"steps": [{"intent": "view.timeline-detail", "slots": {"detail": "everything"}}]}
+    },
+    {
+      "say": "Put the editor in the glass look.",
+      "tags": ["view"],
+      "expect": {"steps": [{"intent": "view.theme", "slots": {"theme": "frost"}}]}
+    },
+    {
+      "say": "Hand me the shape tool set to draw stars.",
+      "tags": ["view"],
+      "expect": {"steps": [{"intent": "view.tool", "slots": {"tool": "shape", "shape_kind": "star"}}]}
+    },
+    {
+      "say": "i keep sticking to the guides when i drag turn that off",
+      "tags": ["view", "spoken"],
+      "expect": {"steps": [{"intent": "view.snapping", "slots": {"snapping": false}}]}
+    },
+    {
+      "say": "What sort of things can I ask you for?",
+      "tags": ["view"],
+      "expect": {"steps": [{"intent": "view.help"}]}
+    },
+    {
+      "say": "Scroll the timeline down to the music row.",
+      "tags": ["view"],
+      "expect": {"steps": [{"intent": "view.reveal", "targets": ["music"]}]}
+    },
+
+    {
+      "say": "Step me back three changes, then put one of them back.",
+      "tags": ["project"],
+      "expect": {"steps": [{"intent": "project.undo", "slots": {"count": 3}}, {"intent": "project.redo", "slots": {"count": 1}}]}
+    },
+    {
+      "say": "Repeat whatever you just did.",
+      "tags": ["project"],
+      "expect": {"steps": [{"intent": "project.again"}]}
+    },
+    {
+      "say": "Get me a file I can put straight on Instagram Reels.",
+      "tags": ["project"],
+      "expect": {"steps": [{"intent": "project.export", "slots": {"export_preset": "instagram"}}]}
+    },
+    {
+      "say": "Grab a still of whatever is under the playhead.",
+      "tags": ["project"],
+      "expect": {"steps": [{"intent": "project.export-frame"}]}
+    },
+    {
+      "say": "Let me pick the quality by hand, and then show me what I've already rendered.",
+      "tags": ["project"],
+      "expect": {"steps": [{"intent": "project.export-settings"}, {"intent": "project.exports-library"}]}
+    },
+    {
+      "say": "Pull up the saved versions and take me back to the last one.",
+      "tags": ["project"],
+      "expect": {"steps": [{"intent": "project.history"}, {"intent": "project.restore"}]}
+    },
+    {
+      "say": "The project itself should be called storm teaser final.",
+      "tags": ["project"],
+      "expect": {"steps": [{"intent": "project.rename", "slots": {"words": "storm teaser final"}}]}
+    },
+    {
+      "say": "can you pull some clips in off my laptop",
+      "tags": ["project", "spoken"],
+      "expect": {"steps": [{"intent": "project.import"}]}
+    },
+    {
+      "say": "Rename drone.mp4 to aerial b roll, and chuck beach.jpg out of the library.",
+      "tags": ["project"],
+      "expect": {"steps": [{"intent": "project.asset-rename", "slots": {"asset": "drone.mp4", "words": "aerial b roll"}}, {"intent": "project.asset-delete", "slots": {"asset": "beach.jpg"}}]}
+    },
+    {
+      "say": "The headline variable should read eye of the storm.",
+      "tags": ["project"],
+      "expect": {"steps": [{"intent": "project.variable", "slots": {"variable": "index.tsx#headline", "words": "eye of the storm"}}]}
+    },
+    {
+      "say": "make the accent colour variable teal",
+      "tags": ["project", "spoken"],
+      "expect": {"steps": [{"intent": "project.variable", "slots": {"variable": "index.tsx#accent", "color": "teal"}}]}
+    },
+    {
+      "say": "Treat this scene as a talking head piece.",
+      "tags": ["project"],
+      "expect": {"steps": [{"intent": "project.skill"}]}
+    },
+    {
+      "say": "Hand the project over to my coding agent.",
+      "tags": ["project"],
+      "expect": {"steps": [{"intent": "project.agent"}]}
+    },
+    {
+      "say": "Open the panel where the AI stuff lives.",
+      "tags": ["project"],
+      "expect": {"steps": [{"intent": "project.generate-panel"}]}
+    },
+    {
+      "say": "set the in point at won second the out point at nine and render it in four k",
+      "tags": ["project", "time", "spoken"],
+      "expect": {"steps": [{"intent": "time.mark-in", "slots": {"when": 1}}, {"intent": "time.mark-out", "slots": {"when": 9}}, {"intent": "project.export", "slots": {"export_preset": "4k"}}]}
+    },
+
+    {
+      "say": "Cook me up a vertical picture of lightning over a city skyline.",
+      "tags": ["generate"],
+      "expect": {"steps": [{"intent": "generate.image", "slots": {"aspect": "9:16"}}]}
+    },
+    {
+      "say": "I want a 2K image of a wet road at night.",
+      "tags": ["generate"],
+      "expect": {"steps": [{"intent": "generate.image", "slots": {"resolution": "2K"}}]}
+    },
+    {
+      "say": "I need about ten seconds of AI footage of rain hammering a window.",
+      "tags": ["generate"],
+      "expect": {"steps": [{"intent": "generate.video", "slots": {"seconds": 10}}]}
+    },
+    {
+      "say": "Build me a wide clip of a lightning strike, in the best quality.",
+      "tags": ["generate"],
+      "expect": {"steps": [{"intent": "generate.video", "slots": {"aspect": "16:9", "quality": "2K"}}]}
+    },
+    {
+      "say": "Have someone read out stay safe out there in the deep voice.",
+      "tags": ["generate"],
+      "expect": {"steps": [{"intent": "generate.voice", "slots": {"words": "stay safe out there"}}]}
+    },
+    {
+      "say": "Put a voiceover on it saying tonight at nine.",
+      "tags": ["generate"],
+      "expect": {"steps": [{"intent": "generate.voice", "slots": {"words": "tonight at nine"}}]}
+    },
+    {
+      "say": "umm can you whip up a square image of a stormy beach for me",
+      "tags": ["generate", "spoken"],
+      "expect": {"steps": [{"intent": "generate.image", "slots": {"aspect": "1:1"}}]}
+    },
+    {
+      "say": "Make a vertical AI picture of a dark sky and shove it right at the back.",
+      "tags": ["generate", "arrange"],
+      "expect": {"steps": [{"intent": "generate.image", "slots": {"aspect": "9:16"}}, {"intent": "arrange.layer", "slots": {"layer_how": "back"}}]}
+    },
+    {
+      "say": "Spin up a four by three image of thunderclouds.",
+      "tags": ["generate"],
+      "expect": {"steps": [{"intent": "generate.image", "slots": {"aspect": "4:3"}}]}
+    },
+    {
+      "say": "can you do me a fifteen second clip of a storm rolling in",
+      "tags": ["generate", "spoken"],
+      "expect": {"steps": [{"intent": "generate.video", "slots": {"seconds": 15}}]}
+    },
+
+    {
+      "say": "is it going to rain tonight",
+      "tags": ["nonsense", "spoken"],
+      "expect": {"nothing": true}
+    },
+    {
+      "say": "ugh my coffee went cold",
+      "tags": ["nonsense", "spoken"],
+      "expect": {"nothing": true}
+    },
+    {
+      "say": "Hey, are you there?",
+      "tags": ["nonsense"],
+      "expect": {"nothing": true}
+    },
+    {
+      "say": "what time does the post office shut",
+      "tags": ["nonsense", "spoken"],
+      "expect": {"nothing": true}
+    },
+    {
+      "say": "sorry i was talking to my mum not you",
+      "tags": ["nonsense", "spoken"],
+      "expect": {"nothing": true}
+    },
+    {
+      "say": "Can you book me a flight to Berlin?",
+      "tags": ["nonsense"],
+      "expect": {"nothing": true}
+    },
+    {
+      "say": "How much does this software cost?",
+      "tags": ["nonsense"],
+      "expect": {"nothing": true}
+    },
+
+    {
+      "say": "Give the title a sharper line, something with more bite.",
+      "tags": ["writing"],
+      "expect": {"note": true}
+    },
+    {
+      "say": "Come up with three different calls to action for the end.",
+      "tags": ["writing"],
+      "expect": {"note": true}
+    },
+    {
+      "say": "rewrite the subtitle so it sounds more urgent",
+      "tags": ["writing", "spoken"],
+      "expect": {"note": true}
+    },
+    {
+      "say": "Think up a catchy headline for the opening.",
+      "tags": ["writing"],
+      "expect": {"note": true}
+    },
+    {
+      "say": "Write a short script for a voiceover about the storm.",
+      "tags": ["writing"],
+      "expect": {"note": true}
+    }
+  ]
+}
