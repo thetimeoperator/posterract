@@ -5,14 +5,17 @@
  */
 import { useEffect, useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { artifactUrls, useEngineStore } from "./store";
+import { artifactUrls, useEngineStore, type AnalyticsScope, type BusinessInput, type PeriodQuery } from "./store";
 import { startSimulator } from "./simulator";
 import {
   POINTS_SOURCE_LABELS,
   levelProgress,
   nextRank,
   rankFor,
-  type AccountSetDTO,
+  type BusinessDTO,
+  type AccountAnalyticsDTO,
+  type AccountAnalyticsResponseDTO,
+  type PeriodStatsDTO,
   type AnalyticsDashboardDTO,
   type AnalyticsRangeDays,
   type LeaderboardDTO,
@@ -50,7 +53,8 @@ export async function getTikTokCreatorInfo(accountId: string): Promise<import("@
     creator_avatar_url: account.avatarUrl || "", privacy_level_options: ["PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "SELF_ONLY"],
     comment_disabled: false, duet_disabled: true, stitch_disabled: false, max_video_post_duration_sec: 600 };
 }
-export const useAccountSets = (): AccountSetDTO[] => useEngineStore((s) => s.accountSets);
+export const useBusinesses = (): BusinessDTO[] => useEngineStore((s) => s.businesses);
+export const usePointsReady = () => true;
 export const usePoints = () => {
   // Select stable refs; derive the summary in a memo (a fresh object from the
   // selector itself would loop the zustand equality check forever).
@@ -234,7 +238,97 @@ const demoDaily = (provider: DemoAnalyticsProvider, rangeDays: AnalyticsRangeDay
   });
 };
 
-export function useAnalyticsDashboard(rangeDays: AnalyticsRangeDays): AnalyticsDashboardDTO {
+/** A stable 0..1 number per account, so every demo creator performs differently but the same each time. */
+const demoWeight = (id: string) => {
+  let hash = 0;
+  for (const character of id) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  return 0.35 + (hash % 1000) / 1000 * 1.3;
+};
+
+export function useAccountAnalytics(rangeDays: AnalyticsRangeDays): AccountAnalyticsResponseDTO {
+  const portals = useEngineStore((s) => s.portals);
+  const businesses = useEngineStore((s) => s.businesses);
+  return useMemo(() => {
+    const members = new Set(businesses.flatMap((business) => business.accountIds));
+    const accounts = portals
+      .filter((portal): portal is typeof portal & { provider: DemoAnalyticsProvider } =>
+        ["instagram", "tiktok", "facebook", "threads"].includes(portal.provider) && (portal.status === "connected" || members.has(portal.id)))
+      .map((portal): AccountAnalyticsDTO => {
+        const weight = demoWeight(portal.id);
+        const all = demoDaily(portal.provider, rangeDays === "total" ? 90 : (rangeDays * 2) as AnalyticsRangeDays);
+        const half = rangeDays === "total" ? 0 : rangeDays;
+        const currentDays = rangeDays === "total" ? all : all.slice(half);
+        const previousDays = rangeDays === "total" ? [] : all.slice(0, half);
+        const scale = (value: number) => Math.round(value * weight);
+        const sum = (days: typeof all, key: "views" | "likes" | "comments" | "shares") => days.reduce((total, day) => total + scale(day[key]), 0);
+        const views = sum(currentDays, "views");
+        const likes = sum(currentDays, "likes");
+        const comments = sum(currentDays, "comments");
+        const shares = sum(currentDays, "shares");
+        const interactions = likes + comments + shares;
+        const posts = Math.max(1, Math.round(currentDays.length / 3 * weight));
+        const quiet = weight < 0.6;
+        return {
+          accountId: portal.id,
+          provider: portal.provider,
+          handle: portal.handle,
+          displayName: portal.displayName,
+          avatarUrl: portal.avatarUrl,
+          status: portal.status,
+          audience: Math.round(18_000 * weight),
+          audienceDelta: currentDays.reduce((total, day) => total + scale(day.audienceGained - day.audienceLost), 0),
+          views, likes, comments, shares,
+          interactions,
+          engagementRate: views ? interactions / views : undefined,
+          publishedPosts: quiet ? 0 : posts,
+          lastPostAt: Date.now() - (quiet ? 9 : 1) * 86_400_000,
+          points: Math.round(views / 1000 * 10) / 10 + (quiet ? 0 : posts),
+          failedPosts: portal.status === "connected" ? 0 : 1,
+          daily: currentDays.map((day) => ({ date: day.date, views: scale(day.views) })),
+          previous: rangeDays === "total" ? undefined : {
+            views: sum(previousDays, "views"),
+            interactions: sum(previousDays, "likes") + sum(previousDays, "comments") + sum(previousDays, "shares"),
+            audienceDelta: previousDays.reduce((total, day) => total + scale(day.audienceGained - day.audienceLost), 0),
+            publishedPosts: Math.max(0, posts - 1),
+            points: Math.round(sum(previousDays, "views") / 1000 * 10) / 10,
+          },
+          lastSyncedAt: Date.now() - 11 * 60_000,
+        };
+      });
+    return { rangeDays, accounts };
+  }, [portals, businesses, rangeDays]);
+}
+
+export function usePeriodStats(query: PeriodQuery): PeriodStatsDTO {
+  const stats = useEngineStore((s) => s.stats);
+  const points = useEngineStore((s) => s.points);
+  return useMemo(() => {
+    const start = new Date(`${query.from}T00:00:00`).getTime();
+    const end = new Date(`${query.to}T00:00:00`).getTime() + 86_400_000;
+    const span = end - start;
+    const earned = (low: number, high: number) => points.filter((entry) => entry.at >= low && entry.at < high).reduce((total, entry) => total + entry.amount, 0);
+    const today = Date.now();
+    const days = Math.max(0, Math.round((Math.min(end, today) - start) / 86_400_000));
+    const dailyViews = Array.from({ length: days }, (_, index) => {
+      const date = new Date(start + index * 86_400_000);
+      return { date: date.toISOString().slice(0, 10), views: 2_400 + Math.round(Math.sin(index * 0.7) * 600 + index * 40) };
+    });
+    const views = dailyViews.reduce((total, day) => total + day.views, 0);
+    return {
+      from: query.from,
+      to: query.to,
+      timeZone: query.timeZone,
+      views,
+      previousViews: Math.round(views * 0.82),
+      dailyViews,
+      points: Math.round(earned(start, end) * 100) / 100,
+      previousPoints: Math.round(earned(start - span, start) * 100) / 100,
+      streak: { days: stats.streakDays, postedToday: stats.lastPostDay === new Date().toISOString().slice(0, 10), next: { days: 7, points: 10 } },
+    };
+  }, [query.from, query.to, query.timeZone, stats, points]);
+}
+
+export function useAnalyticsDashboard(rangeDays: AnalyticsRangeDays, _scope?: AnalyticsScope): AnalyticsDashboardDTO {
   return useMemo(() => {
     const makePlatform = (provider: DemoAnalyticsProvider) => {
       const daily = demoDaily(provider, rangeDays);
@@ -382,10 +476,10 @@ export function useOAuth() {
   };
 }
 
-export function useAccountSetActions() {
+export function useBusinessActions() {
   return {
-    create: async (_input: { name: string; accountIds: string[] }) => { throw new Error("Account sets require the PostgreSQL engine"); },
-    update: async (_id: string, _input: { name: string; accountIds: string[] }) => { throw new Error("Account sets require the PostgreSQL engine"); },
-    remove: async (_id: string) => undefined,
+    create: async (input: BusinessInput) => useEngineStore.getState().saveBusiness(undefined, input),
+    update: async (id: string, input: BusinessInput) => useEngineStore.getState().saveBusiness(id, input),
+    remove: async (id: string) => useEngineStore.getState().removeBusiness(id),
   };
 }

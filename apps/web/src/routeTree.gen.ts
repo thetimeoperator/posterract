@@ -15,6 +15,7 @@ import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as GateRouteImport } from './routes/gate'
 import { Route as EnterRouteImport } from './routes/enter'
 import { Route as DataDeletionRouteImport } from './routes/data-deletion'
+import { Route as ConnectRouteImport } from './routes/connect'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as DevPosterractV2RouteImport } from './routes/dev/posterract-v2'
@@ -63,6 +64,11 @@ const EnterRoute = EnterRouteImport.update({
 const DataDeletionRoute = DataDeletionRouteImport.update({
   id: '/data-deletion',
   path: '/data-deletion',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConnectRoute = ConnectRouteImport.update({
+  id: '/connect',
+  path: '/connect',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppRoute = AppRouteImport.update({
@@ -162,6 +168,7 @@ const OauthCallbackProviderRoute = OauthCallbackProviderRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
+  '/connect': typeof ConnectRoute
   '/data-deletion': typeof DataDeletionRoute
   '/enter': typeof EnterRoute
   '/gate': typeof GateRoute
@@ -187,6 +194,7 @@ export interface FileRoutesByFullPath {
   '/oauth/callback/$provider': typeof OauthCallbackProviderRoute
 }
 export interface FileRoutesByTo {
+  '/connect': typeof ConnectRoute
   '/data-deletion': typeof DataDeletionRoute
   '/enter': typeof EnterRoute
   '/gate': typeof GateRoute
@@ -215,6 +223,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
+  '/connect': typeof ConnectRoute
   '/data-deletion': typeof DataDeletionRoute
   '/enter': typeof EnterRoute
   '/gate': typeof GateRoute
@@ -244,6 +253,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/connect'
     | '/data-deletion'
     | '/enter'
     | '/gate'
@@ -269,6 +279,7 @@ export interface FileRouteTypes {
     | '/oauth/callback/$provider'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/connect'
     | '/data-deletion'
     | '/enter'
     | '/gate'
@@ -296,6 +307,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_app'
+    | '/connect'
     | '/data-deletion'
     | '/enter'
     | '/gate'
@@ -324,6 +336,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
+  ConnectRoute: typeof ConnectRoute
   DataDeletionRoute: typeof DataDeletionRoute
   EnterRoute: typeof EnterRoute
   GateRoute: typeof GateRoute
@@ -379,6 +392,13 @@ declare module '@tanstack/react-router' {
       path: '/data-deletion'
       fullPath: '/data-deletion'
       preLoaderRoute: typeof DataDeletionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/connect': {
+      id: '/connect'
+      path: '/connect'
+      fullPath: '/connect'
+      preLoaderRoute: typeof ConnectRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app': {
@@ -553,6 +573,7 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
+  ConnectRoute: ConnectRoute,
   DataDeletionRoute: DataDeletionRoute,
   EnterRoute: EnterRoute,
   GateRoute: GateRoute,

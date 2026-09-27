@@ -13,10 +13,11 @@ import {
   pushSignal,
 } from "@posterract/hyperkit";
 import type { PlatformId } from "@posterract/contract";
-import { PLATFORM_CAPABILITIES, PUBLISHING_PLATFORM_IDS } from "@posterract/contract";
+import { PLATFORM_CAPABILITIES, PUBLISHING_PLATFORM_IDS, allowsSeveralAccounts } from "@posterract/contract";
 import { VideoDropzone } from "@/components/VideoDropzone";
 import { ArtifactThumb } from "@/components/ArtifactThumb";
 import { AccountTargets } from "@/components/AccountTargets";
+import { useSelectedBusiness } from "@/state/business";
 import { TikTokDeclaration, TikTokSettings, TikTokHoverHint, TIKTOK_DISCLOSURE_HINT } from "@/components/TikTokSettings";
 import { emptyTikTokOptions, validateTikTokOptions, type TikTokCreatorInfo } from "@posterract/contract/tiktok";
 import {
@@ -24,7 +25,7 @@ import {
   computePreflight,
   renderTemplate,
   useArtifacts,
-  useAccountSets,
+  useBusinesses,
   useEngineActions,
   usePortals,
   useTransmissions,
@@ -57,7 +58,7 @@ function Composer() {
   const search = Route.useSearch();
   const artifacts = useArtifacts();
   const portals = usePortals();
-  const accountSets = useAccountSets();
+  const businesses = useBusinesses();
   const transmissions = useTransmissions();
   const projections = useProjections();
   const { createTransmission } = useEngineActions();
@@ -72,8 +73,9 @@ function Composer() {
   const [hashtags, setHashtags] = useState<string[]>([]);
   const [tagDraft, setTagDraft] = useState("");
   const [platforms, setPlatforms] = useState<PlatformId[]>(["instagram", "tiktok"]);
-  const [accountSetId, setAccountSetId] = useState("");
-  const [selectedAccounts, setSelectedAccounts] = useState<Partial<Record<PlatformId, string>>>({});
+  const [businessId, setBusinessId] = useState("");
+  // Instagram, Facebook and Threads can take several accounts; TikTok one.
+  const [selectedAccounts, setSelectedAccounts] = useState<Partial<Record<PlatformId, string[]>>>({});
   const [tiktok, setTikTok] = useState(emptyTikTokOptions);
   const [creatorState, setCreatorState] = useState<{ accountId?: string; info?: TikTokCreatorInfo; loading: boolean; error?: string }>({ loading: false });
   const [creatorRefresh, setCreatorRefresh] = useState(0);
@@ -93,7 +95,7 @@ function Composer() {
       let changed = false;
       for (const provider of platforms) {
         const available = portals.filter((a) => a.provider === provider && a.status === "connected");
-        if (current[provider] === undefined && available.length === 1) { next[provider] = available[0].id; changed = true; }
+        if (current[provider] === undefined && available.length === 1) { next[provider] = [available[0].id]; changed = true; }
       }
       return changed ? next : current;
     });
@@ -109,12 +111,15 @@ function Composer() {
     // Stored platform captions already include the original hashtags.
     setHashtags([]);
     setOverrides(Object.fromEntries(targets.map((p) => [p.provider, p.caption])));
-    setPlatforms(targets.map((p) => p.provider));
-    setSelectedAccounts(Object.fromEntries(targets.map((p) => [p.provider, p.portalId || ""])));
+    setPlatforms([...new Set(targets.map((p) => p.provider))]);
+    const copiedAccounts: Partial<Record<PlatformId, string[]>> = {};
+    for (const target of targets) if (target.portalId) copiedAccounts[target.provider] = [...(copiedAccounts[target.provider] ?? []), target.portalId];
+    setSelectedAccounts(copiedAccounts);
+    setBusinessId(source.businessId ?? "");
     setTikTok(emptyTikTokOptions());
   }, [search.copy, transmissions, projections]);
 
-  const tiktokAccountId = platforms.includes("tiktok") ? selectedAccounts.tiktok : undefined;
+  const tiktokAccountId = platforms.includes("tiktok") ? selectedAccounts.tiktok?.[0] : undefined;
   useEffect(() => { setTikTok(emptyTikTokOptions()); }, [tiktokAccountId]);
   useEffect(() => {
     let active = true;
@@ -141,9 +146,15 @@ function Composer() {
   const fullCaptionFor = (p: PlatformId) =>
     [captionFor(p), hashtags.map((h) => `#${h}`).join(" ")].filter(Boolean).join("\n\n");
 
-  const selectedAccountSet = accountSets.find((set) => set.id === accountSetId);
-  const portalStatus = (p: PlatformId) =>
-    portals.find((account) => account.id === selectedAccounts[p] && account.provider === p)?.status;
+  const chosenFor = (p: PlatformId) => portals.filter((account) => account.provider === p && (selectedAccounts[p] ?? []).includes(account.id));
+  const portalStatus = (p: PlatformId) => {
+    const chosen = chosenFor(p);
+    return chosen.length === 0 ? undefined : chosen.find((account) => account.status !== "connected")?.status ?? "connected";
+  };
+  const selectedIds = platforms.flatMap((p) => selectedAccounts[p] ?? []);
+  // The post counts as posted from the business while every chosen account is in it.
+  const business = businesses.find((item) => item.id === businessId);
+  const activeBusiness = business && selectedIds.length > 0 && selectedIds.every((id) => business.accountIds.includes(id)) ? business : undefined;
 
   const preflight = useMemo(() => {
       const checks = computePreflight({
@@ -167,14 +178,43 @@ function Composer() {
     && platforms.every((p) => portalStatus(p) === "connected")
     && (!directTikTok || (!!creator && !creatorState.loading && !tiktokValidation));
   const destinations = platforms.map((p) => {
-    const account = portals.find((a) => a.id === selectedAccounts[p]);
-    return `${PLATFORM_CAPABILITIES[p].label}: ${p === "tiktok" && creator ? creator.creator_nickname : account?.displayName || account?.handle || "choose account"}`;
+    const names = chosenFor(p).map((account) => p === "tiktok" && creator ? creator.creator_nickname : account.displayName || account.handle);
+    return `${PLATFORM_CAPABILITIES[p].label}: ${names.join(", ") || "choose account"}`;
   }).join(" · ");
 
   const togglePlatform = (p: PlatformId) => {
-    setAccountSetId("");
     setPlatforms((cur) => (cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p]));
   };
+  const chooseAccount = (provider: PlatformId, id: string) => {
+    setSelectedAccounts((previous) => {
+      const current = previous[provider] ?? [];
+      const next = !allowsSeveralAccounts(provider) ? (id ? [id] : [])
+        : current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
+      return { ...previous, [provider]: next };
+    });
+  };
+  const chooseBusiness = (id: string) => {
+    setBusinessId(id);
+    const next = businesses.find((item) => item.id === id);
+    if (!next) return;
+    const byPlatform: Partial<Record<PlatformId, string[]>> = {};
+    for (const account of next.accounts) {
+      if (account.status !== "connected" || !(PUBLISHING_PLATFORM_IDS as readonly string[]).includes(account.provider)) continue;
+      if (!allowsSeveralAccounts(account.provider) && byPlatform[account.provider]?.length) continue;
+      byPlatform[account.provider] = [...(byPlatform[account.provider] ?? []), account.id];
+    }
+    setPlatforms(Object.keys(byPlatform) as PlatformId[]);
+    setSelectedAccounts(byPlatform);
+  };
+  // A new post starts on the business picked in the header.
+  const headerBusiness = useSelectedBusiness();
+  const startedOnBusiness = useRef(false);
+  useEffect(() => {
+    if (startedOnBusiness.current || search.copy || !headerBusiness) return;
+    startedOnBusiness.current = true;
+    chooseBusiness(headerBusiness.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [headerBusiness, search.copy]);
 
   const addTag = () => {
     const clean = tagDraft.replace(/^#/, "").trim().replace(/\s+/g, "");
@@ -201,7 +241,8 @@ function Composer() {
           platforms.map((p) => [p, fullCaptionFor(p)]),
         ) as Partial<Record<PlatformId, string>>,
         perPlatformOptions: platforms.includes("tiktok") ? { tiktok: tiktok.mode === "direct" ? { ...tiktok, consentAccepted: true } : { mode: "inbox" } } : undefined,
-        accountIds: platforms.map((p) => selectedAccounts[p]!),
+        accountIds: selectedIds,
+        ...(activeBusiness ? { businessId: activeBusiness.id } : {}),
         scheduleMode: mode,
         scheduledFor,
       };
@@ -383,32 +424,24 @@ function Composer() {
       {/* ── Right: targets + trajectory + pre-flight ── */}
       <div className="flex flex-col gap-4">
         <Panel kicker="Projection targets" title="Accounts" brackets>
-          {accountSets.length > 0 && (
+          {businesses.length > 0 && (
             <label className="mb-3 block">
-              <span className="kicker mb-1.5 block !text-[8px]">Account set</span>
+              <span className="kicker mb-1.5 block !text-[8px]">Business</span>
               <select
-                value={accountSetId}
-                onChange={(event) => {
-                  const nextId = event.target.value;
-                  setAccountSetId(nextId);
-                  const next = accountSets.find((set) => set.id === nextId);
-                  if (next) {
-                    setPlatforms(next.accounts.map((account) => account.provider).filter((provider) => (PUBLISHING_PLATFORM_IDS as readonly string[]).includes(provider)));
-                    setSelectedAccounts(Object.fromEntries(next.accounts.map((account) => [account.provider, account.id])));
-                  }
-                }}
+                value={activeBusiness?.id ?? ""}
+                onChange={(event) => chooseBusiness(event.target.value)}
                 className="h-10 w-full rounded-[10px] border border-white/[0.09] bg-void-2 px-3 text-[12px] text-starlight outline-none focus:border-neon/30"
               >
                 <option value="">Custom</option>
-                {accountSets.map((set) => <option key={set.id} value={set.id}>{set.name} · {set.accounts.length} networks</option>)}
+                {businesses.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.accounts.length} account{item.accounts.length === 1 ? "" : "s"}</option>)}
               </select>
               <span className="mt-1.5 block text-[9.5px] text-starlight-faint">
-                {selectedAccountSet ? `Using the accounts saved in ${selectedAccountSet.name}.` : "Choose one connected account for each selected platform."}
+                {activeBusiness ? `Posting to the accounts in ${activeBusiness.name}.` : "Choose the accounts to post to."}
               </span>
             </label>
           )}
           <AccountTargets accounts={portals} platforms={platforms} selected={selectedAccounts} creator={creator}
-            onToggle={togglePlatform} onSelect={(provider, id) => { setAccountSetId(""); setSelectedAccounts((previous) => ({ ...previous, [provider]: id })); }} />
+            onToggle={togglePlatform} onSelect={chooseAccount} />
           <p className="mt-2.5 text-[10px] text-starlight-faint">YouTube and X are coming soon.</p>
           {platforms.some((p) => portalStatus(p) !== "connected") && (
             <p className="mt-2.5 text-[11px] text-solar">

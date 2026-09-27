@@ -145,7 +145,7 @@ function TransmissionRow({
           <div className="min-w-0 flex-1">
             <p className="truncate text-[13.5px] font-medium text-starlight">{t.title}</p>
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-              <PlatformRuneRow platforms={projections.map((p) => p.provider)} statusDots={statusDots} />
+              <PlatformRuneRow platforms={[...new Set(projections.map((p) => p.provider))]} statusDots={statusDots} />
               <span className="telemetry text-[11px] text-starlight-faint">{formatWhen(t.scheduledFor)}</span>
               {t.status === "scheduled" && t.scheduledFor && t.scheduledFor > Date.now() && (
                 <Countdown to={t.scheduledFor} className="text-[11px]" />

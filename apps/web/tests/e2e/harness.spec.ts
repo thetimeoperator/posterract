@@ -30,13 +30,13 @@ test.describe("Agent harness", () => {
     await page.getByLabel("Key name").fill("Codex publishing agent");
     await page.getByRole("button", { name: "Create key" }).click();
     await expect(page.getByRole("heading", { name: "This key is shown once." })).toBeVisible();
-    await expect(page.locator("code")).toContainText("pr_demo_");
+    await expect(page.locator("code").filter({ hasText: "pr_demo_" })).toBeVisible();
     await page.getByRole("button", { name: "I saved the key" }).click();
     await expect(page.getByText("Codex publishing agent")).toBeVisible();
     const card = page.getByTestId("api-key-card");
     await expect(card.getByText("Published", { exact: true })).toBeVisible();
     await expect(card.getByText("Created", { exact: true })).toBeVisible();
     await expect(card.getByText("Actions", { exact: true })).toBeVisible();
-    await expect(page.locator("code")).toHaveCount(0);
+    await expect(page.locator("code").filter({ hasText: "pr_demo_" })).toHaveCount(0);
   });
 });

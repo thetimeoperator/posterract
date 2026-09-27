@@ -3,15 +3,16 @@ import { useId } from "react";
 import type { TikTokCreatorInfo, TikTokPostOptions } from "@posterract/contract/tiktok";
 import { TikTokDeclaration, TikTokHoverHint, TikTokPrivacySelect } from "@/components/TikTokSettings";
 
-function SettingToggle({ label, description, checked, disabled, onChange }: {
+function SettingControl({ label, description, checked, disabled, onChange, checkbox = false }: {
   label: string; description?: string; checked: boolean; disabled?: boolean; onChange: (value: boolean) => void;
+  checkbox?: boolean;
 }) {
   const id = useId();
-  return <label className="web-compose-toggle-row" data-disabled={disabled || undefined}>
+  return <label className={checkbox ? "web-compose-checkbox-row" : "web-compose-toggle-row"} data-disabled={disabled || undefined}>
     <span><strong>{label}</strong>{description && <small id={id}>{description}</small>}</span>
     <input type="checkbox" aria-label={label} aria-describedby={description ? id : undefined} checked={checked} disabled={disabled}
       onChange={(event) => onChange(event.target.checked)} />
-    <span className="web-compose-toggle" aria-hidden />
+    {!checkbox && <span className="web-compose-toggle" aria-hidden />}
   </label>;
 }
 
@@ -36,23 +37,23 @@ export function WebTikTokSettings({ value, onChange, creator, loading, error, on
         branded={value.brandContent} onChange={(privacyLevel) => onChange({ ...value, privacyLevel })} />
       <div className="web-compose-settings-columns">
         <div className="web-compose-setting-group"><h4>Interactions</h4>
-          <SettingToggle label="Allow comments" checked={value.allowComment} disabled={!creator || loading || creator.comment_disabled} onChange={(v) => change("allowComment", v)} />
-          <SettingToggle label="Allow Duet" checked={value.allowDuet} disabled={!creator || loading || creator.duet_disabled} onChange={(v) => change("allowDuet", v)} />
-          <SettingToggle label="Allow Stitch" checked={value.allowStitch} disabled={!creator || loading || creator.stitch_disabled} onChange={(v) => change("allowStitch", v)} />
+          <SettingControl checkbox label="Allow comments" checked={value.allowComment} disabled={!creator || loading || creator.comment_disabled} onChange={(v) => change("allowComment", v)} />
+          <SettingControl checkbox label="Allow Duet" checked={value.allowDuet} disabled={!creator || loading || creator.duet_disabled} onChange={(v) => change("allowDuet", v)} />
+          <SettingControl checkbox label="Allow Stitch" checked={value.allowStitch} disabled={!creator || loading || creator.stitch_disabled} onChange={(v) => change("allowStitch", v)} />
           <p className="web-compose-setting-note">Unavailable interactions are controlled by this TikTok account.</p>
         </div>
         <div className="web-compose-setting-group"><h4>Content disclosures</h4>
-          <SettingToggle label="Disclose commercial content" description="This promotes you, a brand, product, or service." checked={value.commercialContent}
+          <SettingControl label="Disclose commercial content" description="This promotes you, a brand, product, or service." checked={value.commercialContent}
             onChange={(commercialContent) => onChange({ ...value, commercialContent, brandOrganic: false, brandContent: false })} />
           {value.commercialContent && <div className="web-compose-disclosure-options">
-            <SettingToggle label="Your brand — promoting yourself or your business" checked={value.brandOrganic} onChange={(v) => change("brandOrganic", v)} />
+            <SettingControl checkbox label="Your brand — promoting yourself or your business" checked={value.brandOrganic} onChange={(v) => change("brandOrganic", v)} />
             <TikTokHoverHint message={value.privacyLevel === "SELF_ONLY" ? "Branded content visibility cannot be set to private." : undefined} label="Why branded content is unavailable">
-              <SettingToggle label="Branded content — promoting another brand or third party" checked={value.brandContent} disabled={value.privacyLevel === "SELF_ONLY"} onChange={(v) => change("brandContent", v)} />
+              <SettingControl checkbox label="Branded content — promoting another brand or third party" checked={value.brandContent} disabled={value.privacyLevel === "SELF_ONLY"} onChange={(v) => change("brandContent", v)} />
             </TikTokHoverHint>
             {(value.privacyLevel === "SELF_ONLY" || value.brandContent) && <p className="web-compose-setting-note">Branded content visibility cannot be set to private.</p>}
             {(value.brandOrganic || value.brandContent) && <p className="web-compose-setting-note">Your video will be labeled as “{value.brandContent ? "Paid partnership" : "Promotional content"}”.</p>}
           </div>}
-          <SettingToggle label="AI-generated content" description="TikTok will label this video as AI-generated." checked={value.isAigc} onChange={(v) => change("isAigc", v)} />
+          <SettingControl label="AI-generated content" description="TikTok will label this video as AI-generated." checked={value.isAigc} onChange={(v) => change("isAigc", v)} />
         </div>
       </div>
       <div className="web-compose-tiktok-declaration"><TikTokDeclaration branded={value.brandContent} /></div>

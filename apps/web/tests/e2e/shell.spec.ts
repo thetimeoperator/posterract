@@ -34,12 +34,16 @@ test.describe("Posterract shell", () => {
     expect(await dock.getByRole("link").evaluateAll((links) => links.map((link) => link.getAttribute("aria-label")))).toEqual([
       "Create — Agent video editor",
       "Calendar — Publishing schedule",
-      "API Keys — Agent access",
       "Analytics — Performance",
-      "Social accounts — Connections",
-      "Assets — Media library",
-      "Settings — Workspace",
+      "Points — Levels & leaderboard",
     ]);
+    // Setup pages live in the account menu.
+    await page.getByRole("button", { name: "Account menu" }).click();
+    const menu = page.getByRole("menu");
+    for (const label of ["Social accounts", "Assets", "API Keys", "Settings"]) {
+      await expect(menu.getByRole("menuitem", { name: label })).toBeVisible();
+    }
+    await page.keyboard.press("Escape");
     await expect(dock.getByRole("link", { name: /Skills|History/ })).toHaveCount(0);
     expect(errors).toEqual([]);
   });
@@ -172,8 +176,8 @@ test.describe("Posterract shell", () => {
     expect(box!.x + box!.width).toBeLessThanOrEqual(390);
     expect(box!.y).toBeGreaterThan(630);
     await expect(page.getByRole("link", { name: "Posterract home" })).toBeVisible();
-    await expect(dock.getByRole("link", { name: /API Keys/i })).toBeVisible();
-    await expect(dock.getByRole("link", { name: /Settings/i })).toBeVisible();
+    await expect(dock.getByRole("link", { name: /Analytics/i })).toBeVisible();
+    await expect(dock.getByRole("link", { name: /Points/i })).toBeVisible();
     await expect(page.getByRole("button", { name: "More Posterract destinations" })).toHaveCount(0);
   });
 
@@ -212,8 +216,13 @@ test.describe("Posterract shell", () => {
     await expect(page.getByText("Lost in a dimension")).toBeVisible();
   });
 
-  test("Points is not an active product route", async ({ page }) => {
-    await page.goto("/points");
-    await expect(page.getByText("Lost in a dimension")).toBeVisible();
+  test("the rank chip shows on every tab except Points, which has its own", async ({ page }) => {
+    await page.goto("/continuum");
+    const chip = page.getByRole("link", { name: /^Your rank: .+, level \d+\. Open Points$/ });
+    await expect(chip).toBeVisible();
+    await chip.click();
+    await expect(page).toHaveURL(/\/points$/);
+    await expect(page.getByText("Lost in a dimension")).toHaveCount(0);
+    await expect(chip).toHaveCount(0);
   });
 });

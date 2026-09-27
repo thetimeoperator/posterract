@@ -34,9 +34,9 @@ test("approved compact layout has no duplicate headings, hashtag bar or account 
   expect(button.y).toBeGreaterThan(caption.y + caption.height);
   expect(button.width).toBeLessThan(150);
   expect(button.width).toBeLessThan(caption.width / 2);
-  await expect(page.getByLabel("Account set", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("Account set", { exact: true })).toBeDisabled();
-  await expect(page.getByRole("link", { name: "Create account set (opens in a new tab)" })).toHaveAttribute("href", "/portals");
+  await expect(page.getByLabel("Business", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Business", { exact: true })).toBeDisabled();
+  await expect(page.getByRole("link", { name: "Create business (opens in a new tab)" })).toHaveAttribute("href", "/portals");
   const trajectory = page.locator(".web-compose-sidebar > section").first();
   await expect(trajectory.getByRole("heading", { name: "When", exact: true })).toBeVisible();
   expect((await trajectory.boundingBox())!.height).toBeLessThan(145);
@@ -74,7 +74,7 @@ test("TikTok declarations stay inside its direct-post settings tab", async ({ pa
   await expect(music).toHaveCount(0);
   await page.getByRole("group", { name: "Target accounts" }).getByRole("button", { name: "Threads", exact: true }).click();
   await page.getByRole("button", { name: "Publish now", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Publish to 3 platforms now?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Publish to 3 accounts now?" })).toBeVisible();
   await expect(music).toHaveCount(0);
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
 });

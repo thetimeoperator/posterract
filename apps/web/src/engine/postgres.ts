@@ -1,7 +1,9 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 import type {
-  AccountSetDTO,
+  BusinessDTO,
+  AccountAnalyticsResponseDTO,
+  PeriodStatsDTO,
   AnalyticsDashboardDTO,
   AnalyticsRangeDays,
   ArtifactDTO,
@@ -15,7 +17,7 @@ import type {
   ProjectionDTO,
   TransmissionDTO,
 } from "@posterract/contract";
-import type { CreateTransmissionInput } from "./store";
+import type { AnalyticsScope, BusinessInput, CreateTransmissionInput, PeriodQuery } from "./store";
 import { cloudJson } from "@/lib/cloudRequest";
 import { desktopRequest, isPosterractDesktop } from "@/lib/desktop";
 
@@ -31,17 +33,23 @@ type Bootstrap = {
   projections: ProjectionDTO[];
   events: EventDTO[];
   portals: PortalDTO[];
-  accountSets: AccountSetDTO[];
+  businesses: BusinessDTO[];
   points: PointsSummaryDTO;
 };
 
 type State = Bootstrap & {
   loaded: boolean;
-  analytics: Partial<Record<AnalyticsRangeDays, AnalyticsDashboardDTO>>;
+  /** Keyed by range, business and accounts (see analyticsKey). */
+  analytics: Record<string, AnalyticsDashboardDTO>;
+  accountAnalytics: Partial<Record<AnalyticsRangeDays, AccountAnalyticsResponseDTO>>;
+  /** Keyed by period and scope (see periodKey). */
+  periodStats: Record<string, PeriodStatsDTO>;
   pointsDashboard?: PointsDashboardDTO;
   leaderboards: Partial<Record<LeaderboardPeriod, LeaderboardDTO>>;
   refresh: () => Promise<void>;
-  loadAnalytics: (rangeDays: AnalyticsRangeDays) => Promise<void>;
+  loadAnalytics: (rangeDays: AnalyticsRangeDays, scope?: AnalyticsScope) => Promise<void>;
+  loadAccountAnalytics: (rangeDays: AnalyticsRangeDays) => Promise<void>;
+  loadPeriodStats: (query: PeriodQuery) => Promise<void>;
   loadPointsDashboard: () => Promise<void>;
   loadLeaderboard: (period: LeaderboardPeriod) => Promise<void>;
 };
@@ -66,9 +74,11 @@ const usePostgresStore = create<State>((set) => ({
   projections: [],
   events: [],
   portals: [],
-  accountSets: [],
+  businesses: [],
   points: emptyPoints,
   analytics: {},
+  accountAnalytics: {},
+  periodStats: {},
   leaderboards: {},
   refresh: async () => {
     const data = await request<Bootstrap>("/v1/bootstrap");
@@ -77,11 +87,22 @@ const usePostgresStore = create<State>((set) => ({
     }
     set({ ...data, loaded: true });
   },
-  loadAnalytics: async (rangeDays) => {
-    const data = await request<AnalyticsDashboardDTO>(
-      `/v1/analytics?rangeDays=${rangeDays}`,
-    );
-    set((state) => ({ analytics: { ...state.analytics, [rangeDays]: data } }));
+  loadAnalytics: async (rangeDays, scope) => {
+    const query = new URLSearchParams({ rangeDays: String(rangeDays) });
+    if (scope?.businessId) query.set("business", scope.businessId);
+    if (scope?.accountIds?.length) query.set("accounts", scope.accountIds.join(","));
+    const data = await request<AnalyticsDashboardDTO>(`/v1/analytics?${query}`);
+    set((state) => ({ analytics: { ...state.analytics, [analyticsKey(rangeDays, scope)]: data } }));
+  },
+  loadAccountAnalytics: async (rangeDays) => {
+    const data = await request<AccountAnalyticsResponseDTO>(`/v1/analytics/accounts?rangeDays=${rangeDays}`);
+    set((state) => ({ accountAnalytics: { ...state.accountAnalytics, [rangeDays]: data } }));
+  },
+  loadPeriodStats: async (query) => {
+    const params = new URLSearchParams({ from: query.from, to: query.to, tz: query.timeZone });
+    if (query.businessId) params.set("business", query.businessId);
+    const data = await request<PeriodStatsDTO>(`/v1/stats/period?${params}`);
+    set((state) => ({ periodStats: { ...state.periodStats, [periodKey(query)]: data } }));
   },
   loadPointsDashboard: async () => {
     const data = await request<PointsDashboardDTO>("/v1/points/dashboard");
@@ -134,19 +155,56 @@ export const useTransmissions = () => usePostgresStore((state) => state.transmis
 export const useProjections = () => usePostgresStore((state) => state.projections);
 export const useEvents = () => usePostgresStore((state) => state.events);
 export const usePortals = () => usePostgresStore((state) => state.portals);
-export const useAccountSets = () => usePostgresStore((state) => state.accountSets);
+export const useBusinesses = () => usePostgresStore((state) => state.businesses);
 export const usePoints = () => usePostgresStore((state) => state.points);
+/** False until the first load, so nothing shows level 1 before the real points arrive. */
+export const usePointsReady = () => usePostgresStore((state) => state.loaded);
+
+/** Every account's stats for a period, for the Businesses tab on Analytics. */
+export function useAccountAnalytics(rangeDays: AnalyticsRangeDays): AccountAnalyticsResponseDTO | undefined {
+  const data = usePostgresStore((state) => state.accountAnalytics[rangeDays]);
+  const load = usePostgresStore((state) => state.loadAccountAnalytics);
+  useEffect(() => {
+    void load(rangeDays).catch((error) => console.error("Account analytics refresh failed", error));
+  }, [load, rangeDays]);
+  return data;
+}
+
+function periodKey(query: PeriodQuery) {
+  return `${query.from}|${query.to}|${query.timeZone}|${query.businessId ?? ""}`;
+}
+
+/** Views, points and streak for the month or week on the calendar. */
+export function usePeriodStats(query: PeriodQuery): PeriodStatsDTO | undefined {
+  const key = periodKey(query);
+  const data = usePostgresStore((state) => state.periodStats[key]);
+  const load = usePostgresStore((state) => state.loadPeriodStats);
+  const { from, to, timeZone, businessId } = query;
+  useEffect(() => {
+    void load({ from, to, timeZone, businessId }).catch((error) => console.error("Period stats refresh failed", error));
+  }, [load, from, to, timeZone, businessId]);
+  return data;
+}
+
+function analyticsKey(rangeDays: AnalyticsRangeDays, scope?: AnalyticsScope) {
+  return `${rangeDays}|${scope?.businessId ?? ""}|${[...(scope?.accountIds ?? [])].sort().join(",")}`;
+}
 
 export function useAnalyticsDashboard(
   rangeDays: AnalyticsRangeDays,
+  scope?: AnalyticsScope,
 ): AnalyticsDashboardDTO | undefined {
-  const dashboard = usePostgresStore((state) => state.analytics[rangeDays]);
+  const key = analyticsKey(rangeDays, scope);
+  const dashboard = usePostgresStore((state) => state.analytics[key]);
   const loadAnalytics = usePostgresStore((state) => state.loadAnalytics);
+  const businessId = scope?.businessId;
+  const accounts = scope?.accountIds?.join(",");
   useEffect(() => {
-    void loadAnalytics(rangeDays).catch((error) => {
+    const scoped = { businessId, accountIds: accounts ? accounts.split(",") : undefined };
+    void loadAnalytics(rangeDays, scoped).catch((error) => {
       console.error("PostgreSQL analytics refresh failed", error);
     });
-  }, [loadAnalytics, rangeDays]);
+  }, [loadAnalytics, rangeDays, businessId, accounts]);
   return dashboard;
 }
 
@@ -272,7 +330,7 @@ export function useEngineActions() {
             input.scheduleMode === "now"
               ? "now"
               : new Date(input.scheduledFor).toISOString(),
-          accountSetId: input.accountSetId,
+          businessId: input.businessId,
           accountIds: input.accountIds,
         }),
       });
@@ -288,6 +346,7 @@ export function useEngineActions() {
         scheduleMode: input.scheduleMode,
         scheduledFor: input.scheduledFor,
         source: "ui",
+        businessId: input.businessId,
         createdAt: Date.now(),
         updatedAt: Date.now(),
       } satisfies TransmissionDTO;
@@ -402,27 +461,27 @@ export function useOAuth() {
   };
 }
 
-export function useAccountSetActions() {
+export function useBusinessActions() {
   const refresh = usePostgresStore((state) => state.refresh);
   return {
-    create: async (input: { name: string; accountIds: string[] }) => {
-      const result = await request<AccountSetDTO>("/v1/account-sets", {
+    create: async (input: BusinessInput) => {
+      const result = await request<BusinessDTO>("/v1/businesses", {
         method: "POST",
         body: JSON.stringify(input),
       });
       await refresh();
       return result;
     },
-    update: async (id: string, input: { name: string; accountIds: string[] }) => {
-      const result = await request<AccountSetDTO>(
-        `/v1/account-sets/${encodeURIComponent(id)}`,
+    update: async (id: string, input: BusinessInput) => {
+      const result = await request<BusinessDTO>(
+        `/v1/businesses/${encodeURIComponent(id)}`,
         { method: "PUT", body: JSON.stringify(input) },
       );
       await refresh();
       return result;
     },
     remove: async (id: string) => {
-      await request(`/v1/account-sets/${encodeURIComponent(id)}`, { method: "DELETE" });
+      await request(`/v1/businesses/${encodeURIComponent(id)}`, { method: "DELETE" });
       await refresh();
     },
   };

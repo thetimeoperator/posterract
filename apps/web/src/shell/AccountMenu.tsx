@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronDown, LogIn, LogOut, Settings, UserRound } from "lucide-react";
+import { ChevronDown, LogIn, LogOut } from "lucide-react";
 import { useProfile, initials } from "@/state/profile";
 import { authClient } from "@/lib/authClient";
 import { ENGINE_MODE } from "@/engine/useEngine";
 import { useAuthState } from "@/lib/useAuthState";
 import { desktopSignOut } from "@/lib/desktopAuth";
 import { isPosterractDesktop } from "@/lib/desktop";
+import { SETUP_NAV_ITEMS } from "./nav";
 
 /** Account menu — avatar dropdown, the thing every product has top-right. */
 export function AccountMenu() {
@@ -64,8 +65,10 @@ export function AccountMenu() {
               <p className="telemetry truncate text-[11px] text-starlight-faint">{subtitle}</p>
             </div>
             <div className="p-1.5">
-              <MenuLink to="/settings" icon={<UserRound size={14} />} label="Profile" onPick={() => setOpen(false)} />
-              <MenuLink to="/settings" icon={<Settings size={14} />} label="Settings" onPick={() => setOpen(false)} />
+              {SETUP_NAV_ITEMS.map((item) => {
+                const Icon = item.icon;
+                return <MenuLink key={item.path} to={item.path} icon={<Icon size={14} />} label={item.label} onPick={() => setOpen(false)} />;
+              })}
               {ENGINE_MODE === "cloud" ? (
                 <button
                   role="menuitem"

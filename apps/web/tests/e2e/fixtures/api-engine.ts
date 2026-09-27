@@ -15,7 +15,7 @@ export async function useApiEngine(page: Page) {
 export function emptyBootstrap() {
   return {
     workspaceId: "00000000-0000-4000-8000-000000000001",
-    artifacts: [] as any[], accountSets: [] as any[], portals: [] as any[],
+    artifacts: [] as any[], businesses: [] as any[], portals: [] as any[],
     transmissions: [], projections: [], events: [],
     points: { lifetimeRP: 0, weekRP: 0, streakDays: 0, badges: [], recent: [] },
   };

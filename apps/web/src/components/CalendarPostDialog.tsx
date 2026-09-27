@@ -2,14 +2,16 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { ExternalLink, Film, RotateCcw } from 'lucide-react';
 import { Button, Modal, StatusBadge, pushSignal } from '@posterract/hyperkit';
 import { PLATFORM_CAPABILITIES } from '@posterract/contract';
-import { artifactUrl, useEngineActions, usePortals, useProjections, useTransmissions } from '@/engine/useEngine';
+import { artifactUrl, useBusinesses, useEngineActions, usePortals, useProjections, useTransmissions } from '@/engine/useEngine';
 import { localDateTimeValue } from '@/lib/calendar-date';
 import { PointsChip } from '@/components/PointsChip';
+import { BusinessLogo } from '@/components/BusinessLogo';
 
 export function CalendarPostDialog({ transmissionId, onClose }: { transmissionId: string | null; onClose: () => void }) {
   const transmission = useTransmissions().find((item) => item.id === transmissionId);
   const projections = useProjections().filter((item) => item.transmissionId === transmissionId);
   const portals = usePortals();
+  const business = useBusinesses().find((item) => item.id === transmission?.businessId);
   const actions = useEngineActions();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -43,6 +45,7 @@ export function CalendarPostDialog({ transmissionId, onClose }: { transmissionId
           </div>
           <div className="min-w-0 space-y-4">
             <StatusBadge status={transmission.status} />
+            {business && <p className="flex items-center gap-2 text-sm text-starlight"><BusinessLogo name={business.name} logoUrl={business.logoUrl} size={20} />{business.name}</p>}
             {transmission.scheduledFor && <div><p className="text-xs text-starlight-faint">Scheduled time · {timezone}</p><p className="mt-1 text-sm text-starlight">{new Date(transmission.scheduledFor).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</p></div>}
             <div><p className="mb-1 text-xs text-starlight-faint">Caption</p><p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-starlight">{transmission.baseCaption || 'No caption'}</p>{transmission.hashtags.length > 0 && <p className="mt-2 break-words text-xs text-neon">{transmission.hashtags.map((tag) => tag.startsWith('#') ? tag : `#${tag}`).join(' ')}</p>}</div>
           </div>

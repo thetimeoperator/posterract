@@ -3,7 +3,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import clsx from "clsx";
 import { Dock, DockIcon, DockItem } from "@/components/ui/dock";
 import { LiquidSurface } from "@/components/LiquidSurface";
-import { MVP_NAV_ITEMS, isNavActive } from "./nav";
+import { DOCK_NAV_ITEMS, isNavActive } from "./nav";
 
 /** A compact, buttons-only navigation lens anchored to the bottom edge. */
 export function BottomDock() {
@@ -16,7 +16,7 @@ export function BottomDock() {
     >
       <LiquidSurface preset="dock" className="bottom-dock-shell relative z-20 rounded-full">
         <Dock className="bottom-dock-buttons" panelHeight={58} magnification={64}>
-          {MVP_NAV_ITEMS.map((item) => {
+          {DOCK_NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const active = isNavActive(pathname, item.path);
             return (

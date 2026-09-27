@@ -8,9 +8,10 @@ const formats = { instagram: "Instagram Reel", facebook: "Facebook Page Reel", t
 
 export function WebPlatformSettings({ open, onClose, platforms, active, onActive, accounts, selected, issues, tiktokSettings }: {
   open: boolean; onClose: () => void; platforms: PlatformId[]; active?: PlatformId; onActive: (provider: PlatformId) => void;
-  accounts: PortalDTO[]; selected: Partial<Record<PlatformId, string>>; issues: Partial<Record<PlatformId, boolean>>; tiktokSettings: ReactNode;
+  accounts: PortalDTO[]; selected: Partial<Record<PlatformId, string[]>>; issues: Partial<Record<PlatformId, boolean>>; tiktokSettings: ReactNode;
 }) {
-  const account = accounts.find((a) => a.provider === active && a.id === selected[active!]);
+  const chosen = accounts.filter((a) => a.provider === active && (selected[active!] ?? []).includes(a.id));
+  const account = chosen[0];
   const caps = active && PLATFORM_CAPABILITIES[active];
   return <WebComposeDialog open={open} onClose={onClose} title="Platform settings">
     {platforms.length === 0 ? <p className="web-compose-setting-note">Select an account to configure its settings.</p> : <>
@@ -30,7 +31,7 @@ export function WebPlatformSettings({ open, onClose, platforms, active, onActive
       </div>
       {active && caps && <div role="tabpanel" id="web-settings-panel" aria-labelledby={`web-settings-tab-${active}`}>
         <div className="web-compose-setting-identity"><WebAccountAvatar provider={active} account={account} />
-          <div><strong>{account?.displayName || account?.handle || caps.label}</strong>{account?.handle && <small>{account.handle}</small>}</div>
+          <div><strong>{account?.displayName || account?.handle || caps.label}{chosen.length > 1 ? ` + ${chosen.length - 1} more` : ""}</strong>{account?.handle && <small>{chosen.map((a) => a.handle).join(", ")}</small>}</div>
         </div>
         {active === "tiktok" ? tiktokSettings : <div className="web-compose-format-info">
           <span className="kicker">Format</span><p>{formats[active as keyof typeof formats] || caps.label}</p>

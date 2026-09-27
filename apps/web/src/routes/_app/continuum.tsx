@@ -7,9 +7,12 @@ import { Button, EmptyState, Modal, Panel, PlatformBrandMark, Segmented, StatusB
 import type { PlatformId, TransmissionStatus } from "@posterract/contract";
 import { CalendarPostDialog } from "@/components/CalendarPostDialog";
 import { PointsChip, pointsByTransmission } from "@/components/PointsChip";
+import { BusinessLogo } from "@/components/BusinessLogo";
+import { PeriodStats } from "@/components/calendar/PeriodStats";
+import { useSelectedBusiness } from "@/state/business";
 import { addCalendarDays, startOfWeek, scheduleTimeForDay, sameCalendarDay, calendarDayKey } from "@/lib/calendar-date";
 import { ArtifactThumb } from "@/components/ArtifactThumb";
-import { useEngineActions, useProjections, useTransmissions } from "@/engine/useEngine";
+import { useBusinesses, useEngineActions, useProjections, useTransmissions } from "@/engine/useEngine";
 import "@/styles/calendar.css";
 
 export const Route = createFileRoute("/_app/continuum")({
@@ -20,30 +23,37 @@ function PostStatusDot({ status }: { status: TransmissionStatus }) {
   return <span role="img" aria-label={`Status: ${status}`} title={status} className={clsx("inline-block h-1.5 w-1.5 flex-none rounded-full", status === "live" ? "bg-neon" : status === "scheduled" ? "bg-ice" : status === "failed" || status === "partial" ? "bg-redshift" : status === "canceled" ? "bg-starlight-faint" : "bg-solar")} />;
 }
 
+/** The bottom row of a post tile: its platforms, and its points in the corner. With points it stays one line, so the tile keeps its size. */
 function CalendarPlatformLogos({ platforms, points }: { platforms: readonly PlatformId[]; points?: number }) {
   const unique = [...new Set(platforms)];
   return (
-    <span data-calendar-platforms className="calendar-post-platforms">
+    <span data-calendar-platforms data-has-points={points !== undefined || undefined} className="calendar-post-platforms">
+      <span className="calendar-post-logos">
       {unique.map((platform) => (
         <PlatformBrandMark key={platform} platform={platform} height={18} className="flex-none" />
       ))}
       {platforms.length === 0 && <span className="text-[9px] text-starlight-faint">No targets</span>}
-      {points !== undefined && <PointsChip points={points} size="sm" className="ml-auto" />}
+      </span>
+      {points !== undefined && <PointsChip points={points} size="sm" compact className="ml-auto" />}
     </span>
   );
 }
 
-function CalendarPostSummary({ title, scheduledFor, status, platforms, points }: {
-  title: string; scheduledFor: number; status: TransmissionStatus; platforms: readonly PlatformId[]; points?: number;
+function CalendarPostSummary({ title, scheduledFor, status, platforms, points, businessId }: {
+  title: string; scheduledFor: number; status: TransmissionStatus; platforms: readonly PlatformId[]; points?: number; businessId?: string;
 }) {
+  // Published posts always show their points, 0 until the first stats come in.
+  const shownPoints = points ?? (status === "live" || status === "partial" ? 0 : undefined);
+  const business = useBusinesses().find((item) => item.id === businessId);
   return <span className="calendar-post-summary">
     <span className="calendar-post-heading">
+      {business && <BusinessLogo name={business.name} logoUrl={business.logoUrl} size={14} className="calendar-post-business" />}
       <span data-calendar-post-title className="calendar-post-title" title={title}>{title}</span>
       <span className="calendar-post-meta"><PostStatusDot status={status} /><time data-calendar-post-time dateTime={new Date(scheduledFor).toISOString()}>
         {new Date(scheduledFor).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
       </time></span>
     </span>
-    <CalendarPlatformLogos platforms={platforms} points={points} />
+    <CalendarPlatformLogos platforms={platforms} points={shownPoints} />
   </span>;
 }
 
@@ -101,8 +111,16 @@ function attachPostDragPreview(event: DragEvent<HTMLElement>) {
  * today's column in real time. Click a day's + to compose into that slot.
  */
 function Continuum() {
-  const transmissions = useTransmissions();
+  const allTransmissions = useTransmissions();
   const projections = useProjections();
+  // The business picked in the header: its posts are the ones made from it or sent to its accounts.
+  const selectedBusiness = useSelectedBusiness();
+  const transmissions = useMemo(() => {
+    if (!selectedBusiness) return allTransmissions;
+    const accounts = new Set(selectedBusiness.accountIds);
+    const reached = new Set(projections.filter((projection) => accounts.has(projection.portalId)).map((projection) => projection.transmissionId));
+    return allTransmissions.filter((transmission) => transmission.businessId === selectedBusiness.id || reached.has(transmission.id));
+  }, [allTransmissions, projections, selectedBusiness]);
   const platformsByPost = useMemo(() => {
     const grouped = new Map<string, PlatformId[]>();
     for (const projection of projections) {
@@ -166,6 +184,17 @@ function Continuum() {
       transmission.scheduledFor < nextMonthStart,
   ).length;
   const periodTotal = view === "week" ? weekTotal : monthTotal;
+  // The period on screen as local dates, for its numbers on the right of the title.
+  const localKey = (time: number) => {
+    const date = new Date(time);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  };
+  const periodStart = view === "week" ? days[0] : monthStart;
+  const periodEnd = view === "week" ? addCalendarDays(days[6], 1) : nextMonthStart;
+  const periodPosts = transmissions.filter((transmission) => transmission.scheduledFor && transmission.scheduledFor >= periodStart && transmission.scheduledFor < periodEnd);
+  const periodLabel = view === "week"
+    ? (isCurrentPeriod ? "This week" : `Week of ${weekLabel}`)
+    : isCurrentPeriod ? "This month" : `${new Date(monthStart).toLocaleDateString([], { month: "long", year: "numeric" })} totals`;
 
   const movePeriod = (direction: -1 | 1) => {
     if (view === "week") {
@@ -248,7 +277,7 @@ function Continuum() {
 
   return (
     <div className="space-y-4">
-      <div>
+      <div className="calendar-hero">
         <div>
           <div className="flex items-center gap-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-[11px] border border-neon/25 bg-neon/[0.06] text-neon">
@@ -275,6 +304,14 @@ function Continuum() {
             </span>
           </Link>
         </div>
+        <PeriodStats
+          from={localKey(periodStart)}
+          to={localKey(addCalendarDays(periodEnd, -1))}
+          label={selectedBusiness ? `${periodLabel} · ${selectedBusiness.name}` : periodLabel}
+          businessId={selectedBusiness?.id}
+          posted={periodPosts.filter((transmission) => transmission.status === "live" || transmission.status === "partial").length}
+          scheduled={periodPosts.filter((transmission) => transmission.status === "scheduled" || transmission.status === "transmitting").length}
+        />
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -358,7 +395,7 @@ function Continuum() {
               <div className="mt-2 space-y-1.5">
                 {items.length === 0 ? <p className="rounded-[10px] border border-dashed border-[var(--glass-border)] px-3 py-3 text-[10px] text-starlight-faint">No posts scheduled.</p> : items.map((t) => {
                   const canDrag = t.status === "scheduled" && reschedulingId !== t.id;
-                  return <div key={t.id} data-draggable-post data-transmission-id={t.id} draggable={canDrag} onDragStart={(event) => beginPostDrag(event, t.id)} onDragEnd={finishPostDrag} title={canDrag ? "Drag to move this scheduled post" : undefined} className={clsx("calendar-post-shell", canDrag && "calendar-post-shell--draggable", draggingId === t.id && "is-dragging", reschedulingId === t.id && "is-rescheduling")}><button type="button" onClick={() => openPost(t.id)} aria-label={`View post: ${t.title}`} data-calendar-post-surface draggable={false} className="calendar-post-block calendar-post-block--agenda calendar-post-compact w-full text-left flex items-center gap-2 rounded-[8px]"><ArtifactThumb artifactId={t.artifactId} className="h-8 w-6 flex-none" hoverPreview={false} /><CalendarPostSummary title={t.title} scheduledFor={t.scheduledFor!} status={t.status} platforms={platformsByPost.get(t.id) ?? []} points={pointsByPost.get(t.id)} /></button></div>;
+                  return <div key={t.id} data-draggable-post data-transmission-id={t.id} draggable={canDrag} onDragStart={(event) => beginPostDrag(event, t.id)} onDragEnd={finishPostDrag} title={canDrag ? "Drag to move this scheduled post" : undefined} className={clsx("calendar-post-shell", canDrag && "calendar-post-shell--draggable", draggingId === t.id && "is-dragging", reschedulingId === t.id && "is-rescheduling")}><button type="button" onClick={() => openPost(t.id)} aria-label={`View post: ${t.title}`} data-calendar-post-surface draggable={false} className="calendar-post-block calendar-post-block--agenda calendar-post-compact w-full text-left flex items-center gap-2 rounded-[8px]"><ArtifactThumb artifactId={t.artifactId} className="h-8 w-6 flex-none" hoverPreview={false} /><CalendarPostSummary title={t.title} scheduledFor={t.scheduledFor!} status={t.status} platforms={platformsByPost.get(t.id) ?? []} points={pointsByPost.get(t.id)} businessId={t.businessId} /></button></div>;
                 })}
               </div>
             </section>
@@ -437,7 +474,7 @@ function Continuum() {
                       draggable={false}
                       className="calendar-post-block calendar-post-block--week calendar-post-compact w-full text-left block rounded-[8px]"
                     >
-                      <CalendarPostSummary title={t.title} scheduledFor={t.scheduledFor!} status={t.status} platforms={platformsByPost.get(t.id) ?? []} points={pointsByPost.get(t.id)} />
+                      <CalendarPostSummary title={t.title} scheduledFor={t.scheduledFor!} status={t.status} platforms={platformsByPost.get(t.id) ?? []} points={pointsByPost.get(t.id)} businessId={t.businessId} />
                     </button>
                     </div>
                   );
@@ -590,7 +627,7 @@ function DayInspector({
             return (
               <button type="button" key={transmission.id} onClick={() => onPickPost(transmission.id)} aria-label={`View post: ${transmission.title}`} className="day-inspector-post w-full text-left">
                 <ArtifactThumb artifactId={transmission.artifactId} className="h-9 w-7 flex-none" hoverPreview={false} />
-                <CalendarPostSummary title={transmission.title} scheduledFor={transmission.scheduledFor!} status={transmission.status} platforms={platforms} points={pointsByPost.get(transmission.id)} />
+                <CalendarPostSummary title={transmission.title} scheduledFor={transmission.scheduledFor!} status={transmission.status} platforms={platforms} points={pointsByPost.get(transmission.id)} businessId={transmission.businessId} />
                 <StatusBadge status={transmission.status} size="sm" />
               </button>
             );
@@ -712,7 +749,7 @@ function MonthView({
                     )}
                     data-calendar-post-surface
                   >
-                    <CalendarPostSummary title={t.title} scheduledFor={t.scheduledFor!} status={t.status} platforms={platformsByPost.get(t.id) ?? []} points={pointsByPost.get(t.id)} />
+                    <CalendarPostSummary title={t.title} scheduledFor={t.scheduledFor!} status={t.status} platforms={platformsByPost.get(t.id) ?? []} points={pointsByPost.get(t.id)} businessId={t.businessId} />
                   </button>
                   );
                 })}

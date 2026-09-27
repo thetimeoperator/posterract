@@ -6,7 +6,7 @@ import { useEffect } from "react";
 import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import { create } from "zustand";
 import type {
-  AccountSetDTO,
+  BusinessDTO,
   ArtifactDTO,
   AnalyticsRangeDays,
   EventDTO,
@@ -21,7 +21,7 @@ import type {
 } from "@posterract/contract";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
-import type { CreateTransmissionInput } from "./store";
+import type { AnalyticsScope, BusinessInput, CreateTransmissionInput, PeriodQuery } from "./store";
 
 /** Workspace context (single workspace until auth lands). */
 type WorkspaceState = { workspaceId: string | null; setWorkspaceId: (id: string) => void };
@@ -145,9 +145,19 @@ export function usePortals(): PortalDTO[] {
   }));
 }
 
-export function useAccountSets(): AccountSetDTO[] {
+export function useBusinesses(): BusinessDTO[] {
   return [];
 }
+
+export function useAccountAnalytics(_rangeDays: AnalyticsRangeDays): import("@posterract/contract").AccountAnalyticsResponseDTO | undefined {
+  return undefined;
+}
+
+export function usePeriodStats(_query: PeriodQuery): import("@posterract/contract").PeriodStatsDTO | undefined {
+  return undefined;
+}
+
+export const usePointsReady = () => true;
 
 export function usePoints(): PointsSummaryDTO | undefined {
   const data = useWsQuery((args) => useQuery(api.points.getMyPoints, args));
@@ -170,7 +180,7 @@ export function useLeaderboard(_period: LeaderboardPeriod): LeaderboardDTO | und
   return undefined;
 }
 
-export function useAnalyticsDashboard(rangeDays: AnalyticsRangeDays) {
+export function useAnalyticsDashboard(rangeDays: AnalyticsRangeDays, _scope?: AnalyticsScope) {
   const workspaceId = useWorkspace((state) => state.workspaceId);
   return useQuery(api.analytics.dashboard, workspaceId ? { rangeDays } : "skip");
 }
@@ -290,10 +300,10 @@ export function useOAuth() {
   };
 }
 
-export function useAccountSetActions() {
+export function useBusinessActions() {
   return {
-    create: async (_input: { name: string; accountIds: string[] }) => { throw new Error("Account sets require the PostgreSQL engine"); },
-    update: async (_id: string, _input: { name: string; accountIds: string[] }) => { throw new Error("Account sets require the PostgreSQL engine"); },
+    create: async (_input: BusinessInput): Promise<BusinessDTO> => { throw new Error("Businesses require the PostgreSQL engine"); },
+    update: async (_id: string, _input: BusinessInput): Promise<BusinessDTO> => { throw new Error("Businesses require the PostgreSQL engine"); },
     remove: async (_id: string) => undefined,
   };
 }

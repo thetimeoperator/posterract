@@ -2,7 +2,9 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { Bell, Command } from "lucide-react";
 import { MiniTesseract } from "@posterract/hyperkit";
 import { useUI } from "@/state/ui";
+import { RankChip } from "@/components/points/RankChip";
 import { AccountMenu } from "./AccountMenu";
+import { BusinessSwitcher } from "./BusinessSwitcher";
 import { navItemForPath } from "./nav";
 
 /** Brand and account controls stay above the workspace, separate from navigation. */
@@ -43,6 +45,9 @@ export function AppHeader() {
         </Link>
 
         <div className="pointer-events-auto flex flex-none items-center gap-1.5">
+          <BusinessSwitcher />
+          {/* The Points tab shows the same rank in its own header. */}
+          {pathname !== "/points" && <RankChip />}
           <button
             type="button"
             onClick={() => setNavigatorOpen(true)}

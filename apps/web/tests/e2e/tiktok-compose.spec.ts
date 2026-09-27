@@ -23,7 +23,7 @@ async function seed(page: Page, multiple = false) {
     if (multiple) {
       const first = store.portals.find((a: any) => a.provider === "tiktok");
       const second = { ...first, id: "tiktok_second", handle: "@second.creator", displayName: "Second Creator" };
-      engine.setState({ portals: [...store.portals, second], accountSets: [{ id: "chosen-set", name: "Creator set", accounts: [second], workspaceId: "ws_local", createdAt: Date.now(), updatedAt: Date.now() }] });
+      engine.setState({ portals: [...store.portals, second], businesses: [{ id: "chosen-set", name: "Creator set", accounts: [second], accountIds: [second.id], workspaceId: "ws_local", createdAt: Date.now(), updatedAt: Date.now() }] });
     }
     const artifact = await store.addArtifact(new File([new Uint8Array(128)], "review-clip.mp4", { type: "video/mp4" }), { durationMs: 18_000, width: 1080, height: 1920 });
     return artifact.id;
@@ -94,7 +94,7 @@ test("Direct Post defaults to Everyone with unchecked interactions, disclosure v
   await page.screenshot({ path: "/tmp/posterract-tiktok-web-settings.png", fullPage: true });
 });
 
-test("explicit accounts and Account Sets survive scheduling; switching accounts resets privacy", async ({ page }) => {
+test("explicit accounts and businesses survive scheduling; switching accounts resets privacy", async ({ page }) => {
   await seed(page, true);
   await page.getByRole("button", { name: "Accounts", exact: true }).click();
   const picker = page.getByRole("dialog", { name: "Accounts", exact: true });
@@ -117,18 +117,18 @@ test("explicit accounts and Account Sets survive scheduling; switching accounts 
   await expect(page.getByLabel("TikTok privacy")).toHaveText("Everyone");
   await expect(page.getByLabel("Allow comments")).not.toBeChecked();
   await closeSettings(page);
-  await page.getByLabel("Account set", { exact: true }).selectOption("chosen-set");
-  await expect(page.getByLabel("Account set", { exact: true })).toHaveValue("chosen-set");
+  await page.getByLabel("Business", { exact: true }).selectOption("chosen-set");
+  await expect(page.getByLabel("Business", { exact: true })).toHaveValue("chosen-set");
   await expect(page.getByRole("group", { name: "Target accounts" }).getByRole("button", { name: "Instagram", exact: true })).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByRole("group", { name: "Target accounts" }).getByRole("button", { name: "TikTok", exact: true })).toHaveAttribute("title", /Second Creator/);
   await expect(page.getByRole("tablist", { name: "Caption variants" }).getByRole("tab")).toHaveCount(2);
-  await page.screenshot({ path: "/tmp/posterract-composer-account-set.png", fullPage: true });
+  await page.screenshot({ path: "/tmp/posterract-composer-business.png", fullPage: true });
   await page.getByRole("button", { name: "Accounts", exact: true }).click();
-  await expect(picker.getByRole("link", { name: "Manage account sets (opens in a new tab)" })).toHaveAttribute("target", "_blank");
+  await expect(picker.getByRole("link", { name: "Manage businesses (opens in a new tab)" })).toHaveAttribute("target", "_blank");
   await expect(account).toHaveValue("tiktok_second");
   await account.selectOption("portal_tiktok");
   await picker.getByRole("button", { name: "Done", exact: true }).click();
-  await expect(page.getByLabel("Account set", { exact: true })).toHaveValue("");
+  await expect(page.getByLabel("Business", { exact: true })).toHaveValue("");
   await page.getByRole("button", { name: "Accounts", exact: true }).click();
   await account.selectOption("tiktok_second");
   await picker.getByRole("button", { name: "Done", exact: true }).click();

@@ -8,7 +8,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type {
   ArtifactDTO,
-  AccountSetDTO,
+  BusinessDTO,
   EventDTO,
   PlatformId,
   PointsEntryDTO,
@@ -46,11 +46,21 @@ export type CreateTransmissionInput = {
   perPlatformOptions?: Partial<
     Record<PlatformId, Record<string, string | boolean | number>>
   >;
-  accountSetId?: string;
+  /** The business it's posted from; accountIds are the exact accounts (several per platform are fine). */
+  businessId?: string;
   accountIds?: string[];
   scheduleMode: ScheduleMode;
   scheduledFor: number;
 };
+
+/** A business as the Businesses dialog saves it. logo: a data URL, null removes it, undefined keeps it. */
+export type BusinessInput = { name: string; accountIds: string[]; logo?: string | null };
+
+/** Which accounts analytics cover: every account, a business, or picked accounts. */
+export type AnalyticsScope = { businessId?: string; accountIds?: string[] };
+
+/** The calendar period on screen, as local dates (inclusive), and the business in view. */
+export type PeriodQuery = { from: string; to: string; timeZone: string; businessId?: string };
 
 /** Ledger rows keep a private refId for idempotent awarding. */
 type LedgerEntry = PointsEntryDTO & { refId?: string };
@@ -71,7 +81,7 @@ type EngineState = {
   projections: ProjectionDTO[];
   events: EventDTO[];
   portals: PortalDTO[];
-  accountSets: AccountSetDTO[];
+  businesses: BusinessDTO[];
   points: LedgerEntry[];
   stats: StatsState;
 
@@ -89,6 +99,8 @@ type EngineState = {
   duplicateTransmission: (id: string) => TransmissionDTO | undefined;
   retryProjection: (projectionId: string) => void;
   setPortalStatus: (provider: PlatformId, status: PortalDTO["status"]) => void;
+  saveBusiness: (id: string | undefined, input: BusinessInput) => BusinessDTO;
+  removeBusiness: (id: string) => void;
 
   /** Internal (simulator) */
   _updateProjection: (id: string, patch: Partial<ProjectionDTO>) => void;
@@ -156,7 +168,7 @@ export const useEngineStore = create<EngineState>()(
       projections: [],
       events: [],
       portals: seedPortals,
-      accountSets: [],
+      businesses: [],
       points: [],
       stats: { lifetimeRP: 0, weekRP: 0, weekStartAt: startOfWeek(Date.now()), streakDays: 0, badges: [] },
 
@@ -237,15 +249,20 @@ export const useEngineStore = create<EngineState>()(
           scheduleMode: input.scheduleMode,
           scheduledFor: input.scheduleMode === "now" ? now : input.scheduledFor,
           source: "ui",
+          businessId: input.businessId,
           createdAt: now,
           updatedAt: now,
         };
-        const portalByProvider = new Map(get().portals.filter((p) => !input.accountIds || input.accountIds.includes(p.id)).map((p) => [p.provider, p]));
-        const projections: ProjectionDTO[] = input.platforms.map((provider) => ({
+        // One platform post per account, so two Instagram accounts get two.
+        const targets = input.platforms.flatMap((provider) => {
+          const chosen = get().portals.filter((p) => p.provider === provider && (!input.accountIds || input.accountIds.includes(p.id)));
+          return (chosen.length ? chosen : [undefined]).map((portal) => ({ provider, portalId: portal?.id ?? `portal_${provider}` }));
+        });
+        const projections: ProjectionDTO[] = targets.map(({ provider, portalId }) => ({
           id: `prj_${crypto.randomUUID().slice(0, 8)}`,
           transmissionId: id,
           workspaceId: WS,
-          portalId: portalByProvider.get(provider)?.id ?? `portal_${provider}`,
+          portalId,
           provider,
           caption: input.perPlatformCaptions[provider] ?? input.baseCaption,
           hashtags: input.hashtags,
@@ -267,6 +284,33 @@ export const useEngineStore = create<EngineState>()(
               : `“${transmission.title}” in trajectory for ${new Date(transmission.scheduledFor!).toLocaleString()}`,
         });
         return transmission;
+      },
+
+      saveBusiness: (id, input) => {
+        const now = Date.now();
+        const existing = id ? get().businesses.find((business) => business.id === id) : undefined;
+        const business: BusinessDTO = {
+          id: existing?.id ?? `biz_${crypto.randomUUID().slice(0, 8)}`,
+          workspaceId: WS,
+          name: input.name,
+          logoUrl: input.logo === undefined ? existing?.logoUrl : input.logo ?? undefined,
+          accountIds: input.accountIds,
+          accounts: get().portals.filter((portal) => input.accountIds.includes(portal.id)),
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
+        };
+        set((s) => ({
+          businesses: [...s.businesses.filter((item) => item.id !== business.id), business]
+            .sort((left, right) => left.name.localeCompare(right.name)),
+        }));
+        return business;
+      },
+
+      removeBusiness: (id) => {
+        set((s) => ({
+          businesses: s.businesses.filter((business) => business.id !== id),
+          transmissions: s.transmissions.map((item) => item.businessId === id ? { ...item, businessId: undefined } : item),
+        }));
       },
 
       rescheduleTransmission: async (id, scheduledFor) => {
@@ -504,7 +548,7 @@ export const useEngineStore = create<EngineState>()(
         projections: s.projections,
         events: s.events.slice(0, 50),
         portals: s.portals,
-        accountSets: s.accountSets,
+        businesses: s.businesses,
         points: s.points.slice(0, 100),
         stats: s.stats,
       }),

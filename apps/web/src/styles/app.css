@@ -939,7 +939,8 @@ select {
 
 .bottom-dock-shell {
   display: inline-flex;
-  width: 374px;
+  /* Four buttons; a fixed width keeps the glass frame still while an icon magnifies. */
+  width: 196px;
   max-width: calc(100vw - 20px);
   min-width: 0;
   height: 60px;
@@ -1000,6 +1001,66 @@ select {
 @keyframes dock-trace-in {
   from { opacity: 0; transform: translateX(-50%) scale(0.2); filter: blur(3px); }
   to { opacity: 1; transform: translateX(-50%) scale(1); filter: blur(0); }
+}
+
+/* Business switcher: which business the app is looking at (shell/BusinessSwitcher.tsx). */
+.app-header-business {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+  max-width: 220px;
+  padding: 0 9px 0 8px;
+  border: 1px solid rgba(228, 255, 238, 0.11);
+  border-radius: 12px;
+  background: rgba(8, 18, 17, 0.26);
+  backdrop-filter: blur(8px);
+  color: #eafff3;
+  font-size: 12px;
+  transition: border-color 0.2s ease;
+}
+.app-header-business:hover { border-color: rgba(101, 255, 154, 0.34); }
+.app-header-business-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-header-business-option {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  color: #eafff3;
+  font-size: 12.5px;
+  text-align: left;
+  transition: background 0.15s ease;
+}
+.app-header-business-option:hover { background: rgba(234, 255, 243, 0.05); }
+@media (max-width: 639px) {
+  .app-header-business-name { display: none; }
+}
+
+/* Rank chip: the user's rank and level on every tab (components/points/RankChip.tsx). */
+.app-header-rank {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 11px 0 6px;
+  border: 1px solid rgba(228, 255, 238, 0.11);
+  border-radius: 12px;
+  background: rgba(8, 18, 17, 0.26);
+  backdrop-filter: blur(8px);
+  color: #eafff3;
+  transition: border-color 0.2s ease;
+}
+.app-header-rank:hover { border-color: rgba(101, 255, 154, 0.34); }
+.app-header-rank-text { display: grid; grid-template-columns: auto auto; column-gap: 8px; row-gap: 3px; align-items: baseline; }
+.app-header-rank-name { font-size: 11px; font-weight: 800; font-style: italic; letter-spacing: 0.03em; text-transform: uppercase; white-space: nowrap; }
+.app-header-rank-level { font-size: 9.5px; color: #9ccbb0; white-space: nowrap; }
+.app-header-rank-bar { grid-column: 1 / -1; height: 2px; overflow: hidden; border-radius: 2px; background: rgba(234, 255, 243, 0.1); }
+.app-header-rank-bar > span { display: block; height: 100%; border-radius: 2px; }
+@media (max-width: 639px) {
+  .app-header-rank { gap: 5px; padding: 0 8px 0 5px; }
+  .app-header-rank-name, .app-header-rank-bar { display: none; }
 }
 
 .app-header-action,
@@ -1130,10 +1191,10 @@ select {
   .space-backdrop__video { display: none; }
 }
 
-/* Eight dock buttons share a phone's width; hover magnification is desktop-only anyway. */
+/* The dock's buttons share a phone's width; hover magnification is desktop-only anyway. */
 @media (max-width: 400px) {
   .bottom-dock-buttons { padding-inline: 4px; }
-  .bottom-dock-item { width: min(40px, calc((100vw - 56px) / 8)) !important; }
+  .bottom-dock-item { width: min(40px, calc((100vw - 56px) / 4)) !important; }
   .bottom-dock-item > div { width: 100%; height: auto; aspect-ratio: 1 / 1; }
 }
 

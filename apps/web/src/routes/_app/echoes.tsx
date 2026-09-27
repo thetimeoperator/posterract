@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import {
   ArrowUpRight,
@@ -19,10 +19,22 @@ import {
   type PlatformAnalyticsDTO,
   type PlatformId,
 } from "@posterract/contract";
-import { useAnalyticsDashboard, useProjections, useTransmissions } from "@/engine/useEngine";
+import { useAnalyticsDashboard, useBusinesses, usePortals, useProjections, useTransmissions } from "@/engine/useEngine";
+import { ScopeFilters } from "@/components/analytics/ScopeFilters";
+import { BusinessesView } from "@/components/analytics/BusinessesView";
+import { useBusinessView, useSelectedBusiness } from "@/state/business";
+import type { AnalyticsScope } from "@/engine/store";
 import { PointsChip } from "@/components/PointsChip";
 
-export const Route = createFileRoute("/_app/echoes")({ component: Analytics });
+type AnalyticsSearch = { tab?: "businesses"; account?: string };
+
+export const Route = createFileRoute("/_app/echoes")({
+  validateSearch: (search: Record<string, unknown>): AnalyticsSearch => ({
+    tab: search.tab === "businesses" ? "businesses" : undefined,
+    account: typeof search.account === "string" ? search.account : undefined,
+  }),
+  component: Analytics,
+});
 
 type PlatformFilter = "all" | AnalyticsPlatformId;
 type ChartMetric = "views" | "interactions" | "growth";
@@ -87,6 +99,10 @@ const SIGNAL_TONES = [
 ] as const;
 
 const ANALYTICS_STYLES = `
+  .analytics-tabs { display: inline-flex; gap: 2px; margin-top: 14px; padding: 3px; border-radius: 11px; background: rgba(9, 18, 16, .8); }
+  .analytics-tabs button { height: 34px; padding: 0 16px; border-radius: 8px; font-family: var(--font-display); font-size: 13px; color: var(--starlight-faint); transition: color .15s ease, background .15s ease; }
+  .analytics-tabs button:hover { color: var(--starlight); }
+  .analytics-tabs button[aria-selected="true"] { background: rgba(101, 255, 154, .12); color: var(--starlight); box-shadow: inset 0 0 0 1px rgba(101, 255, 154, .25); }
   .analytics-signal-tile {
     position: relative;
     isolation: isolate;
@@ -223,13 +239,37 @@ const ANALYTICS_STYLES = `
 `;
 
 function Analytics() {
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const tab = search.tab ?? "overview";
   const [platform, setPlatform] = useState<PlatformFilter>("all");
   const [rangeValue, setRangeValue] = useState<`${AnalyticsRangeDays}`>("total");
   const [chartMetric, setChartMetric] = useState<ChartMetric>("views");
+  // Everything, one business, or picked accounts. The business is the one
+  // picked in the header, so every tab looks at the same business.
+  const selectedBusiness = useSelectedBusiness();
+  const setBusinessId = useBusinessView((state) => state.setBusinessId);
+  const [accountIds, setAccountIds] = useState<string[] | undefined>(search.account ? [search.account] : undefined);
+  useEffect(() => { if (search.account) setAccountIds([search.account]); }, [search.account]);
+  const scope: AnalyticsScope = { businessId: selectedBusiness?.id, accountIds };
+  const setScope = (next: AnalyticsScope) => {
+    if ((next.businessId ?? "") !== (selectedBusiness?.id ?? "")) {
+      setBusinessId(next.businessId ?? "");
+      setAccountIds(undefined);
+    } else {
+      setAccountIds(next.accountIds);
+    }
+  };
+  const openAccount = (accountId: string) => {
+    setAccountIds([accountId]);
+    void navigate({ search: { account: accountId } });
+  };
+  const businesses = useBusinesses();
+  const portals = usePortals();
   const rangeDays: AnalyticsRangeDays = rangeValue === "total"
     ? "total"
     : Number(rangeValue) as AnalyticsRangeDays;
-  const dashboard = useAnalyticsDashboard(rangeDays);
+  const dashboard = useAnalyticsDashboard(rangeDays, scope);
   const transmissions = useTransmissions();
   const projections = useProjections();
 
@@ -277,17 +317,72 @@ function Analytics() {
     };
   }, [projections, transmissions]);
 
+  const hero = (
+        <section className="glass relative overflow-hidden px-5 py-5 sm:px-6">
+          <div
+            className="pointer-events-none absolute inset-0 opacity-80"
+            style={{
+              background:
+                "radial-gradient(circle at 14% 0%, rgba(101,255,154,.12), transparent 31%), radial-gradient(circle at 90% 10%, rgba(124,247,255,.08), transparent 28%)",
+            }}
+            aria-hidden
+          />
+          <div className="relative flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+            <div>
+              <div className="mb-2 flex items-center gap-2 text-neon">
+                <BarChart3 size={14} />
+                <span className="kicker !text-neon">Cross-platform performance</span>
+              </div>
+              <h1 className="font-display text-[28px] font-semibold tracking-[-0.03em] text-starlight sm:text-[34px]">
+                Analytics
+              </h1>
+              <p className="mt-1.5 max-w-2xl text-[14px] leading-relaxed text-starlight-dim">
+                TikTok, Instagram, Facebook, and Threads performance in one dashboard.
+              </p>
+              <div className="analytics-tabs" role="tablist" aria-label="Analytics views">
+                <button type="button" role="tab" aria-selected={tab === "overview"} onClick={() => void navigate({ search: {} })}>Overview</button>
+                <button type="button" role="tab" aria-selected={tab === "businesses"} onClick={() => void navigate({ search: { tab: "businesses" } })}>Businesses</button>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center xl:justify-end">
+              {tab === "overview" && <ScopeFilters businesses={businesses} accounts={portals} value={scope} onChange={setScope} />}
+              <PlatformSelector value={platform} onChange={setPlatform} />
+              <Segmented
+                aria-label="Analytics date range"
+                options={RANGES}
+                value={rangeValue}
+                onChange={setRangeValue}
+              />
+            </div>
+          </div>
+        </section>
+  );
+
+  if (tab === "businesses") {
+    return (
+      <div className="space-y-4" data-testid="analytics-dashboard">
+        <style>{ANALYTICS_STYLES}</style>
+        {hero}
+        <BusinessesView rangeDays={rangeDays} platform={platform} onOpenAccount={openAccount} />
+      </div>
+    );
+  }
+
   // Do not render real-looking zeroes while the selected range is still
   // loading. That previously made connected accounts appear disconnected
   // during the initial Total request (and after a transient failed request).
   if (!dashboard) {
     return (
-      <Panel className="min-h-[60vh]">
-        <EmptyState
-          title="Loading account analytics"
-          detail="Retrieving connected accounts and their available totals."
-        />
-      </Panel>
+      <div className="space-y-4" data-testid="analytics-dashboard">
+        <style>{ANALYTICS_STYLES}</style>
+        {hero}
+        <Panel className="min-h-[40vh]">
+          <EmptyState
+            title="Loading account analytics"
+            detail="Retrieving connected accounts and their available totals."
+          />
+        </Panel>
+      </div>
     );
   }
 
@@ -298,7 +393,10 @@ function Analytics() {
   const isEmpty = dashboard && !anyConnected && delivery.published === 0 && delivery.scheduled === 0;
   if (isEmpty) {
     return (
-      <Panel className="min-h-[60vh]">
+      <div className="space-y-4" data-testid="analytics-dashboard">
+        <style>{ANALYTICS_STYLES}</style>
+        {hero}
+      <Panel className="min-h-[40vh]">
         <EmptyState
           title="No analytics yet"
           detail="Connect TikTok, Instagram, Facebook, or Threads, then publish your first post. Performance data will appear here after the first analytics sync."
@@ -309,45 +407,14 @@ function Analytics() {
           }
         />
       </Panel>
+      </div>
     );
   }
 
   return (
     <div className="space-y-4" data-testid="analytics-dashboard">
       <style>{ANALYTICS_STYLES}</style>
-      <section className="glass relative overflow-hidden px-5 py-5 sm:px-6">
-        <div
-          className="pointer-events-none absolute inset-0 opacity-80"
-          style={{
-            background:
-              "radial-gradient(circle at 14% 0%, rgba(101,255,154,.12), transparent 31%), radial-gradient(circle at 90% 10%, rgba(124,247,255,.08), transparent 28%)",
-          }}
-          aria-hidden
-        />
-        <div className="relative flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-          <div>
-            <div className="mb-2 flex items-center gap-2 text-neon">
-              <BarChart3 size={14} />
-              <span className="kicker !text-neon">Cross-platform performance</span>
-            </div>
-            <h1 className="font-display text-[28px] font-semibold tracking-[-0.03em] text-starlight sm:text-[34px]">
-              Analytics
-            </h1>
-            <p className="mt-1.5 max-w-2xl text-[14px] leading-relaxed text-starlight-dim">
-              TikTok, Instagram, Facebook, and Threads performance in one dashboard.
-            </p>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <PlatformSelector value={platform} onChange={setPlatform} />
-            <Segmented
-              aria-label="Analytics date range"
-              options={RANGES}
-              value={rangeValue}
-              onChange={setRangeValue}
-            />
-          </div>
-        </div>
-      </section>
+      {hero}
 
       {selected.some((row) => row.connected && !row.ready) && (
         <ScopeNotice platforms={selected.filter((row) => row.connected && !row.ready)} />

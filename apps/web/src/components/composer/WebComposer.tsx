@@ -11,7 +11,7 @@ import {
   pushSignal,
 } from "@posterract/hyperkit";
 import type { PlatformId } from "@posterract/contract";
-import { PLATFORM_CAPABILITIES, PUBLISHING_PLATFORM_IDS } from "@posterract/contract";
+import { PLATFORM_CAPABILITIES, PUBLISHING_PLATFORM_IDS, allowsSeveralAccounts } from "@posterract/contract";
 import { VideoDropzone } from "@/components/VideoDropzone";
 import { ArtifactThumb } from "@/components/ArtifactThumb";
 import { TikTokHoverHint, TIKTOK_DISCLOSURE_HINT } from "@/components/TikTokSettings";
@@ -21,7 +21,7 @@ import {
   computePreflight,
   renderTemplate,
   useArtifacts,
-  useAccountSets,
+  useBusinesses,
   useEngineActions,
   usePortals,
   useTransmissions,
@@ -30,6 +30,7 @@ import {
 } from "@/engine/useEngine";
 import { aspectLabel, formatBytes, formatDuration, toDatetimeLocal } from "@/lib/fmt";
 import type { CreateTransmissionInput } from "@/engine/store";
+import { useSelectedBusiness } from "@/state/business";
 
 import { WebAccountStrip } from "./WebAccountStrip";
 import { WebPlatformSettings } from "./WebPlatformSettings";
@@ -40,7 +41,7 @@ export function WebComposer({ search }: { search: { artifact?: string; at?: numb
   const navigate = useNavigate();
   const artifacts = useArtifacts();
   const portals = usePortals();
-  const accountSets = useAccountSets();
+  const businesses = useBusinesses();
   const transmissions = useTransmissions();
   const projections = useProjections();
   const { createTransmission } = useEngineActions();
@@ -58,8 +59,9 @@ export function WebComposer({ search }: { search: { artifact?: string; at?: numb
   const [now, setNow] = useState(Date.now);
   const captionRef = useRef<HTMLTextAreaElement>(null);
   const [platforms, setPlatforms] = useState<PlatformId[]>(["instagram", "tiktok"]);
-  const [accountSetId, setAccountSetId] = useState("");
-  const [selectedAccounts, setSelectedAccounts] = useState<Partial<Record<PlatformId, string>>>({});
+  const [businessId, setBusinessId] = useState("");
+  // Instagram, Facebook and Threads can take several accounts; TikTok one.
+  const [selectedAccounts, setSelectedAccounts] = useState<Partial<Record<PlatformId, string[]>>>({});
   const [tiktok, setTikTok] = useState(emptyTikTokOptions);
   const [creatorState, setCreatorState] = useState<{ accountId?: string; info?: TikTokCreatorInfo; loading: boolean; error?: string }>({ loading: false });
   const [creatorRefresh, setCreatorRefresh] = useState(0);
@@ -85,7 +87,7 @@ export function WebComposer({ search }: { search: { artifact?: string; at?: numb
       let changed = false;
       for (const provider of platforms) {
         const available = portals.filter((a) => a.provider === provider && a.status === "connected");
-        if (current[provider] === undefined && available.length === 1) { next[provider] = available[0].id; changed = true; }
+        if (current[provider] === undefined && available.length === 1) { next[provider] = [available[0].id]; changed = true; }
       }
       return changed ? next : current;
     });
@@ -100,12 +102,15 @@ export function WebComposer({ search }: { search: { artifact?: string; at?: numb
     setBaseCaption([source.baseCaption, source.hashtags.map((tag) => `#${tag}`).join(" ")].filter(Boolean).join("\n\n"));
     // Legacy target captions already contain their original hashtags; never append again.
     setOverrides(Object.fromEntries(targets.map((p) => [p.provider, p.caption])));
-    setPlatforms(targets.map((p) => p.provider));
-    setSelectedAccounts(Object.fromEntries(targets.map((p) => [p.provider, p.portalId || ""])));
+    setPlatforms([...new Set(targets.map((p) => p.provider))]);
+    const copiedAccounts: Partial<Record<PlatformId, string[]>> = {};
+    for (const target of targets) if (target.portalId) copiedAccounts[target.provider] = [...(copiedAccounts[target.provider] ?? []), target.portalId];
+    setSelectedAccounts(copiedAccounts);
+    setBusinessId(source.businessId ?? "");
     setTikTok(emptyTikTokOptions());
   }, [search.copy, transmissions, projections]);
 
-  const tiktokAccountId = platforms.includes("tiktok") ? selectedAccounts.tiktok : undefined;
+  const tiktokAccountId = platforms.includes("tiktok") ? selectedAccounts.tiktok?.[0] : undefined;
   useEffect(() => { setTikTok(emptyTikTokOptions()); }, [tiktokAccountId]);
   useEffect(() => {
     let active = true;
@@ -137,8 +142,16 @@ export function WebComposer({ search }: { search: { artifact?: string; at?: numb
     return renderTemplate(raw, { title: resolvedTitle });
   };
   const fullCaptionFor = captionFor;
-  const portalStatus = (p: PlatformId) =>
-    portals.find((account) => account.id === selectedAccounts[p] && account.provider === p)?.status;
+  const chosenFor = (p: PlatformId) => portals.filter((account) => account.provider === p && (selectedAccounts[p] ?? []).includes(account.id));
+  // Every chosen account has to be connected; nothing chosen reads as "choose an account".
+  const portalStatus = (p: PlatformId) => {
+    const chosen = chosenFor(p);
+    return chosen.length === 0 ? undefined : chosen.find((account) => account.status !== "connected")?.status ?? "connected";
+  };
+  const selectedIds = platforms.flatMap((p) => selectedAccounts[p] ?? []);
+  // The post counts as posted from the business while every chosen account is in it.
+  const business = businesses.find((item) => item.id === businessId);
+  const activeBusinessId = business && selectedIds.length > 0 && selectedIds.every((id) => business.accountIds.includes(id)) ? business.id : "";
 
   const preflight = useMemo(() => {
       const checks = computePreflight({
@@ -181,14 +194,45 @@ export function WebComposer({ search }: { search: { artifact?: string; at?: numb
     setSettingsOpen(true);
   };
   const destinations = platforms.map((p) => {
-    const account = portals.find((a) => a.id === selectedAccounts[p]);
-    return `${PLATFORM_CAPABILITIES[p].label}: ${p === "tiktok" && creator ? creator.creator_nickname : account?.displayName || account?.handle || "choose account"}`;
+    const names = chosenFor(p).map((account) => p === "tiktok" && creator ? creator.creator_nickname : account.displayName || account.handle);
+    return `${PLATFORM_CAPABILITIES[p].label}: ${names.join(", ") || "choose account"}`;
   }).join(" · ");
+  const accountCount = selectedIds.length;
 
   const togglePlatform = (p: PlatformId) => {
-    setAccountSetId("");
     setPlatforms((cur) => (cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p]));
   };
+  const chooseAccount = (provider: PlatformId, id: string) => {
+    setSelectedAccounts((previous) => {
+      const current = previous[provider] ?? [];
+      const next = !allowsSeveralAccounts(provider) ? (id ? [id] : [])
+        : current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
+      return { ...previous, [provider]: next };
+    });
+    if (id) setPlatforms((previous) => previous.includes(provider) ? previous : [...previous, provider]);
+  };
+  const chooseBusiness = (id: string) => {
+    setBusinessId(id);
+    const next = businesses.find((item) => item.id === id);
+    if (!next) return;
+    const accounts = next.accounts.filter((a) => a.status === "connected" && (PUBLISHING_PLATFORM_IDS as readonly string[]).includes(a.provider));
+    const byPlatform: Partial<Record<PlatformId, string[]>> = {};
+    for (const account of accounts) {
+      if (!allowsSeveralAccounts(account.provider) && byPlatform[account.provider]?.length) continue;
+      byPlatform[account.provider] = [...(byPlatform[account.provider] ?? []), account.id];
+    }
+    setPlatforms(Object.keys(byPlatform) as PlatformId[]);
+    setSelectedAccounts(byPlatform);
+  };
+  // A new post starts on the business picked in the header.
+  const headerBusiness = useSelectedBusiness();
+  const startedOnBusiness = useRef(false);
+  useEffect(() => {
+    if (startedOnBusiness.current || search.copy || !headerBusiness) return;
+    startedOnBusiness.current = true;
+    chooseBusiness(headerBusiness.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [headerBusiness, search.copy]);
 
   const launch = async () => {
     if (!artifact || submitting || !canLaunch) return;
@@ -209,7 +253,8 @@ export function WebComposer({ search }: { search: { artifact?: string; at?: numb
           platforms.map((p) => [p, fullCaptionFor(p)]),
         ) as Partial<Record<PlatformId, string>>,
         perPlatformOptions: platforms.includes("tiktok") ? { tiktok: tiktok.mode === "direct" ? { ...tiktok, consentAccepted: true } : { mode: "inbox" } } : undefined,
-        accountIds: platforms.map((p) => selectedAccounts[p]!),
+        accountIds: selectedIds,
+        ...(activeBusinessId ? { businessId: activeBusinessId } : {}),
         scheduleMode: mode,
         scheduledFor,
       };
@@ -221,7 +266,7 @@ export function WebComposer({ search }: { search: { artifact?: string; at?: numb
         title: mode === "now" ? "Post submitted" : "Post scheduled",
         detail:
           mode === "now"
-            ? `Publishing “${t.title}” to ${platforms.length} platform${platforms.length > 1 ? "s" : ""} now.`
+            ? `Publishing “${t.title}” to ${accountCount} account${accountCount === 1 ? "" : "s"} now.`
             : `“${t.title}” will publish ${new Date(scheduledFor).toLocaleString()}.`,
       });
       void navigate({ to: "/transmissions" });
@@ -262,16 +307,8 @@ export function WebComposer({ search }: { search: { artifact?: string; at?: numb
     <div className="web-compose-layout">
       <Panel brackets className="web-compose-post" aria-label="Post">
         <WebAccountStrip accounts={portals} platforms={platforms} selected={selectedAccounts} onToggle={togglePlatform}
-          onAccount={(provider, id) => { setAccountSetId(""); setSelectedAccounts((previous) => ({ ...previous, [provider]: id }));
-            if (id) setPlatforms((previous) => previous.includes(provider) ? previous : [...previous, provider]); }}
-          accountSets={accountSets} accountSetId={accountSetId} onAccountSet={(id) => {
-            setAccountSetId(id);
-            const next = accountSets.find((set) => set.id === id);
-            if (next) {
-              setPlatforms(next.accounts.map((a) => a.provider).filter((p) => (PUBLISHING_PLATFORM_IDS as readonly string[]).includes(p)));
-              setSelectedAccounts(Object.fromEntries(next.accounts.map((a) => [a.provider, a.id])));
-            }
-          }} creator={creator} pickerOpen={pickerOpen} onPicker={setPickerOpen} issues={platformIssues} />
+          onAccount={chooseAccount} businesses={businesses} businessId={activeBusinessId} onBusiness={chooseBusiness}
+          creator={creator} pickerOpen={pickerOpen} onPicker={setPickerOpen} issues={platformIssues} />
         <div className="web-compose-content">
           <div className="web-compose-media" id="web-compose-media">
             <span className="kicker">Artifact</span>
@@ -335,7 +372,7 @@ export function WebComposer({ search }: { search: { artifact?: string; at?: numb
         </Panel>
         <div className="web-compose-publish">
           <TikTokHoverHint message={disclosureHint} label="Why posting is unavailable"><Button variant="primary" size="lg" icon={<Send size={15} />} className="w-full"
-            disabled={!canLaunch || submitting} aria-busy={submitting} onClick={() => mode === "now" && platforms.length >= 3 ? setConfirmOpen(true) : void launch()}>
+            disabled={!canLaunch || submitting} aria-busy={submitting} onClick={() => mode === "now" && accountCount >= 3 ? setConfirmOpen(true) : void launch()}>
             {submitting ? "Submitting…" : mode === "at" ? "Schedule post" : platforms.length === 1 && tiktokAccountId && tiktok.mode === "inbox" ? "Send to TikTok inbox" : "Publish now"}
           </Button></TikTokHoverHint>
         </div>
@@ -353,7 +390,7 @@ export function WebComposer({ search }: { search: { artifact?: string; at?: numb
         <ArtifactThumb artifactId={a.id} className="aspect-[9/16] w-full" /><p className="mt-1 truncate text-[11px] text-starlight-dim">{a.fileName}</p>
       </button>)}</div>
     </Modal>
-    <Modal open={confirmOpen} onClose={() => setConfirmOpen(false)} kicker="Confirm" title={`Publish to ${platforms.length} platforms now?`}
+    <Modal open={confirmOpen} onClose={() => setConfirmOpen(false)} kicker="Confirm" title={`Publish to ${accountCount} accounts now?`}
       footer={<><Button variant="tertiary" onClick={() => setConfirmOpen(false)}>Cancel</Button><TikTokHoverHint message={disclosureHint} label="Why posting is unavailable" className="w-auto">
         <Button variant="primary" disabled={submitting || !canLaunch} onClick={() => { setConfirmOpen(false); void launch(); }}>Publish now</Button></TikTokHoverHint></>}>
       <p className="text-[13px] text-starlight-dim">This publishes immediately to <strong className="text-starlight">{destinations}</strong>. A live transmission can’t be recalled.</p>

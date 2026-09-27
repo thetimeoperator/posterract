@@ -32,7 +32,7 @@ const CURL_EXAMPLE = `curl -X POST https://api.posterract.app/v1/posts \\
     "artifactId": "MEDIA_UUID",
     "title": "Launch post",
     "caption": "The launch is live.",
-    "accountSetId": "ACCOUNT_SET_UUID",
+    "businessId": "BUSINESS_UUID",
     "platforms": ["instagram", "tiktok"],
     "scheduledFor": "2026-08-21T18:00:00Z"
   }'`;
@@ -197,7 +197,7 @@ function ApiKeysPage() {
 
       <Panel kicker="Posting API" title="Schedule from any agent" brackets className="min-w-0">
         <p className="text-[10.5px] leading-relaxed text-starlight-dim">
-          Upload media, choose connected platforms, and create or schedule a post with the same API key. Fetch <code className="text-neon">GET /v1/account-sets</code>, then send its ID as <code className="text-neon">accountSetId</code> so the agent uses the exact saved accounts. App-created and API-created posts appear together in the Calendar and Analytics.
+          Upload media, choose connected platforms, and create or schedule a post with the same API key. Fetch <code className="text-neon">GET /v1/businesses</code>, then send one's ID as <code className="text-neon">businessId</code> to post to every account in that business. App-created and API-created posts appear together in the Calendar and Analytics.
         </p>
         <pre className="telemetry mt-4 max-w-full overflow-x-auto rounded-[12px] border border-[var(--glass-border)] bg-void-1 p-4 text-[10px] leading-relaxed text-starlight-dim">
           {CURL_EXAMPLE}
