@@ -1,0 +1,89 @@
+# AI FOR SAVAGES — its own stack, deliberately separate from the Posterract
+# compose file. The two share one thing only: the Postgres that holds the single
+# people list. Bringing either stack down must never take the other with it,
+# which is why this is a second project rather than another service in the first.
+
+services:
+  hub:
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    build:
+      context: ../..
+      dockerfile: deploy/aiforsavages/Dockerfile
+    # Bound to loopback only. The internet reaches this through the Cloudflare
+    # tunnel (api.aiforsavages.fyi), never directly.
+    ports:
+      - "127.0.0.1:3003:3003"
+    environment:
+      PORT: "3003"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+      # The Hub connects as its own least-privilege role, not as the owner.
+      DATABASE_URL: postgresql://hub:${HUB_PG_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      HUB_PG_POOL_MAX: ${HUB_PG_POOL_MAX:-10}
+
+      # Service-to-service calls from the AFS site (Vercel) and from the
+      # Posterract API carry this as a bearer token.
+      HUB_SERVICE_KEY: ${HUB_SERVICE_KEY}
+
+      AFS_SITE_URL: ${AFS_SITE_URL:-https://aiforsavages.fyi}
+
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
+      # Networkless JWT verification: with the key present the Hub never calls
+      # out to Clerk to check a session.
+      CLERK_JWT_KEY: ${CLERK_JWT_KEY}
+      CLERK_AUTHORIZED_PARTIES: ${CLERK_AUTHORIZED_PARTIES:-https://aiforsavages.fyi}
+      CLERK_WEBHOOK_SECRET: ${CLERK_WEBHOOK_SECRET:-}
+
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      # Separate from Posterract's webhook secret: this is the AFS endpoint's.
+      AFS_STRIPE_WEBHOOK_SECRET: ${AFS_STRIPE_WEBHOOK_SECRET:-}
+      AFS_STRIPE_PRICE_MONTHLY: ${AFS_STRIPE_PRICE_MONTHLY}
+      AFS_STRIPE_PRICE_YEARLY: ${AFS_STRIPE_PRICE_YEARLY}
+      AFS_STRIPE_PRICE_LIFETIME: ${AFS_STRIPE_PRICE_LIFETIME}
+      AFS_STRIPE_PORTAL_CONFIGURATION: ${AFS_STRIPE_PORTAL_CONFIGURATION:-}
+      # The old one-time price, still on sale. Comma-separated. Only used by
+      # the legacy checkout bridge; remove both together.
+      AFS_STRIPE_PRICE_LEGACY: ${AFS_STRIPE_PRICE_LEGACY:-}
+
+      # Seals members' GitHub tokens at rest (32 random bytes, hex). Without it
+      # the Hub boots and everything else works; only GitHub connect answers
+      # 503 github_not_configured.
+      AFS_GITHUB_TOKEN_KEY: ${AFS_GITHUB_TOKEN_KEY:-}
+
+      # Discord — pay or leave (Push 6). The bot only ever adds people, sets
+      # their role and removes people; DISCORD_ENFORCEMENT decides whether
+      # removals are off, only reported, or real. Missing = off.
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:-}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:-}
+      DISCORD_ROLE_FOUNDING: ${DISCORD_ROLE_FOUNDING:-}
+      DISCORD_ROLE_MEMBER: ${DISCORD_ROLE_MEMBER:-}
+      DISCORD_PROTECTED_ROLES: ${DISCORD_PROTECTED_ROLES:-}
+      DISCORD_ENFORCEMENT: ${DISCORD_ENFORCEMENT:-off}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3003/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - posterract-network
+    mem_limit: 256m
+
+networks:
+  # Joined, not created: Postgres lives here and is reachable as "postgres".
+  posterract-network:
+    external: true
+    name: posterract_posterract-network
