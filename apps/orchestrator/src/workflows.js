@@ -60,6 +60,25 @@ export async function analyticsRefreshWorkflow() {
   return continueAsNew();
 }
 
+// Every post on every connected account, whichever app or tool made it, read
+// each hour so the Analytics posting graph counts all of them.
+export async function accountPostsWorkflow() {
+  for (let cycle = 0; cycle < 24; cycle += 1) {
+    try {
+      const accountIds = await activities.listPostSyncAccounts();
+      await Promise.all(
+        accountIds.map((accountId) =>
+          activities.syncAccountPosts(accountId).catch(() => undefined),
+        ),
+      );
+    } catch {
+      // The next cycle retries global failures without killing the loop.
+    }
+    await sleep("1 hour");
+  }
+  return continueAsNew();
+}
+
 export async function publicationWorkflow(input) {
   let releaseEarly = false;
   let canceled = false;

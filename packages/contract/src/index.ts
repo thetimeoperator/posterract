@@ -142,7 +142,19 @@ export type ProjectionDTO = {
   errorSummary?: string;
   /** Points this post has earned on its platform (Instagram, Facebook and Threads). */
   points?: number;
+  /** Epoch ms the post went live on its platform. */
+  publishedAt?: number;
   updatedAt: number;
+};
+
+/**
+ * One post on one connected account, from any app or tool (read from the
+ * platform) or made through Posterract: what the Analytics posting graph counts.
+ */
+export type AccountPostDTO = {
+  accountId: string;
+  /** Epoch ms the post went live. */
+  publishedAt: number;
 };
 
 export type PortalDTO = {

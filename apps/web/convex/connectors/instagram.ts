@@ -3,6 +3,7 @@
  * (graph.instagram.com). Pure fetch helpers; called from Convex actions.
  * Endpoints verified against Meta docs (see docs/instagram-api.md).
  */
+import { collectGraphPosts, parseGraphTime, type PlatformPostList } from "./platformPosts";
 
 const API_VERSION = "v23.0";
 const GRAPH = `https://graph.instagram.com`;
@@ -380,4 +381,33 @@ export async function instagramPostInsights(args: {
     follows: optionalValue("follows"),
     profileViews: optionalValue("profile_visits"),
   };
+}
+
+/**
+ * Every post on the account since `since` (epoch ms), whichever app or tool
+ * made it — for the Analytics posting graph.
+ */
+export async function instagramListMedia(args: {
+  userId: string;
+  accessToken: string;
+  since: number;
+  maxPages?: number;
+}): Promise<PlatformPostList> {
+  const url = new URL(`${GRAPH}/${API_VERSION}/${args.userId}/media`);
+  url.searchParams.set("fields", "id,timestamp,media_product_type,permalink");
+  url.searchParams.set("limit", "50");
+  url.searchParams.set("access_token", args.accessToken);
+  type Item = { id?: string; timestamp?: string; media_product_type?: string; permalink?: string };
+  return collectGraphPosts<Item>({
+    firstPage: url.toString(),
+    since: args.since,
+    maxPages: args.maxPages ?? 20,
+    label: "Instagram media list",
+    time: (item) => parseGraphTime(item.timestamp),
+    toPost: (item) => {
+      const publishedAt = parseGraphTime(item.timestamp);
+      if (!item.id || !Number.isFinite(publishedAt)) return undefined;
+      return { id: item.id, publishedAt, permalink: item.permalink, kind: item.media_product_type?.toLowerCase() };
+    },
+  });
 }

@@ -227,6 +227,43 @@ function summarizePeriod({ daily, posts, audience, publishedPosts }) {
  * The Analytics page. `accountIds` narrows it to a business's or picked
  * accounts; null means every connected account.
  */
+/**
+ * When every post on the workspace's accounts went live in the last 120 days,
+ * for the Analytics posting graph. The platform lists (read by the worker
+ * each hour) cover posts from any app or tool, Posterract's included; a post
+ * made through Posterract counts on its own only where those lists can't see
+ * it yet: before an account was first read, or since its last read.
+ */
+export async function loadAccountPosts(postgres, workspaceId) {
+  const result = await postgres.query(
+    `select pp.social_account_id as account_id, pp.published_at
+     from platform_posts pp
+     where pp.workspace_id = $1 and pp.published_at >= now() - interval '120 days'
+     union all
+     select p.social_account_id, coalesce(p.published_at, t.scheduled_for, p.updated_at)
+     from projections p
+     join transmissions t on t.id = p.transmission_id
+     join social_accounts a on a.id = p.social_account_id
+     where p.workspace_id = $1 and p.status = 'live'
+       and coalesce(p.published_at, t.scheduled_for, p.updated_at) >= now() - interval '120 days'
+       and not exists (
+         select 1 from platform_posts pp
+         where pp.social_account_id = p.social_account_id
+           and pp.platform_post_id = p.platform_post_id
+       )
+       and (a.posts_covered_from is null
+            or coalesce(p.published_at, t.scheduled_for, p.updated_at) < a.posts_covered_from
+            or coalesce(p.published_at, t.scheduled_for, p.updated_at) >= a.posts_synced_at)`,
+    [workspaceId],
+  );
+  return {
+    posts: result.rows.map((row) => ({
+      accountId: row.account_id,
+      publishedAt: new Date(row.published_at).getTime(),
+    })),
+  };
+}
+
 export async function loadAnalyticsDashboard(postgres, workspaceId, rangeDays, { accountIds = null } = {}) {
   const isTotal = rangeDays === "total";
   const cutoffDate = isTotal

@@ -35,6 +35,7 @@ export const useLeaderboard = impl.useLeaderboard;
 export const useAnalyticsDashboard = impl.useAnalyticsDashboard;
 export const useAccountAnalytics = impl.useAccountAnalytics;
 export const usePeriodStats = impl.usePeriodStats;
+export const useAccountPosts = impl.useAccountPosts;
 export const useEngineActions = impl.useEngineActions;
 export const artifactUrl = impl.artifactUrl;
 export const useOAuth = impl.useOAuth;

@@ -1,4 +1,5 @@
 /** Official Threads API OAuth, publishing, and insights helpers. */
+import { collectGraphPosts, parseGraphTime, type PlatformPostList } from "./platformPosts";
 
 const API_VERSION = "v1.0";
 const GRAPH = "https://graph.threads.net";
@@ -291,4 +292,34 @@ export async function threadsPostInsights(args: {
     quotes: value("quotes"),
     threadShares: value("shares"),
   };
+}
+
+/**
+ * Every thread the account posted since `since` (epoch ms), whichever app or
+ * tool made it — for the Analytics posting graph. Reposts of other people's
+ * threads are left out.
+ */
+export async function threadsListPosts(args: {
+  accessToken: string;
+  since: number;
+  maxPages?: number;
+}): Promise<PlatformPostList> {
+  const url = new URL(`${GRAPH}/${API_VERSION}/me/threads`);
+  url.searchParams.set("fields", "id,timestamp,media_type,permalink");
+  url.searchParams.set("since", String(Math.floor(args.since / 1000)));
+  url.searchParams.set("limit", "50");
+  url.searchParams.set("access_token", args.accessToken);
+  type Item = { id?: string; timestamp?: string; media_type?: string; permalink?: string };
+  return collectGraphPosts<Item>({
+    firstPage: url.toString(),
+    since: args.since,
+    maxPages: args.maxPages ?? 20,
+    label: "Threads post list",
+    time: (item) => parseGraphTime(item.timestamp),
+    toPost: (item) => {
+      const publishedAt = parseGraphTime(item.timestamp);
+      if (!item.id || item.media_type === "REPOST_FACADE" || !Number.isFinite(publishedAt)) return undefined;
+      return { id: item.id, publishedAt, permalink: item.permalink, kind: item.media_type?.toLowerCase() };
+    },
+  });
 }

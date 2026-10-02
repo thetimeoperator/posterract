@@ -106,6 +106,7 @@ async function runProjection(projection: ProjectionDTO): Promise<void> {
     status: "live",
     platformPostId: postId,
     platformPostUrl: url,
+    publishedAt: Date.now(),
     errorCategory: undefined,
     errorSummary: undefined,
   });

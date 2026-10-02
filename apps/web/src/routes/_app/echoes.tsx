@@ -19,9 +19,10 @@ import {
   type PlatformAnalyticsDTO,
   type PlatformId,
 } from "@posterract/contract";
-import { useAnalyticsDashboard, useBusinesses, usePortals, useProjections, useTransmissions } from "@/engine/useEngine";
+import { useAccountPosts, useAnalyticsDashboard, useBusinesses, usePortals, useProjections, useTransmissions } from "@/engine/useEngine";
 import { ScopeFilters } from "@/components/analytics/ScopeFilters";
 import { BusinessesView } from "@/components/analytics/BusinessesView";
+import { PostingCadence } from "@/components/analytics/PostingCadence";
 import { useBusinessView, useSelectedBusiness } from "@/state/business";
 import type { AnalyticsScope } from "@/engine/store";
 import { PointsChip } from "@/components/PointsChip";
@@ -272,6 +273,7 @@ function Analytics() {
   const dashboard = useAnalyticsDashboard(rangeDays, scope);
   const transmissions = useTransmissions();
   const projections = useProjections();
+  const accountPosts = useAccountPosts();
 
   const selected = useMemo(
     () =>
@@ -316,6 +318,19 @@ function Analytics() {
       })),
     };
   }, [projections, transmissions]);
+
+  const cadence = (
+    <PostingCadence
+      portals={portals}
+      accountPosts={accountPosts}
+      projections={projections}
+      transmissions={transmissions}
+      businesses={businesses}
+      rangeDays={rangeDays}
+      platform={platform}
+      scope={scope}
+    />
+  );
 
   const hero = (
         <section className="glass relative overflow-hidden px-5 py-5 sm:px-6">
@@ -376,6 +391,7 @@ function Analytics() {
       <div className="space-y-4" data-testid="analytics-dashboard">
         <style>{ANALYTICS_STYLES}</style>
         {hero}
+        {cadence}
         <Panel className="min-h-[40vh]">
           <EmptyState
             title="Loading account analytics"
@@ -415,6 +431,7 @@ function Analytics() {
     <div className="space-y-4" data-testid="analytics-dashboard">
       <style>{ANALYTICS_STYLES}</style>
       {hero}
+      {cadence}
 
       {selected.some((row) => row.connected && !row.ready) && (
         <ScopeNotice platforms={selected.filter((row) => row.connected && !row.ready)} />

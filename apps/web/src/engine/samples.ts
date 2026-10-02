@@ -152,6 +152,7 @@ export async function seedSamplesOnce(): Promise<void> {
           status: "live",
           platformPostId: postId,
           platformPostUrl: `https://${projection.provider}.com/p/${postId}`,
+          publishedAt: when,
         });
       }
       store()._refreshTransmissionStatus(t.id);

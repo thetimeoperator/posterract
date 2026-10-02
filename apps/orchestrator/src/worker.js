@@ -25,17 +25,20 @@ import {
 } from "../../api/src/points.js";
 import {
   instagramAccountSummary,
+  instagramListMedia,
   instagramPostInsights,
   instagramPublishReel,
   instagramRefreshToken,
 } from "../../web/convex/connectors/instagram.ts";
 import {
+  facebookListPagePosts,
   facebookPageSummary,
   facebookPostInsights,
   facebookPublishReel,
 } from "../../web/convex/connectors/facebook.ts";
 import {
   threadsAccountInsights,
+  threadsListPosts,
   threadsPostInsights,
   threadsPublishVideo,
   threadsRefreshToken,
@@ -43,6 +46,7 @@ import {
 import {
   tiktokGetUserStats,
   tiktokGetVideoStats,
+  tiktokListVideos,
   tiktokUploadVideoDraft,
   tiktokRefreshToken,
 } from "../../web/convex/connectors/tiktok.ts";
@@ -253,63 +257,101 @@ async function refreshAccessToken(row, accessToken, refreshToken) {
     : undefined;
   if (!expiresAt || expiresAt > Date.now() + 10 * 60_000) return accessToken;
 
-  let refreshed;
-  if (row.provider === "instagram") {
-    refreshed = await instagramRefreshToken(accessToken);
-  } else if (row.provider === "threads") {
-    refreshed = await threadsRefreshToken(accessToken);
-  } else if (row.provider === "tiktok") {
-    if (!refreshToken || !env.TIKTOK_CLIENT_KEY || !env.TIKTOK_CLIENT_SECRET) {
-      throw new Error("TikTok refresh credentials are missing — reconnect required");
+  // Publishing, the analytics refresh and the hourly post sync can all reach
+  // the same expiring token at once. One refreshes it while the others wait,
+  // then they use what it stored: TikTok can hand back a new refresh token on
+  // each refresh, so spending the old one twice would fail like a revoked
+  // account.
+  const client = await postgres.connect();
+  try {
+    await client.query("begin");
+    await client.query("select pg_advisory_xact_lock(hashtext($1))", [
+      `token-refresh:${row.social_account_id}`,
+    ]);
+    const stored = await client.query(
+      `select access_token_ciphertext, refresh_token_ciphertext, access_token_expires_at
+       from social_account_tokens where social_account_id = $1`,
+      [row.social_account_id],
+    );
+    const current = stored.rows[0];
+    const currentExpiry = current?.access_token_expires_at
+      ? new Date(current.access_token_expires_at).getTime()
+      : undefined;
+    if (current && currentExpiry && currentExpiry > Date.now() + 10 * 60_000) {
+      await client.query("commit");
+      return decryptSecret(current.access_token_ciphertext);
     }
-    refreshed = await tiktokRefreshToken({
-      clientKey: env.TIKTOK_CLIENT_KEY,
-      clientSecret: env.TIKTOK_CLIENT_SECRET,
-      refreshToken,
-    });
-  } else if (row.provider === "youtube") {
-    if (!refreshToken || !env.YOUTUBE_CLIENT_ID || !env.YOUTUBE_CLIENT_SECRET) {
-      throw new Error("YouTube refresh credentials are missing — reconnect required");
+    if (current) {
+      accessToken = decryptSecret(current.access_token_ciphertext);
+      if (current.refresh_token_ciphertext) {
+        refreshToken = decryptSecret(current.refresh_token_ciphertext);
+      }
     }
-    refreshed = await youtubeRefreshToken({
-      clientId: env.YOUTUBE_CLIENT_ID,
-      clientSecret: env.YOUTUBE_CLIENT_SECRET,
-      refreshToken,
-    });
-  } else {
-    throw new Error(`${row.provider} token expired — reconnect required`);
-  }
 
-  const nextAccessToken = refreshed.accessToken;
-  const nextRefreshToken = refreshed.refreshToken ?? refreshToken;
-  await postgres.query(
-    `update social_account_tokens
-     set access_token_ciphertext = $2,
-         refresh_token_ciphertext = coalesce($3, refresh_token_ciphertext),
-         access_token_expires_at = $4,
-         refresh_expires_at = coalesce($5, refresh_expires_at),
-         updated_at = now()
-     where social_account_id = $1`,
-    [
-      row.social_account_id,
-      encryptSecret(nextAccessToken),
-      nextRefreshToken ? encryptSecret(nextRefreshToken) : null,
-      refreshed.expiresAt ? new Date(refreshed.expiresAt) : null,
-      refreshed.refreshExpiresAt
-        ? new Date(refreshed.refreshExpiresAt)
-        : null,
-    ],
-  );
-  await postgres.query(
-    `update social_accounts
-     set token_expires_at = $2, updated_at = now()
-     where id = $1`,
-    [
-      row.social_account_id,
-      refreshed.expiresAt ? new Date(refreshed.expiresAt) : null,
-    ],
-  );
-  return nextAccessToken;
+    let refreshed;
+    if (row.provider === "instagram") {
+      refreshed = await instagramRefreshToken(accessToken);
+    } else if (row.provider === "threads") {
+      refreshed = await threadsRefreshToken(accessToken);
+    } else if (row.provider === "tiktok") {
+      if (!refreshToken || !env.TIKTOK_CLIENT_KEY || !env.TIKTOK_CLIENT_SECRET) {
+        throw new Error("TikTok refresh credentials are missing — reconnect required");
+      }
+      refreshed = await tiktokRefreshToken({
+        clientKey: env.TIKTOK_CLIENT_KEY,
+        clientSecret: env.TIKTOK_CLIENT_SECRET,
+        refreshToken,
+      });
+    } else if (row.provider === "youtube") {
+      if (!refreshToken || !env.YOUTUBE_CLIENT_ID || !env.YOUTUBE_CLIENT_SECRET) {
+        throw new Error("YouTube refresh credentials are missing — reconnect required");
+      }
+      refreshed = await youtubeRefreshToken({
+        clientId: env.YOUTUBE_CLIENT_ID,
+        clientSecret: env.YOUTUBE_CLIENT_SECRET,
+        refreshToken,
+      });
+    } else {
+      throw new Error(`${row.provider} token expired — reconnect required`);
+    }
+
+    const nextAccessToken = refreshed.accessToken;
+    const nextRefreshToken = refreshed.refreshToken ?? refreshToken;
+    await client.query(
+      `update social_account_tokens
+       set access_token_ciphertext = $2,
+           refresh_token_ciphertext = coalesce($3, refresh_token_ciphertext),
+           access_token_expires_at = $4,
+           refresh_expires_at = coalesce($5, refresh_expires_at),
+           updated_at = now()
+       where social_account_id = $1`,
+      [
+        row.social_account_id,
+        encryptSecret(nextAccessToken),
+        nextRefreshToken ? encryptSecret(nextRefreshToken) : null,
+        refreshed.expiresAt ? new Date(refreshed.expiresAt) : null,
+        refreshed.refreshExpiresAt
+          ? new Date(refreshed.refreshExpiresAt)
+          : null,
+      ],
+    );
+    await client.query(
+      `update social_accounts
+       set token_expires_at = $2, updated_at = now()
+       where id = $1`,
+      [
+        row.social_account_id,
+        refreshed.expiresAt ? new Date(refreshed.expiresAt) : null,
+      ],
+    );
+    await client.query("commit");
+    return nextAccessToken;
+  } catch (error) {
+    await client.query("rollback").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 async function youtubePublish(row, accessToken, videoUrl) {
@@ -922,6 +964,7 @@ async function refreshAccountAnalytics(accountId) {
     return { status: "completed" };
   } catch (error) {
     const message = safeMessage(error, "Analytics refresh failed");
+    if (isRevokedAccess(error)) await markNeedsReconnect(accountId, message);
     if (runId) {
       await postgres.query(
         `update analytics_sync_runs
@@ -949,7 +992,174 @@ async function refreshAccountAnalytics(accountId) {
   }
 }
 
+// The platform has withdrawn the account's access (a password change, the
+// app removed, an expired session). Retrying cannot fix that; reconnecting
+// can. TikTok's own access-token errors are left out on purpose: the next
+// refresh replaces that token, and only a refused refresh token is final.
+const REVOKED_ACCESS =
+  /error validating access token|session has been invalidated|has not authorized application|token has been revoked|refresh token is invalid|invalid_grant/;
+
+function isRevokedAccess(error) {
+  return REVOKED_ACCESS.test(safeMessage(error, "").toLowerCase());
+}
+
+/** Shows the account as needing a reconnect instead of failing silently. */
+async function markNeedsReconnect(accountId, message) {
+  const updated = await postgres.query(
+    `update social_accounts set status = 'needs_reauth', updated_at = now()
+     where id = $1 and status = 'connected'
+     returning workspace_id, provider, handle`,
+    [accountId],
+  );
+  const account = updated.rows[0];
+  if (!account) return;
+  await postgres.query(
+    `insert into events (workspace_id, type, message, payload)
+     values ($1, 'account.needs_reauth', $2, $3)`,
+    [
+      account.workspace_id,
+      `${account.handle} needs reconnecting — ${message}`,
+      JSON.stringify({ provider: account.provider, accountId }),
+    ],
+  );
+}
+
+// Reading the account's own post list needs only its basic read permission.
+const POST_LIST_SCOPE = {
+  instagram: "instagram_business_basic",
+  threads: "threads_basic",
+  tiktok: "video.list",
+  facebook: "pages_read_engagement",
+};
+const DAY_MS = 86_400_000;
+// The posting graph shows up to 120 days. The first read goes that far back;
+// later reads re-check from a week (or the last read, if older) back, which
+// catches new posts and deletions.
+const POSTS_WINDOW_DAYS = 120;
+const POSTS_RECHECK_DAYS = 7;
+
+function listPlatformPosts(account, accessToken, since) {
+  if (account.provider === "instagram") {
+    return instagramListMedia({ userId: account.provider_user_id, accessToken, since });
+  }
+  if (account.provider === "threads") return threadsListPosts({ accessToken, since });
+  if (account.provider === "tiktok") return tiktokListVideos(accessToken, since);
+  return facebookListPagePosts({
+    pageId: account.provider_user_id,
+    pageAccessToken: accessToken,
+    since,
+  });
+}
+
+/**
+ * Reads every post on a connected account from its platform, whichever app
+ * or tool made it, so the Analytics posting graph counts all of them. Posts
+ * made through Posterract come back too, under the same platform post ID.
+ */
+async function syncAccountPosts(accountId) {
+  try {
+    const result = await postgres.query(
+      `select a.*, a.id as social_account_id,
+              coalesce(t.provider_user_id, a.provider_account_id) as provider_user_id,
+              t.access_token_ciphertext, t.refresh_token_ciphertext,
+              coalesce(t.access_token_expires_at, a.token_expires_at) as access_token_expires_at
+       from social_accounts a
+       join social_account_tokens t on t.social_account_id = a.id
+       where a.id = $1 and a.status = 'connected'`,
+      [accountId],
+    );
+    const account = result.rows[0];
+    const scope = account ? POST_LIST_SCOPE[account.provider] : undefined;
+    if (!account || !scope || !(account.scopes ?? []).includes(scope)) {
+      return { status: "skipped" };
+    }
+    let accessToken = decryptSecret(account.access_token_ciphertext);
+    const refreshToken = account.refresh_token_ciphertext
+      ? decryptSecret(account.refresh_token_ciphertext)
+      : undefined;
+    accessToken = await refreshAccessToken(account, accessToken, refreshToken);
+
+    const now = Date.now();
+    const windowStart = now - POSTS_WINDOW_DAYS * DAY_MS;
+    const syncedAt = account.posts_synced_at
+      ? new Date(account.posts_synced_at).getTime()
+      : undefined;
+    const since =
+      account.posts_covered_from && syncedAt
+        ? Math.max(windowStart, Math.min(now - POSTS_RECHECK_DAYS * DAY_MS, syncedAt - DAY_MS))
+        : windowStart;
+    const { posts, complete } = await listPlatformPosts(account, accessToken, since);
+    // Cut short by the page limit: only what was read is known to be whole.
+    const readFrom = complete
+      ? since
+      : Math.min(now, ...posts.map((post) => post.publishedAt));
+
+    const client = await postgres.connect();
+    try {
+      await client.query("begin");
+      // A post the platform no longer lists inside the window just read was deleted.
+      await client.query(
+        `delete from platform_posts
+         where social_account_id = $1 and published_at >= $2
+           and not (platform_post_id = any($3::text[]))`,
+        [account.id, new Date(readFrom), posts.map((post) => post.id)],
+      );
+      for (const post of posts) {
+        await client.query(
+          `insert into platform_posts
+            (social_account_id, workspace_id, provider, platform_post_id,
+             published_at, permalink, kind)
+           values ($1, $2, $3, $4, $5, $6, $7)
+           on conflict (social_account_id, platform_post_id) do update
+           set published_at = excluded.published_at,
+               permalink = excluded.permalink,
+               kind = excluded.kind`,
+          [
+            account.id,
+            account.workspace_id,
+            account.provider,
+            post.id,
+            new Date(post.publishedAt),
+            post.permalink ?? null,
+            post.kind ?? null,
+          ],
+        );
+      }
+      await client.query(
+        `update social_accounts
+         set posts_synced_at = now(),
+             posts_covered_from = least(coalesce(posts_covered_from, $2), $2)
+         where id = $1`,
+        [account.id, new Date(readFrom)],
+      );
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback").catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+    return { status: "completed", posts: posts.length };
+  } catch (error) {
+    const message = safeMessage(error, "Post sync failed");
+    if (isRevokedAccess(error)) await markNeedsReconnect(accountId, message);
+    return { status: "failed", error: message };
+  }
+}
+
 const activities = {
+  async listPostSyncAccounts() {
+    const result = await postgres.query(
+      `select id from social_accounts
+       where status = 'connected'
+         and provider in ('instagram', 'facebook', 'threads', 'tiktok')
+       order by posts_synced_at asc nulls first`,
+    );
+    return result.rows.map((row) => row.id);
+  },
+
+  syncAccountPosts,
+
   async listAnalyticsAccounts() {
     const result = await postgres.query(
       `select id from social_accounts

@@ -3,6 +3,7 @@ import { create } from "zustand";
 import type {
   BusinessDTO,
   AccountAnalyticsResponseDTO,
+  AccountPostDTO,
   PeriodStatsDTO,
   AnalyticsDashboardDTO,
   AnalyticsRangeDays,
@@ -46,12 +47,15 @@ type State = Bootstrap & {
   periodStats: Record<string, PeriodStatsDTO>;
   pointsDashboard?: PointsDashboardDTO;
   leaderboards: Partial<Record<LeaderboardPeriod, LeaderboardDTO>>;
+  /** Every post on every account in the last 120 days, from any app or tool. */
+  accountPosts?: AccountPostDTO[];
   refresh: () => Promise<void>;
   loadAnalytics: (rangeDays: AnalyticsRangeDays, scope?: AnalyticsScope) => Promise<void>;
   loadAccountAnalytics: (rangeDays: AnalyticsRangeDays) => Promise<void>;
   loadPeriodStats: (query: PeriodQuery) => Promise<void>;
   loadPointsDashboard: () => Promise<void>;
   loadLeaderboard: (period: LeaderboardPeriod) => Promise<void>;
+  loadAccountPosts: () => Promise<void>;
 };
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -107,6 +111,10 @@ const usePostgresStore = create<State>((set) => ({
   loadPointsDashboard: async () => {
     const data = await request<PointsDashboardDTO>("/v1/points/dashboard");
     set({ pointsDashboard: data });
+  },
+  loadAccountPosts: async () => {
+    const data = await request<{ posts: AccountPostDTO[] }>("/v1/analytics/posts");
+    set({ accountPosts: data.posts });
   },
   loadLeaderboard: async (period) => {
     const data = await request<LeaderboardDTO>(`/v1/leaderboard?period=${period}`);
@@ -167,6 +175,22 @@ export function useAccountAnalytics(rangeDays: AnalyticsRangeDays): AccountAnaly
   useEffect(() => {
     void load(rangeDays).catch((error) => console.error("Account analytics refresh failed", error));
   }, [load, rangeDays]);
+  return data;
+}
+
+/**
+ * When every post on each account went live (last 120 days), whichever app or
+ * tool made it, for the posting graph. Undefined until the first load.
+ */
+export function useAccountPosts(): AccountPostDTO[] | null | undefined {
+  const data = usePostgresStore((state) => state.accountPosts);
+  const load = usePostgresStore((state) => state.loadAccountPosts);
+  useEffect(() => {
+    const run = () => void load().catch((error) => console.error("Account posts refresh failed", error));
+    run();
+    window.addEventListener("focus", run);
+    return () => window.removeEventListener("focus", run);
+  }, [load]);
   return data;
 }
 

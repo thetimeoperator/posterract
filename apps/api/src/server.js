@@ -39,7 +39,7 @@ import {
 } from "./email.js";
 import { registerOAuthRoutes } from "./oauth.js";
 import { registerAiRoutes } from "./ai/routes.js";
-import { loadAccountAnalytics, loadAnalyticsDashboard, loadPeriodStats, periodProblem } from "./analytics.js";
+import { loadAccountAnalytics, loadAccountPosts, loadAnalyticsDashboard, loadPeriodStats, periodProblem } from "./analytics.js";
 import { registerMetaRoutes } from "./meta.js";
 import {
   executeAgentRun,
@@ -740,6 +740,16 @@ async function ensureRecurringWorkflows() {
   } catch (error) {
     if (error?.name !== "WorkflowExecutionAlreadyStartedError") throw error;
   }
+  try {
+    await temporalClient.workflow.start("accountPostsWorkflow", {
+      taskQueue: env.TEMPORAL_TASK_QUEUE ?? "posterract-publishing",
+      workflowId: "posterract:posts:continuous",
+      args: [],
+    });
+    app.log.info("started continuous post sync workflow");
+  } catch (error) {
+    if (error?.name !== "WorkflowExecutionAlreadyStartedError") throw error;
+  }
 }
 
 async function handleAuthRequest(request, reply) {
@@ -1034,6 +1044,7 @@ app.get("/v1/openapi.json", async () => ({
     "/v1/chats/{id}": { get: { summary: "Read a retained chat and its messages" } },
     "/v1/schedule": { get: { summary: "List scheduled publications in a time range" } },
     "/v1/analytics": { get: { summary: "Read approved TikTok, Instagram, Facebook, and Threads analytics" } },
+    "/v1/analytics/posts": { get: { summary: "When every post on each connected account went live (last 120 days), whichever app or tool made it" } },
     "/v1/points": { get: { summary: "Read the workspace points total, week, streak and badges" } },
     "/v1/points/dashboard": { get: { summary: "Read points, level, rank, streak, follower milestones and top posts" } },
     "/v1/points/ledger": { get: { summary: "Read the immutable points ledger" } },
@@ -1584,6 +1595,13 @@ app.get(
   },
 );
 
+// The posting graph: when every post on every account went live (last 120 days), whichever app or tool made it.
+app.get(
+  "/v1/analytics/posts",
+  { preHandler: requireScope("analytics:read") },
+  async (request) => loadAccountPosts(postgres, requiredWorkspace(request)),
+);
+
 // The calendar's numbers for the month or week on screen: ?from&to (local dates), &tz, &business / &accounts.
 app.get(
   "/v1/stats/period",
@@ -1781,6 +1799,9 @@ app.get(
         points: row.points_earned === null || row.points_earned === undefined
           ? undefined
           : Number(row.points_earned),
+        publishedAt: row.published_at
+          ? new Date(row.published_at).getTime()
+          : undefined,
         updatedAt: new Date(row.updated_at).getTime(),
       })),
       events: eventsResult.rows.map((row) => ({

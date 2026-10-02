@@ -157,6 +157,11 @@ export function usePeriodStats(_query: PeriodQuery): import("@posterract/contrac
   return undefined;
 }
 
+/** No platform post lists here: the posting graph counts this engine's own posts. */
+export function useAccountPosts(): import("@posterract/contract").AccountPostDTO[] | null | undefined {
+  return null;
+}
+
 export const usePointsReady = () => true;
 
 export function usePoints(): PointsSummaryDTO | undefined {

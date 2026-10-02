@@ -1,4 +1,5 @@
 /** Facebook Login + Page Reels publishing helpers. */
+import { collectGraphPosts, parseGraphTime, type PlatformPostList } from "./platformPosts";
 
 const API_VERSION = "v23.0";
 const GRAPH = "https://graph.facebook.com";
@@ -577,4 +578,43 @@ export async function facebookPostInsights(args: {
     averageWatchSeconds,
     threeSecondViews,
   };
+}
+
+/**
+ * Every post the Page published since `since` (epoch ms), whichever app or
+ * tool made it — for the Analytics posting graph. Same `/{page-id}` → `/me`
+ * fallback as facebookPageSummary.
+ */
+export async function facebookListPagePosts(args: {
+  pageId: string;
+  pageAccessToken: string;
+  since: number;
+  maxPages?: number;
+}): Promise<PlatformPostList> {
+  type Item = { id?: string; created_time?: string; permalink_url?: string };
+  let failure: unknown;
+  for (const target of [args.pageId, "me"]) {
+    const url = new URL(`${GRAPH}/${API_VERSION}/${target}/published_posts`);
+    url.searchParams.set("fields", "id,created_time,permalink_url");
+    url.searchParams.set("since", String(Math.floor(args.since / 1000)));
+    url.searchParams.set("limit", "100");
+    url.searchParams.set("access_token", args.pageAccessToken);
+    try {
+      return await collectGraphPosts<Item>({
+        firstPage: url.toString(),
+        since: args.since,
+        maxPages: args.maxPages ?? 10,
+        label: "Facebook Page post list",
+        time: (item) => parseGraphTime(item.created_time),
+        toPost: (item) => {
+          const publishedAt = parseGraphTime(item.created_time);
+          if (!item.id || !Number.isFinite(publishedAt)) return undefined;
+          return { id: item.id, publishedAt, permalink: item.permalink_url, kind: "post" };
+        },
+      });
+    } catch (error) {
+      failure = error;
+    }
+  }
+  throw failure;
 }

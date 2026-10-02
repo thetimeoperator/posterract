@@ -483,3 +483,8 @@ export function useBusinessActions() {
     remove: async (id: string) => useEngineStore.getState().removeBusiness(id),
   };
 }
+
+/** The demo engine has no platform post lists: the posting graph counts its own posts. */
+export function useAccountPosts(): import("@posterract/contract").AccountPostDTO[] | null | undefined {
+  return null;
+}

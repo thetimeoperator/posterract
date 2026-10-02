@@ -10,6 +10,7 @@
  * Chunk rules: 5–64 MB per chunk (final chunk may run to 128 MB); videos
  * ≤ 64 MB go as a single chunk; ≥ 4 GB unsupported.
  */
+import type { PlatformPostList } from "./platformPosts";
 
 const OPEN_API = "https://open.tiktokapis.com";
 
@@ -393,4 +394,37 @@ export async function tiktokUploadVideoDraft(args: {
       throw err;
     }
   }
+}
+
+/**
+ * Every public video on the account since `since` (epoch ms), whichever app
+ * or tool made it — for the Analytics posting graph. TikTok lists them newest
+ * first, 20 to a page.
+ */
+export async function tiktokListVideos(
+  accessToken: string,
+  since: number,
+  maxPages = 40,
+): Promise<PlatformPostList> {
+  const posts: PlatformPostList["posts"] = [];
+  let cursor: number | undefined;
+  for (let page = 0; ; page += 1) {
+    if (page >= maxPages) return { posts, complete: false };
+    const data = await openApiPost<{
+      videos?: Array<{ id?: string; create_time?: number; share_url?: string }>;
+      cursor?: number;
+      has_more?: boolean;
+    }>("/v2/video/list/?fields=id,create_time,share_url", accessToken, cursor === undefined ? { max_count: 20 } : { max_count: 20, cursor });
+    const videos = data.videos ?? [];
+    for (const video of videos) {
+      const publishedAt = (video.create_time ?? Number.NaN) * 1000;
+      if (video.id && publishedAt >= since) {
+        posts.push({ id: video.id, publishedAt, permalink: video.share_url, kind: "video" });
+      }
+    }
+    const lastAt = (videos.at(-1)?.create_time ?? Number.NaN) * 1000;
+    if (!data.has_more || !(lastAt >= since) || data.cursor === undefined) break;
+    cursor = data.cursor;
+  }
+  return { posts, complete: true };
 }
