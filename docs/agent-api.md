@@ -37,7 +37,7 @@ An agent with a local video can use the checked-in client:
 ```bash
 pnpm --filter @posterract/api agent:post -- \
   ./video.mp4 \
-  instagram,tiktok,youtube,threads,facebook \
+  instagram,threads,facebook \
   "The shared caption" \
   now \
   "Internal title"
@@ -46,7 +46,8 @@ pnpm --filter @posterract/api agent:post -- \
 The fifth argument may be an ISO-8601 time instead of `now`, for example
 `2026-08-14T17:30:00Z`. The command uploads directly to private R2 in 16 MiB
 parts, completes the upload, schedules the post, and prints the post and
-projection IDs.
+projection IDs. It sends no TikTok settings, so `tiktok` in its list goes to the
+creator's TikTok inbox; post directly to TikTok with `POST /v1/posts` below.
 
 ## HTTP contract
 
@@ -72,9 +73,8 @@ curl -fsS "$POSTERRACT_API_URL/v1/accounts" \
 ```
 
 Only choose accounts whose status is `connected`. The current code publishes
-through Instagram, TikTok, YouTube, Threads, and Facebook Pages. X is represented
-in the API but remains blocked until Posterract has official X API credentials
-and a connector.
+through Instagram, TikTok, Facebook Pages and Threads. YouTube and X are
+represented in the API but cannot be published to yet.
 
 ### Upload
 
@@ -101,22 +101,53 @@ curl -fsS "$POSTERRACT_API_URL/v1/posts" \
     "title": "Internal title",
     "caption": "Shared caption",
     "hashtags": ["posterract"],
-    "platforms": ["instagram", "tiktok", "youtube"],
+    "platforms": ["instagram", "tiktok"],
+    "accountIds": ["INSTAGRAM_ACCOUNT_UUID", "TIKTOK_ACCOUNT_UUID"],
     "perPlatform": {
-      "youtube": {
-        "caption": "YouTube description",
+      "tiktok": {
+        "caption": "TikTok caption",
         "options": {
-          "title": "YouTube title",
-          "privacyStatus": "private",
-          "madeForKids": false,
-          "containsSyntheticMedia": false,
-          "notifySubscribers": false
+          "mode": "direct",
+          "privacyLevel": "PUBLIC_TO_EVERYONE",
+          "allowComment": true,
+          "allowDuet": false,
+          "allowStitch": false,
+          "commercialContent": false,
+          "brandOrganic": false,
+          "brandContent": false,
+          "isAigc": false,
+          "consentAccepted": true
         }
       }
     },
     "scheduledFor": "now"
   }'
 ```
+
+### TikTok
+
+TikTok Direct Post (audited September 30, 2026) posts publicly:
+
+- `privacyLevel` defaults to `PUBLIC_TO_EVERYONE` when left out or empty (a
+  private account gets the widest audience it allows). Set it only for a
+  smaller audience, from the account's `privacy_level_options`.
+- `GET /v1/accounts/{accountId}/tiktok/creator-info` returns the account's
+  nickname, `privacy_level_options`, which of comments, Duet and Stitch it has
+  turned off, and `max_video_post_duration_sec`.
+- `allowComment`, `allowDuet` and `allowStitch` must stay off when the account
+  disables them.
+- `commercialContent` with `brandOrganic` (the creator's own brand; TikTok labels
+  it "Promotional content") and/or `brandContent` (a paid partnership; labelled
+  "Paid partnership", never `SELF_ONLY`). `isAigc` labels AI-generated video.
+- Name the TikTok account in `accountIds`; one TikTok account per post.
+- Send `consentAccepted: true` only after the creator has agreed to TikTok's
+  Music Usage Confirmation (and Branded Content Policy for branded content).
+- The API checks these settings against the live account before accepting the
+  post and answers `409 tiktok_settings_rejected` with the reason otherwise.
+- Without `options.mode`, TikTok gets the video in the creator's inbox to
+  finish in the TikTok app (`"mode": "inbox"` does the same explicitly).
+- After publishing, TikTok takes a few minutes to process the video. A post set
+  to `SELF_ONLY` has no public link and earns no points.
 
 The response is `202 Accepted` and contains the transmission ID plus one
 projection ID per platform. Scheduling is durable in Temporal; an agent does

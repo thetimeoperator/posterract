@@ -1,11 +1,11 @@
 # Meta Muse connector
 
 Posterract as a connector for Meta Muse (and any other MCP client): Muse can post
-and schedule videos on Instagram, Facebook and Threads, run the calendar, use the
-video library, read analytics, and play the points game.
+and schedule videos on Instagram, TikTok, Facebook and Threads, run the calendar,
+use the video library, read analytics, and play the points game.
 
-TikTok and YouTube are not offered until their APIs are approved (TikTok's Content
-Posting API, YouTube's quota extension).
+TikTok joined on September 30, 2026, when its Content Posting API Direct Post audit
+was approved. YouTube is not offered until its quota extension is approved.
 
 ## Where it lives
 
@@ -63,8 +63,17 @@ tools read the points module (`apps/api/src/points.js`) directly.
   `cancel_post` and `duplicate_post` work the same way.
 - **Retries don't double-post.** A write tool called again with the same arguments
   within ten minutes reuses its idempotency key and replays the first result.
-- **Accounts:** only Instagram, Facebook and Threads accounts can be targeted;
-  anything else is refused.
+- **Accounts:** only Instagram, TikTok, Facebook and Threads accounts can be
+  targeted; anything else is refused.
+- **TikTok posts go to everyone by default.** `create_post` takes an optional
+  `tiktok` object: who can watch (`everyone` by default; `friends`, `followers`,
+  `only_me`), comments, Duet and Stitch, `your_brand` / `branded_content`
+  disclosure, `ai_generated`, or `send_to_inbox`. The preview fetches each TikTok
+  account's current settings and shows its name, the audience, disabled
+  interactions, the longest video, the label TikTok will add and TikTok's
+  declaration. The API checks the settings against the live account before
+  accepting the post. A TikTok post can't be copied with `duplicate_post`: the
+  agent is told to create it again.
 - **Link imports** accept public `https` links only (port 443, no credentials).
   Every address is checked when the connection is made, including after
   redirects, so private, loopback, link-local and carrier-NAT addresses (such
@@ -84,13 +93,13 @@ tools read the points module (`apps/api/src/points.js`) directly.
 
 The same flow as Postiz: one link, then a sign-in link. No key to copy.
 
-1. The user connects Instagram, Facebook or Threads in Posterract first.
+1. The user connects Instagram, TikTok, Facebook or Threads in Posterract first.
 2. In Muse, they send:
 
    > Connect to Posterract. Its MCP server URL is
    > https://api.posterract.app/v1/mcp. I want you to post and schedule my videos on
-   > Instagram, Facebook and Threads, check my analytics, and tell me my Posterract
-   > rank and points.
+   > Instagram, TikTok, Facebook and Threads, check my analytics, and tell me my
+   > Posterract rank and points.
 
 3. Muse registers itself, then sends a sign-in link. The link opens
    Posterract's `/connect` page, which shows what Muse is asking to do.
