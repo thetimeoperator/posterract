@@ -15,7 +15,7 @@ import { PLATFORM_CAPABILITIES, PUBLISHING_PLATFORM_IDS, allowsSeveralAccounts }
 import { VideoDropzone } from "@/components/VideoDropzone";
 import { ArtifactThumb } from "@/components/ArtifactThumb";
 import { TikTokHoverHint, TIKTOK_DISCLOSURE_HINT } from "@/components/TikTokSettings";
-import { emptyTikTokOptions, validateTikTokOptions, type TikTokCreatorInfo } from "@posterract/contract/tiktok";
+import { defaultTikTokPrivacy, emptyTikTokOptions, validateTikTokOptions, type TikTokCreatorInfo } from "@posterract/contract/tiktok";
 import {
   artifactUrl,
   computePreflight,
@@ -31,13 +31,14 @@ import {
 import { aspectLabel, formatBytes, formatDuration, toDatetimeLocal } from "@/lib/fmt";
 import type { CreateTransmissionInput } from "@/engine/store";
 import { useSelectedBusiness } from "@/state/business";
+import { startingPlatforms } from "@/lib/composePlatforms";
 
 import { WebAccountStrip } from "./WebAccountStrip";
 import { WebPlatformSettings } from "./WebPlatformSettings";
 import { WebTikTokSettings } from "./WebTikTokSettings";
 import "./web-composer.css";
 
-export function WebComposer({ search }: { search: { artifact?: string; at?: number; copy?: string } }) {
+export function WebComposer({ search }: { search: { artifact?: string; at?: number; copy?: string; platforms?: string } }) {
   const navigate = useNavigate();
   const artifacts = useArtifacts();
   const portals = usePortals();
@@ -58,7 +59,7 @@ export function WebComposer({ search }: { search: { artifact?: string; at?: numb
   const [pickerOpen, setPickerOpen] = useState(false);
   const [now, setNow] = useState(Date.now);
   const captionRef = useRef<HTMLTextAreaElement>(null);
-  const [platforms, setPlatforms] = useState<PlatformId[]>(["instagram", "tiktok"]);
+  const [platforms, setPlatforms] = useState<PlatformId[]>(() => startingPlatforms(search.platforms) ?? ["instagram", "tiktok"]);
   const [businessId, setBusinessId] = useState("");
   // Instagram, Facebook and Threads can take several accounts; TikTok one.
   const [selectedAccounts, setSelectedAccounts] = useState<Partial<Record<PlatformId, string[]>>>({});
@@ -123,11 +124,9 @@ export function WebComposer({ search }: { search: { artifact?: string; at?: numb
   }, [tiktokAccountId, creatorRefresh]);
   const creator = creatorState.accountId === tiktokAccountId ? creatorState.info : undefined;
   useEffect(() => {
-    // Default only after this account confirms public posting is available.
-    // Keep any audience the user has already selected, including on refresh.
-    if (creator?.privacy_level_options.includes("PUBLIC_TO_EVERYONE")) {
-      setTikTok((current) => current.privacyLevel ? current : { ...current, privacyLevel: "PUBLIC_TO_EVERYONE" });
-    }
+    // Posts go to Everyone unless the user picks otherwise (a private account: the widest audience it allows).
+    const audience = creator ? defaultTikTokPrivacy(creator.privacy_level_options) : "";
+    if (audience) setTikTok((current) => current.privacyLevel ? current : { ...current, privacyLevel: audience });
   }, [creator, tiktok.privacyLevel]);
 
   const artifact = artifacts.find((a) => a.id === artifactId);
@@ -228,11 +227,11 @@ export function WebComposer({ search }: { search: { artifact?: string; at?: numb
   const headerBusiness = useSelectedBusiness();
   const startedOnBusiness = useRef(false);
   useEffect(() => {
-    if (startedOnBusiness.current || search.copy || !headerBusiness) return;
+    if (startedOnBusiness.current || search.copy || search.platforms || !headerBusiness) return;
     startedOnBusiness.current = true;
     chooseBusiness(headerBusiness.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [headerBusiness, search.copy]);
+  }, [headerBusiness, search.copy, search.platforms]);
 
   const launch = async () => {
     if (!artifact || submitting || !canLaunch) return;

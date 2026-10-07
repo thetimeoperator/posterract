@@ -10,6 +10,7 @@ import "@fontsource-variable/jetbrains-mono/index.css";
 import "./styles/app.css";
 
 import { routeTree } from "./routeTree.gen";
+import { watchForNewBuild } from "./lib/freshBuild";
 
 const router = createRouter({
   routeTree,
@@ -22,6 +23,8 @@ declare module "@tanstack/react-router" {
     router: typeof router;
   }
 }
+
+watchForNewBuild(router);
 
 const convexUrl = import.meta.env.VITE_CONVEX_URL as string | undefined;
 const postgresBackend = Boolean(import.meta.env.VITE_API_URL);

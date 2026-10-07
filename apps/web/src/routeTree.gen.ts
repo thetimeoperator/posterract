@@ -27,6 +27,7 @@ import { Route as AppUplinkRouteImport } from './routes/_app/uplink'
 import { Route as AppTransmissionsRouteImport } from './routes/_app/transmissions'
 import { Route as AppSkillsRouteImport } from './routes/_app/skills'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
+import { Route as AppProfileRouteImport } from './routes/_app/profile'
 import { Route as AppPortalsRouteImport } from './routes/_app/portals'
 import { Route as AppPointsRouteImport } from './routes/_app/points'
 import { Route as AppForgeRouteImport } from './routes/_app/forge'
@@ -125,6 +126,11 @@ const AppSettingsRoute = AppSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AppRoute,
 } as any)
+const AppProfileRoute = AppProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppPortalsRoute = AppPortalsRouteImport.update({
   id: '/portals',
   path: '/portals',
@@ -182,6 +188,7 @@ export interface FileRoutesByFullPath {
   '/forge': typeof AppForgeRoute
   '/points': typeof AppPointsRoute
   '/portals': typeof AppPortalsRoute
+  '/profile': typeof AppProfileRoute
   '/settings': typeof AppSettingsRoute
   '/skills': typeof AppSkillsRoute
   '/transmissions': typeof AppTransmissionsRoute
@@ -208,6 +215,7 @@ export interface FileRoutesByTo {
   '/forge': typeof AppForgeRoute
   '/points': typeof AppPointsRoute
   '/portals': typeof AppPortalsRoute
+  '/profile': typeof AppProfileRoute
   '/settings': typeof AppSettingsRoute
   '/skills': typeof AppSkillsRoute
   '/transmissions': typeof AppTransmissionsRoute
@@ -237,6 +245,7 @@ export interface FileRoutesById {
   '/_app/forge': typeof AppForgeRoute
   '/_app/points': typeof AppPointsRoute
   '/_app/portals': typeof AppPortalsRoute
+  '/_app/profile': typeof AppProfileRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/skills': typeof AppSkillsRoute
   '/_app/transmissions': typeof AppTransmissionsRoute
@@ -267,6 +276,7 @@ export interface FileRouteTypes {
     | '/forge'
     | '/points'
     | '/portals'
+    | '/profile'
     | '/settings'
     | '/skills'
     | '/transmissions'
@@ -293,6 +303,7 @@ export interface FileRouteTypes {
     | '/forge'
     | '/points'
     | '/portals'
+    | '/profile'
     | '/settings'
     | '/skills'
     | '/transmissions'
@@ -321,6 +332,7 @@ export interface FileRouteTypes {
     | '/_app/forge'
     | '/_app/points'
     | '/_app/portals'
+    | '/_app/profile'
     | '/_app/settings'
     | '/_app/skills'
     | '/_app/transmissions'
@@ -478,6 +490,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/profile': {
+      id: '/_app/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof AppProfileRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/portals': {
       id: '/_app/portals'
       path: '/portals'
@@ -545,6 +564,7 @@ interface AppRouteChildren {
   AppForgeRoute: typeof AppForgeRoute
   AppPointsRoute: typeof AppPointsRoute
   AppPortalsRoute: typeof AppPortalsRoute
+  AppProfileRoute: typeof AppProfileRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppSkillsRoute: typeof AppSkillsRoute
   AppTransmissionsRoute: typeof AppTransmissionsRoute
@@ -561,6 +581,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppForgeRoute: AppForgeRoute,
   AppPointsRoute: AppPointsRoute,
   AppPortalsRoute: AppPortalsRoute,
+  AppProfileRoute: AppProfileRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppSkillsRoute: AppSkillsRoute,
   AppTransmissionsRoute: AppTransmissionsRoute,

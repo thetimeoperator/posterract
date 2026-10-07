@@ -143,7 +143,7 @@ const ANALYTICS_STYLES = `
     pointer-events: none;
     border-radius: 999px;
     background: linear-gradient(90deg, transparent, rgba(var(--signal-a), .72), rgba(255,255,255,.94), rgba(var(--signal-b), .5), transparent);
-    filter: drop-shadow(0 0 7px rgba(var(--signal-a), .32));
+    /* No glow filter: a filter on a moving layer is redone by the GPU every frame, six tiles at once. */
     animation: analytics-signal-frame 5.8s ease-in-out infinite;
     animation-delay: calc(var(--signal-i) * -.55s);
   }
@@ -165,15 +165,9 @@ const ANALYTICS_STYLES = `
     color: rgb(var(--signal-a));
     text-shadow: 0 0 16px rgba(var(--signal-a), .16);
   }
-  .analytics-signal-graph {
-    filter: drop-shadow(0 0 2px rgba(var(--signal-a), .22));
-  }
+  /* The glow line is a wider, faint stroke under the line: no filters, which made scrolling stutter. */
   .analytics-signal-line-glow {
-    opacity: .12;
-    filter: blur(.65px);
-  }
-  .analytics-signal-line:not(.analytics-signal-line-glow) {
-    filter: drop-shadow(0 0 1.5px rgba(var(--signal-a), .82)) drop-shadow(0 0 4px rgba(var(--signal-a), .22));
+    opacity: .16;
   }
   .analytics-signal-line {
     animation: analytics-line-arrive 520ms cubic-bezier(.22,.7,.2,1) both;
@@ -692,7 +686,7 @@ function MetricSparkline({ metric, tone }: { metric: SignalMetricModel; tone: nu
             d={line}
             fill="none"
             stroke={`rgb(${SIGNAL_TONES[tone % SIGNAL_TONES.length].primary})`}
-            strokeWidth="2.2"
+            strokeWidth="7"
             strokeLinecap="round"
             strokeLinejoin="round"
             vectorEffect="non-scaling-stroke"

@@ -1,8 +1,9 @@
 /*
- * The Points tab, styled like a Call of Duty career screen: chamfered HUD
- * panels, thin wide screen titles, heavy italic rank names in the tier's
- * metal, a segmented XP bar, topographic contour lines. The tier's colours
- * arrive as --tier-* custom properties on .career.
+ * The Points tab, styled like an Iron Man HUD: flat dark glass, hairline
+ * frames with corner brackets, instruments drawn as lit line art, heavy
+ * italic rank names in the tier's metal. Nothing behind a panel glows; the
+ * lines and numbers do. The tier's colours arrive as --tier-* custom
+ * properties on .career.
  */
 
 .career {
@@ -83,20 +84,6 @@
 .cr-num {
   font-family: var(--font-display);
   font-variant-numeric: tabular-nums;
-}
-
-.cr-contours {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-}
-
-.cr-contours path {
-  fill: none;
-  stroke: rgba(234, 255, 243, 0.055);
-  stroke-width: 1;
 }
 
 .cr-empty {
@@ -261,15 +248,7 @@
   opacity: 0.9;
 }
 
-.career-hero::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 4px);
-}
-
-.career-hero > :not(.cr-contours) {
+.career-hero > * {
   position: relative;
   z-index: 1;
 }
@@ -313,7 +292,6 @@
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 26px rgba(var(--tier-rgb), 0.28));
   padding-right: 0.08em;
 }
 
@@ -552,8 +530,7 @@
 }
 
 .tier-stop--locked .rank-emblem {
-  filter: grayscale(1) brightness(0.42);
-  opacity: 0.6;
+  opacity: 0.75;
 }
 
 .tier-stop__emblem {
@@ -756,13 +733,11 @@
   width: 58px;
   height: 58px;
   color: var(--cr-flame);
-  background: radial-gradient(circle, rgba(255, 179, 71, 0.2), transparent 70%);
-  filter: drop-shadow(0 0 12px rgba(255, 150, 50, 0.6));
+  background: radial-gradient(circle, rgba(255, 179, 71, 0.26), transparent 70%);
 }
 
 .streak__flame--cold {
   color: var(--cr-faint);
-  filter: none;
   background: none;
 }
 
@@ -990,9 +965,7 @@
   inset: 0;
 }
 
-.medal--on {
-  filter: drop-shadow(0 0 12px rgba(255, 196, 60, 0.35));
-}
+
 
 .medal__face {
   position: absolute;
@@ -1006,7 +979,6 @@
 
 .medal--on .medal__face {
   color: #ffe7a0;
-  filter: drop-shadow(0 0 6px rgba(255, 204, 70, 0.7));
 }
 
 .medal--off .medal__face {
@@ -1030,42 +1002,6 @@
   border-radius: 50%;
   background: #080b0b;
   color: #74827e;
-}
-
-/* ── Recent points ──────────────────────────────────────────────── */
-
-.log {
-  max-height: 300px;
-  overflow-y: auto;
-  scrollbar-width: thin;
-}
-
-.log-row {
-  display: grid;
-  grid-template-columns: 70px minmax(0, 1fr) auto;
-  align-items: baseline;
-  gap: 12px;
-  padding: 9px 0;
-  border-bottom: 1px solid rgba(234, 255, 243, 0.05);
-}
-
-.log-row__pts {
-  font: 700 13px/1 var(--font-mono);
-  text-align: right;
-  color: var(--cr-neon);
-}
-
-.log-row__note {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font: 500 12.5px/1.3 var(--font-body);
-  color: var(--cr-dim);
-}
-
-.log-row__time {
-  font: 600 10px/1 var(--font-mono);
-  color: var(--cr-faint);
 }
 
 /* ── Scoring ────────────────────────────────────────────────────── */
@@ -1252,7 +1188,7 @@
 
 .board-row {
   display: grid;
-  grid-template-columns: 58px 40px minmax(0, 1.5fr) minmax(0, 1fr) 64px 130px;
+  grid-template-columns: 58px 40px minmax(0, 1.5fr) minmax(0, 1fr) 64px 104px 130px;
   align-items: center;
   gap: 14px;
   padding: 9px 24px;
@@ -1362,12 +1298,13 @@
 
 /* ── Motion ─────────────────────────────────────────────────────── */
 
+/* Both are drawn inside the emblem's SVG, so every frame they move repaints it: they play, then rest. */
 .rank-emblem__gleam {
-  animation: cr-gleam 4.8s ease-in-out infinite;
+  animation: cr-gleam 4.8s ease-in-out 2;
 }
 
 .rank-emblem__rays {
-  animation: cr-spin 40s linear infinite;
+  animation: cr-spin 40s linear 1;
 }
 
 @keyframes cr-xp-in {
@@ -1521,5 +1458,1716 @@
   .board-row__level,
   .board-row .cr-avatar {
     display: none;
+  }
+}
+
+
+/* ── Views on the leaderboard ───────────────────────────────────── */
+
+.board-row__views {
+  font: 700 13px/1 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--cr-dim);
+}
+
+.board-row--head .board-row__views {
+  font: 700 10px/1 var(--font-mono);
+  letter-spacing: 0.18em;
+  color: var(--cr-faint);
+}
+
+.podium-card__views {
+  margin-top: 10px;
+  padding: 5px 12px;
+  border: 1px solid rgba(var(--place-rgb), 0.28);
+  border-radius: 999px;
+  background: rgba(var(--place-rgb), 0.07);
+  font: 700 11px/1 var(--font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgb(var(--place-rgb));
+}
+
+/* ── HUD ─────────────────────────────────────────────────────────── */
+/*
+ * After the helmet HUD Cantina Creative built for Iron Man 3 and Jayse
+ * Hansen's S.H.I.E.L.D. screens for The Avengers. Panels are flat glass in a
+ * hairline frame, with brackets that lock onto the corners as the page opens;
+ * the rank emblem sits in a target reticle whose gauge is live data; bars are
+ * segmented, scales are ticked, readout numbers are thin. Same components,
+ * same places, no cut corners.
+ */
+
+.hud-layer {
+  --cr-line: rgba(234, 255, 243, 0.085);
+  --cr-text: #eafff3;
+  --cr-dim: #93b8a8;
+  --cr-faint: #56766b;
+  --cr-neon: #65ff9a;
+  --cr-neon-rgb: 101, 255, 154;
+}
+
+.career,
+.hud-layer {
+  --hud-line: rgba(var(--cr-neon-rgb), 0.13);
+  --hud-line-soft: rgba(var(--cr-neon-rgb), 0.07);
+  --hud-glass: linear-gradient(180deg, rgba(8, 15, 14, 0.94), rgba(3, 7, 6, 0.97));
+  --hud-bracket: var(--cr-neon);
+  --hud-glow: rgba(var(--cr-neon-rgb), 0.75);
+}
+
+/* Frames: flat glass, one hairline, no chamfers. */
+.career-head,
+.career-hero,
+.cr-panel,
+.career-chip,
+.podium-card,
+.medal-cell,
+.bonus-card,
+.hero-emblem__plate,
+.xp-bar,
+.aar-row__mark,
+.cr-cta,
+.cr-avatar {
+  clip-path: none;
+}
+
+.career-head,
+.career-hero,
+.cr-panel,
+.career-chip,
+.podium-card,
+.medal-cell,
+.bonus-card {
+  border: 1px solid var(--hud-line);
+  background: var(--hud-glass);
+  box-shadow: none;
+}
+
+.career-head {
+  border-radius: 18px;
+}
+
+.career-hero {
+  --hud-arm: 26px;
+  border-radius: 20px;
+}
+
+/* Clip, not hidden: hidden would make the panel the sticky "you" row's scroller. */
+.cr-panel {
+  overflow: clip;
+  border-radius: 16px;
+}
+
+/* Brackets on the four corners, following their curve, locking on as the page opens. */
+.career-head::before,
+.career-hero::before,
+.cr-panel::before,
+.career-chip::before,
+.podium-card::before,
+.medal-cell::before,
+.bonus-card::before,
+.board-row--me::before,
+.stat-card::before,
+.stat-card__video::before,
+.rules-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  height: auto;
+  pointer-events: none;
+  border: 1.5px solid var(--hud-bracket);
+  border-radius: inherit;
+  background: none;
+  opacity: 1;
+  -webkit-mask:
+    linear-gradient(#000 0 0) 0 0 / var(--hud-arm, 18px) var(--hud-arm, 18px) no-repeat,
+    linear-gradient(#000 0 0) 100% 0 / var(--hud-arm, 18px) var(--hud-arm, 18px) no-repeat,
+    linear-gradient(#000 0 0) 0 100% / var(--hud-arm, 18px) var(--hud-arm, 18px) no-repeat,
+    linear-gradient(#000 0 0) 100% 100% / var(--hud-arm, 18px) var(--hud-arm, 18px) no-repeat;
+  mask:
+    linear-gradient(#000 0 0) 0 0 / var(--hud-arm, 18px) var(--hud-arm, 18px) no-repeat,
+    linear-gradient(#000 0 0) 100% 0 / var(--hud-arm, 18px) var(--hud-arm, 18px) no-repeat,
+    linear-gradient(#000 0 0) 0 100% / var(--hud-arm, 18px) var(--hud-arm, 18px) no-repeat,
+    linear-gradient(#000 0 0) 100% 100% / var(--hud-arm, 18px) var(--hud-arm, 18px) no-repeat;
+  animation: hud-lock 0.7s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+
+/* Panel titles sit on a hairline lit for its first stretch; the meta reads as a bracketed tag. */
+.cr-panel__head {
+  position: relative;
+  border-bottom: 1px solid var(--hud-line-soft);
+}
+
+.cr-panel__head::after {
+  content: "";
+  position: absolute;
+  left: 20px;
+  bottom: -1px;
+  width: 46px;
+  height: 1px;
+  background: var(--cr-neon);
+  box-shadow: 0 0 8px var(--hud-glow);
+}
+
+.cr-panel__meta::before,
+.cr-panel__meta::after {
+  color: rgba(var(--cr-neon-rgb), 0.55);
+}
+
+.cr-panel__meta::before {
+  content: "[ ";
+}
+
+.cr-panel__meta::after {
+  content: " ]";
+}
+
+/* Header ---------------------------------------------------------- */
+
+.career-tab[aria-selected="true"]::after {
+  height: 2px;
+  border-radius: 999px;
+  box-shadow: 0 0 12px rgba(var(--cr-neon-rgb), 0.95);
+}
+
+.career-chip {
+  --hud-arm: 12px;
+  --hud-bracket: var(--tier-ink-1);
+  --hud-glow: rgba(var(--tier-rgb), 0.8);
+  border-color: rgba(var(--tier-rgb), 0.26);
+  border-radius: 12px;
+  background: rgba(3, 7, 6, 0.9);
+}
+
+/* The rank card --------------------------------------------------- */
+
+.hero-emblem {
+  position: relative;
+}
+
+/* The reticle is centred on the emblem: half its 228px. */
+.hero-emblem > .hud-reticle {
+  left: 50%;
+  top: 114px;
+  transform: translate(-50%, -50%);
+}
+
+.hero-emblem .rank-emblem {
+  position: relative;
+  z-index: 1;
+}
+
+/* The level readout docks in the gauge's open bottom. */
+.hero-emblem__plate {
+  position: relative;
+  z-index: 2;
+  border: 1px solid rgba(var(--tier-rgb), 0.35);
+  border-radius: 999px;
+  background: #060c0b;
+  box-shadow: 0 0 0 5px #050a09, 0 0 18px -4px rgba(var(--tier-rgb), 0.5);
+}
+
+/* The three numbers as readouts on a rail, each lit where it sits. */
+.hero-stats {
+  gap: 0;
+  padding-left: 30px;
+  border-left: 1px solid var(--hud-line);
+  counter-reset: hud-stat;
+}
+
+.hero-stat {
+  position: relative;
+  padding: 18px 0;
+  border: 0;
+  border-bottom: 1px solid var(--hud-line-soft);
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  counter-increment: hud-stat;
+}
+
+.hero-stat:last-child {
+  border-bottom: 0;
+}
+
+.hero-stat::before {
+  content: "";
+  position: absolute;
+  left: -31px;
+  top: 18px;
+  width: 2px;
+  height: 30px;
+  border-radius: 1px;
+  background: var(--cr-neon);
+  box-shadow: 0 0 10px var(--hud-glow);
+}
+
+.hero-stat .cr-label {
+  display: flex;
+  justify-content: space-between;
+}
+
+.hero-stat .cr-label::after {
+  content: counter(hud-stat, decimal-leading-zero);
+  color: rgba(var(--cr-neon-rgb), 0.45);
+}
+
+.hero-stat__value {
+  margin-top: 10px;
+  font-weight: 300;
+  font-size: 40px;
+  letter-spacing: -0.01em;
+}
+
+.hero-stat__value--up {
+  text-shadow: 0 0 18px rgba(var(--cr-neon-rgb), 0.55);
+}
+
+.xp__count {
+  font-weight: 400;
+  font-size: 26px;
+}
+
+/* XP: a segmented gauge in a bracket, a white needle at the edge of the fill. */
+.xp-bar {
+  height: 12px;
+  overflow: visible;
+  border-radius: 2px;
+  background: repeating-linear-gradient(90deg, rgba(234, 255, 243, 0.08) 0 10px, transparent 10px 13px);
+  box-shadow: none;
+  outline: 1px solid rgba(var(--cr-neon-rgb), 0.2);
+  outline-offset: 4px;
+}
+
+.xp-bar__fill {
+  border-radius: 0;
+  background: none;
+  box-shadow: 0 0 14px -2px rgba(var(--cr-neon-rgb), 0.55);
+}
+
+.xp-bar__fill::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(var(--cr-neon-rgb), 0.5), var(--cr-neon) 70%, #d9ffe9);
+  -webkit-mask: repeating-linear-gradient(90deg, #000 0 10px, transparent 10px 13px);
+  mask: repeating-linear-gradient(90deg, #000 0 10px, transparent 10px 13px);
+}
+
+.xp-bar__fill::after {
+  top: -7px;
+  bottom: -7px;
+  right: -1px;
+  width: 2px;
+  border-radius: 1px;
+  background: #fff;
+  opacity: 1;
+  box-shadow: 0 0 8px #fff, 0 0 16px var(--cr-neon);
+}
+
+.xp-bar__ticks {
+  display: none;
+}
+
+/* Titles: the empty ones are outlines, the held ones are lit. */
+.tier-pip {
+  height: 8px;
+  border-radius: 1px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(234, 255, 243, 0.16);
+}
+
+.tier-pip--done {
+  background: var(--tier-ink-2);
+  box-shadow: 0 0 8px rgba(var(--tier-rgb), 0.45);
+}
+
+.tier-pip--current {
+  background: var(--tier-ink-1);
+  box-shadow: 0 0 12px rgba(var(--tier-rgb), 0.9), 0 0 0 3px rgba(var(--tier-rgb), 0.16);
+}
+
+/* The reticle ---------------------------------------------------- */
+
+.hud-reticle {
+  position: absolute;
+  pointer-events: none;
+  color: var(--hud-color, var(--cr-neon));
+}
+
+.hud-reticle__layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+}
+
+/* The turning layers are whole <svg> elements, so the GPU turns them without repainting. */
+.hud-reticle__ticks,
+.hud-reticle__sweep,
+.hud-reticle__dash {
+  will-change: transform;
+}
+
+.hud-reticle__ticks {
+  opacity: 0.7;
+  animation: hud-spin 140s linear infinite;
+}
+
+.hud-tick {
+  opacity: 0.45;
+}
+
+.hud-tick--major {
+  opacity: 1;
+}
+
+/* Turning layers carry no filters: a filter on a moving layer is redone every frame. */
+.hud-reticle__sweep {
+  animation: hud-spin 16s linear infinite;
+}
+
+.hud-reticle__dash {
+  opacity: 0.5;
+  animation: hud-spin 80s linear infinite reverse;
+}
+
+.hud-reticle__hair {
+  opacity: 0.28;
+}
+
+.hud-reticle__step--done {
+  stroke: var(--tier-ink-2);
+  opacity: 0.9;
+}
+
+.hud-reticle__step--current {
+  stroke: var(--tier-ink-1);
+  animation: hud-blink 1.6s ease-in-out 3;
+}
+
+.hud-reticle__step--next {
+  opacity: 0.14;
+}
+
+.hud-reticle__track {
+  opacity: 0.16;
+}
+
+.hud-reticle__xp {
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  animation: hud-draw 1.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.hud-reticle__head {
+  fill: #fff;
+  stroke: none;
+  animation: hud-fade 0.4s 1.1s both;
+}
+
+/* Rank progression ----------------------------------------------- */
+
+.tier-track__rail {
+  height: 1px;
+  background: rgba(234, 255, 243, 0.14);
+}
+
+.tier-track__fill {
+  border-radius: 999px;
+  box-shadow: 0 0 10px var(--hud-glow);
+}
+
+.tier-stop__emblem > .hud-reticle {
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.tier-stop__emblem .rank-emblem {
+  position: relative;
+  z-index: 1;
+}
+
+/* Top posts ------------------------------------------------------- */
+
+.aar__list {
+  border-right-color: var(--hud-line-soft);
+}
+
+.aar-row {
+  border-bottom-color: var(--hud-line-soft);
+}
+
+.aar-row[aria-pressed="true"] {
+  background: linear-gradient(90deg, rgba(var(--cr-neon-rgb), 0.11), transparent 80%);
+  box-shadow: inset 2px 0 0 var(--cr-neon);
+}
+
+.aar-row__mark {
+  border: 1px solid var(--hud-line);
+  border-radius: 8px;
+  background: transparent;
+}
+
+.aar__detail {
+  background: none;
+}
+
+.aar__total-value {
+  font-style: normal;
+  font-weight: 300;
+  font-size: 44px;
+}
+
+/* Streak and followers ------------------------------------------- */
+
+.streak-track__rail {
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(234, 255, 243, 0.12);
+}
+
+.streak-track__fill {
+  height: 2px;
+  border-radius: 999px;
+  box-shadow: 0 0 10px rgba(255, 160, 60, 0.85);
+}
+
+.streak-node {
+  top: 1px;
+}
+
+.streak-node__gem {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border-color: rgba(234, 255, 243, 0.24);
+  background: #050909;
+}
+
+.segbar i {
+  height: 6px;
+  border-radius: 1px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(234, 255, 243, 0.14);
+}
+
+.segbar i.on {
+  background: var(--cr-neon);
+  box-shadow: 0 0 8px rgba(var(--cr-neon-rgb), 0.55);
+}
+
+/* Medals and bonuses ---------------------------------------------- */
+
+.medal-cell {
+  position: relative;
+  --hud-arm: 12px;
+  --hud-bracket: rgba(234, 255, 243, 0.3);
+  --hud-glow: transparent;
+  border-color: rgba(234, 255, 243, 0.07);
+  border-radius: 14px;
+  background: rgba(234, 255, 243, 0.015);
+}
+
+.medal-cell--on {
+  --hud-bracket: #ffd666;
+  --hud-glow: rgba(255, 204, 70, 0.8);
+  border-color: rgba(255, 214, 102, 0.22);
+  background: rgba(255, 204, 70, 0.04);
+}
+
+.bonus-card {
+  position: relative;
+  --hud-arm: 12px;
+  border-radius: 14px;
+  background: rgba(234, 255, 243, 0.015);
+}
+
+.cr-cta {
+  border-radius: 999px;
+}
+
+/* Leaderboard ----------------------------------------------------- */
+
+.podium-card {
+  --hud-arm: 22px;
+  --hud-bracket: rgb(var(--place-rgb));
+  --hud-glow: rgba(var(--place-rgb), 0.8);
+  --hud-color: rgb(var(--place-rgb));
+  border-color: rgba(var(--place-rgb), 0.2);
+  border-radius: 18px;
+}
+
+/* A designator lit at the middle of the top edge. */
+.podium-card::after {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  width: 64px;
+  height: 2px;
+  margin-left: -32px;
+  border-radius: 1px;
+  background: rgb(var(--place-rgb));
+  box-shadow: 0 0 12px rgba(var(--place-rgb), 0.9);
+}
+
+/* The reticle is centred on the emblem: top padding plus half the emblem; it fades out above the name. */
+.podium-card > .hud-reticle {
+  left: 50%;
+  top: 66px;
+  transform: translate(-50%, -50%);
+  -webkit-mask-image: linear-gradient(180deg, #000 62%, transparent 80%);
+  mask-image: linear-gradient(180deg, #000 62%, transparent 80%);
+}
+
+.podium-card--1 > .hud-reticle {
+  top: 89px;
+}
+
+.podium-card > .rank-emblem {
+  position: relative;
+  z-index: 1;
+}
+
+/* A podium gauge counts that creator's titles, in their place's colour. */
+.podium-card .hud-reticle__step--done,
+.podium-card .hud-reticle__step--current {
+  stroke: currentColor;
+}
+
+.podium-card--me {
+  --hud-bracket: var(--cr-neon);
+}
+
+.podium-card__pts {
+  font-style: normal;
+  font-weight: 300;
+  font-size: 34px;
+}
+
+.board-row {
+  border-radius: 12px;
+  border-bottom-color: var(--hud-line-soft);
+  transition: background 150ms ease;
+}
+
+.board-row:not(.board-row--head):hover {
+  background: rgba(var(--cr-neon-rgb), 0.035);
+}
+
+.board-row--me {
+  --hud-arm: 12px;
+  border-radius: 12px;
+  background: linear-gradient(90deg, rgba(var(--cr-neon-rgb), 0.16), rgba(var(--cr-neon-rgb), 0.05) 60%), #040c09;
+  box-shadow: inset 2px 0 0 var(--cr-neon), inset 0 0 0 1px rgba(var(--cr-neon-rgb), 0.22), 0 -12px 30px rgba(0, 0, 0, 0.55);
+}
+
+.board-you {
+  border-radius: 999px;
+}
+
+.cr-avatar {
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px var(--hud-line);
+}
+
+/* Motion ------------------------------------------------------------ */
+
+@keyframes hud-lock {
+  from {
+    opacity: 0;
+    transform: scale(1.025);
+  }
+}
+
+@keyframes hud-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes hud-blink {
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@keyframes hud-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+}
+
+@keyframes hud-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (max-width: 1180px) {
+  /* The rank card loses its third column: a slightly smaller reticle stays inside the frame. */
+  .hero-emblem > .hud-reticle {
+    transform: translate(-50%, -50%) scale(0.86);
+  }
+
+  .hero-stats {
+    padding-left: 0;
+    border-left: 0;
+    column-gap: 28px;
+  }
+
+  .hero-stat {
+    padding: 16px 0 0;
+    border-bottom: 0;
+  }
+
+  .hero-stat::before {
+    left: 0;
+    top: -7px;
+    width: 30px;
+    height: 2px;
+  }
+}
+
+@media (max-width: 760px) {
+  .hero-emblem > .hud-reticle {
+    transform: translate(-50%, -50%);
+  }
+
+  .hero-stats {
+    column-gap: 14px;
+  }
+
+  .hero-stat .cr-label::after {
+    content: none;
+  }
+
+  .hero-stat::before {
+    width: 22px;
+  }
+
+  .hero-stat__value {
+    font-size: 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .career-head::before,
+  .career-hero::before,
+  .cr-panel::before,
+  .career-chip::before,
+  .podium-card::before,
+  .medal-cell::before,
+  .bonus-card::before,
+  .board-row--me::before,
+  .hud-reticle__ticks,
+  .hud-reticle__sweep,
+  .hud-reticle__dash,
+  .hud-reticle__step--current,
+  .hud-reticle__xp,
+  .hud-reticle__head {
+    animation: none;
+  }
+}
+
+/* ── Recent points: the feed ──────────────────────────────────────── */
+
+/* Two videos to a line on desktop, newest first, reading left to right. */
+.feed {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  transition: opacity 160ms ease;
+}
+
+.feed > li {
+  min-width: 0;
+  border-top: 1px solid var(--hud-line-soft);
+  animation: feed-in 0.36s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+  animation-delay: calc(var(--i, 0) * 26ms);
+}
+
+.feed > li:nth-child(-n + 2) {
+  border-top: 0;
+}
+
+.feed > li:nth-child(odd) {
+  border-right: 1px solid var(--hud-line-soft);
+}
+
+.feed[data-direction="newer"] > li {
+  animation-name: feed-in-back;
+}
+
+/* A page still loading keeps the last one up, dimmed. */
+.feed--loading {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.feed-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto 24px;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  height: 100%;
+  padding: 10px 18px;
+  color: inherit;
+  text-align: left;
+  transition: background 160ms ease;
+}
+
+button.feed-row {
+  cursor: pointer;
+}
+
+button.feed-row:hover,
+button.feed-row:focus-visible {
+  outline: none;
+  background: linear-gradient(90deg, rgba(var(--cr-neon-rgb), 0.08), transparent 75%);
+}
+
+/* The row you point at is lit on its left edge. */
+button.feed-row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 12px;
+  bottom: 12px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--cr-neon);
+  box-shadow: 0 0 10px var(--hud-glow);
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+button.feed-row:hover::before,
+button.feed-row:focus-visible::before {
+  opacity: 1;
+}
+
+.feed-row__thumb {
+  position: relative;
+  width: 40px;
+  height: 71px;
+  border-radius: 7px;
+  background: #070d0c;
+  box-shadow: inset 0 0 0 1px var(--hud-line);
+}
+
+.post-thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
+.post-thumb--empty {
+  display: grid;
+  place-items: center;
+  color: var(--cr-faint);
+}
+
+/* Brackets lock onto the thumbnail you point at. */
+.feed-row__thumb::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border: 1.5px solid var(--cr-neon);
+  border-radius: 10px;
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(1.12);
+  transition: opacity 180ms ease, transform 260ms cubic-bezier(0.2, 0.9, 0.25, 1);
+  -webkit-mask:
+    linear-gradient(#000 0 0) 0 0 / 9px 9px no-repeat,
+    linear-gradient(#000 0 0) 100% 0 / 9px 9px no-repeat,
+    linear-gradient(#000 0 0) 0 100% / 9px 9px no-repeat,
+    linear-gradient(#000 0 0) 100% 100% / 9px 9px no-repeat;
+  mask:
+    linear-gradient(#000 0 0) 0 0 / 9px 9px no-repeat,
+    linear-gradient(#000 0 0) 100% 0 / 9px 9px no-repeat,
+    linear-gradient(#000 0 0) 0 100% / 9px 9px no-repeat,
+    linear-gradient(#000 0 0) 100% 100% / 9px 9px no-repeat;
+}
+
+button.feed-row:hover .feed-row__thumb::after,
+button.feed-row:focus-visible .feed-row__thumb::after {
+  opacity: 1;
+  transform: none;
+}
+
+.feed-row__platform {
+  position: absolute;
+  left: 3px;
+  bottom: 3px;
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 5px;
+  background: rgba(2, 6, 5, 0.86);
+}
+
+.feed-row__main {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.feed-row__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 600 14px/1.25 var(--font-body);
+  color: var(--cr-text);
+}
+
+.feed-row__sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 600 9.5px/1.2 var(--font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cr-faint);
+}
+
+.feed-row__chips {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 5px;
+  min-width: 0;
+  margin-top: 3px;
+  overflow: hidden;
+}
+
+.feed-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: baseline;
+  gap: 5px;
+  padding: 4px 7px;
+  border: 1px solid var(--hud-line);
+  border-radius: 6px;
+  background: rgba(var(--cr-neon-rgb), 0.03);
+  font: 600 9px/1 var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cr-dim);
+}
+
+.feed-chip b {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--cr-neon);
+}
+
+.feed-chip--more {
+  color: var(--cr-faint);
+}
+
+.feed-row__pts {
+  font: 300 24px/1 var(--font-display);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: right;
+  color: var(--cr-neon);
+  text-shadow: 0 0 18px rgba(var(--cr-neon-rgb), 0.45);
+}
+
+.feed-row__pts span {
+  margin-left: 5px;
+  font: 600 9px/1 var(--font-mono);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--cr-faint);
+  text-shadow: none;
+}
+
+.feed-row__open {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--hud-line);
+  border-radius: 50%;
+  color: var(--cr-faint);
+  transition: color 160ms ease, background 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+button.feed-row:hover .feed-row__open,
+button.feed-row:focus-visible .feed-row__open {
+  color: #021008;
+  border-color: var(--cr-neon);
+  background: var(--cr-neon);
+  box-shadow: 0 0 14px var(--hud-glow);
+}
+
+.feed-row--bonus .feed-row__open {
+  border: 0;
+}
+
+/* Streak and follower milestones: a mark instead of a video. */
+.feed-row__thumb--bonus {
+  display: grid;
+  place-items: center;
+  height: 40px;
+  border-radius: 10px;
+  color: var(--cr-neon);
+  background: rgba(var(--cr-neon-rgb), 0.05);
+}
+
+.feed-row__thumb--bonus[data-source="streak"] {
+  color: var(--cr-flame);
+  background: rgba(255, 179, 71, 0.07);
+  box-shadow: inset 0 0 0 1px rgba(255, 179, 71, 0.25);
+}
+
+.feed-live {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 8px;
+  border-radius: 50%;
+  vertical-align: 1px;
+  background: var(--cr-neon);
+  box-shadow: 0 0 8px var(--cr-neon);
+  animation: hud-blink 1.6s ease-in-out infinite;
+}
+
+.feed-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 22px 16px;
+  border-top: 1px solid var(--hud-line-soft);
+}
+
+.feed-hint {
+  font: 600 9.5px/1 var(--font-mono);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--cr-faint);
+}
+
+.feed-hint::before {
+  content: "▸ ";
+  color: var(--cr-neon);
+}
+
+.feed-head__side {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+/* Pages: two arrows and where you are, like a HUD's page counter. */
+.feed-pager {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.feed-pager__arrow {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--hud-line);
+  border-radius: 50%;
+  color: var(--cr-dim);
+  transition: color 160ms ease, background 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.feed-pager__arrow:hover:not(:disabled),
+.feed-pager__arrow:focus-visible {
+  outline: none;
+  color: #021008;
+  border-color: var(--cr-neon);
+  background: var(--cr-neon);
+  box-shadow: 0 0 14px var(--hud-glow);
+}
+
+.feed-pager__arrow:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.feed-pager__count {
+  min-width: 56px;
+  font: 600 10.5px/1 var(--font-mono);
+  letter-spacing: 0.16em;
+  text-align: center;
+  color: var(--cr-faint);
+}
+
+.feed-pager__count b {
+  color: var(--cr-neon);
+  font-weight: 700;
+}
+
+.feed-pager__count--loading b {
+  animation: hud-blink 0.8s ease-in-out infinite;
+}
+
+@keyframes feed-in {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+}
+
+@keyframes feed-in-back {
+  from {
+    opacity: 0;
+    transform: translateX(-14px);
+  }
+}
+
+/* Medals run the full width: all eight in one row. */
+.medal-grid {
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+}
+
+/* ── The stat card ────────────────────────────────────────────────── */
+
+.hud-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  overflow-y: auto;
+  background: rgba(1, 4, 3, 0.86);
+  animation: hud-fade 0.2s ease both;
+}
+
+.stat-card {
+  --hud-arm: 26px;
+  position: relative;
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 32px;
+  width: min(1040px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  padding: 28px;
+  border: 1px solid var(--hud-line);
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(9, 16, 15, 0.98), rgba(3, 7, 6, 0.99));
+  box-shadow: 0 40px 120px -30px rgba(0, 0, 0, 0.9);
+  color: var(--cr-text);
+  scrollbar-width: thin;
+  animation: stat-in 0.32s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+
+.hud-dialog__close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--hud-line);
+  border-radius: 50%;
+  background: rgba(3, 7, 6, 0.8);
+  color: var(--cr-dim);
+  transition: color 160ms ease, background 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.hud-dialog__close:hover,
+.hud-dialog__close:focus-visible {
+  outline: none;
+  color: #021008;
+  border-color: var(--cr-neon);
+  background: var(--cr-neon);
+  box-shadow: 0 0 14px var(--hud-glow);
+}
+
+.stat-card__media {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.stat-card__video {
+  --hud-arm: 22px;
+  position: relative;
+  aspect-ratio: 9 / 16;
+  border-radius: 16px;
+  background: #050a09;
+  box-shadow: inset 0 0 0 1px var(--hud-line), 0 24px 60px -30px rgba(0, 0, 0, 0.9);
+}
+
+/* A target frame a few pixels outside the video. */
+.stat-card__video::before {
+  inset: -7px;
+  border-radius: 22px;
+}
+
+.stat-card__platform {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: rgba(2, 6, 5, 0.86);
+}
+
+.stat-card__facts {
+  margin: 0;
+  padding: 2px 4px 0;
+}
+
+.stat-card__facts div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--hud-line-soft);
+}
+
+.stat-card__facts dt {
+  font: 600 10px/1 var(--font-mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--cr-faint);
+}
+
+.stat-card__facts dd {
+  margin: 0;
+  font: 600 11px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: right;
+  color: var(--cr-text);
+}
+
+.stat-card__open {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 13px 16px;
+  border: 1px solid rgba(var(--cr-neon-rgb), 0.35);
+  border-radius: 999px;
+  background: rgba(var(--cr-neon-rgb), 0.06);
+  font: 700 10.5px/1 var(--font-mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--cr-neon);
+  transition: color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.stat-card__open:hover,
+.stat-card__open:focus-visible {
+  outline: none;
+  color: #021008;
+  background: var(--cr-neon);
+  box-shadow: 0 0 18px var(--hud-glow);
+}
+
+.stat-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  min-width: 0;
+  padding-top: 4px;
+}
+
+.stat-card__kicker {
+  font: 700 10.5px/1 var(--font-mono);
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--cr-neon);
+}
+
+.stat-card__kicker::before {
+  content: "◆ ";
+}
+
+.stat-card__title {
+  margin-top: 10px;
+  padding-right: 44px;
+  font: 600 26px/1.15 var(--font-display);
+  letter-spacing: -0.01em;
+  color: var(--cr-text);
+}
+
+.stat-card__meta {
+  margin-top: 10px;
+  font: 600 10.5px/1.4 var(--font-mono);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--cr-faint);
+}
+
+.stat-card__readouts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.stat-card__readouts span {
+  padding: 7px 11px;
+  border: 1px solid var(--hud-line);
+  border-radius: 8px;
+  font: 600 10px/1 var(--font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cr-dim);
+}
+
+.stat-card__readouts b {
+  font-weight: 700;
+  color: var(--cr-text);
+}
+
+.stat-card__readouts b.stat-card__up {
+  color: var(--cr-neon);
+}
+
+.stat-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.stat-tile {
+  position: relative;
+  padding: 13px 14px 12px;
+  border: 1px solid var(--hud-line-soft);
+  border-radius: 12px;
+  background: rgba(234, 255, 243, 0.015);
+}
+
+/* Each tile's top edge is lit for its first stretch. */
+.stat-tile::before {
+  content: "";
+  position: absolute;
+  left: 14px;
+  top: -1px;
+  width: 18px;
+  height: 1px;
+  background: var(--cr-neon);
+  box-shadow: 0 0 6px var(--hud-glow);
+}
+
+.stat-tile--empty::before {
+  background: rgba(234, 255, 243, 0.2);
+  box-shadow: none;
+}
+
+.stat-tile__value {
+  margin-top: 10px;
+  font: 300 26px/1 var(--font-display);
+  font-variant-numeric: tabular-nums;
+  color: var(--cr-text);
+}
+
+.stat-tile--empty .stat-tile__value {
+  color: var(--cr-faint);
+}
+
+.stat-tile__pts {
+  min-height: 10px;
+  margin-top: 8px;
+  font: 700 9.5px/1 var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cr-neon);
+}
+
+.stat-points {
+  display: grid;
+  grid-template-columns: 188px minmax(0, 1fr);
+  align-items: center;
+  gap: 26px;
+  padding: 18px 20px;
+  border: 1px solid var(--hud-line-soft);
+  border-radius: 16px;
+}
+
+.stat-ring {
+  position: relative;
+  width: 188px;
+  aspect-ratio: 1;
+}
+
+.stat-ring svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  fill: none;
+}
+
+.stat-ring__ticks {
+  transform-origin: 100px 100px;
+}
+
+.stat-ring__tick {
+  stroke: rgba(var(--cr-neon-rgb), 0.32);
+  stroke-width: 1;
+}
+
+.stat-ring__tick--major {
+  stroke: rgba(var(--cr-neon-rgb), 0.8);
+}
+
+.stat-ring__track {
+  stroke: rgba(234, 255, 243, 0.06);
+  stroke-width: 13;
+}
+
+.stat-ring__inner {
+  stroke: rgba(var(--cr-neon-rgb), 0.22);
+  stroke-width: 1;
+  stroke-dasharray: 2 4;
+}
+
+.stat-ring__slice {
+  stroke-width: 13;
+  stroke-dasharray: 1;
+  animation: hud-draw 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.stat-ring__center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: 6px;
+  text-align: center;
+}
+
+.stat-ring__total {
+  font: 300 30px/1 var(--font-display);
+  font-variant-numeric: tabular-nums;
+  color: var(--cr-text);
+  text-shadow: 0 0 18px rgba(var(--cr-neon-rgb), 0.35);
+}
+
+.stat-legend {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stat-legend__row {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) 44px 70px;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px dashed rgba(234, 255, 243, 0.07);
+}
+
+.stat-legend__row:last-child {
+  border-bottom: 0;
+}
+
+.stat-legend__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--slice);
+  box-shadow: 0 0 8px var(--slice);
+}
+
+.stat-legend__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 700 10.5px/1 var(--font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cr-dim);
+}
+
+.stat-legend__share {
+  font: 600 10.5px/1 var(--font-mono);
+  text-align: right;
+  color: var(--cr-faint);
+}
+
+.stat-legend__pts {
+  font: 700 12.5px/1 var(--font-mono);
+  text-align: right;
+  color: var(--cr-text);
+}
+
+.stat-lately ul {
+  display: grid;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stat-lately li {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--hud-line-soft);
+  font: 500 12.5px/1.2 var(--font-body);
+  color: var(--cr-dim);
+}
+
+.stat-lately li:last-child {
+  border-bottom: 0;
+}
+
+.stat-lately b {
+  font: 700 12.5px/1 var(--font-mono);
+  text-align: right;
+  color: var(--cr-neon);
+}
+
+.stat-lately time {
+  font: 600 10px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cr-faint);
+}
+
+/* The rulebook pop-up: the scoring table, the bonuses, the fine print. */
+.rules-card {
+  --hud-arm: 26px;
+  position: relative;
+  width: min(980px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  padding: 28px 30px 30px;
+  border: 1px solid var(--hud-line);
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(9, 16, 15, 0.98), rgba(3, 7, 6, 0.99));
+  box-shadow: 0 40px 120px -30px rgba(0, 0, 0, 0.9);
+  color: var(--cr-text);
+  scrollbar-width: thin;
+  animation: stat-in 0.32s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+
+.rules-card__head {
+  margin-bottom: 26px;
+  padding-right: 48px;
+}
+
+.rules-card__head .stat-card__title {
+  padding-right: 0;
+}
+
+/* The header's way into the rulebook, beside the rank chip. */
+.career-head__side {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.career-head__side .career-chip {
+  margin-bottom: 0;
+}
+
+.career-rules {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 16px;
+  border: 1px solid rgba(var(--cr-neon-rgb), 0.32);
+  border-radius: 999px;
+  background: rgba(var(--cr-neon-rgb), 0.05);
+  font: 700 10.5px/1 var(--font-mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--cr-neon);
+  transition: color 160ms ease, background 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.career-rules:hover,
+.career-rules:focus-visible {
+  outline: none;
+  color: #021008;
+  border-color: var(--cr-neon);
+  background: var(--cr-neon);
+  box-shadow: 0 0 18px var(--hud-glow);
+}
+
+@keyframes stat-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+}
+
+@media (max-width: 1180px) {
+  .medal-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .feed {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .feed > li:nth-child(odd) {
+    border-right: 0;
+  }
+
+  .feed > li:nth-child(2) {
+    border-top: 1px solid var(--hud-line-soft);
+  }
+}
+
+@media (max-width: 900px) {
+  .stat-card {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 22px;
+    padding: 22px 18px;
+  }
+
+  /* One column, read top down: the title, the video, the numbers, then the post's details. */
+  .stat-card__media,
+  .stat-card__body {
+    display: contents;
+  }
+
+  .stat-card__head {
+    order: 1;
+  }
+
+  .stat-card__video {
+    order: 2;
+    width: min(200px, 56vw);
+    margin: 0 auto;
+  }
+
+  .stat-card__open {
+    order: 3;
+  }
+
+  .stat-tiles {
+    order: 4;
+  }
+
+  .stat-points {
+    order: 5;
+  }
+
+  .stat-lately {
+    order: 6;
+  }
+
+  .stat-card__facts {
+    order: 7;
+  }
+
+  .stat-card__open {
+    align-self: center;
+  }
+
+  .stat-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .stat-points {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+  }
+
+  .stat-legend {
+    width: 100%;
+  }
+}
+
+@media (max-width: 760px) {
+  .medal-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .career-head__side {
+    order: -1;
+    align-self: flex-start;
+    flex-wrap: wrap;
+    margin-bottom: 0;
+  }
+
+  .rules-card {
+    padding: 22px 18px 24px;
+  }
+
+  .feed-row {
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    gap: 12px;
+    padding: 10px 16px;
+  }
+
+  .feed-foot {
+    padding: 12px 16px 14px;
+  }
+
+  .feed-head__side .cr-panel__meta {
+    display: none;
+  }
+
+  .feed-row__open {
+    display: none;
+  }
+
+  .feed-chip:nth-child(n + 3) {
+    display: none;
+  }
+
+  .feed-row__pts {
+    font-size: 20px;
+  }
+
+  .feed-row__pts span {
+    display: none;
+  }
+
+  .hud-layer {
+    padding: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stat-card::before,
+  .stat-card__video::before,
+  .rules-card::before,
+  .hud-layer,
+  .stat-card,
+  .rules-card,
+  .stat-ring__slice,
+  .feed-live,
+  .feed > li,
+  .feed-pager__count--loading b {
+    animation: none;
   }
 }

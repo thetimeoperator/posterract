@@ -42,7 +42,7 @@
   background: linear-gradient(90deg, transparent, rgba(101, 255, 154, 0.55), rgba(255, 255, 255, 0.7), rgba(101, 255, 154, 0.55), transparent);
 }
 
-.cadence-corner { position: absolute; width: 14px; height: 14px; border: 0 solid rgba(101, 255, 154, 0.75); pointer-events: none; filter: drop-shadow(0 0 4px rgba(101, 255, 154, 0.45)); }
+.cadence-corner { position: absolute; width: 14px; height: 14px; border: 0 solid rgba(101, 255, 154, 0.75); pointer-events: none; }
 .cadence-corner--tl { top: 8px; left: 8px; border-top-width: 2px; border-left-width: 2px; border-top-left-radius: 6px; }
 .cadence-corner--tr { top: 8px; right: 8px; border-top-width: 2px; border-right-width: 2px; border-top-right-radius: 6px; }
 .cadence-corner--bl { bottom: 8px; left: 8px; border-bottom-width: 2px; border-left-width: 2px; border-bottom-left-radius: 6px; }
@@ -56,7 +56,9 @@
   font-family: var(--font-mono); font-size: 10.5px; font-weight: 600;
   letter-spacing: 0.18em; text-transform: uppercase; color: var(--neon);
 }
-.cadence-live { width: 7px; height: 7px; border-radius: 999px; background: var(--neon); animation: cadence-live 1.8s ease-out infinite; }
+.cadence-live { position: relative; width: 7px; height: 7px; border-radius: 999px; background: var(--neon); }
+/* The live dot's ring grows and fades by transform and opacity, which the GPU does without repainting. */
+.cadence-live::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: 0 0 0 1.5px rgba(101, 255, 154, 0.6); animation: cadence-live 1.8s ease-out infinite; }
 .cadence-title {
   margin-top: 6px;
   font-family: var(--font-display); font-size: 26px; font-weight: 600;
@@ -112,7 +114,7 @@
 
 .cadence-heat { fill: rgb(101, 255, 154); fill-opacity: calc(0.22 + var(--heat) * 0.78); }
 .cadence-heat[data-empty] { fill: rgba(220, 255, 235, 0.08); fill-opacity: 1; }
-.cadence-heat[data-peak] { filter: drop-shadow(0 0 3px rgba(101, 255, 154, 0.9)); }
+.cadence-heat[data-peak] { opacity: 1; }
 .cadence-heat[data-hover] { stroke: #fff; stroke-width: 1; }
 
 .cadence-series { transition: opacity 200ms ease; }
@@ -127,7 +129,8 @@
   transition: d 450ms cubic-bezier(0.22, 0.7, 0.2, 1), stroke-width 200ms ease, opacity 200ms ease;
 }
 .cadence-line { stroke: rgb(var(--line)); stroke-width: 2; }
-.cadence-line-glow { stroke: rgb(var(--line)); stroke-width: 7; opacity: 0.32; }
+/* A wide, faint stroke under the line: no blur filter, which made the page stutter on scroll in Safari. */
+.cadence-line-glow { stroke: rgb(var(--line)); stroke-width: 8; opacity: 0.18; }
 .cadence-line-core { stroke: rgba(255, 255, 255, 0.5); stroke-width: 0.7; }
 .cadence-leader { stroke: rgba(var(--line), 0.55); stroke-width: 1.2; stroke-dasharray: 2 3; }
 .cadence-series[data-lit] .cadence-line { stroke-width: 2.8; }
@@ -137,7 +140,7 @@
 .cadence-area { animation: cadence-fade 260ms ease-out both; }
 
 .cadence-dot { fill: #030707; stroke: rgb(var(--line)); stroke-width: 1.6; }
-.cadence-dot[data-solid] { fill: rgb(var(--line)); stroke: #030707; stroke-width: 1.5; filter: drop-shadow(0 0 5px rgb(var(--line))); }
+.cadence-dot[data-solid] { fill: rgb(var(--line)); stroke: #030707; stroke-width: 1.5; }
 .cadence-hit-ring {
   fill: rgba(var(--line), 0.14); stroke: rgb(var(--line)); stroke-width: 1.4;
   transform-box: fill-box; transform-origin: center;
@@ -182,7 +185,7 @@
 .cadence-chip-avatar img { width: 100%; height: 100%; border-radius: inherit; object-fit: cover; }
 .cadence-racer-crown {
   position: absolute; top: -14px; left: 50%; translate: -50% 0;
-  color: #ffd666; filter: drop-shadow(0 0 4px rgba(255, 214, 102, 0.85));
+  color: #ffd666;
 }
 .cadence-badge {
   position: absolute; right: -4px; bottom: -3px;
@@ -286,7 +289,7 @@
   box-shadow: inset 0 0 0 1px rgba(var(--line), 0.55), 0 0 22px rgba(var(--line), 0.15);
 }
 .cadence-player:focus-visible { outline: 2px solid rgb(var(--line)); outline-offset: 2px; }
-.cadence-player[data-off] { opacity: 0.38; filter: grayscale(0.9); }
+.cadence-player[data-off] { opacity: 0.32; }
 .cadence-player-rank { font-family: var(--font-mono); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; color: rgba(var(--line), 0.85); }
 .cadence-player-avatar {
   position: relative;
@@ -297,7 +300,7 @@
 .cadence-player-body { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
 .cadence-player-handle { display: flex; min-width: 0; align-items: center; gap: 5px; font-family: var(--font-display); font-size: 13px; font-weight: 600; color: var(--starlight); }
 .cadence-player-handle > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cadence-crown { flex: none; color: #ffd666; filter: drop-shadow(0 0 4px rgba(255, 214, 102, 0.7)); }
+.cadence-crown { flex: none; color: #ffd666; }
 .cadence-player-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; color: var(--starlight-faint); }
 .cadence-player-xp { display: block; height: 3px; margin-top: 4px; overflow: hidden; border-radius: 9px; background: rgba(255, 255, 255, 0.06); }
 .cadence-player-xp > span {
@@ -317,7 +320,7 @@
 
 @keyframes cadence-fade { from { opacity: 0; } }
 @keyframes cadence-ring { 0% { transform: scale(0.6); opacity: 1; } 100% { transform: scale(1.9); opacity: 0; } }
-@keyframes cadence-live { 0% { box-shadow: 0 0 0 0 rgba(101, 255, 154, 0.6); } 100% { box-shadow: 0 0 0 8px rgba(101, 255, 154, 0); } }
+@keyframes cadence-live { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(3.2); opacity: 0; } }
 @keyframes cadence-racer-in { from { opacity: 0; transform: scale(0.3); } to { opacity: 1; transform: scale(1); } }
 @keyframes cadence-pop { from { opacity: 0; scale: 0.94; } to { opacity: 1; scale: 1; } }
 @keyframes cadence-card-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
@@ -333,7 +336,7 @@
 @media (prefers-reduced-motion: reduce) {
   .cadence-racer, .cadence-player, .cadence-player-xp > span, .cadence-chip, .cadence-area { animation: none; }
   .cadence-laser-track, .cadence-hit-ring { display: none; }
-  .cadence-live, .cadence-stat[data-hot] .cadence-stat-label svg { animation: none; }
+  .cadence-live::after, .cadence-stat[data-hot] .cadence-stat-label svg { animation: none; }
 }
 
 /* Loading, and accounts whose access the platform withdrew */
@@ -349,3 +352,6 @@
 .cadence-player[data-reconnect] { box-shadow: inset 0 0 0 1px rgba(255, 178, 77, 0.35); }
 @keyframes cadence-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 @media (prefers-reduced-motion: reduce) { .cadence-loading { animation: none; } }
+.cadence-player-reading { color: rgb(var(--line)); animation: cadence-reading 1.4s ease-in-out infinite; }
+@keyframes cadence-reading { 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) { .cadence-player-reading { animation: none; } }

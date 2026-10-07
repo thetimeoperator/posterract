@@ -1,6 +1,6 @@
-import { useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { ArrowUpRight, Eye, Flame, Lock, Rocket, Trophy, Zap, type LucideIcon } from "lucide-react";
+import { ArrowUpRight, ChevronLeft, ChevronRight, Eye, Flame, IdCard, Info, Lock, Rocket, Trophy, Users, Zap, type LucideIcon } from "lucide-react";
 import { PlatformBrandMark } from "@posterract/hyperkit";
 import {
   BADGES,
@@ -14,24 +14,36 @@ import {
   POINTS_RATES,
   POINTS_RETENTION,
   POINTS_SOURCE_LABELS,
-  POINTS_START_AT,
   POINTS_STREAK_MILESTONES,
   RANK_TIERS,
   RANK_TITLES,
   rankForLevel,
+  type CardImagesDTO,
   type FollowerMilestoneDTO,
   type LeaderboardEntryDTO,
   type LeaderboardPeriod,
   type PointsDashboardDTO,
   type PointsEntryDTO,
+  type PointsFeedItemDTO,
+  type PointsFeedPageDTO,
   type PointsPlatform,
   type PointsSource,
   type PostPointsDTO,
 } from "@posterract/contract";
-import { useLeaderboard, usePointsDashboard } from "@/engine/useEngine";
-import { RankEmblem, TIER_MATERIALS } from "@/components/points/RankEmblem";
+import { fetchCardImages, useLeaderboard, usePointsDashboard, usePointsFeed } from "@/engine/useEngine";
+import { formatCompact, formatPoints, formatWhole, relativeTime } from "@/components/points/format";
+import { HudDialog } from "@/components/points/HudDialog";
+import { HudReticle } from "@/components/points/HudReticle";
 import { Medal } from "@/components/points/Medal";
+import { PostStatCard } from "@/components/points/PostStatCard";
+import { PostThumb } from "@/components/points/PostThumb";
+import { RankEmblem, TIER_MATERIALS } from "@/components/points/RankEmblem";
+import { videoCard } from "@/components/rankcard/cardModel";
+import { useCardAssets } from "@/components/rankcard/cardAssets";
+import { RankCardView } from "@/components/rankcard/RankCardView";
+import { CardActions, usePlayer } from "@/components/rankcard/CardActions";
 import "@/styles/points.css";
+import "@/styles/rankcard.css";
 
 export const Route = createFileRoute("/_app/points")({ component: Points });
 
@@ -61,17 +73,19 @@ const MEDALS: Array<{ id: string; icon: LucideIcon; mark?: string; detail: strin
   { id: "streak_365", icon: Flame, mark: "365", detail: "Post every day for a year" },
 ];
 
+const round2 = (value: number) => Math.round(value * 100) / 100;
+
 // The top three: neon, cyan, white.
 const PODIUM_RGB = ["101, 255, 154", "124, 247, 255", "234, 255, 243"];
 
 function Points() {
   const [view, setView] = useState<PointsView>("mine");
+  const [rulesOpen, setRulesOpen] = useState(false);
   const dashboard = usePointsDashboard();
   const level = dashboard?.level ?? 1;
   return (
     <div className="career" style={tierStyle(level)} data-testid="points-page">
       <header className="career-head">
-        <Contours seed={2} />
         <div className="career-head__main">
           <p className="career-head__kicker">◆ Levels &amp; leaderboard</p>
           <h1 className="career-head__title">Points</h1>
@@ -80,17 +94,24 @@ function Points() {
             <Tab selected={view === "leaderboard"} onSelect={() => setView("leaderboard")}>Leaderboard</Tab>
           </div>
         </div>
-        {dashboard && (
-          <div className="career-chip">
-            <RankEmblem level={dashboard.level} size={46} />
-            <div>
-              <p className="career-chip__name">{dashboard.rank.label}</p>
-              <p className="career-chip__level">Level {dashboard.level}</p>
+        <div className="career-head__side">
+          <button type="button" className="career-rules" onClick={() => setRulesOpen(true)}>
+            <Info size={14} strokeWidth={2.2} />
+            How points work
+          </button>
+          {dashboard && (
+            <div className="career-chip">
+              <RankEmblem level={dashboard.level} size={46} />
+              <div>
+                <p className="career-chip__name">{dashboard.rank.label}</p>
+                <p className="career-chip__level">Level {dashboard.level}</p>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </header>
       {view === "mine" ? <MyPoints dashboard={dashboard} /> : <Leaderboard />}
+      {rulesOpen && <RulesDialog onClose={() => setRulesOpen(false)} />}
     </div>
   );
 }
@@ -122,6 +143,7 @@ function MyPoints({ dashboard }: { dashboard?: PointsDashboardDTO }) {
     <>
       <Hero dashboard={dashboard} />
       <TierLadder level={dashboard.level} />
+      <RecentPoints dashboard={dashboard} first={dashboard.feed} recent={dashboard.recent} topPosts={dashboard.topPosts} />
       <div className="career-grid career-grid--main">
         <TopPosts posts={dashboard.topPosts} />
         <div className="career-stack">
@@ -129,11 +151,7 @@ function MyPoints({ dashboard }: { dashboard?: PointsDashboardDTO }) {
           <Followers accounts={dashboard.followers} />
         </div>
       </div>
-      <div className="career-grid career-grid--even">
-        <Medals unlocked={dashboard.badges} />
-        <RecentPoints entries={dashboard.recent} />
-      </div>
-      <Scoring />
+      <Medals unlocked={dashboard.badges} />
     </>
   );
 }
@@ -147,8 +165,8 @@ function Hero({ dashboard }: { dashboard: PointsDashboardDTO }) {
   const progress = nextLevelAt === null ? 1 : Math.min(1, Math.max(0, (totalPoints - levelFloor) / Math.max(1, span)));
   return (
     <section className="career-hero" aria-label="Your rank">
-      <Contours seed={5} />
       <div className="hero-emblem">
+        <HudReticle size={312} progress={progress} steps={{ count: RANK_TITLES.length, current: rank.titleIndex }} />
         <RankEmblem level={level} size={228} gleam />
         <div className="hero-emblem__plate">
           <span className="cr-label">Level</span>
@@ -249,6 +267,7 @@ function TierLadder({ level }: { level: number }) {
           return (
             <div key={tier.id} className={`tier-stop tier-stop--${state}`}>
               <div className="tier-stop__emblem">
+                {state === "current" && <HudReticle size={96} />}
                 <RankEmblem level={shown} size={state === "current" ? 76 : 60} locked={state === "locked"} glow={state !== "locked"} />
                 {state === "locked" && (
                   <span className="tier-stop__lock" aria-hidden>
@@ -410,7 +429,7 @@ function Followers({ accounts }: { accounts: FollowerMilestoneDTO[] }) {
         {accounts.length === 0 ? (
           <div className="cr-empty">
             <strong>No accounts yet</strong>
-            Connect Instagram, Facebook, or Threads. Every 100 followers you gain after that is worth a point.
+            Connect Instagram, TikTok, Facebook, or Threads. Every 100 followers you gain after that is worth a point.
             <div>
               <Link to="/portals" className="cr-cta">Connect an account</Link>
             </div>
@@ -480,38 +499,276 @@ function Medals({ unlocked }: { unlocked: string[] }) {
   );
 }
 
-function RecentPoints({ entries }: { entries: PointsEntryDTO[] }) {
+type FeedPostItem = Extract<PointsFeedItemDTO, { kind: "post" }>;
+
+/**
+ * The feed from an API older than the paged one: the latest ledger lines
+ * folded into one row per post, on a single page.
+ */
+function feedFromRecent(entries: PointsEntryDTO[], posts: PostPointsDTO[]): PointsFeedPageDTO {
+  const known = new Map(posts.map((post) => [post.projectionId, post]));
+  const groups = new Map<string, FeedPostItem>();
+  const items: PointsFeedItemDTO[] = [];
+  for (const entry of entries) {
+    if (!entry.projectionId) {
+      items.push({ kind: "bonus", entry });
+      continue;
+    }
+    let group = groups.get(entry.projectionId);
+    if (!group) {
+      const post = known.get(entry.projectionId) ?? {
+        projectionId: entry.projectionId,
+        provider: entry.provider ?? "instagram",
+        title: titleFromNote(entry.note),
+        total: 0,
+        parts: [],
+      };
+      group = { kind: "post", post, entries: [], amount: 0, at: entry.at };
+      groups.set(entry.projectionId, group);
+      items.push(group);
+    }
+    group.entries.push(entry);
+    group.amount = round2(group.amount + entry.amount);
+  }
+  return { items, page: 1, pages: 1, total: items.length };
+}
+
+/** A ledger note reads "Views · Instagram · The title": the title is what follows the platform. */
+function titleFromNote(note?: string) {
+  const parts = note?.split(" · ") ?? [];
+  return parts.length >= 3 ? parts.slice(2).join(" · ") : note ?? "A post";
+}
+
+/** What a post earned, rule by rule, biggest first. */
+function earnedBySource(entries: PointsEntryDTO[]) {
+  const sums = new Map<PointsSource, number>();
+  for (const entry of entries) sums.set(entry.source, round2((sums.get(entry.source) ?? 0) + entry.amount));
+  return [...sums].map(([source, amount]) => ({ source, amount })).sort((left, right) => right.amount - left.amount);
+}
+
+const pad2 = (value: number) => String(value).padStart(2, "0");
+
+function FeedPager({ page, pages, loading, onPage }: { page: number; pages: number; loading: boolean; onPage: (page: number) => void }) {
+  if (pages <= 1) return null;
   return (
-    <section className="cr-panel" aria-label="Recent points">
+    <div className="feed-pager" role="group" aria-label="Pages of recent points">
+      <button type="button" className="feed-pager__arrow" aria-label="Newer posts" disabled={page <= 1} onClick={() => onPage(page - 1)}>
+        <ChevronLeft size={15} />
+      </button>
+      <span className={loading ? "feed-pager__count feed-pager__count--loading" : "feed-pager__count"} aria-live="polite">
+        <b>{pad2(page)}</b> / {pad2(pages)}
+      </span>
+      <button type="button" className="feed-pager__arrow" aria-label="Older posts" disabled={page >= pages} onClick={() => onPage(page + 1)}>
+        <ChevronRight size={15} />
+      </button>
+    </div>
+  );
+}
+
+function RecentPoints({
+  dashboard,
+  first,
+  recent,
+  topPosts,
+}: {
+  dashboard: PointsDashboardDTO;
+  first?: PointsFeedPageDTO;
+  recent: PointsEntryDTO[];
+  topPosts: PostPointsDTO[];
+}) {
+  const [page, setPage] = useState(1);
+  // The video whose rank card is open.
+  const [cardPost, setCardPost] = useState<PostPointsDTO>();
+  const [direction, setDirection] = useState<"older" | "newer">("older");
+  const [hovered, setHovered] = useState<string>();
+  const [openId, setOpenId] = useState<string>();
+  const loaded = usePointsFeed(page);
+  // While a page loads, the one before it stays up, dimmed.
+  const [shown, setShown] = useState<PointsFeedPageDTO | undefined>(first);
+  useEffect(() => {
+    if (loaded) setShown(loaded);
+  }, [loaded]);
+  const legacy = useMemo(() => (first ? undefined : feedFromRecent(recent, topPosts)), [first, recent, topPosts]);
+  const feed = legacy ?? loaded ?? shown;
+  const loading = !legacy && !loaded;
+  const pages = feed?.pages ?? 1;
+  const open = feed?.items.find((item): item is FeedPostItem => item.kind === "post" && item.post.projectionId === openId);
+  const rank = open ? topPosts.findIndex((post) => post.projectionId === open.post.projectionId) : -1;
+
+  const turnTo = (next: number) => {
+    if (next < 1 || next > pages || next === page) return;
+    setDirection(next > page ? "older" : "newer");
+    setHovered(undefined);
+    setPage(next);
+  };
+
+  return (
+    <section className="cr-panel cr-panel--feed" aria-label="Recent points">
       <header className="cr-panel__head">
         <h3 className="cr-panel__title">Recent points</h3>
-        <p className="cr-panel__meta">Live feed</p>
+        <div className="feed-head__side">
+          <p className="cr-panel__meta">
+            <span className="feed-live" aria-hidden />
+            Live feed
+          </p>
+          <FeedPager page={page} pages={pages} loading={loading} onPage={turnTo} />
+        </div>
       </header>
-      <div className="cr-panel__body">
-        {entries.length === 0 ? (
+      {!feed || feed.items.length === 0 ? (
+        <div className="cr-panel__body">
           <div className="cr-empty">
-            <strong>Nothing yet</strong>
-            Points you earn show up here as they land.
+            <strong>{feed ? "Nothing yet" : "Loading"}</strong>
+            {feed ? "Points you earn show up here as they land." : "Adding up what your posts earned."}
           </div>
-        ) : (
-          <div className="log">
-            {entries.map((entry) => (
-              <div key={entry.id} className="log-row">
-                <span className="log-row__pts">+{formatPoints(entry.amount)}</span>
-                <span className="log-row__note" title={entry.note}>
-                  {entry.note ?? POINTS_SOURCE_LABELS[entry.source] ?? entry.source}
-                </span>
-                <span className="log-row__time">{relativeTime(entry.at)}</span>
-              </div>
-            ))}
+        </div>
+      ) : (
+        <>
+          <ul
+            key={feed.page}
+            className={loading ? "feed feed--loading" : "feed"}
+            data-direction={direction}
+            aria-busy={loading}
+          >
+            {feed.items.map((item, index) =>
+              item.kind === "post" ? (
+                <li key={item.post.projectionId} className="feed-item" style={{ "--i": index } as CSSProperties}>
+                  <button
+                    type="button"
+                    className="feed-row"
+                    onClick={() => setOpenId(item.post.projectionId)}
+                    onPointerEnter={() => setHovered(item.post.projectionId)}
+                    onPointerLeave={() => setHovered(undefined)}
+                    aria-label={`${item.post.title}: +${formatPoints(item.amount)} points. Open its stat card`}
+                  >
+                    <span className="feed-row__thumb">
+                      <PostThumb post={item.post} playing={hovered === item.post.projectionId} />
+                      <span className="feed-row__platform">
+                        <PlatformBrandMark platform={item.post.provider} height={10} decorative />
+                      </span>
+                    </span>
+                    <span className="feed-row__main">
+                      <span className="feed-row__title">{item.post.title}</span>
+                      <span className="feed-row__sub">
+                        {[
+                          PLATFORM_CAPABILITIES[item.post.provider].label,
+                          relativeTime(item.at),
+                          item.post.metrics && `${formatCompact(item.post.metrics.views)} views`,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
+                      <span className="feed-row__chips">
+                        {earnedBySource(item.entries)
+                          .slice(0, 3)
+                          .map((earned) => (
+                            <span key={earned.source} className="feed-chip">
+                              <b>+{formatPoints(earned.amount)}</b>
+                              {POINTS_SOURCE_LABELS[earned.source] ?? earned.source}
+                            </span>
+                          ))}
+                      </span>
+                    </span>
+                    <span className="feed-row__pts">
+                      +{formatPoints(item.amount)}
+                      <span>pts</span>
+                    </span>
+                    <span className="feed-row__open" aria-hidden>
+                      <ChevronRight size={14} />
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="feed-card"
+                    onClick={() => setCardPost(item.post)}
+                    aria-label={`Make a rank card for ${item.post.title}`}
+                  >
+                    <IdCard size={13} strokeWidth={2} />
+                    Card
+                  </button>
+                </li>
+              ) : (
+                <li key={item.entry.id} style={{ "--i": index } as CSSProperties}>
+                  <div className="feed-row feed-row--bonus">
+                    <span className="feed-row__thumb feed-row__thumb--bonus" data-source={item.entry.source}>
+                      {item.entry.source === "streak" ? <Flame size={19} strokeWidth={1.8} /> : <Users size={19} strokeWidth={1.8} />}
+                    </span>
+                    <span className="feed-row__main">
+                      <span className="feed-row__title">{item.entry.note ?? POINTS_SOURCE_LABELS[item.entry.source]}</span>
+                      <span className="feed-row__sub">
+                        {POINTS_SOURCE_LABELS[item.entry.source] ?? item.entry.source} · {relativeTime(item.entry.at)}
+                      </span>
+                    </span>
+                    <span className="feed-row__pts">
+                      +{formatPoints(item.entry.amount)}
+                      <span>pts</span>
+                    </span>
+                    <span className="feed-row__open" aria-hidden />
+                  </div>
+                </li>
+              ),
+            )}
+          </ul>
+          <div className="feed-foot">
+            <p className="feed-hint">Click a video for its stat card</p>
+            <FeedPager page={page} pages={pages} loading={loading} onPage={turnTo} />
           </div>
-        )}
-      </div>
+        </>
+      )}
+      {open && (
+        <PostStatCard
+          post={open.post}
+          entries={open.entries}
+          rank={rank >= 0 ? rank + 1 : undefined}
+          onClose={() => setOpenId(undefined)}
+        />
+      )}
+      {cardPost && <VideoCardDialog post={cardPost} dashboard={dashboard} onClose={() => setCardPost(undefined)} />}
     </section>
   );
 }
 
-function Scoring() {
+/** A video's rank card, in a pop-up: the card, ready to post or save, with the video's latest numbers. */
+function VideoCardDialog({ post, dashboard, onClose }: { post: PostPointsDTO; dashboard: PointsDashboardDTO; onClose: () => void }) {
+  const week = useLeaderboard("week");
+  const player = usePlayer(week);
+  const card = useMemo(() => videoCard(post, dashboard, player), [post, dashboard, player]);
+  const [pictures, setPictures] = useState<CardImagesDTO>();
+  useEffect(() => {
+    let live = true;
+    void fetchCardImages([post.projectionId], true)
+      .then((loaded) => {
+        if (live) setPictures(loaded);
+      })
+      .catch(() => {
+        if (live) setPictures({ covers: {} });
+      });
+    return () => {
+      live = false;
+    };
+  }, [post.projectionId]);
+  const assets = useCardAssets(card, pictures);
+  const [width] = useState(() => Math.max(240, Math.min(360, window.innerWidth - 76)));
+  const details = [
+    PLATFORM_CAPABILITIES[post.provider].label,
+    post.publishedAt ? new Date(post.publishedAt).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" }) : undefined,
+  ].filter(Boolean);
+  return (
+    <HudDialog className="card-dialog" labelledBy="video-card-title" onClose={onClose}>
+      <RankCardView model={card} assets={assets} width={width} />
+      <div className="card-dialog__side">
+        <header>
+          <p className="stat-card__kicker">Video card</p>
+          <h2 className="stat-card__title" id="video-card-title">{post.title}</h2>
+          <p className="stat-card__meta">{details.join(" · ")}</p>
+        </header>
+        <CardActions model={card} assets={assets} />
+      </div>
+    </HudDialog>
+  );
+}
+
+/** How points are earned, per post and per platform: opened from the header, not kept on the page. */
+function RulesDialog({ onClose }: { onClose: () => void }) {
   const rows: Array<{ label: string; cell: (platform: PointsPlatform) => string | null }> = [
     { label: "Post goes live", cell: () => `+${POINTS_POST_LIVE}` },
     { label: "Views", cell: (platform) => `1 per ${formatWhole(POINTS_RATES[platform].views)}` },
@@ -553,12 +810,15 @@ function Scoring() {
     },
   ];
   return (
-    <section className="cr-panel" aria-label="How points are earned">
-      <header className="cr-panel__head">
-        <h3 className="cr-panel__title">How points are earned</h3>
-        <p className="cr-panel__meta">Per post, per platform</p>
+    <HudDialog className="rules-card" labelledBy="rules-title" onClose={onClose}>
+      <header className="rules-card__head">
+        <p className="stat-card__kicker">Rulebook</p>
+        <h2 className="stat-card__title" id="rules-title">
+          How points are earned
+        </h2>
+        <p className="stat-card__meta">Per post, per platform</p>
       </header>
-      <div className="cr-panel__body">
+      <div>
         <div className="overflow-x-auto">
           <table className="score-table">
             <thead>
@@ -601,14 +861,14 @@ function Scoring() {
           ))}
         </div>
         <p className="score-note">
-          Everyone started at Bronze Recruit on {formatLaunchDay()}: only posts from that day on earn points. Points keep
-          adding up as a post's numbers grow, fractions included. Retention counts from day{" "}
+          Every post on a connected account earns, whichever app you posted it with, from the day you connected the
+          account. Points keep adding up as a post's numbers grow, fractions included. Retention counts from day{" "}
           {POINTS_RETENTION.minAgeHours / 24} on posts with {formatWhole(POINTS_RETENTION.minViews)}+ views. Records and
           breakouts need {formatWhole(POINTS_PERSONAL_BEST.minViews)}+ views and {POINTS_PERSONAL_BEST.minEarlierPosts}{" "}
-          earlier posts. TikTok and YouTube posts don't earn points yet.
+          earlier posts. TikTok posts set to Only me earn nothing. YouTube posts don't earn points yet.
         </p>
       </div>
-    </section>
+    </HudDialog>
   );
 }
 
@@ -663,6 +923,10 @@ function Leaderboard() {
                 style={{ "--place-rgb": PODIUM_RGB[entry.position - 1] } as CSSProperties}
               >
                 <span className="podium-card__place">{entry.position}</span>
+                <HudReticle
+                  size={entry.position === 1 ? 176 : 136}
+                  steps={{ count: RANK_TITLES.length, current: rankForLevel(entry.level).titleIndex }}
+                />
                 <RankEmblem level={entry.level} size={entry.position === 1 ? 118 : 92} />
                 <p className="podium-card__name">
                   {entry.name}
@@ -671,6 +935,7 @@ function Leaderboard() {
                 <p className="podium-card__rank">{entry.rank.label} · Lv {entry.level}</p>
                 <p className="podium-card__pts">{formatPoints(entry.points)}</p>
                 <p className="cr-label podium-card__pts-label">Points {PERIOD_WORDS[period]}</p>
+                <p className="podium-card__views">{formatCompact(entry.views ?? 0)} views</p>
               </div>
             ))}
           </div>
@@ -683,6 +948,7 @@ function Leaderboard() {
                 <span>Creator</span>
                 <span className="board-row__rank">Rank</span>
                 <span className="board-row__level">Level</span>
+                <span className="board-row__views">Views</span>
                 <span className="text-right">Points</span>
               </div>
               {rest.map((entry) => (
@@ -714,6 +980,7 @@ function StandingRow({ entry }: { entry: LeaderboardEntryDTO }) {
       </span>
       <span className="board-row__rank">{entry.rank.label}</span>
       <span className="board-row__level">{entry.level}</span>
+      <span className="board-row__views">{formatCompact(entry.views ?? 0)}</span>
       <span className="board-row__pts">{formatPoints(entry.points)}</span>
     </div>
   );
@@ -743,44 +1010,6 @@ function CreatorAvatar({ name, src, size }: { name: string; src?: string; size: 
 // Pieces
 // ---------------------------------------------------------------------------
 
-/** Topographic contour lines, like the maps behind Call of Duty's menus. */
-function Contours({ seed }: { seed: number }) {
-  const paths = useMemo(() => contourPaths(seed), [seed]);
-  return (
-    <svg className="cr-contours" viewBox="0 0 1200 420" preserveAspectRatio="xMidYMid slice" aria-hidden>
-      {paths.map((d, index) => <path key={index} d={d} />)}
-    </svg>
-  );
-}
-
-function contourPaths(seed: number) {
-  const centers: Array<[number, number]> = [[930, 120], [170, 400]];
-  const mid = (a: [number, number], b: [number, number]) => `${((a[0] + b[0]) / 2).toFixed(1)} ${((a[1] + b[1]) / 2).toFixed(1)}`;
-  const paths: string[] = [];
-  centers.forEach(([cx, cy], centerIndex) => {
-    for (let ring = 0; ring < 9; ring += 1) {
-      const base = 34 + ring * 32;
-      const points: Array<[number, number]> = [];
-      for (let step = 0; step < 64; step += 1) {
-        const angle = (step / 64) * Math.PI * 2;
-        const wobble =
-          1 +
-          0.14 * Math.sin(3 * angle + ring * 0.55 + seed + centerIndex) +
-          0.07 * Math.sin(5 * angle - ring * 0.8 + seed * 2);
-        points.push([cx + Math.cos(angle) * base * wobble * 1.4, cy + Math.sin(angle) * base * wobble]);
-      }
-      let d = `M${mid(points[0]!, points[1]!)}`;
-      for (let index = 1; index <= points.length; index += 1) {
-        const point = points[index % points.length]!;
-        const following = points[(index + 1) % points.length]!;
-        d += ` Q${point[0].toFixed(1)} ${point[1].toFixed(1)} ${mid(point, following)}`;
-      }
-      paths.push(`${d} Z`);
-    }
-  });
-  return paths;
-}
-
 /** The tier's colours for the page: its glow and the ink its name is written in. */
 function tierStyle(level: number): CSSProperties {
   const material = TIER_MATERIALS[rankForLevel(level).tier];
@@ -805,34 +1034,3 @@ function partMetric(source: PointsSource, value: number | undefined) {
   return undefined;
 }
 
-function formatLaunchDay() {
-  return new Date(POINTS_START_AT).toLocaleDateString(undefined, {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-}
-
-function formatPoints(value: number) {
-  return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
-}
-
-function formatWhole(value: number) {
-  return Math.round(value).toLocaleString();
-}
-
-function formatCompact(value: number) {
-  return new Intl.NumberFormat(undefined, {
-    notation: "compact",
-    maximumFractionDigits: Math.abs(value) >= 1000 ? 1 : 0,
-  }).format(value);
-}
-
-function relativeTime(timestamp: number) {
-  const minutes = Math.max(1, Math.round((Date.now() - timestamp) / 60_000));
-  if (minutes < 60) return `${minutes}m ago`;
-  if (minutes < 1440) return `${Math.round(minutes / 60)}h ago`;
-  if (minutes < 10_080) return `${Math.round(minutes / 1440)}d ago`;
-  return new Date(timestamp).toLocaleDateString([], { month: "short", day: "numeric" });
-}

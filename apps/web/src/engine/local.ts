@@ -8,6 +8,7 @@ import { useShallow } from "zustand/react/shallow";
 import { artifactUrls, useEngineStore, type AnalyticsScope, type BusinessInput, type PeriodQuery } from "./store";
 import { startSimulator } from "./simulator";
 import {
+  POINTS_RATES,
   POINTS_SOURCE_LABELS,
   levelProgress,
   nextRank,
@@ -23,10 +24,16 @@ import {
   type PlatformId,
   type PointsDashboardDTO,
   type PointsEntryDTO,
+  type PointsFeedItemDTO,
+  type PointsFeedPageDTO,
+  type CardImagesDTO,
   type PointsPlatform,
   type PointsSource,
   type PostPointsDTO,
 } from "@posterract/contract";
+
+/** The demo and Convex engines load their own way: nothing to start early. */
+export function startEngine(_userId: string | undefined) {}
 
 export function useEngineBoot() {
   const hydrate = useEngineStore((s) => s.hydrate);
@@ -48,7 +55,7 @@ export const useEvents = () => useEngineStore((s) => s.events);
 export const usePortals = () => useEngineStore((s) => s.portals);
 export async function getTikTokCreatorInfo(accountId: string): Promise<import("@posterract/contract/tiktok").TikTokCreatorInfo> {
   const account = useEngineStore.getState().portals.find((p) => p.id === accountId && p.provider === "tiktok");
-  if (!account || account.status !== "connected") throw new Error("Reconnect this TikTok account in Portals.");
+  if (!account || account.status !== "connected") throw new Error("Reconnect this TikTok account in Social accounts.");
   return { creator_nickname: account.displayName || account.handle, creator_username: account.handle.replace(/^@/, ""),
     creator_avatar_url: account.avatarUrl || "", privacy_level_options: ["PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "SELF_ONLY"],
     comment_disabled: false, duet_disabled: true, stitch_disabled: false, max_video_post_duration_sec: 600 };
@@ -77,66 +84,187 @@ const DEMO_POINTS_POSTS: Array<{
   provider: PointsPlatform;
   title: string;
   daysAgo: number;
+  /** A still for the feed and stat card, in public/demo/points. */
+  thumb: string;
   parts: Array<[PointsSource, number, number?]>;
 }> = [
-  { provider: "instagram", title: "The habit that changed my mornings", daysAgo: 3, parts: [
+  { provider: "instagram", title: "The habit that changed my mornings", daysAgo: 3, thumb: "morning-habit", parts: [
     ["watch", 96.5, 96.5], ["views", 48.2, 48_200], ["saves", 34.6, 692], ["likes", 31.4, 3_140],
     ["comments", 28.6, 286], ["shares", 20.5, 410], ["record", 10, 48_200], ["retention", 5, 58.3], ["post", 1],
   ] },
-  { provider: "facebook", title: "Building the studio in 30 seconds", daysAgo: 6, parts: [
+  { provider: "facebook", title: "Building the studio in 30 seconds", daysAgo: 6, thumb: "studio-build", parts: [
     ["watch", 61.2, 61.2], ["views", 31.6, 31_600], ["likes", 19.2, 1_920], ["shares", 19, 380],
     ["comments", 14.4, 144], ["retention", 10, 79.1], ["breakout", 5, 31_600], ["post", 1],
   ] },
-  { provider: "threads", title: "The product drop nobody expected", daysAgo: 9, parts: [
+  { provider: "threads", title: "The product drop nobody expected", daysAgo: 9, thumb: "product-drop", parts: [
     ["comments", 32, 320], ["views", 29.2, 58_400], ["likes", 26.1, 2_610], ["shares", 22.5, 450], ["post", 1],
   ] },
-  { provider: "instagram", title: "Five edits that doubled my watch time", daysAgo: 12, parts: [
+  { provider: "instagram", title: "Five edits that doubled my watch time", daysAgo: 12, thumb: "five-edits", parts: [
     ["watch", 38.4, 38.4], ["views", 22.9, 22_900], ["saves", 15.5, 310], ["likes", 11.8, 1_180],
     ["comments", 9.6, 96], ["shares", 7, 140], ["post", 1],
   ] },
-  { provider: "facebook", title: "Studio tour, part two", daysAgo: 15, parts: [
+  { provider: "facebook", title: "Studio tour, part two", daysAgo: 15, thumb: "studio-tour", parts: [
     ["watch", 21.7, 21.7], ["views", 12.4, 12_400], ["likes", 6.4, 640], ["comments", 5.2, 52], ["shares", 4.4, 88], ["post", 1],
   ] },
-  { provider: "instagram", title: "Lighting setup under $100", daysAgo: 18, parts: [
+  { provider: "instagram", title: "Lighting setup under $100", daysAgo: 18, thumb: "lighting-setup", parts: [
     ["watch", 8.2, 8.2], ["views", 6.1, 6_100], ["saves", 3.7, 74], ["likes", 2.8, 280],
     ["comments", 2.2, 22], ["shares", 0.9, 18], ["post", 1],
   ] },
-  { provider: "threads", title: "Why I stopped posting daily", daysAgo: 21, parts: [
+  { provider: "threads", title: "Why I stopped posting daily", daysAgo: 21, thumb: "posting-daily", parts: [
     ["comments", 6.4, 64], ["views", 4.9, 9_800], ["likes", 4.2, 420], ["shares", 1.8, 36], ["post", 1],
   ] },
-  { provider: "facebook", title: "The 3-second hook rule", daysAgo: 24, parts: [
+  { provider: "facebook", title: "The 3-second hook rule", daysAgo: 24, thumb: "hook-rule", parts: [
     ["watch", 5.6, 5.6], ["views", 4.3, 4_300], ["likes", 1.9, 190], ["comments", 1.4, 14], ["shares", 0.6, 12], ["post", 1],
   ] },
 ];
 
 const DEMO_PROVIDER_LABELS: Record<PointsPlatform, string> = {
   instagram: "Instagram",
+  tiktok: "TikTok",
   facebook: "Facebook",
   threads: "Threads",
 };
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
 
+/** A demo post's numbers, from what its rules measured. */
+function demoMetrics(parts: Array<[PointsSource, number, number?]>): PostPointsDTO["metrics"] {
+  const value = (source: PointsSource) => parts.find(([name]) => name === source)?.[2];
+  const views = value("views") ?? 0;
+  const watchHours = value("watch");
+  const retention = value("retention");
+  return {
+    views,
+    likes: value("likes") ?? 0,
+    comments: value("comments") ?? 0,
+    shares: value("shares") ?? 0,
+    saves: value("saves"),
+    watchHours,
+    averageWatchSeconds: watchHours !== undefined && views > 0 ? round2((watchHours * 3600) / views) : undefined,
+    retention: retention === undefined ? undefined : retention / 100,
+  };
+}
+
+const DEMO_HANDLE = (provider: PointsPlatform) => (provider === "facebook" ? "Posterract Lab" : "@posterract-lab");
+
+function demoCard(
+  projectionId: string,
+  provider: PointsPlatform,
+  post: (typeof DEMO_POINTS_POSTS)[number],
+  parts: Array<[PointsSource, number, number?]>,
+  publishedAt: number,
+): PostPointsDTO {
+  return {
+    projectionId,
+    provider,
+    title: post.title,
+    publishedAt,
+    total: round2(parts.reduce((sum, [, points]) => sum + points, 0)),
+    parts: parts.map(([source, points, value]) => ({ source, points, value })),
+    thumbnailUrl: `/demo/points/${post.thumb}.webp`,
+    handle: DEMO_HANDLE(provider),
+    metrics: demoMetrics(parts),
+  };
+}
+
+function demoTopPosts(now: number): PostPointsDTO[] {
+  return DEMO_POINTS_POSTS.map((post, index) =>
+    demoCard(`points_demo_${index}`, post.provider, post, post.parts, now - post.daysAgo * 86_400_000),
+  );
+}
+
+/** The same videos again on other platforms, for the feed's older pages: [video, platform, share of its numbers]. */
+const DEMO_CROSS_POSTS: Array<[number, PointsPlatform, number]> = [
+  [0, "tiktok", 0.62], [1, "instagram", 0.48], [2, "instagram", 0.4], [3, "tiktok", 0.55],
+  [4, "instagram", 0.35], [5, "facebook", 0.3], [6, "instagram", 0.5], [7, "instagram", 0.28],
+  [0, "threads", 0.22], [2, "facebook", 0.25], [3, "threads", 0.2], [6, "facebook", 0.18],
+];
+/** When each feed item last earned, in hours ago: the eight videos, then their cross-posts. */
+const DEMO_LAST_HOURS = [1, 5, 9, 13, 17, 21, 27, 33];
+const DEMO_CROSS_HOURS = [26, 31, 38, 44, 50, 57, 64, 75, 88, 99, 115, 130];
+const DEMO_FEED_PAGE = 10;
+
+/** A cross-post's rules: only what its platform pays, its numbers scaled down. */
+function crossParts(parts: Array<[PointsSource, number, number?]>, provider: PointsPlatform, share: number) {
+  const rates = POINTS_RATES[provider];
+  return parts
+    .filter(([source]) => {
+      if (source === "record" || source === "breakout") return false;
+      if (source === "saves") return rates.saves !== null;
+      if (source === "watch" || source === "retention") return rates.watchHours !== null;
+      return true;
+    })
+    .map(([source, points, value]): [PointsSource, number, number?] => [
+      source,
+      source === "post" || source === "retention" ? points : round2(points * share),
+      value === undefined || source === "retention" ? value : round2(value * share),
+    ]);
+}
+
+/** A feed item: what a post earned in its latest day, three or four rules, a few minutes apart. */
+function demoFeedPost(post: PostPointsDTO, hoursAgo: number, now: number): PointsFeedItemDTO {
+  const at = now - hoursAgo * 3_600_000 - 17 * 60_000;
+  const entries: PointsEntryDTO[] = post.parts
+    .filter((part) => part.source !== "post")
+    .slice(0, hoursAgo < 24 ? 3 : 4)
+    .map((part, index) => ({
+      id: `${post.projectionId}_${part.source}`,
+      source: part.source,
+      amount: round2(part.points / (index + 2)),
+      note: `${POINTS_SOURCE_LABELS[part.source]} · ${DEMO_PROVIDER_LABELS[post.provider]} · ${post.title}`,
+      projectionId: post.projectionId,
+      provider: post.provider,
+      at: at - index * 3_600_000,
+    }));
+  return { kind: "post", post, entries, amount: round2(entries.reduce((sum, entry) => sum + entry.amount, 0)), at };
+}
+
+let demoFeedItems: PointsFeedItemDTO[] | undefined;
+
+function demoFeed(): PointsFeedItemDTO[] {
+  if (demoFeedItems) return demoFeedItems;
+  const now = Date.now();
+  const top = demoTopPosts(now);
+  const items: PointsFeedItemDTO[] = [
+    ...top.map((post, index) => demoFeedPost(post, DEMO_LAST_HOURS[index]!, now)),
+    ...DEMO_CROSS_POSTS.map(([video, provider, share], index) => {
+      const base = DEMO_POINTS_POSTS[video]!;
+      const card = demoCard(`points_demo_x${index}`, provider, base, crossParts(base.parts, provider, share), now - (base.daysAgo - 0.3) * 86_400_000);
+      return demoFeedPost(card, DEMO_CROSS_HOURS[index]!, now);
+    }),
+    { kind: "bonus", entry: { id: "demo_streak_7", source: "streak", amount: 10, note: "7-day streak", at: now - 30 * 3_600_000 } },
+    {
+      kind: "bonus",
+      entry: { id: "demo_followers_5k", source: "followers", amount: 40, note: "5,000 followers · Threads @posterract-lab", at: now - 52 * 3_600_000 },
+    },
+  ];
+  const at = (item: PointsFeedItemDTO) => (item.kind === "post" ? item.at : item.entry.at);
+  demoFeedItems = items.sort((left, right) => at(right) - at(left));
+  return demoFeedItems;
+}
+
+function demoFeedPage(page: number): PointsFeedPageDTO {
+  const items = demoFeed();
+  const pages = Math.max(1, Math.ceil(items.length / DEMO_FEED_PAGE));
+  const current = Math.min(Math.max(1, page), pages);
+  return { items: items.slice((current - 1) * DEMO_FEED_PAGE, current * DEMO_FEED_PAGE), page: current, pages, total: items.length };
+}
+
 function demoPointsDashboard(): PointsDashboardDTO {
   const now = Date.now();
-  const topPosts: PostPointsDTO[] = DEMO_POINTS_POSTS.map((post, index) => ({
-    projectionId: `points_demo_${index}`,
-    provider: post.provider,
-    title: post.title,
-    publishedAt: now - post.daysAgo * 86_400_000,
-    total: round2(post.parts.reduce((sum, [, points]) => sum + points, 0)),
-    parts: post.parts.map(([source, points, value]) => ({ source, points, value })),
-  }));
+  const topPosts = demoTopPosts(now);
   const recent: PointsEntryDTO[] = [
-    { id: "demo_streak_7", source: "streak" as const, amount: 10, note: "7-day streak", at: now - 5 * 86_400_000 },
-    { id: "demo_followers_5k", source: "followers" as const, amount: 40, note: "5,000 followers · Threads @posterract-lab", at: now - 8 * 86_400_000 },
-    ...DEMO_POINTS_POSTS.slice(0, 4).flatMap((post, postIndex) =>
+    { id: "demo_streak_7", source: "streak" as const, amount: 10, note: "7-day streak", at: now - 30 * 3_600_000 },
+    { id: "demo_followers_5k", source: "followers" as const, amount: 40, note: "5,000 followers · Threads @posterract-lab", at: now - 52 * 3_600_000 },
+    ...DEMO_POINTS_POSTS.slice(0, 6).flatMap((post, postIndex) =>
       post.parts.slice(0, 3).map(([source, points], partIndex) => ({
         id: `demo_${postIndex}_${source}`,
         source,
         amount: round2(points / (partIndex + 2)),
         note: `${POINTS_SOURCE_LABELS[source]} · ${DEMO_PROVIDER_LABELS[post.provider]} · ${post.title}`,
-        at: now - (postIndex * 2 + partIndex + 1) * 3_600_000,
+        projectionId: `points_demo_${postIndex}`,
+        provider: post.provider,
+        at: now - (postIndex * 4 + partIndex + 1) * 3_600_000 - 17 * 60_000,
       })),
     ),
   ].sort((left, right) => right.at - left.at);
@@ -161,6 +289,7 @@ function demoPointsDashboard(): PointsDashboardDTO {
     ],
     topPosts,
     recent,
+    feed: demoFeedPage(1),
     badges: ["first_transmission", "streak_7", "record", "breakout"],
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   };
@@ -191,6 +320,7 @@ function demoLeaderboard(period: LeaderboardPeriod, me: PointsDashboardDTO): Lea
       level: levelProgress(row.lifetime).level,
       rank: { id: rank.id, label: rank.label },
       points: row.points,
+      views: Math.round(row.points * 860 + row.lifetime * 32),
       isMe: row.isMe,
     };
   });
@@ -199,6 +329,17 @@ function demoLeaderboard(period: LeaderboardPeriod, me: PointsDashboardDTO): Lea
 
 export function usePointsDashboard(): PointsDashboardDTO {
   return useMemo(demoPointsDashboard, []);
+}
+
+export function usePointsFeed(page: number): PointsFeedPageDTO | undefined {
+  return useMemo(() => demoFeedPage(page), [page]);
+}
+
+/** The demo's covers are the app's own files, so a canvas can draw them as they are. */
+export async function fetchCardImages(covers: string[]): Promise<CardImagesDTO> {
+  const feedPosts = demoFeed().flatMap((item) => (item.kind === "post" ? [item.post] : []));
+  const posts = new Map([...demoPointsDashboard().topPosts, ...feedPosts].map((post) => [post.projectionId, post.thumbnailUrl]));
+  return { covers: Object.fromEntries(covers.map((key) => [key, posts.get(key)]).filter((entry): entry is [string, string] => Boolean(entry[1]))) };
 }
 
 export function useLeaderboard(period: LeaderboardPeriod): LeaderboardDTO {
@@ -485,6 +626,6 @@ export function useBusinessActions() {
 }
 
 /** The demo engine has no platform post lists: the posting graph counts its own posts. */
-export function useAccountPosts(): import("@posterract/contract").AccountPostDTO[] | null | undefined {
+export function useAccountPosts(): import("@posterract/contract").AccountPostsDTO | null | undefined {
   return null;
 }

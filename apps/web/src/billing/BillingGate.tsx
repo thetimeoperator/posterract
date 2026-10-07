@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import clsx from "clsx";
 import type {
   BillingCheckoutDTO,
@@ -12,6 +12,7 @@ import { cloudJson } from "@/lib/cloudRequest";
 import { desktopSignOut } from "@/lib/desktopAuth";
 import { isPosterractDesktop, openExternalUrl } from "@/lib/desktop";
 import { useAuthState } from "@/lib/useAuthState";
+import { clearSessionCaches, forgetCached, readCached, writeCached } from "@/lib/sessionCache";
 
 import { readBillingSelection, type BillingCycle } from "@/billing/selection";
 
@@ -42,9 +43,16 @@ function price(amount: number): string {
 
 export function BillingGate({ children }: { children: ReactNode }) {
   const authState = useAuthState();
-  const [status, setStatus] = useState<GateStatus>("checking");
+  const userId = authState.user?.id;
+  // A subscriber who was let in last time goes straight in; the check still runs behind them.
+  const remembered = useRef(
+    new URLSearchParams(window.location.search).get("billing") === null
+      ? readCached<BillingSubscriptionDTO>("entitled", userId)
+      : undefined,
+  );
+  const [status, setStatus] = useState<GateStatus>(remembered.current?.entitled ? "ready" : "checking");
   const [config, setConfig] = useState<BillingConfigDTO | null>(null);
-  const [subscription, setSubscription] = useState<BillingSubscriptionDTO | null>(null);
+  const [subscription, setSubscription] = useState<BillingSubscriptionDTO | null>(remembered.current ?? null);
   const [cycle, setCycle] = useState<BillingCycle>(() => readBillingSelection().interval);
   const [busy, setBusy] = useState<"checkout" | "portal" | "signout" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -74,14 +82,14 @@ export function BillingGate({ children }: { children: ReactNode }) {
       });
 
     const check = async () => {
-      setStatus("checking");
+      if (!remembered.current?.entitled) setStatus("checking");
       setError(null);
       try {
-        const nextConfig = await billingRequest<BillingConfigDTO>(
-          "/v1/billing/config",
-          {},
-          controller.signal,
-        );
+        // The plan prices and your subscription are asked for together, not one after the other.
+        const [nextConfig, firstSubscription] = await Promise.all([
+          billingRequest<BillingConfigDTO>("/v1/billing/config", {}, controller.signal),
+          billingRequest<BillingSubscriptionDTO>("/v1/billing/subscription", {}, controller.signal),
+        ]);
         if (!nextConfig.configured || !nextConfig.plans) {
           throw new Error("Secure checkout is not configured yet.");
         }
@@ -89,15 +97,18 @@ export function BillingGate({ children }: { children: ReactNode }) {
         setConfig(nextConfig);
 
         const attempts = returnState === "success" ? 25 : 1;
-        let nextSubscription: BillingSubscriptionDTO | null = null;
+        let nextSubscription: BillingSubscriptionDTO | null = firstSubscription;
         for (let attempt = 0; attempt < attempts; attempt += 1) {
-          nextSubscription = await billingRequest<BillingSubscriptionDTO>(
-            "/v1/billing/subscription",
-            {},
-            controller.signal,
-          );
+          if (attempt > 0) {
+            nextSubscription = await billingRequest<BillingSubscriptionDTO>(
+              "/v1/billing/subscription",
+              {},
+              controller.signal,
+            );
+          }
           if (!active) return;
-          if (nextSubscription.entitled) {
+          if (nextSubscription?.entitled) {
+            writeCached("entitled", userId, nextSubscription);
             setSubscription(nextSubscription);
             setStatus("ready");
             if (returnState === "success") window.location.replace("/?welcome=desktop");
@@ -106,6 +117,8 @@ export function BillingGate({ children }: { children: ReactNode }) {
           if (attempt < attempts - 1) await wait();
         }
 
+        forgetCached("entitled");
+        remembered.current = undefined;
         setSubscription(nextSubscription);
         if (returnState === "success") {
           setError("Stripe is still confirming the payment. Check again in a moment.");
@@ -113,6 +126,8 @@ export function BillingGate({ children }: { children: ReactNode }) {
         setStatus("ready");
       } catch (cause) {
         if (!active || controller.signal.aborted) return;
+        // Let in from last time and the check failed (offline, a blip): stay in; the next check decides.
+        if (remembered.current?.entitled) return;
         setError(cause instanceof Error ? cause.message : "Billing could not be checked.");
         setStatus("error");
       }
@@ -135,7 +150,11 @@ export function BillingGate({ children }: { children: ReactNode }) {
         {},
         controller.signal,
       )
-        .then((nextSubscription) => setSubscription(nextSubscription))
+        .then((nextSubscription) => {
+          if (nextSubscription.entitled) writeCached("entitled", userId, nextSubscription);
+          else forgetCached("entitled");
+          setSubscription(nextSubscription);
+        })
         .catch(() => undefined);
     };
     const interval = window.setInterval(revalidate, 60_000);
@@ -145,7 +164,7 @@ export function BillingGate({ children }: { children: ReactNode }) {
       window.clearInterval(interval);
       window.removeEventListener("focus", revalidate);
     };
-  }, [status, subscription?.entitled]);
+  }, [status, subscription?.entitled, userId]);
 
   if (status === "ready" && subscription?.entitled) {
     return (
@@ -202,6 +221,7 @@ export function BillingGate({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     setBusy("signout");
+    clearSessionCaches();
     if (isPosterractDesktop()) await desktopSignOut().catch(() => undefined);
     else await authClient.signOut().catch(() => undefined);
     window.location.assign("/");
@@ -296,7 +316,7 @@ export function BillingGate({ children }: { children: ReactNode }) {
                       <ul className="grid gap-x-5 gap-y-2.5 text-[10.5px] leading-snug text-starlight-dim sm:grid-cols-2">
                         {[
                           "Instagram, Facebook & Threads direct publishing",
-                          "TikTok draft delivery",
+                          "TikTok direct publishing",
                           "Drag-and-drop scheduling calendar",
                           "Private video storage & media library",
                           "Authorized performance analytics",

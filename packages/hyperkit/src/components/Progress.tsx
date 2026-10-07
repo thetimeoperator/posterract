@@ -83,7 +83,7 @@ export function OrbitRing({
           strokeLinecap="round"
           strokeDasharray={c}
           strokeDashoffset={c * (1 - pct)}
-          style={{ transition: "stroke-dashoffset 300ms var(--ease-warp)", filter: "drop-shadow(0 0 4px rgba(101,255,154,0.5))" }}
+          style={{ transition: "stroke-dashoffset 300ms var(--ease-warp)" }}
         />
         <defs>
           <linearGradient id="hk-orbit-grad" x1="0" y1="0" x2="1" y2="1">

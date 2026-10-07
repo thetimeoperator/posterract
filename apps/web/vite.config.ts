@@ -19,6 +19,19 @@ function sendJson(response: ServerResponse, status: number, payload: unknown) {
   response.end(JSON.stringify(payload));
 }
 
+/** Which build this is: baked into the code and published as /version.json, so an open tab can tell it is out of date. */
+const BUILD_ID = new Date().toISOString();
+
+function buildVersionPlugin(): Plugin {
+  return {
+    name: "posterract-build-version",
+    apply: "build",
+    generateBundle() {
+      this.emitFile({ type: "asset", fileName: "version.json", source: JSON.stringify({ build: BUILD_ID }) });
+    },
+  };
+}
+
 /** Local-only compiler bridge. Production uses the authenticated Posterract API. */
 function creativeCompilerDevPlugin(): Plugin {
   return {
@@ -59,7 +72,11 @@ function creativeCompilerDevPlugin(): Plugin {
 }
 
 export default defineConfig({
+  define: {
+    __POSTERRACT_BUILD__: JSON.stringify(BUILD_ID),
+  },
   plugins: [
+    buildVersionPlugin(),
     creativeCompilerDevPlugin(),
     tanstackRouter({ target: "react", autoCodeSplitting: true }),
     react(),
@@ -68,6 +85,16 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+    },
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        // Every icon in one small file, instead of a separate request for each one a page uses.
+        manualChunks(id) {
+          if (id.includes("/node_modules/lucide-react/")) return "icons";
+        },
+      },
     },
   },
 });

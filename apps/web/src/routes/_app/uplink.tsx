@@ -26,15 +26,31 @@ const SCOPES = [
 
 const CURL_EXAMPLE = `curl -X POST https://api.posterract.app/v1/posts \\
   -H "Authorization: Bearer pr_••••••••••••" \\
-  -H "Idempotency-Key: post-2026-08-21-001" \\
+  -H "Idempotency-Key: post-2026-10-01-001" \\
   -H "Content-Type: application/json" \\
   -d '{
     "artifactId": "MEDIA_UUID",
     "title": "Launch post",
     "caption": "The launch is live.",
-    "businessId": "BUSINESS_UUID",
     "platforms": ["instagram", "tiktok"],
-    "scheduledFor": "2026-08-21T18:00:00Z"
+    "accountIds": ["INSTAGRAM_ACCOUNT_UUID", "TIKTOK_ACCOUNT_UUID"],
+    "perPlatform": {
+      "tiktok": {
+        "options": {
+          "mode": "direct",
+          "privacyLevel": "PUBLIC_TO_EVERYONE",
+          "allowComment": true,
+          "allowDuet": false,
+          "allowStitch": false,
+          "commercialContent": false,
+          "brandOrganic": false,
+          "brandContent": false,
+          "isAigc": false,
+          "consentAccepted": true
+        }
+      }
+    },
+    "scheduledFor": "2026-10-01T18:00:00Z"
   }'`;
 
 const EMPTY_STATS: WorkspaceApiKey["stats"] = {
@@ -198,6 +214,9 @@ function ApiKeysPage() {
       <Panel kicker="Posting API" title="Schedule from any agent" brackets className="min-w-0">
         <p className="text-[10.5px] leading-relaxed text-starlight-dim">
           Upload media, choose connected platforms, and create or schedule a post with the same API key. Fetch <code className="text-neon">GET /v1/businesses</code>, then send one's ID as <code className="text-neon">businessId</code> to post to every account in that business. App-created and API-created posts appear together in the Calendar and Analytics.
+        </p>
+        <p className="mt-2 text-[10.5px] leading-relaxed text-starlight-dim">
+          TikTok posts name the account in <code className="text-neon">accountIds</code> and go public to everyone by default. Set <code className="text-neon">privacyLevel</code> only for a smaller audience; <code className="text-neon">GET /v1/accounts/&#123;id&#125;/tiktok/creator-info</code> lists what the account allows.
         </p>
         <pre className="telemetry mt-4 max-w-full overflow-x-auto rounded-[12px] border border-[var(--glass-border)] bg-void-1 p-4 text-[10px] leading-relaxed text-starlight-dim">
           {CURL_EXAMPLE}

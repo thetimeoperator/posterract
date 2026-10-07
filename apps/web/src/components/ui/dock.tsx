@@ -128,7 +128,7 @@ export function DockItem({ children, className, label, active, disabled }: DockI
       <span
         role="tooltip"
         className={clsx(
-          "pointer-events-none absolute left-1/2 top-[calc(100%+10px)] z-50 -translate-x-1/2 whitespace-nowrap rounded-full border border-[var(--glass-border)] bg-[rgba(5,10,12,0.9)] px-2.5 py-1 font-display text-[10px] font-semibold tracking-wide text-starlight opacity-0 shadow-glow-neon-sm backdrop-blur-sm transition-all duration-150 group-hover/dock:translate-y-0 group-hover/dock:opacity-100 group-focus-within/dock:opacity-100",
+          "pointer-events-none absolute left-1/2 top-[calc(100%+10px)] z-50 -translate-x-1/2 whitespace-nowrap rounded-full border border-[var(--glass-border)] bg-[rgba(5,10,12,0.9)] px-2.5 py-1 font-display text-[10px] font-semibold tracking-wide text-starlight opacity-0 shadow-glow-neon-sm transition-all duration-150 group-hover/dock:translate-y-0 group-hover/dock:opacity-100 group-focus-within/dock:opacity-100",
           active && "text-neon",
         )}
       >

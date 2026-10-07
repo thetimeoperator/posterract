@@ -295,11 +295,6 @@ select {
 
 /* ── Liquid-space application shell ───────────────────────────────── */
 
-:root {
-  --space-x: 0px;
-  --space-y: 0px;
-}
-
 .space-backdrop {
   position: fixed;
   inset: 0;
@@ -312,8 +307,6 @@ select {
     #030506;
 }
 
-.space-backdrop__video,
-.space-backdrop__poster,
 .space-backdrop__nebula,
 .space-backdrop__stars,
 .space-backdrop__grid,
@@ -323,30 +316,11 @@ select {
   inset: -8px;
 }
 
-.space-backdrop__video {
-  width: calc(100% + 16px);
-  height: calc(100% + 16px);
-  object-fit: cover;
-  opacity: 0.46;
-  filter: saturate(0.72) brightness(0.62) contrast(1.12) hue-rotate(12deg);
-  transform: translate3d(var(--space-x), var(--space-y), 0) scale(1.035);
-  transition: transform 800ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.space-backdrop__poster {
-  background-position: center;
-  background-size: cover;
-  opacity: 0.4;
-  filter: saturate(0.72) brightness(0.55) contrast(1.1) hue-rotate(12deg);
-  transform: scale(1.02);
-}
-
 .space-backdrop__nebula {
   background:
     radial-gradient(circle at 48% 18%, rgba(101, 255, 154, 0.12), transparent 22%),
     radial-gradient(circle at 73% 62%, rgba(124, 247, 255, 0.06), transparent 28%),
     radial-gradient(circle at 18% 82%, rgba(101, 255, 154, 0.05), transparent 32%);
-  transform: translate3d(calc(var(--space-x) * -0.4), calc(var(--space-y) * -0.4), 0);
 }
 
 .space-backdrop__stars {
@@ -470,7 +444,6 @@ select {
   width: 24%;
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--neon), var(--ice), transparent);
-  filter: drop-shadow(0 0 5px rgba(101, 255, 154, 0.7));
   transform: translate3d(-120%, 0, 0);
   animation: calendar-cta-trace 4.6s var(--ease-warp) infinite;
   pointer-events: none;
@@ -673,21 +646,18 @@ select {
 
 .calendar-post-grip {
   color: rgba(160, 191, 174, 0.7);
-  filter: drop-shadow(0 0 0 transparent);
-  transition: color 120ms ease, transform 145ms cubic-bezier(0.2, 0.82, 0.2, 1), filter 120ms ease;
+  transition: color 120ms ease, transform 145ms cubic-bezier(0.2, 0.82, 0.2, 1);
 }
 
 .calendar-post-shell--draggable:hover .calendar-post-grip,
 .calendar-post-block--month.calendar-post-shell--draggable:hover .calendar-post-grip {
   color: var(--neon);
-  filter: drop-shadow(0 0 5px rgba(101, 255, 154, 0.4));
   transform: scaleY(1.08);
 }
 
 .calendar-post-shell.is-dragging .calendar-post-block,
 .calendar-post-block--month.is-dragging {
   opacity: 0.3;
-  filter: saturate(1.15);
   transform: scale(0.965) rotate(-0.65deg);
 }
 
@@ -999,8 +969,8 @@ select {
 }
 
 @keyframes dock-trace-in {
-  from { opacity: 0; transform: translateX(-50%) scale(0.2); filter: blur(3px); }
-  to { opacity: 1; transform: translateX(-50%) scale(1); filter: blur(0); }
+  from { opacity: 0; transform: translateX(-50%) scale(0.2); }
+  to { opacity: 1; transform: translateX(-50%) scale(1); }
 }
 
 /* Business switcher: which business the app is looking at (shell/BusinessSwitcher.tsx). */
@@ -1188,7 +1158,6 @@ select {
   .bottom-dock-buttons { padding-inline: 6px; padding-block: 6px; }
   .forge-grid { display: block; min-height: auto; }
   .forge-sessions { display: none; }
-  .space-backdrop__video { display: none; }
 }
 
 /* The dock's buttons share a phone's width; hover magnification is desktop-only anyway. */
@@ -1199,8 +1168,6 @@ select {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .space-backdrop__video { display: none; }
-  .space-backdrop__nebula { transform: none; }
   .dock-light-trace { animation: none; }
   .calendar-new-post-cta::after { animation: none; }
   .calendar-new-post-cta__icon svg,

@@ -4,6 +4,7 @@ import {
   Bot,
   CalendarDays,
   Clapperboard,
+  IdCard,
   Orbit,
   Radio,
   Settings,
@@ -13,7 +14,7 @@ import {
 } from "lucide-react";
 
 export type NavItem = {
-  path: "/create" | "/forge" | "/skills" | "/continuum" | "/transmissions" | "/echoes" | "/points" | "/vault" | "/portals" | "/uplink" | "/settings";
+  path: "/create" | "/forge" | "/skills" | "/continuum" | "/transmissions" | "/echoes" | "/points" | "/profile" | "/vault" | "/portals" | "/uplink" | "/settings";
   label: string;
   flavor: string;
   icon: LucideIcon;
@@ -34,6 +35,7 @@ export const DOCK_NAV_ITEMS: NavItem[] = [
 
 /** Setup, not daily work: in the account menu (and ⌘K). */
 export const SETUP_NAV_ITEMS: NavItem[] = [
+  { path: "/profile", label: "Profile", flavor: "Your rank cards", icon: IdCard, section: "mvp" },
   { path: "/portals", label: "Social accounts", flavor: "Connections & businesses", icon: Orbit, section: "mvp" },
   { path: "/vault", label: "Assets", flavor: "Media library", icon: Archive, section: "mvp" },
   { path: "/uplink", label: "API Keys", flavor: "Agent access", icon: Bot, section: "mvp" },

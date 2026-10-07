@@ -47,7 +47,7 @@ test("Everyone is submitted by default without opening TikTok settings", async (
   expect(options.privacyLevel).toBe("PUBLIC_TO_EVERYONE");
 });
 
-test("an account without public posting uses its available audiences instead", async ({ page }) => {
+test("an account without public posting defaults to the widest audience it allows", async ({ page }) => {
   // Override only the isolated demo creator-info fixture, never the live API.
   await page.route("**/src/engine/local.ts", async (route) => {
     const response = await route.fetch();
@@ -57,9 +57,9 @@ test("an account without public posting uses its available audiences instead", a
     await route.fulfill({ response, body: restricted });
   });
   await seed(page);
-  await expect(page.getByRole("button", { name: "Publish now", exact: true })).toBeDisabled();
-  await page.getByRole("button", { name: /TikTok settings.*Choose who/ }).click();
-  await expect(page.getByLabel("TikTok privacy")).toHaveText("Choose privacy…");
+  await expect(page.getByRole("button", { name: "Publish now", exact: true })).toBeEnabled();
+  await openSettings(page);
+  await expect(page.getByLabel("TikTok privacy")).toHaveText("Friends");
   await page.getByLabel("TikTok privacy").click();
   await expect(page.getByRole("option", { name: "Everyone", exact: true })).toHaveCount(0);
   await page.getByRole("option", { name: "Only me", exact: true }).click();

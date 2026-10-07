@@ -104,6 +104,16 @@ export const TIER_MATERIALS: Record<RankTierId, Material> = {
   },
 };
 
+/** A tier not reached yet: the same shapes in dark steel (a CSS grayscale filter cost every frame on scroll). */
+const LOCKED_MATERIAL: Material = {
+  metal: ["#56625f", "#323b39", "#1a201f", "#0b0e0d"],
+  edge: "#46524f",
+  field: "#070909",
+  tint: "#1c2422",
+  ink: ["#66756f", "#3e4945"],
+  glow: "rgba(0,0,0,0)",
+};
+
 const SHIELD = "M60 16 L92 28 V62 C92 83 78 97 60 106 C42 97 28 83 28 62 V28 Z";
 const FIELD = "M60 24 L85 33.5 V62 C85 79 74 90.5 60 98 C46 90.5 35 79 35 62 V33.5 Z";
 const SHINE = "M60 18.5 L90 29.5 V39 C76 33 62 31.5 30 39.5 V29.5 Z";
@@ -185,7 +195,7 @@ export function RankEmblem({
   style?: CSSProperties;
 }) {
   const rank = rankForLevel(level);
-  const material = TIER_MATERIALS[rank.tier];
+  const material = locked ? LOCKED_MATERIAL : TIER_MATERIALS[rank.tier];
   const id = `emblem${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
   const tier = rank.tierIndex;
   const wings = tier >= 6 ? FEATHERS : tier >= 4 ? FEATHERS.slice(1) : [];
@@ -204,10 +214,7 @@ export function RankEmblem({
       role="img"
       aria-label={`${rank.label}, level ${rank.minLevel}`}
       className={clsx("rank-emblem", `rank-emblem--${rank.tier}`, locked && "rank-emblem--locked", className)}
-      style={{
-        ...(glow && !locked ? { filter: `drop-shadow(0 0 ${Math.max(3, size / 9)}px ${material.glow})` } : undefined),
-        ...style,
-      }}
+      style={style}
     >
       <defs>
         <linearGradient id={`${id}-metal`} x1="0.2" y1="0" x2="0.55" y2="1">
@@ -229,7 +236,14 @@ export function RankEmblem({
         <clipPath id={`${id}-clip`}>
           <path d={SHIELD} />
         </clipPath>
+        <radialGradient id={`${id}-halo`} cx="0.5" cy="0.52" r="0.5">
+          <stop offset="0.3" stopColor={material.glow} />
+          <stop offset="1" stopColor={material.glow} stopOpacity={0} />
+        </radialGradient>
       </defs>
+
+      {/* The glow is painted, not filtered: a drop-shadow filter made scrolling stutter in Safari. */}
+      {glow && !locked && <circle cx={60} cy={62} r={60} fill={`url(#${id}-halo)`} />}
 
       {tier === 9 && (
         <g className="rank-emblem__rays" style={{ transformOrigin: "60px 60px" }}>

@@ -1,0 +1,277 @@
+/*
+ * Rank cards, wherever they show: the card itself (it turns over as it
+ * arrives and tilts toward the pointer; transforms and opacity only), its
+ * Post and Save buttons, the video card pop-up on the Points page, and the
+ * Card button on each video there. Same HUD as the Points tab.
+ */
+
+/* ── The card ───────────────────────────────────────────────────── */
+
+.rc-tilt {
+  --rx: 0deg;
+  --ry: 0deg;
+  --gx: 50%;
+  --gy: 30%;
+  position: relative;
+  flex: none;
+  perspective: 1500px;
+}
+
+.rc-flip {
+  position: absolute;
+  inset: 0;
+  border-radius: 5.1% / 3.65%;
+  transform-style: preserve-3d;
+  transform: rotateX(var(--rx)) rotateY(var(--ry));
+  transition: transform 0.55s cubic-bezier(0.2, 0.8, 0.2, 1);
+  box-shadow: 0 44px 70px -34px rgba(0, 0, 0, 0.95);
+}
+
+.rc-tilt[data-tilt="on"] .rc-flip {
+  transition: transform 0.12s linear;
+}
+
+.rc-flip--turn {
+  animation: rc-turn 1s cubic-bezier(0.6, 0, 0.3, 1);
+}
+
+@keyframes rc-turn {
+  from {
+    transform: rotateY(-180deg) scale(0.9);
+  }
+  62% {
+    transform: rotateY(10deg) scale(1.02);
+  }
+  to {
+    transform: rotateY(0deg) scale(1);
+  }
+}
+
+.rc-side {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+}
+
+.rc-side--back {
+  transform: rotateY(180deg);
+}
+
+.rc-glare {
+  position: absolute;
+  inset: 0;
+  border-radius: 5.1% / 3.65%;
+  background: radial-gradient(circle at var(--gx) var(--gy), rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0) 46%);
+  opacity: 0;
+  pointer-events: none;
+  backface-visibility: hidden;
+  transform: translateZ(1px);
+  transition: opacity 0.3s;
+}
+
+.rc-tilt[data-tilt="on"] .rc-glare {
+  opacity: 1;
+}
+
+.rc-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font: 600 10px/1 var(--font-mono);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--cr-faint);
+}
+
+.rc-thumb {
+  display: block;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rc-flip,
+  .rc-flip--turn {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* ── Post and Save ──────────────────────────────────────────────── */
+
+.card-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.card-actions__post {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 50px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--cr-neon);
+  box-shadow: 0 0 22px rgba(var(--cr-neon-rgb), 0.32);
+  color: #021008;
+  font: 800 12px/1 var(--font-display);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.2s;
+}
+
+.card-actions__post:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 0 30px rgba(var(--cr-neon-rgb), 0.45);
+}
+
+.card-actions__post:disabled {
+  cursor: default;
+}
+
+.card-actions__post:disabled:not([aria-busy="true"]) {
+  opacity: 0.55;
+}
+
+.card-actions__bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: #021008;
+  opacity: 0.45;
+  transition: width 0.2s linear;
+}
+
+.card-actions__saves {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.card-actions__saves button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 42px;
+  border: 1px solid var(--cr-line-strong);
+  border-radius: 10px;
+  background: rgba(234, 255, 243, 0.03);
+  color: var(--cr-text);
+  font: 700 10.5px/1 var(--font-display);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: border-color 0.2s, background-color 0.2s;
+}
+
+.card-actions__saves button:hover:not(:disabled) {
+  border-color: rgba(var(--cr-neon-rgb), 0.5);
+  background: rgba(var(--cr-neon-rgb), 0.05);
+}
+
+.card-actions__saves button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.card-actions__note {
+  margin-top: 2px;
+  font: 500 12px/1.5 var(--font-body);
+  color: var(--cr-faint);
+  text-align: center;
+}
+
+/* ── A video's card, in a pop-up on the Points page ─────────────── */
+
+.card-dialog {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 300px);
+  gap: 32px;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  padding: 30px;
+  border: 1px solid var(--hud-line);
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(9, 16, 15, 0.98), rgba(3, 7, 6, 0.99));
+  box-shadow: 0 40px 120px -30px rgba(0, 0, 0, 0.9);
+  color: var(--cr-text);
+  scrollbar-width: thin;
+  animation: stat-in 0.32s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+
+.card-dialog__side {
+  display: grid;
+  gap: 18px;
+  align-content: center;
+}
+
+.card-dialog__side .stat-card__title {
+  padding-right: 40px;
+}
+
+@media (max-width: 760px) {
+  .card-dialog {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    gap: 20px;
+    padding: 64px 18px 22px;
+  }
+
+  .card-dialog__side {
+    width: 100%;
+  }
+}
+
+/* ── The Card button on each video in Recent points ─────────────── */
+
+.feed-item {
+  display: flex;
+  align-items: stretch;
+}
+
+.feed-item > .feed-row {
+  flex: 1;
+  min-width: 0;
+}
+
+.feed-card {
+  flex: none;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  margin-right: 16px;
+  padding: 0 11px;
+  border: 1px solid var(--hud-line);
+  border-radius: 999px;
+  background: rgba(3, 7, 6, 0.6);
+  color: var(--cr-dim);
+  font: 600 9.5px/1 var(--font-mono);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 160ms ease, background 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.feed-card:hover,
+.feed-card:focus-visible {
+  outline: none;
+  color: #021008;
+  border-color: var(--cr-neon);
+  background: var(--cr-neon);
+  box-shadow: 0 0 14px var(--hud-glow);
+}

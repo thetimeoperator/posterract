@@ -3,7 +3,7 @@ import { create } from "zustand";
 import type {
   BusinessDTO,
   AccountAnalyticsResponseDTO,
-  AccountPostDTO,
+  AccountPostsDTO,
   PeriodStatsDTO,
   AnalyticsDashboardDTO,
   AnalyticsRangeDays,
@@ -13,13 +13,16 @@ import type {
   LeaderboardPeriod,
   PlatformId,
   PointsDashboardDTO,
+  PointsFeedPageDTO,
   PointsSummaryDTO,
+  CardImagesDTO,
   PortalDTO,
   ProjectionDTO,
   TransmissionDTO,
 } from "@posterract/contract";
 import type { AnalyticsScope, BusinessInput, CreateTransmissionInput, PeriodQuery } from "./store";
 import { cloudJson } from "@/lib/cloudRequest";
+import { readCached, writeCached } from "@/lib/sessionCache";
 import { desktopRequest, isPosterractDesktop } from "@/lib/desktop";
 
 const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "/api";
@@ -46,20 +49,47 @@ type State = Bootstrap & {
   /** Keyed by period and scope (see periodKey). */
   periodStats: Record<string, PeriodStatsDTO>;
   pointsDashboard?: PointsDashboardDTO;
+  /** Recent points feed pages after the first, which comes with the dashboard. */
+  pointsFeeds: Record<number, PointsFeedPageDTO>;
   leaderboards: Partial<Record<LeaderboardPeriod, LeaderboardDTO>>;
   /** Every post on every account in the last 120 days, from any app or tool. */
-  accountPosts?: AccountPostDTO[];
+  accountPosts?: AccountPostsDTO;
   refresh: () => Promise<void>;
   loadAnalytics: (rangeDays: AnalyticsRangeDays, scope?: AnalyticsScope) => Promise<void>;
   loadAccountAnalytics: (rangeDays: AnalyticsRangeDays) => Promise<void>;
   loadPeriodStats: (query: PeriodQuery) => Promise<void>;
   loadPointsDashboard: () => Promise<void>;
+  loadPointsFeed: (page: number) => Promise<void>;
   loadLeaderboard: (period: LeaderboardPeriod) => Promise<void>;
   loadAccountPosts: () => Promise<void>;
 };
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return cloudJson<T>(API_BASE, path, init);
+}
+
+/** What a visit remembers for the next one: the workspace data and the Points dashboard. */
+type CachedEngine = { data: Bootstrap; pointsDashboard?: PointsDashboardDTO };
+
+/** The signed-in user the cache belongs to, once startEngine has been told. */
+let cacheUser: string | undefined;
+/** One bootstrap at a time: a second caller shares the request already on its way. */
+let refreshing: Promise<void> | undefined;
+
+function remember() {
+  const state = usePostgresStore.getState();
+  if (!cacheUser || !state.loaded) return;
+  const data: Bootstrap = {
+    workspaceId: state.workspaceId,
+    artifacts: state.artifacts,
+    transmissions: state.transmissions,
+    projections: state.projections,
+    events: state.events,
+    portals: state.portals,
+    businesses: state.businesses,
+    points: state.points,
+  };
+  writeCached("engine", cacheUser, { data, pointsDashboard: state.pointsDashboard } satisfies CachedEngine);
 }
 
 const emptyPoints: PointsSummaryDTO = {
@@ -83,13 +113,22 @@ const usePostgresStore = create<State>((set) => ({
   analytics: {},
   accountAnalytics: {},
   periodStats: {},
+  pointsFeeds: {},
   leaderboards: {},
-  refresh: async () => {
-    const data = await request<Bootstrap>("/v1/bootstrap");
-    for (const artifact of data.artifacts) {
-      if (artifact.publicUrl) artifactUrls.set(artifact.id, artifact.publicUrl);
-    }
-    set({ ...data, loaded: true });
+  refresh: () => {
+    refreshing ??= (async () => {
+      try {
+        const data = await request<Bootstrap>("/v1/bootstrap");
+        for (const artifact of data.artifacts) {
+          if (artifact.publicUrl) artifactUrls.set(artifact.id, artifact.publicUrl);
+        }
+        set({ ...data, loaded: true });
+        remember();
+      } finally {
+        refreshing = undefined;
+      }
+    })();
+    return refreshing;
   },
   loadAnalytics: async (rangeDays, scope) => {
     const query = new URLSearchParams({ rangeDays: String(rangeDays) });
@@ -111,10 +150,15 @@ const usePostgresStore = create<State>((set) => ({
   loadPointsDashboard: async () => {
     const data = await request<PointsDashboardDTO>("/v1/points/dashboard");
     set({ pointsDashboard: data });
+    remember();
+  },
+  loadPointsFeed: async (page) => {
+    const data = await request<PointsFeedPageDTO>(`/v1/points/feed?page=${page}`);
+    set((state) => ({ pointsFeeds: { ...state.pointsFeeds, [page]: data } }));
   },
   loadAccountPosts: async () => {
-    const data = await request<{ posts: AccountPostDTO[] }>("/v1/analytics/posts");
-    set({ accountPosts: data.posts });
+    const data = await request<AccountPostsDTO>("/v1/analytics/posts");
+    set({ accountPosts: { posts: data.posts, syncing: data.syncing ?? [] } });
   },
   loadLeaderboard: async (period) => {
     const data = await request<LeaderboardDTO>(`/v1/leaderboard?period=${period}`);
@@ -139,6 +183,29 @@ function sendTimeZone() {
   }).catch(() => {
     timeZoneSent = false;
   });
+}
+
+/**
+ * Signed in: paint from what the last visit saw at once, and start loading the
+ * real data now, alongside the billing check, instead of after it. The data
+ * shown is only ever this user's, and is replaced the moment the request lands.
+ */
+export function startEngine(userId: string | undefined) {
+  if (!userId) return;
+  if (cacheUser !== userId) {
+    cacheUser = userId;
+    const cached = readCached<CachedEngine>("engine", userId);
+    if (cached?.data && !usePostgresStore.getState().loaded) {
+      for (const artifact of cached.data.artifacts ?? []) {
+        if (artifact.publicUrl) artifactUrls.set(artifact.id, artifact.publicUrl);
+      }
+      usePostgresStore.setState({ ...cached.data, loaded: true, pointsDashboard: cached.pointsDashboard });
+    }
+  }
+  void usePostgresStore
+    .getState()
+    .refresh()
+    .catch(() => undefined);
 }
 
 export function useEngineBoot() {
@@ -182,7 +249,7 @@ export function useAccountAnalytics(rangeDays: AnalyticsRangeDays): AccountAnaly
  * When every post on each account went live (last 120 days), whichever app or
  * tool made it, for the posting graph. Undefined until the first load.
  */
-export function useAccountPosts(): AccountPostDTO[] | null | undefined {
+export function useAccountPosts(): AccountPostsDTO | null | undefined {
   const data = usePostgresStore((state) => state.accountPosts);
   const load = usePostgresStore((state) => state.loadAccountPosts);
   useEffect(() => {
@@ -191,6 +258,18 @@ export function useAccountPosts(): AccountPostDTO[] | null | undefined {
     window.addEventListener("focus", run);
     return () => window.removeEventListener("focus", run);
   }, [load]);
+  // A new connection's past posts arrive within moments: check back until they do.
+  const waiting = (data?.syncing.length ?? 0) > 0;
+  useEffect(() => {
+    if (!waiting) return;
+    let checks = 0;
+    const timer = window.setInterval(() => {
+      checks += 1;
+      if (checks > 45) window.clearInterval(timer);
+      else void load().catch(() => undefined);
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [waiting, load]);
   return data;
 }
 
@@ -243,6 +322,20 @@ export function usePointsDashboard(): PointsDashboardDTO | undefined {
   return dashboard;
 }
 
+/** A page of the Recent points feed: the first comes with the dashboard, the rest load when someone turns to them. */
+export function usePointsFeed(page: number): PointsFeedPageDTO | undefined {
+  const first = usePostgresStore((state) => state.pointsDashboard?.feed);
+  const later = usePostgresStore((state) => (page > 1 ? state.pointsFeeds[page] : undefined));
+  const loadPointsFeed = usePostgresStore((state) => state.loadPointsFeed);
+  useEffect(() => {
+    if (page <= 1) return;
+    void loadPointsFeed(page).catch((error) => {
+      console.error("PostgreSQL points feed failed", error);
+    });
+  }, [loadPointsFeed, page]);
+  return page <= 1 ? first : later;
+}
+
 export function useLeaderboard(period: LeaderboardPeriod): LeaderboardDTO | undefined {
   const leaderboard = usePostgresStore((state) => state.leaderboards[period]);
   const loadLeaderboard = usePostgresStore((state) => state.loadLeaderboard);
@@ -252,6 +345,14 @@ export function useLeaderboard(period: LeaderboardPeriod): LeaderboardDTO | unde
     });
   }, [loadLeaderboard, period]);
   return leaderboard;
+}
+
+/** The pictures rank cards draw, as data URLs: the creator's avatar and the named posts' covers. */
+export async function fetchCardImages(covers: string[], avatar = true): Promise<CardImagesDTO> {
+  const query = new URLSearchParams();
+  if (avatar) query.set("avatar", "1");
+  if (covers.length) query.set("covers", covers.slice(0, 12).join(","));
+  return request<CardImagesDTO>(`/v1/points/card-images?${query}`);
 }
 
 export const artifactUrls = new Map<string, string>();
@@ -270,14 +371,16 @@ export function useEngineActions() {
     ) => {
       let result: { mediaId: string };
       if (isPosterractDesktop()) {
+        // A file from disk uploads by its path; one made in the app (a rank
+        // card's video) has none, so its bytes go to the app to upload.
         const path = window.desktop?.getPathForFile(file);
-        if (!path) throw new Error("Posterract could not access the selected video");
+        const key = path || `memory:${crypto.randomUUID()}`;
         const stopProgress = window.desktop?.on("main:event", (payload) => {
           const event = payload as { channel?: string; data?: { path?: string; progress?: number } };
           const progress = event.data?.progress;
           if (
             event.channel === "cloud:upload-progress"
-            && event.data?.path === path
+            && event.data?.path === key
             && typeof progress === "number"
             && Number.isFinite(progress)
           ) {
@@ -285,13 +388,15 @@ export function useEngineActions() {
           }
         });
         try {
-          result = await desktopRequest<{ mediaId: string }>("cloud:upload-file", {
-            path,
-            contentType: file.type,
-            durationMs: meta.durationMs,
-            width: meta.width,
-            height: meta.height,
-          });
+          const details = { contentType: file.type, durationMs: meta.durationMs, width: meta.width, height: meta.height };
+          result = path
+            ? await desktopRequest<{ mediaId: string }>("cloud:upload-file", { path, ...details })
+            : await desktopRequest<{ mediaId: string }>("cloud:upload-bytes", {
+                key,
+                name: file.name,
+                bytes: new Uint8Array(await file.arrayBuffer()),
+                ...details,
+              });
         } finally {
           stopProgress?.();
         }

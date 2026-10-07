@@ -7,6 +7,8 @@ export type MiniTesseractState = "idle" | "transmitting" | "error";
  * The Posterract mark: a live 2D projection of a rotating 4D hypercube,
  * drawn on a small canvas. Doubles as the global status light —
  * idle: slow rotation · transmitting: fast + cyan pulse · error: redshift flicker.
+ * At rest it turns a few frames a second (the slow turn looks the same) and
+ * stops while the window is hidden; only a post on its way gets every frame.
  * Falls back to a static tesseract under prefers-reduced-motion.
  */
 export function MiniTesseract({
@@ -104,13 +106,27 @@ export function MiniTesseract({
       draw(0.6);
       return;
     }
-    let start = performance.now();
+    const start = performance.now();
+    let timer = 0;
     const loop = (now: number) => {
       draw((now - start) / 1000);
-      raf = requestAnimationFrame(loop);
+      if (document.hidden) return;
+      // Idle turns slowly: 12 frames a second is enough and lets the page rest between them.
+      if (stateRef.current === "transmitting") raf = requestAnimationFrame(loop);
+      else timer = window.setTimeout(() => (raf = requestAnimationFrame(loop)), 83);
+    };
+    const onVisibility = () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(timer);
+      if (!document.hidden) raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [size]);
 
   return (

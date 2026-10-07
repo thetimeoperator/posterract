@@ -19,7 +19,7 @@ import { ArtifactThumb } from "@/components/ArtifactThumb";
 import { AccountTargets } from "@/components/AccountTargets";
 import { useSelectedBusiness } from "@/state/business";
 import { TikTokDeclaration, TikTokSettings, TikTokHoverHint, TIKTOK_DISCLOSURE_HINT } from "@/components/TikTokSettings";
-import { emptyTikTokOptions, validateTikTokOptions, type TikTokCreatorInfo } from "@posterract/contract/tiktok";
+import { defaultTikTokPrivacy, emptyTikTokOptions, validateTikTokOptions, type TikTokCreatorInfo } from "@posterract/contract/tiktok";
 import {
   artifactUrl,
   computePreflight,
@@ -36,8 +36,10 @@ import { aspectLabel, formatBytes, formatDuration, toDatetimeLocal } from "@/lib
 import type { CreateTransmissionInput } from "@/engine/store";
 import { isPosterractDesktop } from "@/lib/desktop";
 import { WebComposer } from "@/components/composer/WebComposer";
+import { startingPlatforms } from "@/lib/composePlatforms";
 
-type ComposeSearch = { artifact?: string; at?: number; copy?: string };
+/** `platforms` (comma-separated) opens the composer on those platforms, as a rank card's Post does. */
+type ComposeSearch = { artifact?: string; at?: number; copy?: string; platforms?: string };
 
 export const Route = createFileRoute("/_app/compose")({
   component: ComposerEntry,
@@ -45,6 +47,7 @@ export const Route = createFileRoute("/_app/compose")({
     artifact: typeof search.artifact === "string" ? search.artifact : undefined,
     at: typeof search.at === "number" ? search.at : undefined,
     copy: typeof search.copy === "string" ? search.copy : undefined,
+    platforms: typeof search.platforms === "string" ? search.platforms : undefined,
   }),
 });
 
@@ -72,7 +75,7 @@ function Composer() {
   const [overrides, setOverrides] = useState<Partial<Record<PlatformId, string>>>({});
   const [hashtags, setHashtags] = useState<string[]>([]);
   const [tagDraft, setTagDraft] = useState("");
-  const [platforms, setPlatforms] = useState<PlatformId[]>(["instagram", "tiktok"]);
+  const [platforms, setPlatforms] = useState<PlatformId[]>(() => startingPlatforms(search.platforms) ?? ["instagram", "tiktok"]);
   const [businessId, setBusinessId] = useState("");
   // Instagram, Facebook and Threads can take several accounts; TikTok one.
   const [selectedAccounts, setSelectedAccounts] = useState<Partial<Record<PlatformId, string[]>>>({});
@@ -131,6 +134,11 @@ function Composer() {
     return () => { active = false; };
   }, [tiktokAccountId, creatorRefresh]);
   const creator = creatorState.accountId === tiktokAccountId ? creatorState.info : undefined;
+  useEffect(() => {
+    // Posts go to Everyone unless the user picks otherwise (a private account: the widest audience it allows).
+    const audience = creator ? defaultTikTokPrivacy(creator.privacy_level_options) : "";
+    if (audience) setTikTok((current) => current.privacyLevel ? current : { ...current, privacyLevel: audience });
+  }, [creator, tiktok.privacyLevel]);
 
   const artifact = artifacts.find((a) => a.id === artifactId);
   const previewUrl = artifactUrl(artifactId);
@@ -210,11 +218,11 @@ function Composer() {
   const headerBusiness = useSelectedBusiness();
   const startedOnBusiness = useRef(false);
   useEffect(() => {
-    if (startedOnBusiness.current || search.copy || !headerBusiness) return;
+    if (startedOnBusiness.current || search.copy || search.platforms || !headerBusiness) return;
     startedOnBusiness.current = true;
     chooseBusiness(headerBusiness.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [headerBusiness, search.copy]);
+  }, [headerBusiness, search.copy, search.platforms]);
 
   const addTag = () => {
     const clean = tagDraft.replace(/^#/, "").trim().replace(/\s+/g, "");

@@ -32,6 +32,9 @@ export const useWorkspace = create<WorkspaceState>((set) => ({
 
 
 
+/** The demo and Convex engines load their own way: nothing to start early. */
+export function startEngine(_userId: string | undefined) {}
+
 export function useEngineBoot() {
   const { isAuthenticated } = useConvexAuth();
   const ensure = useMutation(api.workspaces.ensure);
@@ -158,7 +161,7 @@ export function usePeriodStats(_query: PeriodQuery): import("@posterract/contrac
 }
 
 /** No platform post lists here: the posting graph counts this engine's own posts. */
-export function useAccountPosts(): import("@posterract/contract").AccountPostDTO[] | null | undefined {
+export function useAccountPosts(): import("@posterract/contract").AccountPostsDTO | null | undefined {
   return null;
 }
 
@@ -183,6 +186,14 @@ export function usePointsDashboard(): PointsDashboardDTO | undefined {
 
 export function useLeaderboard(_period: LeaderboardPeriod): LeaderboardDTO | undefined {
   return undefined;
+}
+
+export function usePointsFeed(_page: number): import("@posterract/contract").PointsFeedPageDTO | undefined {
+  return undefined;
+}
+
+export async function fetchCardImages(): Promise<import("@posterract/contract").CardImagesDTO> {
+  return { covers: {} };
 }
 
 export function useAnalyticsDashboard(rangeDays: AnalyticsRangeDays, _scope?: AnalyticsScope) {

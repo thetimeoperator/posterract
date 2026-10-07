@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown, LogIn, LogOut } from "lucide-react";
 import { useProfile, initials } from "@/state/profile";
 import { authClient } from "@/lib/authClient";
+import { clearSessionCaches } from "@/lib/sessionCache";
 import { ENGINE_MODE } from "@/engine/useEngine";
 import { useAuthState } from "@/lib/useAuthState";
 import { desktopSignOut } from "@/lib/desktopAuth";
@@ -60,10 +61,15 @@ export function AccountMenu() {
             transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
             className="glass popup-menu-surface absolute right-0 top-11 z-50 w-60 overflow-hidden rounded-[var(--radius-card)]"
           >
-            <div className="border-b border-[var(--glass-border)] px-4 py-3">
+            <Link
+              to="/profile"
+              role="menuitem"
+              onClick={() => setOpen(false)}
+              className="block border-b border-[var(--glass-border)] px-4 py-3 transition-colors hover:bg-[rgba(101,255,154,0.05)]"
+            >
               <p className="font-display text-[13px] font-semibold text-starlight">{displayName}</p>
               <p className="telemetry truncate text-[11px] text-starlight-faint">{subtitle}</p>
-            </div>
+            </Link>
             <div className="p-1.5">
               {SETUP_NAV_ITEMS.map((item) => {
                 const Icon = item.icon;
@@ -75,6 +81,7 @@ export function AccountMenu() {
                   type="button"
                   onClick={async () => {
                     setOpen(false);
+                    clearSessionCaches();
                     if (isPosterractDesktop()) await desktopSignOut();
                     else await authClient.signOut();
                     void navigate({ to: "/gate" });

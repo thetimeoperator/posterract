@@ -6,6 +6,7 @@ import {
   ANALYTICS_PLATFORM_IDS,
   PLATFORM_CAPABILITIES,
   type AccountPostDTO,
+  type AccountPostsDTO,
   type AnalyticsPlatformId,
   type AnalyticsRangeDays,
   type BusinessDTO,
@@ -68,7 +69,7 @@ export function PostingCadence({
 }: {
   portals: PortalDTO[];
   /** Every post from the platforms' lists; undefined while loading, null where there are none (the demo engine). */
-  accountPosts: AccountPostDTO[] | null | undefined;
+  accountPosts: AccountPostsDTO | null | undefined;
   projections: ProjectionDTO[];
   transmissions: TransmissionDTO[];
   businesses: BusinessDTO[];
@@ -95,7 +96,7 @@ export function PostingCadence({
     [portals],
   );
   const { days, series } = useMemo(
-    () => buildSeries(accounts, accountPosts ?? null, projections, transmissions, rangeDays, palette),
+    () => buildSeries(accounts, accountPosts?.posts ?? null, projections, transmissions, rangeDays, palette),
     [accounts, accountPosts, projections, transmissions, rangeDays, palette],
   );
 
@@ -112,6 +113,8 @@ export function PostingCadence({
   const activeDays = totals.filter((value) => value > 0).length;
   const leaderId = visible.reduce<Series | undefined>((best, row) => (row.total > (best?.total ?? 0) ? row : best), undefined)?.account.id;
   const ranked = [...series].sort((left, right) => left.rank - right.rank);
+  // A new connection whose past posts are still being read.
+  const reading = new Set(accountPosts?.syncing ?? []);
   const topTotal = Math.max(1, ...series.map((row) => row.total));
 
   const toggle = (id: string) =>
@@ -213,6 +216,10 @@ export function PostingCadence({
                     <span className="cadence-player-meta cadence-player-reconnect">
                       <TriangleAlert size={11} aria-hidden />
                       {PLATFORM_CAPABILITIES[row.account.provider].label} · reconnect on Accounts
+                    </span>
+                  ) : reading.has(id) ? (
+                    <span className="cadence-player-meta cadence-player-reading">
+                      {PLATFORM_CAPABILITIES[row.account.provider].label} · reading past posts…
                     </span>
                   ) : (
                     <span className="cadence-player-meta">
@@ -532,7 +539,7 @@ function CadenceChart({
                   mask={isLit ? undefined : `url(#${uid}-trail)`}
                 >
                   {isLit && <path className="cadence-area" d={`${path} L ${last.x} ${y(0)} L ${points[0].x} ${y(0)} Z`} fill={`url(#${uid}-area)`} />}
-                  <path className="cadence-line-glow" d={path} filter={`url(#${uid}-glow)`} />
+                  <path className="cadence-line-glow" d={path} />
                   <path className="cadence-line" d={path} />
                   <path className="cadence-line-core" d={path} />
                   <path

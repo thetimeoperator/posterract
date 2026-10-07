@@ -22,6 +22,7 @@ export const ENGINE_BACKEND: "postgres" | "convex" | "demo" = POSTGRES
 const impl = POSTGRES ? postgresEngine : CLOUD ? cloudEngine : localEngine;
 
 export const useEngineBoot = impl.useEngineBoot;
+export const startEngine = impl.startEngine;
 export const useArtifacts = impl.useArtifacts;
 export const useTransmissions = impl.useTransmissions;
 export const useProjections = impl.useProjections;
@@ -31,6 +32,8 @@ export const useBusinesses = impl.useBusinesses;
 export const usePoints = impl.usePoints;
 export const usePointsReady = impl.usePointsReady;
 export const usePointsDashboard = impl.usePointsDashboard;
+export const usePointsFeed = impl.usePointsFeed;
+export const fetchCardImages = impl.fetchCardImages;
 export const useLeaderboard = impl.useLeaderboard;
 export const useAnalyticsDashboard = impl.useAnalyticsDashboard;
 export const useAccountAnalytics = impl.useAccountAnalytics;
