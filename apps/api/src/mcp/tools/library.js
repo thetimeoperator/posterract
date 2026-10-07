@@ -58,7 +58,7 @@ function uploadType(fileName, contentType) {
   if (contentType && VIDEO_TYPES[contentType]) return contentType;
   const extension = fileName.split(".").pop()?.toLowerCase();
   const type = TYPE_BY_EXTENSION[extension];
-  if (!type) throw new ToolError("Only MP4 and MOV videos can be posted to Instagram, Facebook and Threads.");
+  if (!type) throw new ToolError("Only MP4 and MOV videos can be posted to Instagram, TikTok, Facebook and Threads.");
   return type;
 }
 

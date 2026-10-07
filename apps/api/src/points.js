@@ -1,13 +1,16 @@
 /**
  * Points: what each post, posting streak and follower milestone earns on
- * Instagram, Facebook and Threads, paid into the points ledger. The worker
+ * Instagram, TikTok, Facebook and Threads, paid into the points ledger. The worker
  * scores a workspace after every analytics refresh; the rescore script scores
  * everyone at once. The rates, milestones and levels live in
  * @posterract/contract, so the Points tab explains exactly what this pays.
  *
- * Everyone started at zero on launch day (POINTS_START_AT): only posts
- * published from then earn, streak days count from then, and follower growth
- * is measured from what each account had then (or when it was connected).
+ * Every post on a connected account earns, whichever app or tool made it,
+ * from the day the account was first connected: posts made through
+ * Posterract as projections, the rest from what the worker reads of them
+ * (platform_posts). Streak days count the same posts. Follower growth is
+ * measured from what each account had on launch day (POINTS_START_AT), or
+ * when it was connected if that came later.
  *
  * Paying is idempotent and never takes anything back. A post keeps what each
  * of its rules has earned in post_points and a rule only ever pays the rise
@@ -38,7 +41,7 @@ import {
   rankFor,
 } from "@posterract/contract";
 
-const PROVIDER_LABELS = { instagram: "Instagram", facebook: "Facebook", threads: "Threads" };
+const PROVIDER_LABELS = { instagram: "Instagram", tiktok: "TikTok", facebook: "Facebook", threads: "Threads" };
 const DAY_MS = 86_400_000;
 // Achievements older than this were caught up on, not just earned, so they
 // are paid without a notification: a first sync, a backfill, a late record.
@@ -59,6 +62,48 @@ const optionalNumber = (value) => {
 export function isPointsPlatform(provider) {
   return POINTS_PLATFORMS.includes(provider);
 }
+
+/** Whether a post earns: it is on a points platform and people can see it (not a TikTok Only me post). */
+export function earnsPoints(provider, platformOptions) {
+  return isPointsPlatform(provider) && !(provider === "tiktok" && platformOptions?.privacyLevel === "SELF_ONLY");
+}
+
+// The same rule in SQL, for queries over projections aliased `p`.
+const VISIBLE_POST = "not (p.provider = 'tiktok' and coalesce(p.platform_options->>'privacyLevel', '') = 'SELF_ONLY')";
+
+// When the account (aliased `a`) was first connected: its posts earn from then.
+const CONNECTED_AT = "coalesce(a.connected_at, a.created_at)";
+
+// The video ID in a Facebook post's link (/reel/123/, /videos/123/, ?v=123):
+// what a Facebook projection keeps as its post ID. For platform_posts aliased `pp`.
+const FACEBOOK_VIDEO_ID = `coalesce(
+  substring(pp.permalink from '/reels?/([0-9]+)'),
+  substring(pp.permalink from '/videos/([0-9]+)'),
+  substring(pp.permalink from '[?&]v=([0-9]+)'))`;
+
+/** A post made in another app goes by `provider:postId` wherever a projection would go by its ID. */
+const elsewhereKey = (provider, platformPostId) => `${provider}:${platformPostId}`;
+
+/** A post made elsewhere is titled by its caption's first line, or by its platform. */
+function captionTitle(caption, provider) {
+  const line = (caption ?? "")
+    .split("\n")
+    .map((part) => part.trim())
+    .find(Boolean);
+  if (!line) return `${PROVIDER_LABELS[provider] ?? provider} post`;
+  return line.length > 120 ? `${line.slice(0, 119)}…` : line;
+}
+
+// The listed copy of a paid post made elsewhere (aliased `pp`, from
+// platform_post_points), as `post`: the one with the newest numbers. A post
+// since deleted from its platform keeps its points with no copy left.
+const LISTED_POST = `left join lateral (
+  select listed.* from platform_posts listed
+  where listed.workspace_id = pp.workspace_id and listed.provider = pp.provider
+    and listed.platform_post_id = pp.platform_post_id
+  order by listed.metrics_fetched_at desc nulls last
+  limit 1
+) post on true`;
 
 // ---------------------------------------------------------------------------
 // What a post is worth
@@ -242,11 +287,13 @@ async function loadScoredPosts(database, workspaceId) {
   const result = await database.query(
     `select p.id, p.transmission_id, p.provider, p.social_account_id,
             coalesce(p.published_at, p.created_at) as published_at,
+            ${CONNECTED_AT} as connected_at,
             t.title, m.duration_ms,
             s.views, s.likes, s.comments, s.shares, s.watch_time_seconds,
             s.average_view_duration_seconds, s.raw_metrics, s.fetched_at
      from projections p
      join transmissions t on t.id = p.transmission_id
+     left join social_accounts a on a.id = p.social_account_id
      left join media_assets m on m.id = t.media_asset_id
      left join lateral (
        select * from publication_metric_snapshots s
@@ -254,25 +301,96 @@ async function loadScoredPosts(database, workspaceId) {
        order by s.fetched_at desc, s.id desc
        limit 1
      ) s on true
-     where p.workspace_id = $1 and p.status = 'live' and p.provider = any($2::text[])`,
+     where p.workspace_id = $1 and p.status = 'live' and p.provider = any($2::text[]) and ${VISIBLE_POST}`,
     [workspaceId, POINTS_PLATFORMS],
   );
   return result.rows;
 }
 
 /**
- * The local days a workspace posted something new since launch day. Only live
- * posts count, and a video counts once: posting the same file again, on any
- * platform or any day, keeps nobody's streak alive.
+ * Posts made in other apps, as the worker's hourly read of each account lists
+ * them: one row a post (the copy with the newest numbers, when two of the
+ * workspace's accounts list it), published since its account was connected.
+ * `$1` is the workspace, `$2` the points platforms, `$3` now; `scope` narrows
+ * the list further.
+ *
+ * Posts Posterract made are left to their projections: matched by the
+ * platform's post ID, or on Facebook by the video ID in the post's link. A
+ * public TikTok that Posterract posted can be listed before TikTok has given
+ * its projection the public ID, so TikToks within a day of such a post wait
+ * for it (for at most the week TikTok is asked).
  */
-async function loadPostingDays(database, workspaceId, timeZone) {
+function postsMadeElsewhereQuery(scope = "") {
+  return `
+    with accounts as (
+      select a.id, ${CONNECTED_AT} as connected_at
+      from social_accounts a
+      where a.workspace_id = $1 and a.provider = any($2::text[])
+    ), listed as (
+      select distinct on (pp.provider, pp.platform_post_id)
+             pp.*, accounts.connected_at,
+             case when pp.provider = 'facebook' then ${FACEBOOK_VIDEO_ID} end as video_id
+      from platform_posts pp
+      join accounts on accounts.id = pp.social_account_id
+      where pp.workspace_id = $1 ${scope}
+      order by pp.provider, pp.platform_post_id, pp.metrics_fetched_at desc nulls last, pp.first_seen_at desc
+    )
+    select listed.* from listed
+    where listed.published_at >= listed.connected_at
+      and not exists (
+        select 1 from projections p
+        where p.workspace_id = $1 and p.provider = listed.provider and p.status = 'live' and ${VISIBLE_POST}
+          and p.platform_post_id in (listed.platform_post_id, listed.video_id)
+      )
+      and not (listed.provider = 'tiktok' and exists (
+        select 1 from projections p
+        where p.workspace_id = $1 and p.provider = 'tiktok' and p.status = 'live' and ${VISIBLE_POST}
+          and p.social_account_id = listed.social_account_id
+          and coalesce(p.platform_post_id, '') !~ '^[0-9]+$'
+          and coalesce(p.published_at, p.created_at) > $3::timestamptz - interval '7 days'
+          and abs(extract(epoch from coalesce(p.published_at, p.created_at) - listed.published_at)) < 86400
+      ))`;
+}
+
+async function loadPostsMadeElsewhere(database, workspaceId, now) {
+  const result = await database.query(postsMadeElsewhereQuery(), [workspaceId, POINTS_PLATFORMS, new Date(now)]);
+  return result.rows;
+}
+
+/**
+ * The posts on one account that earn as made elsewhere and are recent enough
+ * to read numbers for (90 days, as for Posterract's own): what the worker
+ * asks the platform about.
+ */
+export async function loadAccountPostsMadeElsewhere(database, { workspaceId, accountId }, now = Date.now()) {
+  const result = await database.query(
+    postsMadeElsewhereQuery("and pp.social_account_id = $4 and pp.published_at >= $3::timestamptz - interval '90 days'"),
+    [workspaceId, POINTS_PLATFORMS, new Date(now), accountId],
+  );
+  return result.rows.map((row) => ({
+    platformPostId: row.platform_post_id,
+    permalink: row.permalink ?? undefined,
+    videoId: row.video_id ?? undefined,
+    publishedAt: new Date(row.published_at).getTime(),
+    metricsFetchedAt: row.metrics_fetched_at ? new Date(row.metrics_fetched_at).getTime() : undefined,
+  }));
+}
+
+/**
+ * The local days a workspace posted something that earns. Only live posts
+ * count, and a Posterract video counts once: posting the same file again, on
+ * any platform or any day, keeps nobody's streak alive.
+ */
+async function loadPostingDays(database, workspaceId, timeZone, now = Date.now()) {
   const result = await database.query(
     `with live as (
        select p.transmission_id, t.media_asset_id,
               min(coalesce(p.published_at, p.created_at)) as published_at
        from projections p
        join transmissions t on t.id = p.transmission_id
-       where p.workspace_id = $1 and p.status = 'live' and p.provider = any($2::text[])
+       left join social_accounts a on a.id = p.social_account_id
+       where p.workspace_id = $1 and p.status = 'live' and p.provider = any($2::text[]) and ${VISIBLE_POST}
+         and coalesce(p.published_at, p.created_at) >= coalesce(${CONNECTED_AT}, '-infinity'::timestamptz)
        group by p.transmission_id, t.media_asset_id
      ), firsts as (
        select published_at,
@@ -282,8 +400,10 @@ async function loadPostingDays(database, workspaceId, timeZone) {
               ) as use
        from live
      )
-     select published_at from firsts where use = 1 and published_at >= $3`,
-    [workspaceId, POINTS_PLATFORMS, new Date(POINTS_START_AT)],
+     select published_at from firsts where use = 1
+     union all
+     select published_at from (${postsMadeElsewhereQuery()}) elsewhere`,
+    [workspaceId, POINTS_PLATFORMS, new Date(now)],
   );
   return result.rows.map((row) => localDay(new Date(row.published_at).getTime(), timeZone));
 }
@@ -369,40 +489,59 @@ async function notifyToday(client, workspaceId, timeZone, now) {
 
 /**
  * Pays one post rule up to `target`, if that is more than it has had. Returns
- * the amount paid (0 when there was nothing to pay).
+ * the amount paid (0 when there was nothing to pay). `post` is a projection
+ * (`projectionId`) or a post made elsewhere (`platformPostId`).
  */
 async function payPostRule(client, { post, workspaceId, source, target, value, current, awardedAt, dryRun }) {
   if (target <= current + 0.004) return 0;
   const amount = round2(target - current);
   if (dryRun) return amount;
+  const reference = post.projectionId
+    ? `projection:${post.projectionId}:${source}:${target.toFixed(2)}`
+    : `platform:${workspaceId}:${post.provider}:${post.platformPostId}:${source}:${target.toFixed(2)}`;
   await client.query(
     `insert into points_ledger
        (workspace_id, source, amount, reference_id, note, awarded_at,
-        projection_id, social_account_id, provider)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        projection_id, platform_post_id, social_account_id, provider)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      on conflict (reference_id, source) do nothing`,
     [
       workspaceId,
       source,
       amount,
-      `projection:${post.id}:${source}:${target.toFixed(2)}`,
+      reference,
       noteFor(source, post.provider, post.title),
       awardedAt,
-      post.id,
-      post.social_account_id ?? null,
+      post.projectionId ?? null,
+      post.projectionId ? null : post.platformPostId,
+      post.socialAccountId ?? null,
       post.provider,
     ],
   );
-  await client.query(
-    `insert into post_points
-       (projection_id, source, workspace_id, social_account_id, provider, points, metric_value, updated_at)
-     values ($1, $2, $3, $4, $5, $6, $7, now())
-     on conflict (projection_id, source) do update
-       set points = greatest(post_points.points, excluded.points),
-           metric_value = excluded.metric_value,
-           updated_at = now()`,
-    [post.id, source, workspaceId, post.social_account_id ?? null, post.provider, target, value ?? null],
-  );
+  if (post.projectionId) {
+    await client.query(
+      `insert into post_points
+         (projection_id, source, workspace_id, social_account_id, provider, points, metric_value, updated_at)
+       values ($1, $2, $3, $4, $5, $6, $7, now())
+       on conflict (projection_id, source) do update
+         set points = greatest(post_points.points, excluded.points),
+             metric_value = excluded.metric_value,
+             updated_at = now()`,
+      [post.projectionId, source, workspaceId, post.socialAccountId ?? null, post.provider, target, value ?? null],
+    );
+  } else {
+    await client.query(
+      `insert into platform_post_points
+         (workspace_id, provider, platform_post_id, source, social_account_id, points, metric_value, updated_at)
+       values ($1, $2, $3, $4, $5, $6, $7, now())
+       on conflict (workspace_id, provider, platform_post_id, source) do update
+         set points = greatest(platform_post_points.points, excluded.points),
+             metric_value = excluded.metric_value,
+             social_account_id = coalesce(excluded.social_account_id, platform_post_points.social_account_id),
+             updated_at = now()`,
+      [workspaceId, post.provider, post.platformPostId, source, post.socialAccountId ?? null, target, value ?? null],
+    );
+  }
   return amount;
 }
 
@@ -469,36 +608,73 @@ export async function scoreWorkspace(
 
   const before = announce ? await ledgerTotal(client, workspaceId) : 0;
   const timeZone = await loadTimeZone(client, workspaceId);
-  const posts = await loadScoredPosts(client, workspaceId);
+  const time = (value) => new Date(value).getTime();
+  // Every post in one shape: Posterract's own (projections), then the ones
+  // made in other apps.
+  const posts = [
+    ...(await loadScoredPosts(client, workspaceId)).map((row) => ({
+      key: row.id,
+      projectionId: row.id,
+      transmissionId: row.transmission_id,
+      provider: row.provider,
+      socialAccountId: row.social_account_id,
+      title: row.title,
+      publishedAt: time(row.published_at),
+      connectedAt: row.connected_at ? time(row.connected_at) : -Infinity,
+      durationSeconds: number(row.duration_ms) / 1000,
+      fetchedAt: row.fetched_at ? time(row.fetched_at) : undefined,
+      metrics: row.fetched_at ? postMetrics(row) : undefined,
+    })),
+    ...(await loadPostsMadeElsewhere(client, workspaceId, now)).map((row) => ({
+      key: elsewhereKey(row.provider, row.platform_post_id),
+      platformPostId: row.platform_post_id,
+      provider: row.provider,
+      socialAccountId: row.social_account_id,
+      title: captionTitle(row.caption, row.provider),
+      publishedAt: time(row.published_at),
+      connectedAt: time(row.connected_at),
+      durationSeconds: number(row.duration_seconds),
+      fetchedAt: row.metrics_fetched_at ? time(row.metrics_fetched_at) : undefined,
+      metrics: row.metrics_fetched_at ? postMetrics(row) : undefined,
+    })),
+  ];
   const paidRows = await client.query(
-    "select projection_id, source, points from post_points where workspace_id = $1",
+    `select projection_id::text as key, source, points from post_points where workspace_id = $1
+     union all
+     select provider || ':' || platform_post_id, source, points from platform_post_points where workspace_id = $1`,
     [workspaceId],
   );
-  const paid = new Map(paidRows.rows.map((row) => [`${row.projection_id}:${row.source}`, Number(row.points)]));
+  const paid = new Map(paidRows.rows.map((row) => [`${row.key}:${row.source}`, Number(row.points)]));
+  // Posts whose numbers have earned something already.
+  const counted = new Set(paidRows.rows.filter((row) => row.source !== "post").map((row) => row.key));
 
   const bests = personalBests(
     posts
-      .filter((post) => post.views !== null && post.views !== undefined)
+      .filter((post) => post.metrics)
       .map((post) => ({
-        id: post.id,
-        accountId: post.social_account_id,
-        publishedAt: new Date(post.published_at).getTime(),
-        views: number(post.views),
+        id: post.key,
+        accountId: post.socialAccountId,
+        publishedAt: post.publishedAt,
+        views: post.metrics.views,
       })),
   );
 
   for (const post of posts) {
-    const publishedAt = new Date(post.published_at).getTime();
-    // Earlier posts still set the bar for records and breakouts, but earn nothing.
-    if (publishedAt < POINTS_START_AT) continue;
-    const hasSnapshot = post.fetched_at !== null && post.fetched_at !== undefined;
+    const { publishedAt } = post;
+    // Posts from before the account was connected still set the bar for
+    // records and breakouts, but earn nothing.
+    if (publishedAt < post.connectedAt) continue;
     const targets = postTargets({
       provider: post.provider,
-      metrics: hasSnapshot ? postMetrics(post) : undefined,
-      durationSeconds: number(post.duration_ms) / 1000,
+      metrics: post.metrics,
+      durationSeconds: post.durationSeconds,
       ageHours: (now - publishedAt) / 3_600_000,
-      bests: bests.get(post.id),
+      bests: bests.get(post.key),
     });
+    // Numbers read for the first time days after the post went live (a post
+    // caught up on, like one made elsewhere before its points counted) are
+    // dated when it went live, so they land in the weeks they were earned in.
+    const caughtUp = !counted.has(post.key) && now - publishedAt > FRESH_MS;
     for (const [source, { points, value }] of Object.entries(targets)) {
       const amount = await payPostRule(client, {
         post,
@@ -506,12 +682,14 @@ export async function scoreWorkspace(
         source,
         target: points,
         value,
-        current: paid.get(`${post.id}:${source}`) ?? 0,
+        current: paid.get(`${post.key}:${source}`) ?? 0,
         // When the points were earned: the post going live, or the moment its
         // metrics were read. A backfill dates them all at the post, so old
         // posts land in the past, not all in this week.
         awardedAt:
-          source === "post" || !hasSnapshot || backfill ? new Date(publishedAt) : new Date(post.fetched_at),
+          source === "post" || !post.metrics || backfill || caughtUp
+            ? new Date(publishedAt)
+            : new Date(post.fetchedAt),
         dryRun,
       });
       tally(source, amount);
@@ -519,8 +697,8 @@ export async function scoreWorkspace(
         const where = `${PROVIDER_LABELS[post.provider]}: “${shortTitle(post.title)}”`;
         news.push({
           type: `points.${source}`,
-          projectionId: post.id,
-          transmissionId: post.transmission_id,
+          projectionId: post.projectionId,
+          transmissionId: post.transmissionId,
           message:
             source === "record"
               ? `New views record on ${where} (+${formatAmount(amount)} points).`
@@ -531,7 +709,7 @@ export async function scoreWorkspace(
   }
 
   // Streak milestones: each once per run of consecutive posting days.
-  const runs = streakRuns(await loadPostingDays(client, workspaceId, timeZone));
+  const runs = streakRuns(await loadPostingDays(client, workspaceId, timeZone, now));
   for (const run of runs) {
     for (const milestone of POINTS_STREAK_MILESTONES) {
       if (run.length < milestone.days) continue;
@@ -627,11 +805,11 @@ export async function scoreWorkspace(
 
 /**
  * The point for a post going live, paid the moment the platform confirms it
- * rather than at the next analytics refresh. Instagram, Facebook and Threads
- * only; the other platforms earn nothing yet.
+ * rather than at the next analytics refresh. Instagram, TikTok, Facebook and
+ * Threads only (not TikTok Only me posts); the other platforms earn nothing yet.
  */
-export async function awardPostLive(postgres, { projectionId, workspaceId, provider, socialAccountId, title }) {
-  if (!isPointsPlatform(provider)) return 0;
+export async function awardPostLive(postgres, { projectionId, workspaceId, provider, socialAccountId, title, platformOptions }) {
+  if (!earnsPoints(provider, platformOptions)) return 0;
   const client = await postgres.connect();
   try {
     await client.query("begin");
@@ -642,7 +820,7 @@ export async function awardPostLive(postgres, { projectionId, workspaceId, provi
     );
     const before = await ledgerTotal(client, workspaceId);
     const amount = await payPostRule(client, {
-      post: { id: projectionId, provider, social_account_id: socialAccountId, title },
+      post: { projectionId, provider, socialAccountId, title },
       workspaceId,
       source: "post",
       target: POINTS_POST_LIVE,
@@ -670,7 +848,39 @@ function entryFromRow(row) {
     source: row.source,
     amount: Number(row.amount),
     note: row.note ?? undefined,
+    // The post that earned it: a projection, or a post made elsewhere by its key.
+    projectionId:
+      row.projection_id ?? (row.platform_post_id ? elsewhereKey(row.provider, row.platform_post_id) : undefined),
+    provider: row.provider ?? undefined,
     at: new Date(row.awarded_at).getTime(),
+  };
+}
+
+/**
+ * A post's latest numbers for its stat card, from its newest analytics
+ * snapshot: saves only where the platform reports them, retention as the
+ * share of the video watched on average.
+ */
+function metricsFromSnapshot(row) {
+  const metrics = postMetrics(row);
+  // The video's length: Posterract's own file, or what the platform says (Facebook).
+  const durationSeconds =
+    optionalNumber(row.duration_ms) !== undefined
+      ? Number(row.duration_ms) / 1000
+      : optionalNumber(row.duration_seconds);
+  const retention =
+    metrics.averageWatchSeconds !== undefined && durationSeconds
+      ? Math.min(1, metrics.averageWatchSeconds / durationSeconds)
+      : undefined;
+  return {
+    views: metrics.views,
+    likes: metrics.likes,
+    comments: metrics.comments,
+    shares: metrics.shares,
+    saves: POINTS_RATES[row.provider]?.saves ? metrics.saves : undefined,
+    watchHours: metrics.watchSeconds === undefined ? undefined : round2(metrics.watchSeconds / 3600),
+    averageWatchSeconds: metrics.averageWatchSeconds,
+    retention: retention === undefined ? undefined : Math.round(retention * 1000) / 1000,
   };
 }
 
@@ -687,26 +897,30 @@ async function loadTotals(database, workspaceId) {
 }
 
 async function loadStreak(database, workspaceId, timeZone, now = Date.now()) {
-  const runs = streakRuns(await loadPostingDays(database, workspaceId, timeZone));
+  const runs = streakRuns(await loadPostingDays(database, workspaceId, timeZone, now));
   return streakState(runs, localDay(now, timeZone));
 }
 
 /** The streak as the calendar shows it: its days, whether today's post is in yet, and the next bonus. */
 export async function loadStreakSummary(database, workspaceId, now = Date.now()) {
   const timeZone = await loadTimeZone(database, workspaceId);
-  const runs = streakRuns(await loadPostingDays(database, workspaceId, timeZone));
+  const runs = streakRuns(await loadPostingDays(database, workspaceId, timeZone, now));
   const today = localDay(now, timeZone);
   const state = streakState(runs, today);
   return { days: state.current, postedToday: runs.at(-1)?.end === today, next: state.next };
 }
 
 async function loadBadges(database, workspaceId, streak) {
+  // Any post, Posterract's own or made elsewhere.
+  const anyPost = (condition) =>
+    `(exists (select 1 from post_points where workspace_id = $1 and ${condition})
+      or exists (select 1 from platform_post_points where workspace_id = $1 and ${condition}))`;
   const result = await database.query(
     `select
-       exists (select 1 from post_points where workspace_id = $1 and source = 'post') as posted,
-       exists (select 1 from post_points where workspace_id = $1 and source = 'views' and metric_value >= 100000) as club,
-       exists (select 1 from post_points where workspace_id = $1 and source = 'record') as record,
-       exists (select 1 from post_points where workspace_id = $1 and source = 'breakout') as breakout`,
+       ${anyPost("source = 'post'")} as posted,
+       ${anyPost("source = 'views' and metric_value >= 100000")} as club,
+       ${anyPost("source = 'record'")} as record,
+       ${anyPost("source = 'breakout'")} as breakout`,
     [workspaceId],
   );
   const row = result.rows[0] ?? {};
@@ -726,7 +940,7 @@ export async function loadPointsSummary(database, workspaceId) {
     loadTotals(database, workspaceId),
     loadStreak(database, workspaceId, timeZone),
     database.query(
-      `select id, source, amount, note, awarded_at from points_ledger
+      `select id, source, amount, note, awarded_at, projection_id, platform_post_id, provider from points_ledger
        where workspace_id = $1 order by awarded_at desc, id desc limit 30`,
       [workspaceId],
     ),
@@ -743,23 +957,34 @@ export async function loadPointsSummary(database, workspaceId) {
 /** Everything the My Points tab shows. */
 export async function loadPointsDashboard(database, workspaceId, now = Date.now()) {
   const timeZone = await loadTimeZone(database, workspaceId);
-  const [totals, streak, recent, posts, accounts] = await Promise.all([
+  const [totals, streak, recent, posts, accounts, feed] = await Promise.all([
     loadTotals(database, workspaceId),
     loadStreak(database, workspaceId, timeZone, now),
     database.query(
-      `select id, source, amount, note, awarded_at from points_ledger
+      `select id, source, amount, note, awarded_at, projection_id, platform_post_id, provider from points_ledger
        where workspace_id = $1 order by awarded_at desc, id desc limit 30`,
       [workspaceId],
     ),
     database.query(
-      `select pp.projection_id, pp.provider, pp.source, pp.points, pp.metric_value,
-             p.platform_post_url, coalesce(p.published_at, p.created_at) as published_at, t.title,
-             sum(pp.points) over (partition by pp.projection_id) as total
-       from post_points pp
-       join projections p on p.id = pp.projection_id
-       join transmissions t on t.id = p.transmission_id
-       where pp.workspace_id = $1
-       order by total desc, pp.projection_id, pp.points desc`,
+      `with paid as (
+         select pp.projection_id::text as key, pp.provider, pp.source, pp.points, pp.metric_value,
+                p.platform_post_url as url, coalesce(p.published_at, p.created_at) as published_at,
+                t.title, null::text as caption, t.media_asset_id, a.handle
+         from post_points pp
+         join projections p on p.id = pp.projection_id
+         join transmissions t on t.id = p.transmission_id
+         left join social_accounts a on a.id = p.social_account_id
+         where pp.workspace_id = $1
+         union all
+         select pp.provider || ':' || pp.platform_post_id, pp.provider, pp.source, pp.points, pp.metric_value,
+                post.permalink, post.published_at, null, post.caption, null, a.handle
+         from platform_post_points pp
+         ${LISTED_POST}
+         left join social_accounts a on a.id = pp.social_account_id
+         where pp.workspace_id = $1
+       )
+       select *, sum(points) over (partition by key) as total from paid
+       order by total desc, key, points desc`,
       [workspaceId],
     ),
     database.query(
@@ -773,23 +998,26 @@ export async function loadPointsDashboard(database, workspaceId, now = Date.now(
        order by a.created_at asc`,
       [workspaceId, POINTS_PLATFORMS],
     ),
+    loadPointsFeed(database, workspaceId, 1),
   ]);
 
   const byPost = new Map();
   for (const row of posts.rows) {
-    let post = byPost.get(row.projection_id);
+    let post = byPost.get(row.key);
     if (!post) {
       if (byPost.size >= 10) continue;
       post = {
-        projectionId: row.projection_id,
+        projectionId: row.key,
         provider: row.provider,
-        title: row.title,
-        url: row.platform_post_url ?? undefined,
+        title: row.title ?? captionTitle(row.caption, row.provider),
+        url: row.url ?? undefined,
         publishedAt: row.published_at ? new Date(row.published_at).getTime() : undefined,
         total: round2(Number(row.total)),
         parts: [],
+        artifactId: row.media_asset_id ?? undefined,
+        handle: row.handle ?? undefined,
       };
-      byPost.set(row.projection_id, post);
+      byPost.set(row.key, post);
     }
     if (Number(row.points) > 0) {
       post.parts.push({
@@ -799,7 +1027,6 @@ export async function loadPointsDashboard(database, workspaceId, now = Date.now(
       });
     }
   }
-
   const progress = levelProgress(totals.total);
   const rank = rankFor(totals.total);
   const upcoming = nextRank(totals.total);
@@ -831,8 +1058,285 @@ export async function loadPointsDashboard(database, workspaceId, now = Date.now(
       }),
     topPosts: [...byPost.values()],
     recent: recent.rows.map(entryFromRow),
+    feed,
     badges: await loadBadges(database, workspaceId, streak),
     timeZone,
+  };
+}
+
+/** The platform's own cover, when it is one the app can show. */
+const coverUrl = (value) => (typeof value === "string" && value.startsWith("https://") ? value : undefined);
+
+/**
+ * Posts as the feed and its stat cards show them: points rule by rule, the
+ * video (for the thumbnail), the account, and the latest analytics numbers.
+ * `keys` are projection IDs and the `provider:postId` keys of posts made elsewhere.
+ */
+async function loadPostCards(database, workspaceId, keys) {
+  const cards = new Map();
+  const projectionIds = keys.filter((key) => !key.includes(":"));
+  const elsewhereKeys = keys.filter((key) => key.includes(":"));
+  if (elsewhereKeys.length) {
+    const elsewhere = await database.query(
+      `select pp.provider, pp.platform_post_id, pp.source, pp.points, pp.metric_value, a.handle,
+              post.permalink, post.published_at, post.caption, post.thumbnail_url, post.views, post.likes,
+              post.comments, post.shares, post.watch_time_seconds, post.average_view_duration_seconds,
+              post.duration_seconds, post.raw_metrics, post.metrics_fetched_at
+       from platform_post_points pp
+       ${LISTED_POST}
+       left join social_accounts a on a.id = pp.social_account_id
+       where pp.workspace_id = $1 and pp.provider || ':' || pp.platform_post_id = any($2::text[])
+       order by pp.provider, pp.platform_post_id, pp.points desc`,
+      [workspaceId, elsewhereKeys],
+    );
+    for (const row of elsewhere.rows) {
+      const key = elsewhereKey(row.provider, row.platform_post_id);
+      let card = cards.get(key);
+      if (!card) {
+        card = {
+          projectionId: key,
+          provider: row.provider,
+          title: captionTitle(row.caption, row.provider),
+          url: row.permalink ?? undefined,
+          publishedAt: row.published_at ? new Date(row.published_at).getTime() : undefined,
+          total: 0,
+          parts: [],
+          thumbnailUrl: coverUrl(row.thumbnail_url),
+          handle: row.handle ?? undefined,
+          metrics: row.metrics_fetched_at ? metricsFromSnapshot(row) : undefined,
+        };
+        cards.set(key, card);
+      }
+      if (Number(row.points) > 0) {
+        card.total = round2(card.total + Number(row.points));
+        card.parts.push({ source: row.source, points: Number(row.points), value: optionalNumber(row.metric_value) });
+      }
+    }
+  }
+  if (projectionIds.length === 0) return cards;
+  const [posts, snapshots] = await Promise.all([
+    database.query(
+      `select p.id as projection_id, p.provider, p.platform_post_url,
+              coalesce(p.published_at, p.created_at) as published_at,
+              t.title, t.media_asset_id, a.handle, pp.source, pp.points, pp.metric_value
+       from projections p
+       join transmissions t on t.id = p.transmission_id
+       left join social_accounts a on a.id = p.social_account_id
+       left join post_points pp on pp.projection_id = p.id
+       where p.workspace_id = $1 and p.id = any($2::uuid[])
+       order by p.id, pp.points desc nulls last`,
+      [workspaceId, projectionIds],
+    ),
+    database.query(
+      `select distinct on (s.projection_id) s.projection_id, p.provider, s.views, s.likes, s.comments, s.shares,
+              s.watch_time_seconds, s.average_view_duration_seconds, s.raw_metrics, m.duration_ms
+       from publication_metric_snapshots s
+       join projections p on p.id = s.projection_id
+       join transmissions t on t.id = p.transmission_id
+       left join media_assets m on m.id = t.media_asset_id
+       where p.workspace_id = $1 and s.projection_id = any($2::uuid[])
+       order by s.projection_id, s.fetched_at desc, s.id desc`,
+      [workspaceId, projectionIds],
+    ),
+  ]);
+  for (const row of posts.rows) {
+    let card = cards.get(row.projection_id);
+    if (!card) {
+      card = {
+        projectionId: row.projection_id,
+        provider: row.provider,
+        title: row.title,
+        url: row.platform_post_url ?? undefined,
+        publishedAt: row.published_at ? new Date(row.published_at).getTime() : undefined,
+        total: 0,
+        parts: [],
+        artifactId: row.media_asset_id ?? undefined,
+        handle: row.handle ?? undefined,
+      };
+      cards.set(row.projection_id, card);
+    }
+    if (row.source && Number(row.points) > 0) {
+      card.total = round2(card.total + Number(row.points));
+      card.parts.push({ source: row.source, points: Number(row.points), value: optionalNumber(row.metric_value) });
+    }
+  }
+  for (const row of snapshots.rows) {
+    const card = cards.get(row.projection_id);
+    if (!card) continue;
+    card.metrics = metricsFromSnapshot(row);
+    // The platform's own cover, saved with each refresh: it outlives the posted video,
+    // which storage lets go of two days after the post goes live.
+    const cover = coverUrl(row.raw_metrics?.thumbnailUrl);
+    if (cover) card.thumbnailUrl = cover;
+  }
+  return cards;
+}
+
+export const POINTS_FEED_PAGE = 10;
+
+/**
+ * The Recent points feed, newest first, a page at a time: each post once, at
+ * its latest points, with what it earned in the day up to them; streak and
+ * follower milestones each stand on their own.
+ */
+export async function loadPointsFeed(database, workspaceId, page = 1, size = POINTS_FEED_PAGE) {
+  // A post goes by its projection, or by `provider:postId` when made elsewhere.
+  const postKey = "coalesce(projection_id::text, provider || ':' || platform_post_id)";
+  const items = `
+    select 'post' as kind, ${postKey} as key, max(awarded_at) as at
+    from points_ledger
+    where workspace_id = $1 and (projection_id is not null or platform_post_id is not null)
+    group by 2
+    union all
+    select 'bonus', id::text, awarded_at
+    from points_ledger
+    where workspace_id = $1 and projection_id is null and platform_post_id is null`;
+  const [rows, count] = await Promise.all([
+    database.query(`select kind, key, at from (${items}) items order by at desc, key limit $2 offset $3`, [
+      workspaceId,
+      size,
+      (page - 1) * size,
+    ]),
+    database.query(`select count(*) as total from (${items}) items`, [workspaceId]),
+  ]);
+  const postIds = rows.rows.filter((row) => row.kind === "post").map((row) => row.key);
+  const bonusIds = rows.rows.filter((row) => row.kind === "bonus").map((row) => row.key);
+  const [entries, bonuses, cards] = await Promise.all([
+    postIds.length
+      ? database.query(
+          `with keyed as (
+             select id, source, amount, note, awarded_at, projection_id, platform_post_id, provider,
+                    ${postKey} as key
+             from points_ledger
+             where workspace_id = $1 and (projection_id is not null or platform_post_id is not null)
+           ), latest as (
+             select key, max(awarded_at) as at from keyed where key = any($2::text[]) group by key
+           )
+           select keyed.* from keyed
+           join latest on latest.key = keyed.key
+           where keyed.awarded_at > latest.at - interval '24 hours'
+           order by keyed.awarded_at desc, keyed.id desc`,
+          [workspaceId, postIds],
+        )
+      : { rows: [] },
+    bonusIds.length
+      ? database.query(
+          `select id, source, amount, note, awarded_at, projection_id, platform_post_id, provider
+           from points_ledger where workspace_id = $1 and id = any($2::bigint[])`,
+          [workspaceId, bonusIds],
+        )
+      : { rows: [] },
+    loadPostCards(database, workspaceId, postIds),
+  ]);
+  const byPost = new Map();
+  for (const row of entries.rows) {
+    const list = byPost.get(row.key) ?? [];
+    if (list.length < 24) list.push(entryFromRow(row));
+    byPost.set(row.key, list);
+  }
+  const bonusById = new Map(bonuses.rows.map((row) => [String(row.id), entryFromRow(row)]));
+  const total = Number(count.rows[0]?.total ?? 0);
+  return {
+    items: rows.rows
+      .map((row) => {
+        if (row.kind === "bonus") {
+          const entry = bonusById.get(row.key);
+          return entry ? { kind: "bonus", entry } : undefined;
+        }
+        const post = cards.get(row.key);
+        if (!post) return undefined;
+        const list = byPost.get(row.key) ?? [];
+        return {
+          kind: "post",
+          post,
+          entries: list,
+          amount: round2(list.reduce((sum, entry) => sum + entry.amount, 0)),
+          at: new Date(row.at).getTime(),
+        };
+      })
+      .filter(Boolean),
+    page,
+    pages: Math.max(1, Math.ceil(total / size)),
+    total,
+  };
+}
+
+// Where the creator's avatar and their posts' covers are hosted. Rank cards
+// draw them on a canvas, and these CDNs send no CORS headers, so the API reads
+// them, only from these hosts, and hands them over as data URLs.
+const CARD_IMAGE_HOSTS = [
+  "cdninstagram.com",
+  "fbcdn.net",
+  "tiktokcdn.com",
+  "tiktokcdn-us.com",
+  "tiktokcdn-eu.com",
+  "googleusercontent.com",
+  "ggpht.com",
+  "clerk.com",
+];
+const CARD_IMAGE_BYTES = 4 * 1024 * 1024;
+const CARD_COVERS_MAX = 12;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isCardImageUrl(value) {
+  if (typeof value !== "string") return false;
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      CARD_IMAGE_HOSTS.some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`))
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function cardImage(url, fetchImage) {
+  if (!isCardImageUrl(url)) return undefined;
+  try {
+    const response = await fetchImage(url, { signal: AbortSignal.timeout(6_000) });
+    const type = (response.headers.get("content-type") ?? "").split(";")[0].trim();
+    if (!response.ok || !type.startsWith("image/") || type === "image/svg+xml") return undefined;
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.length === 0 || bytes.length > CARD_IMAGE_BYTES) return undefined;
+    return `data:${type};base64,${bytes.toString("base64")}`;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The pictures a rank card shows: the creator's avatar (their own picture,
+ * else a connected account's, Instagram first, the account the card names) and the covers of their posts, by
+ * post key. Only the workspace's own posts; anything that can't be read is
+ * left out, and the card draws without it.
+ */
+export async function loadCardImages(database, workspaceId, { avatar = false, covers = [] } = {}, fetchImage = fetch) {
+  const keys = [...new Set(covers)].filter((key) => typeof key === "string" && key.length > 0 && key.length <= 200).slice(0, CARD_COVERS_MAX);
+  const [owner, cards] = await Promise.all([
+    avatar
+      ? database.query(
+          `select u.image_url,
+                  (select a.avatar_url from social_accounts a
+                   where a.workspace_id = w.id and a.status = 'connected' and a.avatar_url is not null
+                   order by case a.provider when 'instagram' then 0 when 'threads' then 1 when 'tiktok' then 2
+                                            when 'facebook' then 3 else 4 end, a.created_at asc
+                   limit 1) as account_avatar
+           from workspaces w left join app_users u on u.id = w.owner_id
+           where w.id = $1`,
+          [workspaceId],
+        )
+      : { rows: [] },
+    keys.length ? loadPostCards(database, workspaceId, keys.filter((key) => key.includes(":") || UUID.test(key))) : new Map(),
+  ]);
+  const row = owner.rows[0];
+  const [avatarUrl, ...coverUrls] = await Promise.all([
+    row ? cardImage(row.image_url, fetchImage).then((image) => image ?? cardImage(row.account_avatar, fetchImage)) : undefined,
+    ...keys.map((key) => cardImage(cards.get(key)?.thumbnailUrl, fetchImage)),
+  ]);
+  return {
+    avatar: avatarUrl,
+    covers: Object.fromEntries(keys.map((key, index) => [key, coverUrls[index]]).filter(([, image]) => image)),
   };
 }
 
@@ -895,6 +1399,8 @@ const PERIOD_START = {
 export async function loadLeaderboard(database, workspaceId, period = "week", limit = 100) {
   const since = PERIOD_START[period];
   if (since === undefined) throw Object.assign(new Error("invalid_period"), { statusCode: 400 });
+  // A view point is a platform's rate of views, so the period's views are its view points times that rate.
+  const viewRate = `case l.provider ${POINTS_PLATFORMS.map((platform) => `when '${platform}' then ${POINTS_RATES[platform].views}`).join(" ")} else 1000 end`;
   const query = (withMembership) => `
     with eligible as (
       select w.id as workspace_id, w.name as workspace_name, w.created_at,
@@ -917,7 +1423,8 @@ export async function loadLeaderboard(database, workspaceId, period = "week", li
     ), totals as (
       select l.workspace_id,
              coalesce(sum(l.amount), 0) as lifetime,
-             coalesce(sum(l.amount) ${since ? `filter (where l.awarded_at >= ${since})` : ""}, 0) as points
+             coalesce(sum(l.amount) ${since ? `filter (where l.awarded_at >= ${since})` : ""}, 0) as points,
+             coalesce(sum(l.amount * ${viewRate}) filter (where l.source = 'views'${since ? ` and l.awarded_at >= ${since}` : ""}), 0) as views
       from points_ledger l
       where l.workspace_id in (select workspace_id from eligible)
       group by l.workspace_id
@@ -926,7 +1433,7 @@ export async function loadLeaderboard(database, workspaceId, period = "week", li
              (select a.handle from social_accounts a
               where a.workspace_id = e.workspace_id and a.status = 'connected' and a.handle is not null
               order by a.created_at asc limit 1) as account_handle,
-             coalesce(t.points, 0) as points, coalesce(t.lifetime, 0) as lifetime,
+             coalesce(t.points, 0) as points, coalesce(t.lifetime, 0) as lifetime, coalesce(t.views, 0) as views,
              row_number() over (order by coalesce(t.points, 0) desc, coalesce(t.lifetime, 0) desc, e.created_at asc) as position,
              (select a.avatar_url from social_accounts a
               where a.workspace_id = e.workspace_id and a.avatar_url is not null
@@ -955,6 +1462,7 @@ export async function loadLeaderboard(database, workspaceId, period = "week", li
       level: levelProgress(lifetime).level,
       rank: { id: rank.id, label: rank.label },
       points: round2(Number(row.points)),
+      views: Math.round(Number(row.views ?? 0)),
       isMe: row.workspace_id === workspaceId,
     };
   };
@@ -1005,6 +1513,20 @@ export function registerPointsRoutes(app, { postgres, requireScope, requireSessi
     loadPointsDashboard(postgres, requiredWorkspace(request)),
   );
 
+  app.get("/v1/points/feed", { preHandler: requireScope("points:read") }, async (request, reply) => {
+    const page = Number(request.query?.page ?? 1);
+    if (!Number.isInteger(page) || page < 1 || page > 10_000) return reply.code(400).send({ error: "invalid_page" });
+    return loadPointsFeed(postgres, requiredWorkspace(request), page);
+  });
+
+  // `avatar=1` and `covers=<post key>,<post key>`: the pictures for rank cards, as data URLs.
+  app.get("/v1/points/card-images", { preHandler: requireScope("points:read") }, async (request, reply) => {
+    const covers = typeof request.query?.covers === "string" && request.query.covers ? request.query.covers.split(",") : [];
+    if (covers.length > CARD_COVERS_MAX) return reply.code(400).send({ error: "too_many_covers" });
+    reply.header("cache-control", "private, max-age=600");
+    return loadCardImages(postgres, requiredWorkspace(request), { avatar: request.query?.avatar === "1", covers });
+  });
+
   app.get("/v1/points/ledger", { preHandler: requireScope("points:read") }, async (request, reply) => {
     const limit = Math.min(100, Math.max(1, Number(request.query?.limit ?? 30)));
     if (!Number.isInteger(limit)) return reply.code(400).send({ error: "invalid_limit" });
@@ -1014,7 +1536,7 @@ export function registerPointsRoutes(app, { postgres, requireScope, requireSessi
       return reply.code(400).send({ error: "invalid_cursor" });
     }
     const result = await postgres.query(
-      `select id, source, amount, reference_id, note, awarded_at, projection_id, provider
+      `select id, source, amount, reference_id, note, awarded_at, projection_id, platform_post_id, provider
        from points_ledger
        where workspace_id = $1
          and ($2::timestamptz is null or awarded_at < $2)
@@ -1030,6 +1552,7 @@ export function registerPointsRoutes(app, { postgres, requireScope, requireSessi
         referenceId: row.reference_id ?? undefined,
         note: row.note ?? undefined,
         projectionId: row.projection_id ?? undefined,
+        platformPostId: row.platform_post_id ?? undefined,
         provider: row.provider ?? undefined,
         awardedAt: new Date(row.awarded_at).getTime(),
       })),

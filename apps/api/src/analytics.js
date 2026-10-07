@@ -233,6 +233,8 @@ function summarizePeriod({ daily, posts, audience, publishedPosts }) {
  * each hour) cover posts from any app or tool, Posterract's included; a post
  * made through Posterract counts on its own only where those lists can't see
  * it yet: before an account was first read, or since its last read.
+ * `syncing` lists connected accounts whose posts are still being read for
+ * the first time (a new connection), so the graph can say so.
  */
 export async function loadAccountPosts(postgres, workspaceId) {
   const result = await postgres.query(
@@ -256,11 +258,21 @@ export async function loadAccountPosts(postgres, workspaceId) {
             or coalesce(p.published_at, t.scheduled_for, p.updated_at) >= a.posts_synced_at)`,
     [workspaceId],
   );
+  const unread = await postgres.query(
+    `select id from social_accounts
+     where workspace_id = $1 and status = 'connected' and posts_synced_at is null
+       and ((provider = 'instagram' and 'instagram_business_basic' = any(scopes))
+         or (provider = 'threads' and 'threads_basic' = any(scopes))
+         or (provider = 'tiktok' and 'video.list' = any(scopes))
+         or (provider = 'facebook' and 'pages_read_engagement' = any(scopes)))`,
+    [workspaceId],
+  );
   return {
     posts: result.rows.map((row) => ({
       accountId: row.account_id,
       publishedAt: new Date(row.published_at).getTime(),
     })),
+    syncing: unread.rows.map((row) => row.id),
   };
 }
 

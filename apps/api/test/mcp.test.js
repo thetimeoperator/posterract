@@ -71,6 +71,16 @@ async function harness() {
       accounts: [account(IG, "instagram", "@me"), account(IG2, "instagram", "@me.too"), account(TT, "tiktok", "@me")],
     }],
   }));
+  app.get("/v1/accounts/:id/tiktok/creator-info", async () => ({
+    creator_avatar_url: "",
+    creator_username: "sofia.tt",
+    creator_nickname: "Sofia TT",
+    privacy_level_options: ["PUBLIC_TO_EVERYONE", "FOLLOWER_OF_CREATOR", "SELF_ONLY"],
+    comment_disabled: false,
+    duet_disabled: true,
+    stitch_disabled: false,
+    max_video_post_duration_sec: 600,
+  }));
   app.post("/v1/posts", record("create"));
   app.get("/v1/posts/:id", async (request) => ({
     id: request.params.id,
@@ -186,19 +196,81 @@ test("create_post previews first, posts only when confirmed, and never twice for
   assert.notEqual(calls[2].key, calls[0].key);
 });
 
-test("create_post only reaches Instagram, Facebook and Threads, and asks for the right key", async () => {
+test("create_post posts to TikTok, to everyone by default", async () => {
   const { call, calls, video } = await harness();
-  const tiktok = await call("full", "create_post", { video_id: video, caption: "x", when: "now", account_ids: [TT], confirm: true });
-  assert.equal(tiktok.isError, true);
-  assert.match(tiktok.content[0].text, /isn't a connected Instagram, Facebook or Threads account/);
+  const base = { video_id: video, caption: "x", when: "now", account_ids: [TT] };
 
-  // A business posts to all its Instagram, Facebook and Threads accounts, both Instagram accounts included.
+  // The preview shows the TikTok account's name, the audience (everyone by default) and TikTok's declaration.
+  const preview = await call("full", "create_post", base);
+  const row = preview.structuredContent.posting_to[0];
+  assert.equal(row.platform, "tiktok");
+  assert.equal(row.account, "Sofia TT");
+  assert.equal(row.tiktok.username, "@sofia.tt");
+  assert.deepEqual(row.tiktok.choices, ["everyone", "followers", "only_me"]);
+  assert.equal(row.tiktok.who_can_watch, "everyone");
+  assert.equal(row.tiktok.comments, "off");
+  assert.match(row.tiktok.duet, /turned off in this account's TikTok settings/);
+  assert.match(row.tiktok.declaration, /Music Usage Confirmation/);
+  assert.match(row.tiktok.after_posting, /few minutes/);
+  assert.equal(row.problem, undefined);
+  assert.equal(calls.length, 0);
+
+  // Confirmed with no TikTok settings, it goes to everyone.
+  await call("full", "create_post", { ...base, confirm: true });
+  assert.equal(calls.at(-1).body.perPlatform.tiktok.options.privacyLevel, "PUBLIC_TO_EVERYONE");
+  assert.equal(calls.at(-1).body.perPlatform.tiktok.options.consentAccepted, true);
+
+  // Choices the account doesn't allow show up as problems.
+  const friends = await call("full", "create_post", { ...base, tiktok: { privacy: "friends" } });
+  assert.match(friends.structuredContent.posting_to[0].problem, /no longer available/);
+  const duet = await call("full", "create_post", { ...base, tiktok: { privacy: "everyone", allow_duet: true } });
+  assert.match(duet.structuredContent.posting_to[0].problem, /disabled a selected interaction/);
+  const privateBranded = await call("full", "create_post", { ...base, tiktok: { privacy: "only_me", branded_content: true } });
+  assert.match(privateBranded.structuredContent.posting_to[0].problem, /cannot be set to private/);
+
+  // Branded content carries TikTok's label and its Branded Content Policy.
+  const branded = await call("full", "create_post", { ...base, tiktok: { privacy: "everyone", branded_content: true } });
+  assert.equal(branded.structuredContent.posting_to[0].tiktok.label, "Paid partnership");
+  assert.match(branded.structuredContent.posting_to[0].tiktok.declaration, /Branded Content Policy/);
+  assert.equal(branded.structuredContent.posting_to[0].problem, undefined);
+
+  // With the user's choices it posts directly, recording their agreement to TikTok's declaration.
+  const posted = await call("full", "create_post", { ...base, tiktok: { privacy: "everyone", allow_comments: true, ai_generated: true }, confirm: true });
+  assert.equal(posted.isError, undefined);
+  assert.match(posted.structuredContent.next_step, /few minutes/);
+  assert.deepEqual(calls.at(-1).body.perPlatform.tiktok, {
+    caption: "x",
+    options: {
+      mode: "direct",
+      privacyLevel: "PUBLIC_TO_EVERYONE",
+      allowComment: true,
+      allowDuet: false,
+      allowStitch: false,
+      commercialContent: false,
+      brandOrganic: false,
+      brandContent: false,
+      isAigc: true,
+      consentAccepted: true,
+    },
+  });
+  assert.deepEqual(calls.at(-1).body.accountIds, [TT]);
+
+  // Or to the TikTok inbox, to finish in the TikTok app.
+  await call("full", "create_post", { ...base, tiktok: { send_to_inbox: true }, confirm: true });
+  assert.deepEqual(calls.at(-1).body.perPlatform.tiktok, { caption: "x", options: { mode: "inbox" } });
+});
+
+test("create_post posts to a whole business, and asks for the right key", async () => {
+  const { call, calls, video } = await harness();
+
+  // A business posts to all its accounts, both Instagram accounts and its TikTok included.
   const preview = await call("full", "create_post", { video_id: video, caption: "x", when: "now", business_id: BUSINESS });
   assert.equal(preview.structuredContent.business, "Sofia");
-  assert.deepEqual(preview.structuredContent.posting_to.map((row) => row.account), ["@me", "@me.too"]);
-  await call("full", "create_post", { video_id: video, caption: "x", when: "now", business_id: BUSINESS, confirm: true });
-  assert.deepEqual(calls.at(-1).body.platforms, ["instagram"]);
-  assert.deepEqual(calls.at(-1).body.accountIds, [IG, IG2]);
+  assert.deepEqual(preview.structuredContent.posting_to.map((row) => row.account), ["@me", "@me.too", "Sofia TT"]);
+  await call("full", "create_post", { video_id: video, caption: "x", when: "now", business_id: BUSINESS, tiktok: { privacy: "followers" }, confirm: true });
+  assert.deepEqual(calls.at(-1).body.platforms, ["instagram", "tiktok"]);
+  assert.deepEqual(calls.at(-1).body.accountIds, [IG, IG2, TT]);
+  assert.equal(calls.at(-1).body.perPlatform.tiktok.options.privacyLevel, "FOLLOWER_OF_CREATOR");
   assert.equal(calls.at(-1).body.businessId, BUSINESS);
   assert.equal(calls.at(-1).body.scheduledFor, "now");
 

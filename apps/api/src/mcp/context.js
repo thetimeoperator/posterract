@@ -11,9 +11,9 @@ import { createHash } from "node:crypto";
 /** A failure the agent should read and act on; its message is shown to it verbatim. */
 export class ToolError extends Error {}
 
-/** Platforms reachable through the connector. TikTok and YouTube wait on their API approvals. */
-export const CONNECTOR_PLATFORMS = ["instagram", "facebook", "threads"];
-export const PLATFORM_NAMES = { instagram: "Instagram", facebook: "Facebook", threads: "Threads" };
+/** Platforms reachable through the connector. YouTube waits on its API approval. */
+export const CONNECTOR_PLATFORMS = ["instagram", "tiktok", "facebook", "threads"];
+export const PLATFORM_NAMES = { instagram: "Instagram", tiktok: "TikTok", facebook: "Facebook", threads: "Threads" };
 
 export const UUID = "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$";
 
@@ -33,7 +33,7 @@ const API_ERRORS = {
   caption_too_long: "The caption is too long for that platform.",
   invalid_scheduled_for: "Give the time as an ISO 8601 date-time with a time-zone offset, in the future, or \"now\".",
   scheduled_for_in_past: "That time has already passed. Pick a time in the future.",
-  invalid_platforms: "Choose Instagram, Facebook or Threads.",
+  invalid_platforms: "Choose Instagram, TikTok, Facebook or Threads.",
   duplicate_platform: "Each platform can only be listed once.",
   invalid_account_ids: "Those account ids aren't valid. Use list_accounts.",
   invalid_business_id: "That business id isn't valid. Use list_accounts.",
@@ -48,6 +48,11 @@ const API_ERRORS = {
   invalid_schedule_range: "That date range is invalid; it can span at most 180 days.",
   invalid_analytics_range: "Use a range of 7, 30 or 90 days, or total.",
   post_has_no_media: "That post has no video to copy.",
+  invalid_tiktok_options: "Those TikTok settings don't work together.",
+  tiktok_explicit_account_required: "Name the TikTok account to post to (account_ids from list_accounts).",
+  tiktok_post_consent_required: "The user has to agree to TikTok's declaration before posting.",
+  direct_post_review_required:
+    "This post went to TikTok, and TikTok needs a copy made as a new post. Use create_post with the same video and caption.",
 };
 
 function explainApiError(statusCode, body) {
@@ -55,8 +60,11 @@ function explainApiError(statusCode, body) {
   if (code && API_ERRORS[code]) {
     const details = body.details?.provider ? ` (${PLATFORM_NAMES[body.details.provider] ?? body.details.provider})` : "";
     const maximum = body.details?.maximum ? ` The limit is ${body.details.maximum} characters.` : "";
-    return `${API_ERRORS[code]}${details}${maximum}`;
+    const reason = typeof body.details?.reason === "string" ? ` ${body.details.reason}` : "";
+    return `${API_ERRORS[code]}${details}${maximum}${reason}`;
   }
+  // TikTok's answers come already written for the user.
+  if (typeof body?.detail === "string" && body.detail) return body.detail;
   if (statusCode === 402 || statusCode === 403) return API_ERRORS.subscription_required;
   if (statusCode === 404) return "Posterract couldn't find that.";
   if (statusCode === 429) return API_ERRORS.rate_limit_exceeded;

@@ -1,5 +1,5 @@
 /**
- * Analytics for Instagram, Facebook and Threads: account totals for a
+ * Analytics for Instagram, TikTok, Facebook and Threads: account totals for a
  * period and the best posts, trimmed to what an agent needs to answer
  * "how are my videos doing?".
  */
@@ -54,8 +54,8 @@ export const getAnalytics = {
   name: "get_analytics",
   title: "Get analytics",
   description:
-    "Shows how the user's Instagram, Facebook and Threads accounts are doing over a period: followers, views, likes, " +
-    "comments, shares, saves, watch time and their best posts. Stats refresh twice a day.",
+    "Shows how the user's Instagram, TikTok, Facebook and Threads accounts are doing over a period: followers, views, likes, " +
+    "comments, shares, saves, watch time and their best posts (TikTok reports no saves or watch time). Stats refresh twice a day.",
   scopes: ["analytics:read"],
   annotations: { readOnlyHint: true, openWorldHint: false },
   inputSchema: {
@@ -83,7 +83,7 @@ export const getAnalytics = {
       period: period === "total" ? "all time" : `last ${period} days`,
       totals: { views: sum("views"), likes: sum("likes"), comments: sum("comments"), shares: sum("shares") },
       platforms: platforms.map(describePlatform),
-      ...(platforms.length === 0 ? { note: "No Instagram, Facebook or Threads account with analytics is connected yet." } : {}),
+      ...(platforms.length === 0 ? { note: "No Instagram, TikTok, Facebook or Threads account with analytics is connected yet." } : {}),
     };
   },
 };

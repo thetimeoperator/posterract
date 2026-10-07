@@ -10,6 +10,8 @@ export type PlatformPost = {
   publishedAt: number;
   permalink?: string;
   kind?: string;
+  /** Its caption or text, where the platform lists one: the Points feed's title. */
+  caption?: string;
 };
 
 /** `complete` is false when the page limit cut the walk short of `since`. */

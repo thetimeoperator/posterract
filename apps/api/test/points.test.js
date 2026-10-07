@@ -9,8 +9,11 @@ import { LEVEL_THRESHOLDS, POINTS_START_AT, levelFor, levelProgress, rankFor, ra
 import {
   awardPostLive,
   followerMilestonesCrossed,
+  isCardImageUrl,
+  loadCardImages,
   loadLeaderboard,
   loadPointsDashboard,
+  loadPointsFeed,
   loadPointsSummary,
   personalBests,
   postTargets,
@@ -50,12 +53,19 @@ async function workspace(postgres, { name = "Sina", verified = true } = {}) {
   return { userId: user.id, workspaceId: space.id };
 }
 
-async function account(postgres, workspaceId, provider, handle = provider) {
+// Accounts are connected well before the scoring tests' posts unless a test says when.
+async function account(
+  postgres,
+  workspaceId,
+  provider,
+  handle = provider,
+  { connectedAt = LAUNCH - 90 * DAY, providerAccountId = `${provider}-${Math.random()}` } = {},
+) {
   const row = await one(
     postgres,
-    `insert into social_accounts (workspace_id, provider, provider_account_id, handle)
-     values ($1, $2, $3, $4) returning id`,
-    [workspaceId, provider, `${provider}-${Math.random()}`, handle],
+    `insert into social_accounts (workspace_id, provider, provider_account_id, handle, created_at)
+     values ($1, $2, $3, $4, $5) returning id`,
+    [workspaceId, provider, providerAccountId, handle, new Date(connectedAt)],
   );
   return row.id;
 }
@@ -70,7 +80,10 @@ async function media(postgres, workspaceId, durationMs = 25_000) {
   return row.id;
 }
 
-async function livePost(postgres, { workspaceId, accountId, provider, mediaId, publishedAt, title = "My video" }) {
+async function livePost(
+  postgres,
+  { workspaceId, accountId, provider, mediaId, publishedAt, title = "My video", platformOptions = {}, platformPostId = `post-${Math.random()}` },
+) {
   const transmission = await one(
     postgres,
     `insert into transmissions (workspace_id, media_asset_id, title, status, schedule_mode, source)
@@ -79,12 +92,15 @@ async function livePost(postgres, { workspaceId, accountId, provider, mediaId, p
   );
   const projection = await one(
     postgres,
-    `insert into projections (transmission_id, workspace_id, social_account_id, provider, status, published_at, platform_post_id)
-     values ($1, $2, $3, $4, 'live', $5, $6) returning id`,
-    [transmission.id, workspaceId, accountId, provider, new Date(publishedAt), `post-${Math.random()}`],
+    `insert into projections (transmission_id, workspace_id, social_account_id, provider, status, published_at, platform_post_id, platform_options)
+     values ($1, $2, $3, $4, 'live', $5, $6, $7) returning id`,
+    [transmission.id, workspaceId, accountId, provider, new Date(publishedAt), platformPostId, JSON.stringify(platformOptions)],
   );
   return projection.id;
 }
+
+const PUBLIC_TIKTOK = { mode: "direct", privacyLevel: "PUBLIC_TO_EVERYONE" };
+const ONLY_ME_TIKTOK = { mode: "direct", privacyLevel: "SELF_ONLY" };
 
 async function snapshot(postgres, { projectionId, workspaceId, provider, views, likes = 0, comments = 0, shares = 0, watch, average, raw = {}, at = Date.now() }) {
   await postgres.query(
@@ -93,6 +109,39 @@ async function snapshot(postgres, { projectionId, workspaceId, provider, views, 
         watch_time_seconds, average_view_duration_seconds, raw_metrics, fetched_at)
      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
     [projectionId, workspaceId, provider, views, likes, comments, shares, watch ?? null, average ?? null, JSON.stringify(raw), new Date(at)],
+  );
+}
+
+// A post as the worker's read of the account lists it, made in any app, with
+// the numbers a refresh read for it (`at`) if any.
+async function listed(
+  postgres,
+  { workspaceId, accountId, provider, id, publishedAt, permalink = null, caption = null, views, likes = 0, comments = 0, shares = 0, raw = {}, cover = null, at },
+) {
+  await postgres.query(
+    `insert into platform_posts
+       (social_account_id, workspace_id, provider, platform_post_id, published_at, permalink, kind, caption,
+        views, likes, comments, shares, raw_metrics, thumbnail_url, metrics_fetched_at)
+     values ($1, $2, $3, $4, $5, $6, 'video', $7, $8, $9, $10, $11, $12, $13, $14)
+     on conflict (social_account_id, platform_post_id) do update
+       set views = excluded.views, likes = excluded.likes, comments = excluded.comments, shares = excluded.shares,
+           raw_metrics = excluded.raw_metrics, metrics_fetched_at = excluded.metrics_fetched_at`,
+    [
+      accountId,
+      workspaceId,
+      provider,
+      id,
+      new Date(publishedAt),
+      permalink,
+      caption,
+      at === undefined ? null : views,
+      at === undefined ? null : likes,
+      at === undefined ? null : comments,
+      at === undefined ? null : shares,
+      JSON.stringify(raw),
+      cover,
+      at === undefined ? null : new Date(at),
+    ],
   );
 }
 
@@ -181,8 +230,24 @@ test("a post earns the founder's rates, platform by platform", () => {
   assert.equal(threads.saves, undefined);
   assert.equal(threads.watch, undefined);
 
-  // TikTok and YouTube earn nothing yet.
-  assert.deepEqual(postTargets({ provider: "tiktok", metrics: { views: 1e6 } }), {});
+  // TikTok earns like Instagram, minus saves, watch time and retention it doesn't report.
+  const tiktok = postTargets({
+    provider: "tiktok",
+    metrics: { views: 20_000, likes: 300, comments: 40, shares: 10, saves: 0, watchSeconds: undefined },
+    durationSeconds: 30,
+    ageHours: 120,
+  });
+  assert.equal(tiktok.post.points, 1);
+  assert.equal(tiktok.views.points, 20);
+  assert.equal(tiktok.likes.points, 3);
+  assert.equal(tiktok.comments.points, 4);
+  assert.equal(tiktok.shares.points, 0.5);
+  assert.equal(tiktok.saves, undefined);
+  assert.equal(tiktok.watch, undefined);
+  assert.equal(tiktok.retention, undefined);
+
+  // YouTube earns nothing yet.
+  assert.deepEqual(postTargets({ provider: "youtube", metrics: { views: 1e6 } }), {});
 });
 
 test("the retention bonus waits for day 3 and 1,000 views, and pays +5 at half watched, +10 at three quarters", () => {
@@ -278,6 +343,34 @@ test("scoring pays each post, milestone and account once, and never takes points
   assert.deepEqual({ baseline: igFollowers.baseline, next: igFollowers.next }, { baseline: 900, next: { followers: 5_000, points: 40 } });
   assert.ok(dashboard.badges.includes("first_transmission"));
 
+  // The feed: each post once, newest first, with its video, account and latest numbers; milestones stand alone.
+  assert.ok(dashboard.recent.some((entry) => entry.projectionId === igPost && entry.provider === "instagram"));
+  assert.deepEqual({ page: dashboard.feed.page, pages: dashboard.feed.pages, total: dashboard.feed.total }, { page: 1, pages: 1, total: 4 });
+  const igItem = dashboard.feed.items.find((item) => item.kind === "post" && item.post.projectionId === igPost);
+  assert.equal(igItem.post.artifactId, clip);
+  assert.equal(igItem.post.handle, "sina");
+  assert.equal(igItem.post.total, 65.28);
+  assert.ok(igItem.entries.length > 0 && igItem.entries.every((entry) => entry.projectionId === igPost));
+  // Its latest day: the 10 its views grew by. Its first numbers were read five
+  // days after it went live, so what they paid is dated then, not today.
+  assert.equal(igItem.amount, 10);
+  assert.deepEqual(
+    {
+      views: igItem.post.metrics.views,
+      saves: igItem.post.metrics.saves,
+      watchHours: igItem.post.metrics.watchHours,
+      retention: igItem.post.metrics.retention,
+    },
+    { views: 20_000, saves: 60, watchHours: 27.78, retention: 0.52 },
+  );
+  const thItem = dashboard.feed.items.find((item) => item.kind === "post" && item.post.projectionId === thPost);
+  assert.equal(thItem.post.metrics.saves, undefined);
+  assert.ok(dashboard.feed.items.some((item) => item.kind === "bonus" && item.entry.source === "followers"));
+
+  // Further pages come a page at a time.
+  const nextPage = await loadPointsFeed(postgres, workspaceId, 2, 3);
+  assert.deepEqual({ items: nextPage.items.length, page: nextPage.page, pages: nextPage.pages }, { items: 1, page: 2, pages: 2 });
+
   const summary = await loadPointsSummary(postgres, workspaceId);
   assert.equal(summary.lifetimeRP, 92.28);
 });
@@ -367,23 +460,23 @@ test("a relaunch backfill is silent and dates each post's points when it went li
   assert.equal(Number(notified.count), 0);
 });
 
-test("everyone starts at zero on launch day: earlier posts, posting days and followers earn nothing", async () => {
+test("a post earns from when its account was connected: earlier posts and posting days earn nothing", async () => {
   const postgres = await database();
   const { workspaceId } = await workspace(postgres);
-  const now = LAUNCH + 3 * DAY + 12 * HOUR;
-  const ig = await account(postgres, workspaceId, "instagram", "@sina");
-  // Six days of posting before launch, around 1,250 views each.
+  const connectedAt = LAUNCH + 10 * DAY;
+  const now = connectedAt + 3 * DAY + 12 * HOUR;
+  const ig = await account(postgres, workspaceId, "instagram", "@sina", { connectedAt });
+  // Six days of posting (after launch day) before the account was connected, around 1,250 views each.
   for (let index = 0; index < 6; index += 1) {
-    const earlier = await livePost(postgres, { workspaceId, accountId: ig, provider: "instagram", publishedAt: LAUNCH - (6 - index) * DAY + 12 * HOUR });
-    await snapshot(postgres, { projectionId: earlier, workspaceId, provider: "instagram", views: 1_000 + index * 100, at: LAUNCH - HOUR });
+    const earlier = await livePost(postgres, { workspaceId, accountId: ig, provider: "instagram", publishedAt: connectedAt - (6 - index) * DAY + 12 * HOUR });
+    await snapshot(postgres, { projectionId: earlier, workspaceId, provider: "instagram", views: 1_000 + index * 100, at: connectedAt + HOUR });
   }
-  // Launch day: the seventh day in a row, and 50,000 views.
-  const hit = await livePost(postgres, { workspaceId, accountId: ig, provider: "instagram", publishedAt: LAUNCH + 12 * HOUR, title: "The hit" });
+  // The day it was connected: the seventh day in a row, and 50,000 views.
+  const hit = await livePost(postgres, { workspaceId, accountId: ig, provider: "instagram", publishedAt: connectedAt + 12 * HOUR, title: "The hit" });
   await snapshot(postgres, { projectionId: hit, workspaceId, provider: "instagram", views: 50_000, at: now - HOUR });
-  // 1,100 followers at launch; the 1,000 milestone was passed before it.
-  await followers(postgres, { accountId: ig, workspaceId, provider: "instagram", audience: 800, at: LAUNCH - 10 * DAY });
-  await followers(postgres, { accountId: ig, workspaceId, provider: "instagram", audience: 1_100, at: LAUNCH - HOUR });
-  await followers(postgres, { accountId: ig, workspaceId, provider: "instagram", audience: 5_200, at: LAUNCH + 2 * DAY });
+  // 1,100 followers when it was connected, so the 1,000 milestone earns nothing.
+  await followers(postgres, { accountId: ig, workspaceId, provider: "instagram", audience: 1_100, at: connectedAt + HOUR });
+  await followers(postgres, { accountId: ig, workspaceId, provider: "instagram", audience: 5_200, at: connectedAt + 2 * DAY });
 
   const report = await scoreWorkspacePoints(postgres, workspaceId, { now });
   // The earlier posts still set the bar: 50,000 views is a record and a breakout.
@@ -393,25 +486,176 @@ test("everyone starts at zero on launch day: earlier posts, posting days and fol
   assert.equal(Number(scored.posts), 1);
   const baseline = await one(postgres, "select followers from follower_baselines where social_account_id = $1", [ig]);
   assert.equal(Number(baseline.followers), 1_100);
-  const dashboard = await loadPointsDashboard(postgres, workspaceId, LAUNCH + 12 * HOUR);
+  const dashboard = await loadPointsDashboard(postgres, workspaceId, connectedAt + 12 * HOUR);
   assert.equal(dashboard.streak.current, 1);
 });
 
-test("the live-post point is paid once, on Instagram, Facebook and Threads only", async () => {
+test("posts made in other apps earn from when the account was connected, and Posterract's own are never paid twice", async () => {
+  const postgres = await database();
+  const { workspaceId } = await workspace(postgres);
+  const connectedAt = LAUNCH + 10 * DAY;
+  const now = connectedAt + 20 * DAY;
+  const ig = await account(postgres, workspaceId, "instagram", "@sina", { connectedAt });
+  const fb = await account(postgres, workspaceId, "facebook", "Sina Page", { connectedAt });
+  const tt = await account(postgres, workspaceId, "tiktok", "sina", { connectedAt });
+
+  // Made in Instagram's own app: before connecting (earns nothing) and after.
+  await listed(postgres, { workspaceId, accountId: ig, provider: "instagram", id: "ig-before", publishedAt: connectedAt - DAY, views: 9_000, at: now - HOUR });
+  const afterAt = connectedAt + 5 * DAY;
+  await listed(postgres, {
+    workspaceId,
+    accountId: ig,
+    provider: "instagram",
+    id: "ig-after",
+    publishedAt: afterAt,
+    permalink: "https://www.instagram.com/reel/abc/",
+    caption: "\n  Morning routine  \nwith more lines",
+    views: 4_000,
+    likes: 200,
+    raw: { saves: 40 },
+    cover: "https://cdn.example.com/after.jpg",
+    at: now - HOUR,
+  });
+  // Made through Posterract, and listed by Instagram too: its projection scores it.
+  await livePost(postgres, { workspaceId, accountId: ig, provider: "instagram", publishedAt: connectedAt + 6 * DAY, platformPostId: "ig-ours" });
+  await listed(postgres, { workspaceId, accountId: ig, provider: "instagram", id: "ig-ours", publishedAt: connectedAt + 6 * DAY, views: 100_000, at: now - HOUR });
+  // A Facebook reel Posterract made: listed under the Page post's ID, matched by the video ID in its link.
+  await livePost(postgres, { workspaceId, accountId: fb, provider: "facebook", publishedAt: connectedAt + 7 * DAY, platformPostId: "777" });
+  await listed(postgres, { workspaceId, accountId: fb, provider: "facebook", id: "page_1", permalink: "https://www.facebook.com/reel/777/", publishedAt: connectedAt + 7 * DAY, views: 50_000, at: now - HOUR });
+  // A TikTok made elsewhere, with no numbers read yet.
+  await listed(postgres, { workspaceId, accountId: tt, provider: "tiktok", id: "7000000000000000001", publishedAt: connectedAt + 8 * DAY });
+
+  const first = await scoreWorkspacePoints(postgres, workspaceId, { now });
+  // ig-after 1 + 4 + 2 + 2 (saves) = 9; the TikTok 1; Posterract's two posts 1 each.
+  assert.equal(first.paid, 12);
+  assert.deepEqual(first.bySource, { post: 4, views: 4, likes: 2, saves: 2 });
+  const elsewhere = await postgres.query(
+    "select platform_post_id, sum(points)::float as points from platform_post_points where workspace_id = $1 group by 1 order by 1",
+    [workspaceId],
+  );
+  assert.deepEqual(elsewhere.rows, [
+    { platform_post_id: "7000000000000000001", points: 1 },
+    { platform_post_id: "ig-after", points: 9 },
+  ]);
+  // Numbers read long after the post went live are dated when it went live.
+  const dated = await one(
+    postgres,
+    "select min(awarded_at) as first, max(awarded_at) as last from points_ledger where platform_post_id = 'ig-after'",
+  );
+  assert.equal(new Date(dated.first).getTime(), afterAt);
+  assert.equal(new Date(dated.last).getTime(), afterAt);
+  assert.equal((await scoreWorkspacePoints(postgres, workspaceId, { now })).paid, 0);
+
+  // Growth pays the rise, dated when it was read.
+  await listed(postgres, { workspaceId, accountId: ig, provider: "instagram", id: "ig-after", publishedAt: afterAt, views: 6_000, likes: 200, raw: { saves: 40 }, at: now + 1_000 });
+  assert.deepEqual((await scoreWorkspacePoints(postgres, workspaceId, { now })).bySource, { views: 2 });
+
+  const dashboard = await loadPointsDashboard(postgres, workspaceId, now);
+  assert.equal(dashboard.totalPoints, 14);
+  const top = dashboard.topPosts[0];
+  assert.deepEqual(
+    { key: top.projectionId, title: top.title, url: top.url, total: top.total, handle: top.handle },
+    { key: "instagram:ig-after", title: "Morning routine", url: "https://www.instagram.com/reel/abc/", total: 11, handle: "@sina" },
+  );
+  const item = dashboard.feed.items.find((entry) => entry.kind === "post" && entry.post.projectionId === "instagram:ig-after");
+  assert.equal(item.post.thumbnailUrl, "https://cdn.example.com/after.jpg");
+  assert.equal(item.post.metrics.views, 6_000);
+  assert.equal(item.post.metrics.saves, 40);
+  assert.equal(item.amount, 2);
+  assert.ok(item.entries.every((entry) => entry.projectionId === "instagram:ig-after"));
+  const tiktok = dashboard.feed.items.find((entry) => entry.kind === "post" && entry.post.projectionId === "tiktok:7000000000000000001");
+  assert.equal(tiktok.post.title, "TikTok post");
+  assert.equal(dashboard.feed.total, 4);
+  assert.ok(dashboard.badges.includes("first_transmission"));
+  // Posting days count every post that earns, whichever app made it.
+  const streak = await loadPointsDashboard(postgres, workspaceId, connectedAt + 8 * DAY + HOUR);
+  assert.equal(streak.streak.current, 4);
+});
+
+test("a TikTok posted through Posterract is never paid again as a post made elsewhere", async () => {
+  const postgres = await database();
+  const { workspaceId } = await workspace(postgres);
+  const now = LAUNCH + 30 * DAY;
+  const tt = await account(postgres, workspaceId, "tiktok", "sina");
+  // TikTok lists the video before it has given the projection its public ID.
+  const projection = await livePost(postgres, { workspaceId, accountId: tt, provider: "tiktok", publishedAt: now - 2 * HOUR, platformOptions: PUBLIC_TIKTOK, platformPostId: null });
+  await listed(postgres, { workspaceId, accountId: tt, provider: "tiktok", id: "7111111111111111111", publishedAt: now - 2 * HOUR + 30_000, views: 3_000, at: now - HOUR });
+  // A video from the TikTok app that same morning has to wait too, being so close.
+  assert.equal((await scoreWorkspacePoints(postgres, workspaceId, { now })).paid, 1);
+  const none = await one(postgres, "select count(*)::int as n from platform_post_points where workspace_id = $1", [workspaceId]);
+  assert.equal(none.n, 0);
+  // The public ID arrives: the projection has it, and the listed copy is never paid.
+  await postgres.query("update projections set platform_post_id = '7111111111111111111' where id = $1", [projection]);
+  assert.equal((await scoreWorkspacePoints(postgres, workspaceId, { now })).paid, 0);
+  const still = await one(postgres, "select count(*)::int as n from platform_post_points where workspace_id = $1", [workspaceId]);
+  assert.equal(still.n, 0);
+});
+
+test("an account earns from when it was connected, not from when its empty row was made", async () => {
+  const postgres = await database();
+  const { workspaceId } = await workspace(postgres);
+  const madeAt = LAUNCH + DAY;
+  const connectedAt = LAUNCH + 20 * DAY;
+  const now = connectedAt + 10 * DAY;
+  // The workspace's empty Instagram row, filled in when the account was connected.
+  const ig = await account(postgres, workspaceId, "instagram", "@sina", { connectedAt: madeAt });
+  await postgres.query("update social_accounts set connected_at = $2 where id = $1", [ig, new Date(connectedAt)]);
+  await listed(postgres, { workspaceId, accountId: ig, provider: "instagram", id: "ig-between", publishedAt: connectedAt - 5 * DAY, views: 9_000, at: now - HOUR });
+  await listed(postgres, { workspaceId, accountId: ig, provider: "instagram", id: "ig-since", publishedAt: connectedAt + DAY, views: 2_000, at: now - HOUR });
+  assert.deepEqual((await scoreWorkspacePoints(postgres, workspaceId, { now })).bySource, { post: 1, views: 2 });
+});
+
+test("the live-post point is paid once, on Instagram, TikTok, Facebook and Threads, never for TikTok Only me", async () => {
   const postgres = await database();
   const { workspaceId } = await workspace(postgres);
   const ig = await account(postgres, workspaceId, "instagram");
   const tt = await account(postgres, workspaceId, "tiktok");
+  const yt = await account(postgres, workspaceId, "youtube");
   const igPost = await livePost(postgres, { workspaceId, accountId: ig, provider: "instagram", publishedAt: LAUNCH + DAY });
-  const ttPost = await livePost(postgres, { workspaceId, accountId: tt, provider: "tiktok", publishedAt: LAUNCH + DAY });
-  const pay = (projectionId, provider, accountId) =>
-    awardPostLive(postgres, { projectionId, workspaceId, provider, socialAccountId: accountId, title: "Clip" });
+  const ttPost = await livePost(postgres, { workspaceId, accountId: tt, provider: "tiktok", publishedAt: LAUNCH + DAY, platformOptions: PUBLIC_TIKTOK });
+  const ttPrivate = await livePost(postgres, { workspaceId, accountId: tt, provider: "tiktok", publishedAt: LAUNCH + DAY, platformOptions: ONLY_ME_TIKTOK });
+  const ytPost = await livePost(postgres, { workspaceId, accountId: yt, provider: "youtube", publishedAt: LAUNCH + DAY });
+  const pay = (projectionId, provider, accountId, platformOptions) =>
+    awardPostLive(postgres, { projectionId, workspaceId, provider, socialAccountId: accountId, title: "Clip", platformOptions });
   assert.equal(await pay(igPost, "instagram", ig), 1);
   assert.equal(await pay(igPost, "instagram", ig), 0);
-  assert.equal(await pay(ttPost, "tiktok", tt), 0);
-  assert.equal(await total(postgres, workspaceId), 1);
-  // The analytics pass sees the post already paid.
+  assert.equal(await pay(ttPost, "tiktok", tt, PUBLIC_TIKTOK), 1);
+  assert.equal(await pay(ttPrivate, "tiktok", tt, ONLY_ME_TIKTOK), 0);
+  assert.equal(await pay(ytPost, "youtube", yt), 0);
+  assert.equal(await total(postgres, workspaceId), 2);
+  // The analytics pass sees both posts already paid, and still skips Only me.
   assert.equal((await scoreWorkspacePoints(postgres, workspaceId, { now: LAUNCH + 2 * DAY })).paid, 0);
+});
+
+test("TikTok posts earn from their stats, but an Only me post earns nothing and keeps no streak alive", async () => {
+  const postgres = await database();
+  const { workspaceId } = await workspace(postgres);
+  const tt = await account(postgres, workspaceId, "tiktok");
+  const start = LAUNCH + 15 * HOUR;
+  const post = async (day, platformOptions) =>
+    livePost(postgres, { workspaceId, accountId: tt, provider: "tiktok", mediaId: await media(postgres, workspaceId), publishedAt: start + day * DAY, platformOptions });
+
+  const publicPost = await post(0, PUBLIC_TIKTOK);
+  await snapshot(postgres, { projectionId: publicPost, workspaceId, provider: "tiktok", views: 5_000, likes: 200, comments: 10, shares: 40 });
+  const privatePost = await post(1, ONLY_ME_TIKTOK);
+  await snapshot(postgres, { projectionId: privatePost, workspaceId, provider: "tiktok", views: 50_000, likes: 2_000 });
+  for (let day = 2; day < 7; day += 1) await post(day, PUBLIC_TIKTOK);
+
+  const report = await scoreWorkspacePoints(postgres, workspaceId, { now: start + 8 * DAY });
+  // 6 public posts go live; the one with stats adds 5 + 2 + 1 + 2.
+  assert.equal(report.bySource.post, 6);
+  assert.equal(report.bySource.views, 5);
+  assert.equal(report.bySource.likes, 2);
+  assert.equal(report.bySource.comments, 1);
+  assert.equal(report.bySource.shares, 2);
+  // Day 1 was only an Only me post: days 0 and 2–6 are not seven in a row.
+  assert.equal(report.bySource.streak, undefined);
+  const paidPrivate = await one(postgres, "select count(*)::int as n from post_points where projection_id = $1", [privatePost]);
+  assert.equal(paidPrivate.n, 0);
+
+  // A public post on day 1 makes the run seven days long.
+  await post(1, PUBLIC_TIKTOK);
+  assert.equal((await scoreWorkspacePoints(postgres, workspaceId, { now: start + 8 * DAY })).bySource.streak, 10);
 });
 
 test("reaching a new tier gets its own notification", async () => {
@@ -426,6 +670,36 @@ test("reaching a new tier gets its own notification", async () => {
   await awardPostLive(postgres, { projectionId: post, workspaceId, provider: "instagram", socialAccountId: ig, title: "Clip" });
   const event = await one(postgres, "select message from events where workspace_id = $1 and type = 'points.level'", [workspaceId]);
   assert.equal(event.message, "You made Silver! You're now Silver Recruit, level 11.");
+});
+
+test("card images come only from the platforms' own image hosts, as data URLs", async () => {
+  assert.equal(isCardImageUrl("https://scontent-xxc1-1.cdninstagram.com/v/t51/a.jpg?oe=1"), true);
+  assert.equal(isCardImageUrl("https://p16-common-sign.tiktokcdn-us.com/x.jpeg"), true);
+  assert.equal(isCardImageUrl("http://scontent.cdninstagram.com/a.jpg"), false);
+  assert.equal(isCardImageUrl("https://169.254.169.254/latest/meta-data"), false);
+  assert.equal(isCardImageUrl("https://evil.com/cdninstagram.com.jpg"), false);
+  assert.equal(isCardImageUrl("https://cdninstagram.com.evil.com/a.jpg"), false);
+
+  const postgres = await database();
+  const { workspaceId, userId } = await workspace(postgres);
+  await postgres.query("update app_users set image_url = 'https://internal.example/avatar.png' where id = $1", [userId]);
+  const ig = await account(postgres, workspaceId, "instagram", "sina");
+  await postgres.query("update social_accounts set avatar_url = 'https://scontent.cdninstagram.com/me.jpg', status = 'connected' where id = $1", [ig]);
+  const post = await livePost(postgres, { workspaceId, accountId: ig, provider: "instagram", publishedAt: LAUNCH + DAY });
+  await snapshot(postgres, { projectionId: post, workspaceId, provider: "instagram", views: 900, raw: { thumbnailUrl: "https://scontent.cdninstagram.com/cover.jpg" } });
+  await listed(postgres, { workspaceId, accountId: ig, provider: "instagram", id: "elsewhere1", publishedAt: LAUNCH + DAY, cover: "https://scontent.cdninstagram.com/svg.svg" });
+
+  const asked = [];
+  const fetchImage = async (url) => {
+    asked.push(url);
+    const svg = url.endsWith(".svg");
+    return new Response(svg ? "<svg/>" : new Uint8Array([1, 2, 3]), { headers: { "content-type": svg ? "image/svg+xml" : "image/jpeg" } });
+  };
+  const images = await loadCardImages(postgres, workspaceId, { avatar: true, covers: [post, "instagram:elsewhere1", "not-a-key"] }, fetchImage);
+  assert.equal(images.avatar, "data:image/jpeg;base64,AQID");
+  assert.deepEqual(Object.keys(images.covers), [post]);
+  assert.equal(images.covers[post], "data:image/jpeg;base64,AQID");
+  assert.ok(!asked.some((url) => url.includes("internal.example")));
 });
 
 test("the leaderboard ranks everyone on a paid plan or an AI FOR SAVAGES membership", async () => {

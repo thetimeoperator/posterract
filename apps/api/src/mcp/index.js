@@ -1,6 +1,6 @@
 /**
  * Posterract's MCP server: the connector Meta Muse (or any MCP client) uses
- * to post and schedule videos on Instagram, Facebook and Threads, read their
+ * to post and schedule videos on Instagram, TikTok, Facebook and Threads, read their
  * analytics and play the points game.
  *
  * It lives at POST /v1/mcp on the API (the gateway already routes /v1/* to

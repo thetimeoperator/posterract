@@ -64,7 +64,7 @@ import { BusinessError, loadBusinesses, parseScopeQuery, registerBusinessRoutes,
 import { isValidTimeZone, loadPointsSummary, registerPointsRoutes } from "./points.js";
 import { registerMcpRoutes } from "./mcp/index.js";
 import { registerConnectorAuthRoutes, verifyConnectorToken } from "./mcp/auth.js";
-import { registerTikTokRoutes } from "./tiktok.js";
+import { checkTikTokDirectPost, registerTikTokRoutes } from "./tiktok.js";
 import { registerTikTokMediaRoute, cleanupTikTokMedia } from "./tiktokMedia.js";
 import { resolvePostTargets } from "./postTargets.js";
 import { loadVaultMedia, registerMediaDeleteRoute } from "./media.js";
@@ -606,7 +606,8 @@ async function dispatchOutbox() {
            'publication.requested',
            'publication.cancel_requested',
            'publication.reschedule_requested',
-           'transmission.analytics_index_requested'
+           'transmission.analytics_index_requested',
+           'account.posts_sync_requested'
          )
          and (
            event_type <> 'auth.welcome_email_requested'
@@ -675,6 +676,12 @@ async function dispatchOutbox() {
           await temporalClient.workflow
             .getHandle("posterract:analytics:continuous")
             .signal("refreshAnalytics");
+        } else if (event.event_type === "account.posts_sync_requested") {
+          await temporalClient.workflow.start("accountPostsNowWorkflow", {
+            taskQueue: env.TEMPORAL_TASK_QUEUE ?? "posterract-publishing",
+            workflowId: `posterract:posts:account:${event.aggregate_id}:${event.id}`,
+            args: [event.aggregate_id],
+          });
         }
         await client.query(
           `update outbox_events
@@ -1047,12 +1054,16 @@ app.get("/v1/openapi.json", async () => ({
     "/v1/analytics/posts": { get: { summary: "When every post on each connected account went live (last 120 days), whichever app or tool made it" } },
     "/v1/points": { get: { summary: "Read the workspace points total, week, streak and badges" } },
     "/v1/points/dashboard": { get: { summary: "Read points, level, rank, streak, follower milestones and top posts" } },
+    "/v1/points/feed": { get: { summary: "Read the Recent points feed a page at a time (page=1..): each post with what it earned in its latest day, and streak and follower milestones" } },
     "/v1/points/ledger": { get: { summary: "Read the immutable points ledger" } },
     "/v1/leaderboard": { get: { summary: "Rank everyone on the base plan or above by points (period=week|month|all)" } },
     "/v1/mcp": { post: { summary: "MCP server (Streamable HTTP) for AI agents such as Meta Muse: post, schedule, analytics and the points game" } },
     "/v1/accounts": { get: { summary: "List connected social accounts" } },
+    "/v1/accounts/{accountId}/tiktok/creator-info": {
+      get: { summary: "Read a TikTok account's current posting options for Direct Post: who can watch, which interactions are off, and the longest video" },
+    },
     "/v1/uploads/multipart": { post: { summary: "Start a direct R2 multipart upload" } },
-    "/v1/posts": { post: { summary: "Publish now or schedule a post" } },
+    "/v1/posts": { post: { summary: "Publish now or schedule a post on Instagram, TikTok, Facebook and Threads" } },
     "/v1/posts/{id}": { get: { summary: "Read post and per-platform status" } },
     "/v1/posts/{id}/events": { get: { summary: "Read post events" } },
     "/v1/posts/{id}/cancel": { post: { summary: "Cancel a scheduled post" } },
@@ -1884,6 +1895,19 @@ app.post(
     const requestHash = hashRequest(request.body);
     const actorKey = idempotencyActor(request);
     const source = request.authContext.kind === "api_key" ? "api" : "ui";
+    // Create Post checks TikTok settings on screen; API keys and agents are
+    // checked here, before the post is accepted, against the live account.
+    // A post that names no audience gets Everyone here too.
+    const directTikTok = input.projections.find((item) => item.provider === "tiktok" && item.options.mode === "direct");
+    if (directTikTok && (source === "api" || !directTikTok.options.privacyLevel)) {
+      const problem = await checkTikTokDirectPost(postgres, {
+        workspaceId,
+        accountIds: input.accountIds,
+        mediaId: input.artifactId,
+        options: directTikTok.options,
+      });
+      if (problem) return reply.code(problem.status).send(problem.body);
+    }
     const client = await postgres.connect();
     let response;
     try {
@@ -2210,7 +2234,7 @@ app.post(
       );
       if (originalProjections.rows.some((row) => row.provider === "tiktok" && row.platform_options?.mode === "direct")) {
         await client.query("rollback");
-        return reply.code(409).send({ error: "direct_post_review_required", detail: "Open this copy in Create Post to choose privacy and authorize it again." });
+        return reply.code(409).send({ error: "direct_post_review_required", detail: "TikTok needs its settings chosen again for a copy: open it in Create Post, or create a new post with TikTok settings." });
       }
       if (originalProjections.rows.length === 0) {
         await client.query("rollback");

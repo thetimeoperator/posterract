@@ -1,7 +1,8 @@
 /**
  * Scores every workspace from scratch under the points rules
  * (apps/api/src/points.js), for when the rules change and everyone should be
- * paid again under the new ones. Nothing from before launch day counts.
+ * paid again under the new ones. A post counts from when its account was
+ * first connected.
  *
  *   node --import tsx scripts/points-rescore.mjs                dry run
  *   node --import tsx scripts/points-rescore.mjs --apply        rescore for real
@@ -36,6 +37,7 @@ try {
       await client.query("begin");
       await client.query("delete from points_ledger where workspace_id = $1", [workspace.id]);
       await client.query("delete from post_points where workspace_id = $1", [workspace.id]);
+      await client.query("delete from platform_post_points where workspace_id = $1", [workspace.id]);
       await client.query("delete from follower_baselines where workspace_id = $1", [workspace.id]);
       await client.query("delete from events where workspace_id = $1 and type like 'points.%'", [workspace.id]);
       const report = await scoreWorkspace(client, workspace.id, { backfill: true, notify: false });

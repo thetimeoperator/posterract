@@ -12,6 +12,8 @@
  */
 import type { PlatformPostList } from "./platformPosts";
 
+import { tiktokFailureMessage } from "./tiktokDirect";
+
 const OPEN_API = "https://open.tiktokapis.com";
 
 /** Scopes approved for Posterract in the TikTok developer portal. */
@@ -197,6 +199,8 @@ export type TikTokVideoStats = {
   shares: number;
   durationSeconds?: number;
   createdAt?: number;
+  /** The video's cover, for the Points feed. */
+  thumbnailUrl?: string;
 };
 
 export async function tiktokGetVideoStats(
@@ -204,7 +208,7 @@ export async function tiktokGetVideoStats(
   videoIds: string[],
 ): Promise<TikTokVideoStats[]> {
   if (videoIds.length === 0) return [];
-  const fields = "id,view_count,like_count,comment_count,share_count,duration,create_time";
+  const fields = "id,view_count,like_count,comment_count,share_count,duration,create_time,cover_image_url";
   const data = await openApiPost<{
     videos?: Array<{
       id?: string;
@@ -214,6 +218,7 @@ export async function tiktokGetVideoStats(
       share_count?: number;
       duration?: number;
       create_time?: number;
+      cover_image_url?: string;
     }>;
   }>(`/v2/video/query/?fields=${fields}`, accessToken, { filters: { video_ids: videoIds.slice(0, 20) } });
   return (data.videos ?? []).flatMap((video) =>
@@ -226,6 +231,7 @@ export async function tiktokGetVideoStats(
           shares: video.share_count ?? 0,
           durationSeconds: video.duration,
           createdAt: video.create_time,
+          thumbnailUrl: video.cover_image_url,
         }]
       : [],
   );
@@ -386,7 +392,11 @@ export async function tiktokUploadVideoDraft(args: {
         publishId = await initAndUpload();
         continue;
       }
-      throw new Error(`TikTok draft upload failed: ${status.fail_reason ?? "unknown"}`);
+      const reason = status.fail_reason ?? "unknown";
+      const failure = new Error(`TikTok draft upload failed: ${tiktokFailureMessage(reason) ?? reason}`) as Error & { retryable?: boolean };
+      // TikTok documents `internal` as a temporary problem on its side.
+      if (reason === "internal") failure.retryable = true;
+      throw failure;
     }
     if (Date.now() > deadline) {
       const err = new Error("TikTok draft is still processing — will retry") as Error & { retryable?: boolean };
@@ -411,15 +421,25 @@ export async function tiktokListVideos(
   for (let page = 0; ; page += 1) {
     if (page >= maxPages) return { posts, complete: false };
     const data = await openApiPost<{
-      videos?: Array<{ id?: string; create_time?: number; share_url?: string }>;
+      videos?: Array<{ id?: string; create_time?: number; share_url?: string; title?: string; video_description?: string }>;
       cursor?: number;
       has_more?: boolean;
-    }>("/v2/video/list/?fields=id,create_time,share_url", accessToken, cursor === undefined ? { max_count: 20 } : { max_count: 20, cursor });
+    }>(
+      "/v2/video/list/?fields=id,create_time,share_url,title,video_description",
+      accessToken,
+      cursor === undefined ? { max_count: 20 } : { max_count: 20, cursor },
+    );
     const videos = data.videos ?? [];
     for (const video of videos) {
       const publishedAt = (video.create_time ?? Number.NaN) * 1000;
       if (video.id && publishedAt >= since) {
-        posts.push({ id: video.id, publishedAt, permalink: video.share_url, kind: "video" });
+        posts.push({
+          id: video.id,
+          publishedAt,
+          permalink: video.share_url,
+          kind: "video",
+          caption: video.title || video.video_description,
+        });
       }
     }
     const lastAt = (videos.at(-1)?.create_time ?? Number.NaN) * 1000;

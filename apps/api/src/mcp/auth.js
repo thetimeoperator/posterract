@@ -33,7 +33,7 @@ export const CONNECTOR_SCOPES = [
 
 /** What each scope lets a connected app do, as the /connect page words it. */
 export const SCOPE_LABELS = {
-  "accounts:read": "See your connected Instagram, Facebook and Threads accounts",
+  "accounts:read": "See your connected Instagram, TikTok, Facebook and Threads accounts",
   "posts:read": "See your calendar and your posts",
   "posts:write": "Post, schedule, move and cancel posts (it asks you first)",
   "media:write": "Add videos to your library",

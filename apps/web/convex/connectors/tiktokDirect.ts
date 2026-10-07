@@ -13,6 +13,59 @@ export function tiktokPostingRestrictionMessage(code: string): string | undefine
   }
 }
 
+/**
+ * What a TikTok error or `fail_reason` means for the creator, in plain words.
+ * Codes from developers.tiktok.com: Direct Post errors, Get Post Status fail
+ * reasons and the v2 error codes. Undefined for codes not listed here.
+ */
+export function tiktokFailureMessage(code: string): string | undefined {
+  const restriction = tiktokPostingRestrictionMessage(code);
+  if (restriction) return restriction;
+  switch (code) {
+    case "file_format_check_failed":
+    case "invalid_file_upload":
+      return "TikTok couldn’t read this video’s format. Export it as an MP4 and try again.";
+    case "duration_check_failed":
+      return "This video’s length isn’t allowed on this TikTok account. Trim it and try again.";
+    case "frame_rate_check_failed":
+      return "TikTok doesn’t accept this video’s frame rate. Export it at a standard frame rate, such as 30 fps, and try again.";
+    case "picture_size_check_failed":
+      return "TikTok doesn’t accept this video’s resolution. Export it at a standard size, such as 1080×1920, and try again.";
+    case "internal":
+    case "internal_error":
+      return "TikTok had a problem on its side. Try again in a few minutes.";
+    case "video_pull_failed":
+      return "TikTok couldn’t download the video from Posterract. Try again.";
+    case "publish_cancelled":
+      return "This TikTok upload was cancelled before it finished.";
+    case "auth_removed":
+      return "This TikTok account removed Posterract’s access. Reconnect it in Social accounts, then try again.";
+    case "access_token_invalid":
+    case "scope_not_authorized":
+    case "scope_permission_missed":
+      return "TikTok authorization needs attention. Reconnect this account in Social accounts, then try again.";
+    case "spam_risk_text":
+      return "TikTok flagged the caption as spam. Change the caption and try again.";
+    case "spam_risk":
+      return "TikTok flagged this post as a spam risk and didn’t publish it. Try again later, or change the caption or video.";
+    case "privacy_level_option_mismatch":
+      return "That audience isn’t available for this TikTok account anymore. Choose who can watch again.";
+    case "unaudited_client_can_only_post_to_private_accounts":
+      return "TikTok only allowed a private post for this account at that time. Post it again.";
+    case "url_ownership_unverified":
+      return "TikTok couldn’t verify Posterract’s video link. Try again later.";
+    case "rate_limit_exceeded":
+      return "TikTok is limiting requests right now. Try again in a minute.";
+    case "invalid_params":
+    case "invalid_param":
+      return "TikTok rejected the post settings. Review them and try again.";
+    case "prepared_media_expired":
+      return "The prepared video expired before TikTok took it. Retry the post.";
+    case "account_disconnected":
+      return "Reconnect this TikTok account in Social accounts, then try again.";
+  }
+}
+
 export class TikTokApiError extends Error {
   constructor(public code: string, public status: number, public ambiguous = false) {
     super(`TikTok: ${code}`);

@@ -146,15 +146,18 @@ export function parseCreatePost(body, now = new Date()) {
         maximum: captionLimits[provider],
       });
     }
-    const options = override.options ?? {};
+    let options = override.options ?? {};
     if (!options || typeof options !== "object" || Array.isArray(options)) {
       throw new RequestValidationError("invalid_platform_options", {
         provider,
       });
     }
     if (provider === "tiktok") {
-      const reason = validateTikTokOptions(options);
+      // No audience given means Everyone: the route fills in the widest one the account allows.
+      const defaultAudience = options.mode === "direct" && (options.privacyLevel === undefined || options.privacyLevel === "");
+      const reason = validateTikTokOptions(defaultAudience ? { ...options, privacyLevel: "PUBLIC_TO_EVERYONE" } : options);
       if (reason) throw new RequestValidationError("invalid_tiktok_options", { reason });
+      if (defaultAudience) options = { ...options, privacyLevel: "" };
       if (options.mode === "direct") {
         if (!accountIds) throw new RequestValidationError("tiktok_explicit_account_required");
         if (options.consentAccepted !== true) throw new RequestValidationError("tiktok_post_consent_required");

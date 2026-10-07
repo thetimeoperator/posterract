@@ -461,6 +461,10 @@ export async function facebookPostInsights(args: {
   watchTimeSeconds?: number;
   averageWatchSeconds?: number;
   threeSecondViews?: number;
+  /** The video's thumbnail, for the Points feed. */
+  thumbnailUrl?: string;
+  /** The video's length, for the retention bonus on posts made in other apps. */
+  durationSeconds?: number;
 }> {
   const url = new URL(`${GRAPH}/${API_VERSION}/${args.videoId}`);
   url.searchParams.set("fields", "views,likes.summary(true),comments.summary(true)");
@@ -567,6 +571,27 @@ export async function facebookPostInsights(args: {
       // Base counts stay valid without the breakdowns.
     }
   }
+  // The cover for the Points feed: the preferred thumbnail, else the video's picture.
+  let thumbnailUrl: string | undefined;
+  let durationSeconds: number | undefined;
+  try {
+    const pictureUrl = new URL(`${GRAPH}/${API_VERSION}/${args.videoId}`);
+    pictureUrl.searchParams.set("fields", "picture,thumbnails{uri,is_preferred},length");
+    pictureUrl.searchParams.set("access_token", args.pageAccessToken);
+    const pictureResponse = await fetch(pictureUrl);
+    const picture = (await pictureResponse.json()) as {
+      picture?: string;
+      thumbnails?: { data?: Array<{ uri?: string; is_preferred?: boolean }> };
+      length?: number;
+    };
+    if (pictureResponse.ok) {
+      const thumbnails = picture.thumbnails?.data ?? [];
+      thumbnailUrl = thumbnails.find((thumbnail) => thumbnail.is_preferred)?.uri ?? thumbnails[0]?.uri ?? picture.picture;
+      if (typeof picture.length === "number" && picture.length > 0) durationSeconds = picture.length;
+    }
+  } catch {
+    // No cover this time; the next refresh asks again.
+  }
   return {
     views: body.views ?? 0,
     likes: body.likes?.summary?.total_count ?? 0,
@@ -577,6 +602,46 @@ export async function facebookPostInsights(args: {
     watchTimeSeconds,
     averageWatchSeconds,
     threeSecondViews,
+    thumbnailUrl,
+    durationSeconds,
+  };
+}
+
+/**
+ * A Page post that isn't a video (a photo, link or text post): its reactions,
+ * comments, shares and picture, for points. Only videos report views.
+ */
+export async function facebookPagePostInsights(args: {
+  postId: string;
+  pageAccessToken: string;
+}): Promise<{
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  reactions?: number;
+  thumbnailUrl?: string;
+}> {
+  const url = new URL(`${GRAPH}/${API_VERSION}/${args.postId}`);
+  url.searchParams.set("fields", "reactions.limit(0).summary(true),comments.limit(0).summary(true),shares,full_picture");
+  url.searchParams.set("access_token", args.pageAccessToken);
+  const response = await fetch(url);
+  const body = (await response.json()) as {
+    reactions?: { summary?: { total_count?: number } };
+    comments?: { summary?: { total_count?: number } };
+    shares?: { count?: number };
+    full_picture?: string;
+    error?: { message?: string };
+  };
+  if (!response.ok) throw new Error(`Facebook post insights failed: ${body.error?.message ?? response.status}`);
+  const reactions = body.reactions?.summary?.total_count ?? 0;
+  return {
+    views: 0,
+    likes: reactions,
+    comments: body.comments?.summary?.total_count ?? 0,
+    shares: body.shares?.count ?? 0,
+    reactions,
+    thumbnailUrl: body.full_picture,
   };
 }
 
@@ -591,11 +656,11 @@ export async function facebookListPagePosts(args: {
   since: number;
   maxPages?: number;
 }): Promise<PlatformPostList> {
-  type Item = { id?: string; created_time?: string; permalink_url?: string };
+  type Item = { id?: string; created_time?: string; permalink_url?: string; message?: string };
   let failure: unknown;
   for (const target of [args.pageId, "me"]) {
     const url = new URL(`${GRAPH}/${API_VERSION}/${target}/published_posts`);
-    url.searchParams.set("fields", "id,created_time,permalink_url");
+    url.searchParams.set("fields", "id,created_time,permalink_url,message");
     url.searchParams.set("since", String(Math.floor(args.since / 1000)));
     url.searchParams.set("limit", "100");
     url.searchParams.set("access_token", args.pageAccessToken);
@@ -609,7 +674,7 @@ export async function facebookListPagePosts(args: {
         toPost: (item) => {
           const publishedAt = parseGraphTime(item.created_time);
           if (!item.id || !Number.isFinite(publishedAt)) return undefined;
-          return { id: item.id, publishedAt, permalink: item.permalink_url, kind: "post" };
+          return { id: item.id, publishedAt, permalink: item.permalink_url, kind: "post", caption: item.message };
         },
       });
     } catch (error) {

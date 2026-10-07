@@ -84,11 +84,11 @@ export const PLATFORM_CAPABILITIES: Record<PlatformId, PlatformCapabilities> = {
     apiWindowCap: { posts: 15, windowHours: 24 },
     approval: {
       devModeWorks: true,
-      publicRequires: "TikTok Content Posting API audit (2–6 weeks)",
     },
     notes: [
-      "Until the app is audited, API posts are forced to SELF_ONLY (private) visibility.",
-      "Pull-from-URL requires a verified domain; privacy/duet/stitch controls must be shown in the composer.",
+      "Direct Post is audited (September 30, 2026): posts can be public.",
+      "The creator picks privacy with no default; privacy/duet/stitch controls must be shown in the composer.",
+      "Pull-from-URL requires a verified domain.",
       "Per-creator limits come from creator_info and can be lower than the static cap.",
     ],
   },

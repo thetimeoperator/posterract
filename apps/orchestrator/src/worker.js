@@ -21,6 +21,7 @@ import {
 import {
   awardPostLive,
   isPointsPlatform,
+  loadAccountPostsMadeElsewhere,
   scoreWorkspacePoints,
 } from "../../api/src/points.js";
 import {
@@ -32,6 +33,7 @@ import {
 } from "../../web/convex/connectors/instagram.ts";
 import {
   facebookListPagePosts,
+  facebookPagePostInsights,
   facebookPageSummary,
   facebookPostInsights,
   facebookPublishReel,
@@ -943,9 +945,11 @@ async function refreshAccountAnalytics(accountId) {
         return { status: "skipped" };
       }
       await applyCumulativeAnalytics(account, summary, videos);
-      // What the fresh numbers earn. Scoring failing leaves the analytics in
-      // place; the next refresh scores everything again and pays the rest.
+      // What the fresh numbers earn, for posts made elsewhere too. Scoring
+      // failing leaves the analytics in place; the next refresh scores
+      // everything again and pays the rest.
       if (isPointsPlatform(account.provider)) {
+        await refreshPostsMadeElsewhere(account, accessToken).catch(() => undefined);
         await scoreWorkspacePoints(postgres, account.workspace_id).catch(() => undefined);
       }
     }
@@ -990,6 +994,95 @@ async function refreshAccountAnalytics(accountId) {
     }
     return { status: "failed", error: message };
   }
+}
+
+// Posts made in other apps earn points too, from what each refresh reads of
+// them. Fresh posts are read every refresh, older ones less often (a cover
+// URL lasts days, so no post goes long without a new one), and a refresh
+// reads at most POSTS_ELSEWHERE_PER_REFRESH of them, newest and never-read first.
+const POSTS_ELSEWHERE_PER_REFRESH = 100;
+const HOUR_MS = 3_600_000;
+
+function dueForNumbers(post, now) {
+  if (!post.metricsFetchedAt) return true;
+  const age = now - post.publishedAt;
+  const since = now - post.metricsFetchedAt;
+  if (age < 3 * DAY_MS) return true;
+  if (age < 30 * DAY_MS) return since >= DAY_MS - HOUR_MS;
+  return since >= 3 * DAY_MS - HOUR_MS;
+}
+
+async function readPostElsewhere(account, accessToken, post) {
+  if (account.provider === "instagram") {
+    return instagramPostInsights({ mediaId: post.platformPostId, accessToken });
+  }
+  if (account.provider === "threads") {
+    return threadsPostInsights({ mediaId: post.platformPostId, accessToken });
+  }
+  if (account.provider === "facebook") {
+    // A video's numbers live on the video (its ID is in the post's link);
+    // a photo, link or text post only reports reactions, comments and shares.
+    return post.videoId
+      ? facebookPostInsights({ videoId: post.videoId, pageAccessToken: accessToken })
+      : facebookPagePostInsights({ postId: post.platformPostId, pageAccessToken: accessToken });
+  }
+  return undefined;
+}
+
+async function refreshPostsMadeElsewhere(account, accessToken) {
+  const now = Date.now();
+  const due = (
+    await loadAccountPostsMadeElsewhere(postgres, { workspaceId: account.workspace_id, accountId: account.id }, now)
+  )
+    .filter((post) => dueForNumbers(post, now))
+    .sort((left, right) => Number(Boolean(left.metricsFetchedAt)) - Number(Boolean(right.metricsFetchedAt)) || right.publishedAt - left.publishedAt)
+    .slice(0, POSTS_ELSEWHERE_PER_REFRESH);
+  const read = [];
+  if (account.provider === "tiktok") {
+    for (let index = 0; index < due.length; index += 20) {
+      try {
+        const metrics = await tiktokGetVideoStats(accessToken, due.slice(index, index + 20).map((post) => post.platformPostId));
+        for (const metric of metrics) read.push({ platformPostId: metric.id, ...metric });
+      } catch {
+        // The next refresh asks again.
+      }
+    }
+  } else {
+    for (const post of due) {
+      try {
+        const metric = await readPostElsewhere(account, accessToken, post);
+        if (metric) read.push({ platformPostId: post.platformPostId, ...metric });
+      } catch {
+        // Deleted and newly processing posts do not hold up the rest.
+      }
+    }
+  }
+  for (const metric of read) {
+    const cover = typeof metric.thumbnailUrl === "string" && metric.thumbnailUrl.startsWith("https://") ? metric.thumbnailUrl : null;
+    await postgres.query(
+      `update platform_posts
+       set views = $3, likes = $4, comments = $5, shares = $6,
+           watch_time_seconds = $7, average_view_duration_seconds = $8,
+           duration_seconds = coalesce($9, duration_seconds),
+           thumbnail_url = coalesce($10, thumbnail_url),
+           raw_metrics = $11, metrics_fetched_at = now()
+       where social_account_id = $1 and platform_post_id = $2`,
+      [
+        account.id,
+        metric.platformPostId,
+        Number(metric.views ?? 0),
+        Number(metric.likes ?? 0),
+        Number(metric.comments ?? 0),
+        Number(metric.shares ?? 0),
+        metric.watchTimeSeconds ?? null,
+        metric.averageWatchSeconds ?? null,
+        metric.durationSeconds ?? null,
+        cover,
+        JSON.stringify(metric),
+      ],
+    );
+  }
+  return read.length;
 }
 
 // The platform has withdrawn the account's access (a password change, the
@@ -1108,12 +1201,13 @@ async function syncAccountPosts(accountId) {
         await client.query(
           `insert into platform_posts
             (social_account_id, workspace_id, provider, platform_post_id,
-             published_at, permalink, kind)
-           values ($1, $2, $3, $4, $5, $6, $7)
+             published_at, permalink, kind, caption)
+           values ($1, $2, $3, $4, $5, $6, $7, $8)
            on conflict (social_account_id, platform_post_id) do update
            set published_at = excluded.published_at,
                permalink = excluded.permalink,
-               kind = excluded.kind`,
+               kind = excluded.kind,
+               caption = excluded.caption`,
           [
             account.id,
             account.workspace_id,
@@ -1122,6 +1216,7 @@ async function syncAccountPosts(accountId) {
             new Date(post.publishedAt),
             post.permalink ?? null,
             post.kind ?? null,
+            post.caption ? post.caption.slice(0, 2_000) : null,
           ],
         );
       }
@@ -1139,6 +1234,8 @@ async function syncAccountPosts(accountId) {
     } finally {
       client.release();
     }
+    // A new post earns its point for going live now, not at the next stats refresh.
+    await scoreWorkspacePoints(postgres, account.workspace_id).catch(() => undefined);
     return { status: "completed", posts: posts.length };
   } catch (error) {
     const message = safeMessage(error, "Post sync failed");
@@ -1321,6 +1418,7 @@ const activities = {
           provider: row.provider,
           socialAccountId: row.social_account_id,
           title: row.title,
+          platformOptions: row.platform_options,
         }).catch(() => undefined);
       }
       await emit(
@@ -1445,6 +1543,15 @@ const directActivities = createTikTokDirectActivities({
   postgres, r2, loadProjectionContext, signedMediaUrl, prepareMedia: (url) => prepareTikTokMedia(url, true),
   accessTokenFor: (row) => refreshAccessToken(row, decryptSecret(row.access_token_ciphertext),
     row.refresh_token_ciphertext ? decryptSecret(row.refresh_token_ciphertext) : undefined),
+  // The point for going live, paid now rather than at the next analytics refresh.
+  onLive: (row) => awardPostLive(postgres, {
+    projectionId: row.id,
+    workspaceId: row.workspace_id,
+    provider: row.provider,
+    socialAccountId: row.social_account_id,
+    title: row.title,
+    platformOptions: row.platform_options,
+  }),
 });
 Object.assign(activities, directActivities);
 

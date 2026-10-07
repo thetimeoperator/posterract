@@ -258,6 +258,8 @@ export async function threadsPostInsights(args: {
   reposts: number;
   quotes: number;
   threadShares: number;
+  /** The post's cover: a video's thumbnail, or the photo itself. */
+  thumbnailUrl?: string;
 }> {
   type InsightRow = { name?: string; values?: Array<{ value?: number }>; total_value?: { value?: number } };
   const fetchMetrics = async (metrics: string) => {
@@ -281,7 +283,20 @@ export async function threadsPostInsights(args: {
     const metric = data.find((row) => row.name === name);
     return metric?.total_value?.value ?? metric?.values?.at(-1)?.value ?? 0;
   };
+  // The cover for the Points feed; a thread without one still reports its numbers.
+  let thumbnailUrl: string | undefined;
+  try {
+    const mediaUrl = new URL(`${GRAPH}/${API_VERSION}/${args.mediaId}`);
+    mediaUrl.searchParams.set("fields", "media_type,thumbnail_url,media_url");
+    mediaUrl.searchParams.set("access_token", args.accessToken);
+    const mediaResponse = await fetch(mediaUrl);
+    const media = (await mediaResponse.json()) as { media_type?: string; thumbnail_url?: string; media_url?: string };
+    if (mediaResponse.ok) thumbnailUrl = media.thumbnail_url ?? (media.media_type === "IMAGE" ? media.media_url : undefined);
+  } catch {
+    // No cover this time; the next refresh asks again.
+  }
   return {
+    thumbnailUrl,
     views: value("views"),
     likes: value("likes"),
     comments: value("replies"),
@@ -305,11 +320,11 @@ export async function threadsListPosts(args: {
   maxPages?: number;
 }): Promise<PlatformPostList> {
   const url = new URL(`${GRAPH}/${API_VERSION}/me/threads`);
-  url.searchParams.set("fields", "id,timestamp,media_type,permalink");
+  url.searchParams.set("fields", "id,timestamp,media_type,permalink,text");
   url.searchParams.set("since", String(Math.floor(args.since / 1000)));
   url.searchParams.set("limit", "50");
   url.searchParams.set("access_token", args.accessToken);
-  type Item = { id?: string; timestamp?: string; media_type?: string; permalink?: string };
+  type Item = { id?: string; timestamp?: string; media_type?: string; permalink?: string; text?: string };
   return collectGraphPosts<Item>({
     firstPage: url.toString(),
     since: args.since,
@@ -319,7 +334,7 @@ export async function threadsListPosts(args: {
     toPost: (item) => {
       const publishedAt = parseGraphTime(item.timestamp);
       if (!item.id || item.media_type === "REPOST_FACADE" || !Number.isFinite(publishedAt)) return undefined;
-      return { id: item.id, publishedAt, permalink: item.permalink, kind: item.media_type?.toLowerCase() };
+      return { id: item.id, publishedAt, permalink: item.permalink, kind: item.media_type?.toLowerCase(), caption: item.text };
     },
   });
 }

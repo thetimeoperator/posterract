@@ -134,7 +134,7 @@ test("TikTok: pages by cursor and stops at the cutoff", async () => {
       body: {
         data: {
           videos: [
-            { id: "v1", create_time: seconds(NOW - DAY), share_url: "https://tiktok/v1" },
+            { id: "v1", create_time: seconds(NOW - DAY), share_url: "https://tiktok/v1", title: "", video_description: "Day one #fyp" },
             { id: "v2", create_time: seconds(NOW - 2 * DAY) },
           ],
           cursor: 1700000000000,
@@ -162,10 +162,12 @@ test("TikTok: pages by cursor and stops at the cutoff", async () => {
     assert.deepEqual(result.posts.map((post) => post.id), ["v1", "v2", "v3"]);
     assert.equal(result.complete, true);
     assert.equal(result.posts[0].permalink, "https://tiktok/v1");
+    // The caption: the title, or the description when there is none.
+    assert.equal(result.posts[0].caption, "Day one #fyp");
     assert.equal(calls.length, 2);
     assert.deepEqual(calls[0].body, { max_count: 20 });
     assert.deepEqual(calls[1].body, { max_count: 20, cursor: 1700000000000 });
-    assert.match(calls[0].url, /\/v2\/video\/list\/\?fields=id,create_time,share_url$/);
+    assert.match(calls[0].url, /\/v2\/video\/list\/\?fields=id,create_time,share_url,title,video_description$/);
   } finally {
     restore();
   }

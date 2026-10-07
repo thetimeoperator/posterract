@@ -6,7 +6,7 @@ import { Readable } from "node:stream";
 import Fastify from "fastify";
 import { PGlite } from "@electric-sql/pglite";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
-import { registerTikTokRoutes } from "../src/tiktok.js";
+import { checkTikTokDirectPost, registerTikTokRoutes } from "../src/tiktok.js";
 import { registerTikTokMediaRoute, tiktokMediaUrl, cleanupTikTokMedia, validMediaSignature } from "../src/tiktokMedia.js";
 import { parseCreatePost } from "../src/domain.js";
 import { loadExplicitPostAccounts } from "../src/postTargets.js";
@@ -51,7 +51,9 @@ test("Direct submissions require explicit account IDs and fresh consent; legacy 
   assert.equal(parseCreatePost(input).projections[0].options.privacyLevel, "SELF_ONLY");
   assert.throws(() => parseCreatePost({ ...input, accountIds: undefined }), /tiktok_explicit_account_required/);
   assert.throws(() => parseCreatePost({ ...input, perPlatform: { tiktok: { options: { ...options, consentAccepted: false } } } }), /tiktok_post_consent_required/);
-  assert.throws(() => parseCreatePost({ ...input, perPlatform: { tiktok: { options: { ...options, privacyLevel: "" } } } }), /invalid_tiktok_options/);
+  // No audience means Everyone: the route fills it in from the account.
+  assert.equal(parseCreatePost({ ...input, perPlatform: { tiktok: { options: { ...options, privacyLevel: "" } } } }).projections[0].options.privacyLevel, "");
+  assert.throws(() => parseCreatePost({ ...input, perPlatform: { tiktok: { options: { ...options, privacyLevel: "NOBODY" } } } }), /invalid_tiktok_options/);
   assert.equal(parseCreatePost({ ...input, perPlatform: {} }).projections[0].options.mode, undefined);
 });
 
@@ -148,8 +150,9 @@ test("signed media supports GET, HEAD and ranges without redirect; tampering, ex
   await cleanupTikTokMedia(postgres, r2, env.R2_BUCKET); assert.equal(deleted, 1);
 });
 
-test("restart resumes known publish ID, private completion succeeds and awards no points (TikTok earns none yet)", async (t) => {
-  const f = await fixture(t);
+test("restart resumes known publish ID, private completion succeeds and awards no points (Only me earns none)", async (t) => {
+  let paid = 0;
+  const f = await fixture(t, { onLive: async () => { paid++; } });
   assert.equal((await f.activities.initializeTikTokDirect(projection)).status, "processing");
   const restarted = createTikTokDirectActivities(f.deps);
   assert.equal((await restarted.initializeTikTokDirect(projection)).status, "processing");
@@ -159,6 +162,79 @@ test("restart resumes known publish ID, private completion succeeds and awards n
   const row = (await f.db.query("select * from projections")).rows[0];
   assert.equal(row.status, "live"); assert.equal(row.platform_post_id, null);
   assert.equal((await f.db.query("select * from points_ledger")).rows.length, 0);
+  assert.equal(paid, 0);
+});
+
+test("a public Direct Post pays its live point once, when it goes live", async (t) => {
+  const live = [];
+  const f = await fixture(t, { onLive: async (row) => { live.push(row.id); },
+    fetchStatus: async () => ({ status: "PUBLISH_COMPLETE", publicaly_available_post_id: ["7400000000000000001"] }) });
+  await f.db.query(`update projections set platform_options = platform_options || '{"privacyLevel":"PUBLIC_TO_EVERYONE"}'::jsonb`);
+  await f.activities.initializeTikTokDirect(projection);
+  assert.equal((await f.activities.pollTikTokDirect(projection)).status, "live");
+  assert.equal((await f.activities.pollTikTokDirect(projection)).status, "live");
+  assert.deepEqual(live, [projection]);
+  const row = (await f.db.query("select platform_post_url from projections")).rows[0];
+  assert.equal(row.platform_post_url, "https://www.tiktok.com/@test.creator/video/7400000000000000001");
+});
+
+test("TikTok failures reach the creator in plain words", async (t) => {
+  for (const [reason, expected] of [
+    ["spam_risk", /flagged this post as a spam risk/],
+    ["spam_risk_text", /flagged the caption as spam/],
+    ["file_format_check_failed", /couldn’t read this video’s format/],
+    ["auth_removed", /removed Posterract’s access/],
+    ["something_new", /could not publish this post \(something_new\)/],
+  ]) {
+    const f = await fixture(t, { fetchStatus: async () => ({ status: "FAILED", fail_reason: reason }) });
+    await f.activities.initializeTikTokDirect(projection);
+    assert.equal((await f.activities.pollTikTokDirect(projection)).status, "failed");
+    const row = (await f.db.query("select error_summary from projections")).rows[0];
+    assert.match(row.error_summary, expected);
+    assert.doesNotMatch(row.error_summary, /Review the account and post settings/);
+  }
+});
+
+test("API keys and agents get TikTok's answer when the post is made, checked against the live account", async (t) => {
+  const f = await fixture(t);
+  const mediaId = "00000000-0000-4000-8000-000000000006";
+  await f.db.query(`insert into media_assets (id, workspace_id, original_filename, r2_key, mime_type, size_bytes, duration_ms, status)
+    values ($1, $2, 'clip.mp4', 'media/clip', 'video/mp4', 1000, 30000, 'ready')`, [mediaId, ws]);
+  const direct = { ...emptyTikTokOptions(), privacyLevel: "PUBLIC_TO_EVERYONE", allowComment: true, consentAccepted: true };
+  const check = (options, deps = {}) => checkTikTokDirectPost(f.postgres, { workspaceId: ws, accountIds: [account], mediaId, options },
+    { creatorInfo: async () => info, freshToken: async () => "token", ...deps });
+
+  assert.equal(await check(direct), undefined);
+
+  // No audience: Everyone, or for a private account the widest audience it allows.
+  const unset = { ...direct, privacyLevel: "" };
+  assert.equal(await check(unset), undefined);
+  assert.equal(unset.privacyLevel, "PUBLIC_TO_EVERYONE");
+  const privateAccount = { ...direct, privacyLevel: "" };
+  assert.equal(await check(privateAccount, { creatorInfo: async () => ({ ...info, privacy_level_options: ["MUTUAL_FOLLOW_FRIENDS", "SELF_ONLY"] }) }), undefined);
+  assert.equal(privateAccount.privacyLevel, "MUTUAL_FOLLOW_FRIENDS");
+
+  const friends = await check({ ...direct, privacyLevel: "MUTUAL_FOLLOW_FRIENDS" });
+  assert.equal(friends.status, 409);
+  assert.equal(friends.body.error, "tiktok_settings_rejected");
+  assert.match(friends.body.detail, /no longer available/);
+  assert.deepEqual(friends.body.details.privacyLevelOptions, info.privacy_level_options);
+
+  const duet = await check({ ...direct, allowDuet: true });
+  assert.match(duet.body.detail, /disabled a selected interaction/);
+
+  await f.db.query("update media_assets set duration_ms = 90000 where id = $1", [mediaId]);
+  const long = await check(direct);
+  assert.match(long.body.detail, /up to 60 seconds/);
+  await f.db.query("update media_assets set duration_ms = 30000 where id = $1", [mediaId]);
+
+  const capped = await check(direct, { creatorInfo: async () => { throw new TikTokApiError("spam_risk_too_many_posts", 200); } });
+  assert.equal(capped.status, 409);
+  assert.match(capped.body.detail, /attempt has stopped/);
+
+  await f.db.query("update social_accounts set status = 'disconnected' where id = $1", [account]);
+  const disconnected = await check(direct);
+  assert.equal(disconnected.body.error, "account_not_connected");
 });
 
 test("processing and network outages never initialize another upload", async (t) => {

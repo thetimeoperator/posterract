@@ -23,6 +23,15 @@ export type TikTokPostOptions = {
   isAigc: boolean;
   consentAccepted?: boolean;
 };
+/**
+ * Who a TikTok post goes to when nobody picks: Everyone. A private account
+ * can't post to Everyone, so it gets the widest audience it allows.
+ */
+export function defaultTikTokPrivacy(options: readonly TikTokPrivacy[]): TikTokPrivacy | "" {
+  return (["PUBLIC_TO_EVERYONE", "FOLLOWER_OF_CREATOR", "MUTUAL_FOLLOW_FRIENDS", "SELF_ONLY"] as const)
+    .find((level) => options.includes(level)) ?? "";
+}
+
 export const emptyTikTokOptions = (): TikTokPostOptions => ({
   mode: "direct", privacyLevel: "", allowComment: false, allowDuet: false,
   allowStitch: false, commercialContent: false, brandOrganic: false,

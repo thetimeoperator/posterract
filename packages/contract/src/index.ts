@@ -140,7 +140,7 @@ export type ProjectionDTO = {
   platformPostUrl?: string;
   errorCategory?: ErrorCategory;
   errorSummary?: string;
-  /** Points this post has earned on its platform (Instagram, Facebook and Threads). */
+  /** Points this post has earned on its platform (Instagram, TikTok, Facebook and Threads). */
   points?: number;
   /** Epoch ms the post went live on its platform. */
   publishedAt?: number;
@@ -155,6 +155,12 @@ export type AccountPostDTO = {
   accountId: string;
   /** Epoch ms the post went live. */
   publishedAt: number;
+};
+
+export type AccountPostsDTO = {
+  posts: AccountPostDTO[];
+  /** Newly connected accounts whose past posts are still being read. */
+  syncing: string[];
 };
 
 export type PortalDTO = {
@@ -540,14 +546,18 @@ export type AnalyticsDashboardDTO = {
 // Points are decimal: 3,540 views on Instagram are 3.54 points.
 // ---------------------------------------------------------------------------
 
-/** The platforms whose posts earn points; the rest earn nothing yet. */
-export const POINTS_PLATFORMS = ["instagram", "facebook", "threads"] as const;
+/**
+ * The platforms whose posts earn points; the rest earn nothing yet. A TikTok
+ * post set to Only me earns nothing and keeps no streak alive: nobody sees it.
+ */
+export const POINTS_PLATFORMS = ["instagram", "tiktok", "facebook", "threads"] as const;
 export type PointsPlatform = (typeof POINTS_PLATFORMS)[number];
 
 /**
  * How many of a thing make one point, per platform. Threads counts a view
  * each time a post is displayed rather than played, so its views are worth
- * half. Watch time is hours per point.
+ * half. Watch time is hours per point. TikTok's approved scopes report
+ * neither saves nor watch time, so it earns neither (nor a retention bonus).
  */
 export const POINTS_RATES: Record<PointsPlatform, {
   views: number;
@@ -558,6 +568,7 @@ export const POINTS_RATES: Record<PointsPlatform, {
   watchHours: number | null;
 }> = {
   instagram: { views: 1_000, likes: 100, comments: 10, shares: 20, saves: 20, watchHours: 1 },
+  tiktok: { views: 1_000, likes: 100, comments: 10, shares: 20, saves: null, watchHours: null },
   facebook: { views: 1_000, likes: 100, comments: 10, shares: 20, saves: null, watchHours: 1 },
   threads: { views: 2_000, likes: 100, comments: 10, shares: 20, saves: null, watchHours: null },
 };
@@ -566,9 +577,10 @@ export const POINTS_RATES: Record<PointsPlatform, {
 export const POINTS_POST_LIVE = 1;
 
 /**
- * Launch day, Sep 24 2026 (UTC). Points count from here: posts published
- * before it earn nothing, and streaks and follower growth start counting from
- * it, so everyone starts at level 1.
+ * Launch day, Sep 24 2026 (UTC). Follower growth counts from the followers an
+ * account had then, or when it was connected if that came later. Posts don't
+ * wait for it: every post on a connected account earns from the day the
+ * account was connected, whichever app or tool made it.
  */
 export const POINTS_START_AT = Date.UTC(2026, 8, 24);
 
@@ -790,6 +802,13 @@ export type PointsEntryDTO = {
   source: PointsSource;
   amount: number;
   note?: string;
+  /**
+   * The post that earned it: its Posterract post (projection) ID, or
+   * `provider:postId` for a post made in another app. Unset for streak and
+   * follower milestones.
+   */
+  projectionId?: string;
+  provider?: PointsPlatform;
   at: number;
 };
 
@@ -801,8 +820,23 @@ export type PointsSummaryDTO = {
   recent: PointsEntryDTO[];
 };
 
+/** A post's latest numbers on its platform, whether or not they have earned points yet. */
+export type PostMetricsDTO = {
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  /** Where the platform reports them (Instagram). */
+  saves?: number;
+  watchHours?: number;
+  averageWatchSeconds?: number;
+  /** The share of the video watched on average, 0 to 1. */
+  retention?: number;
+};
+
 /** One post's points, rule by rule. */
 export type PostPointsDTO = {
+  /** Its Posterract post (projection) ID, or `provider:postId` for a post made in another app. */
   projectionId: string;
   provider: PointsPlatform;
   title: string;
@@ -810,6 +844,38 @@ export type PostPointsDTO = {
   publishedAt?: number;
   total: number;
   parts: Array<{ source: PointsSource; points: number; value?: number }>;
+  /** The posted video, for its thumbnail: one of the workspace's artifacts. */
+  artifactId?: string;
+  /** A still to show instead of the video's first frame. */
+  thumbnailUrl?: string;
+  /** The account it went out on. */
+  handle?: string;
+  metrics?: PostMetricsDTO;
+};
+
+/**
+ * One row of the Recent points feed: a post with what it earned in the day up
+ * to its latest points, or a streak or follower milestone on its own.
+ */
+export type PointsFeedItemDTO =
+  | {
+      kind: "post";
+      post: PostPointsDTO;
+      /** Its points in that day, newest first. */
+      entries: PointsEntryDTO[];
+      amount: number;
+      /** When it last earned. */
+      at: number;
+    }
+  | { kind: "bonus"; entry: PointsEntryDTO };
+
+/** A page of the Recent points feed, newest first. */
+export type PointsFeedPageDTO = {
+  items: PointsFeedItemDTO[];
+  /** 1-based. */
+  page: number;
+  pages: number;
+  total: number;
 };
 
 export type FollowerMilestoneDTO = {
@@ -837,6 +903,8 @@ export type PointsDashboardDTO = {
   followers: FollowerMilestoneDTO[];
   topPosts: PostPointsDTO[];
   recent: PointsEntryDTO[];
+  /** The Recent points feed's first page; the rest come from /v1/points/feed. */
+  feed?: PointsFeedPageDTO;
   badges: string[];
   timeZone?: string;
 };
@@ -850,6 +918,8 @@ export type LeaderboardEntryDTO = {
   level: number;
   rank: { id: string; label: string };
   points: number;
+  /** Views the creator's posts earned points for in the period. */
+  views: number;
   isMe: boolean;
 };
 
@@ -860,6 +930,9 @@ export type LeaderboardDTO = {
   me?: LeaderboardEntryDTO;
   total: number;
 };
+
+/** Pictures for rank cards as data URLs (platform CDNs send no CORS headers): the avatar and covers by post key. */
+export type CardImagesDTO = { avatar?: string; covers: Record<string, string> };
 
 // ---------------------------------------------------------------------------
 // Billing — public catalog and workspace subscription state. Stripe customer,

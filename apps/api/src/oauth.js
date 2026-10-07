@@ -450,7 +450,7 @@ export async function refreshAccountProfiles(database, workspaceId, options = {}
   };
 }
 
-async function saveConnection(database, workspaceId, provider, connection) {
+export async function saveConnection(database, workspaceId, provider, connection) {
   const client = await database.connect();
   try {
     await client.query("begin");
@@ -510,6 +510,13 @@ async function saveConnection(database, workspaceId, provider, connection) {
        set provider_account_id = $3, handle = $4, display_name = $5,
            avatar_url = $6, status = 'connected', scopes = $7,
            token_expires_at = $8, provider_auth_user_id = $9,
+           -- When this platform account was first connected (its posts earn
+           -- points from then): kept through reconnects, restarted when the
+           -- row now holds a different account.
+           connected_at = case
+             when connected_at is null or provider_account_id is distinct from $3 then now()
+             else connected_at
+           end,
            updated_at = now()
        where id = $1 and workspace_id = $2`,
       [
@@ -558,6 +565,14 @@ async function saveConnection(database, workspaceId, provider, connection) {
         `${provider} connected — ${connection.handle}`,
         JSON.stringify({ provider, socialAccountId: accountId }),
       ],
+    );
+    // Read the account's existing posts now (the last 120 days, from any app
+    // or tool), so the posting graph shows its history right away instead of
+    // after the next hourly read.
+    await client.query(
+      `insert into outbox_events (aggregate_type, aggregate_id, event_type, payload)
+       values ('social_account', $1, 'account.posts_sync_requested', '{}')`,
+      [accountId],
     );
     await client.query("commit");
     return accountId;

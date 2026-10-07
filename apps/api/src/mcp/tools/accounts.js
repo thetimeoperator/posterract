@@ -8,7 +8,7 @@ import { CONNECTOR_PLATFORMS } from "../context.js";
 
 const reachable = (account) => CONNECTOR_PLATFORMS.includes(account.provider);
 
-/** The caller's Instagram, Facebook and Threads accounts, and their businesses. */
+/** The caller's Instagram, TikTok, Facebook and Threads accounts, and their businesses. */
 export async function loadTargets(context) {
   const [{ accounts }, { businesses }] = await Promise.all([
     context.api("GET", "/v1/accounts"),
@@ -35,7 +35,7 @@ export const listAccounts = {
   name: "list_accounts",
   title: "List connected accounts",
   description:
-    "Lists the Instagram, Facebook and Threads accounts connected to Posterract, and the user's businesses " +
+    "Lists the Instagram, TikTok, Facebook and Threads accounts connected to Posterract, and the user's businesses " +
     "(groups of accounts they made, e.g. one per brand; posting to a business posts to all its accounts, even two " +
     "on one platform). Call this before create_post: it takes account ids or a business id from here.",
   scopes: ["accounts:read"],
@@ -51,7 +51,7 @@ export const listAccounts = {
         accounts: business.accounts.map(describeAccount),
       })),
       ...(accounts.length === 0
-        ? { note: "No Instagram, Facebook or Threads accounts are connected yet. Connect them in Posterract → Social accounts." }
+        ? { note: "No Instagram, TikTok, Facebook or Threads accounts are connected yet. Connect them in Posterract → Social accounts." }
         : {}),
     };
   },

@@ -79,6 +79,12 @@ export async function accountPostsWorkflow() {
   return continueAsNew();
 }
 
+// A newly connected account: read its existing posts now, not at the next
+// hourly pass.
+export async function accountPostsNowWorkflow(accountId) {
+  return activities.syncAccountPosts(accountId);
+}
+
 export async function publicationWorkflow(input) {
   let releaseEarly = false;
   let canceled = false;

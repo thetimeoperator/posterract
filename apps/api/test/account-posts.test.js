@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { loadAccountPosts } from "../src/analytics.js";
+import { saveConnection } from "../src/oauth.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const migrationDirectory = resolve(here, "../../../deploy/posterract/postgres/init");
@@ -16,7 +17,8 @@ async function database() {
   const db = new PGlite({ extensions: { pgcrypto } });
   const files = (await readdir(migrationDirectory)).filter((name) => /^\d+.*\.sql$/.test(name)).sort();
   for (const name of files) await db.exec(await readFile(resolve(migrationDirectory, name), "utf8"));
-  return { query: (sql, params) => db.query(sql, params) };
+  const query = (sql, params) => db.query(sql, params);
+  return { query, connect: async () => ({ query, release() {} }) };
 }
 
 test("the posting graph counts every post on an account, from any app or tool, without counting Posterract's twice", async () => {
@@ -26,15 +28,16 @@ test("the posting graph counts every post on an account, from any app or tool, w
   const user = (await postgres.query("insert into app_users (email, display_name, email_verified) values ('s@example.com', 'Sina', true) returning id")).rows[0];
   const workspaceId = (await postgres.query("insert into workspaces (owner_id, name) values ($1, 'Mine') returning id", [user.id])).rows[0].id;
   const otherId = (await postgres.query("insert into workspaces (owner_id, name) values ($1, 'Theirs') returning id", [user.id])).rows[0].id;
-  const account = async (workspace, provider, handle, covered) =>
+  const account = async (workspace, provider, handle, covered, scopes = []) =>
     (await postgres.query(
-      `insert into social_accounts (workspace_id, provider, provider_account_id, handle, status, posts_covered_from, posts_synced_at)
-       values ($1, $2, $3, $4, 'connected', $5, $6) returning id`,
-      [workspace, provider, `${provider}-${handle}`, handle, covered?.from ?? null, covered?.syncedAt ?? null],
+      `insert into social_accounts (workspace_id, provider, provider_account_id, handle, status, posts_covered_from, posts_synced_at, scopes)
+       values ($1, $2, $3, $4, 'connected', $5, $6, $7) returning id`,
+      [workspace, provider, `${provider}-${handle}`, handle, covered?.from ?? null, covered?.syncedAt ?? null, scopes],
     )).rows[0].id;
   // Instagram was read an hour ago, back to 30 days ago; TikTok has never been read.
-  const instagram = await account(workspaceId, "instagram", "@zeropointsina", { from: at(30 * DAY), syncedAt: at(HOUR) });
-  const tiktok = await account(workspaceId, "tiktok", "@sina", null);
+  const instagram = await account(workspaceId, "instagram", "@zeropointsina", { from: at(30 * DAY), syncedAt: at(HOUR) }, ["instagram_business_basic"]);
+  const tiktok = await account(workspaceId, "tiktok", "@sina", null, ["video.list"]);
+  await account(workspaceId, "threads", "@no-read-permission", null, []);
   const stranger = await account(otherId, "instagram", "@stranger", { from: at(30 * DAY), syncedAt: at(HOUR) });
 
   const platformPost = (accountId, workspace, id, ago) => postgres.query(
@@ -66,11 +69,43 @@ test("the posting graph counts every post on an account, from any app or tool, w
   await projection(tiktok, "tiktok", "live", "7301", 3 * DAY); // never read: Posterract's own posts count
   await projection(tiktok, "tiktok", "failed", null, 3 * DAY); // never went live
 
-  const { posts } = await loadAccountPosts(postgres, workspaceId);
+  const { posts, syncing } = await loadAccountPosts(postgres, workspaceId);
   const byAccount = (id) => posts.filter((post) => post.accountId === id).length;
   assert.equal(byAccount(instagram), 5, "made-here, postiz-1, app-1, before-reading and just-now");
   assert.equal(byAccount(tiktok), 1);
   assert.equal(byAccount(stranger), 0, "another workspace's posts never leak in");
   assert.equal(posts.length, 6);
   assert.ok(posts.every((post) => typeof post.publishedAt === "number" && post.publishedAt <= now));
+  // TikTok was just connected and hasn't been read yet; Instagram has; Threads can't be read.
+  assert.deepEqual(syncing, [tiktok]);
+});
+
+test("connecting an account queues a read of its past posts right away", async () => {
+  const previousKey = process.env.TOKEN_ENCRYPTION_KEY;
+  process.env.TOKEN_ENCRYPTION_KEY ??= Buffer.alloc(32, 7).toString("base64");
+  try {
+    const postgres = await database();
+    const user = (await postgres.query("insert into app_users (email, display_name, email_verified) values ('n@example.com', 'New', true) returning id")).rows[0];
+    const workspaceId = (await postgres.query("insert into workspaces (owner_id, name) values ($1, 'New') returning id", [user.id])).rows[0].id;
+    const accountId = await saveConnection(postgres, workspaceId, "tiktok", {
+      providerAccountId: "open-id-1",
+      handle: "Sina The Alchemist",
+      accessToken: "access",
+      refreshToken: "refresh",
+      scopes: ["user.info.basic", "video.list"],
+      expiresAt: Date.now() + 86_400_000,
+    });
+    const queued = await postgres.query(
+      "select aggregate_type, aggregate_id, event_type, processed_at from outbox_events where event_type = 'account.posts_sync_requested'",
+    );
+    assert.equal(queued.rows.length, 1);
+    assert.equal(queued.rows[0].aggregate_type, "social_account");
+    assert.equal(queued.rows[0].aggregate_id, accountId);
+    assert.equal(queued.rows[0].processed_at, null);
+    const { syncing } = await loadAccountPosts(postgres, workspaceId);
+    assert.deepEqual(syncing, [accountId], "the graph shows it as being read until the first read lands");
+  } finally {
+    if (previousKey === undefined) delete process.env.TOKEN_ENCRYPTION_KEY;
+    else process.env.TOKEN_ENCRYPTION_KEY = previousKey;
+  }
 });

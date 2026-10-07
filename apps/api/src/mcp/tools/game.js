@@ -9,7 +9,6 @@ import {
   LEVEL_THRESHOLDS,
   MAX_LEVEL,
   POINTS_SOURCE_LABELS,
-  POINTS_START_AT,
   RANK_TIERS,
   RANK_TITLES,
   rankForLevel,
@@ -57,7 +56,7 @@ function tipsFor(dashboard) {
   if (nextLevelAt !== null) {
     tips.push(`${round2(nextLevelAt - totalPoints).toLocaleString("en-US")} more points to ${rankForLevel(level + 1).label}.`);
   }
-  tips.push("Views and watch time earn the most: a point per 1,000 views on Instagram and Facebook (2,000 on Threads), and a point per hour watched.");
+  tips.push("Views and watch time earn the most: a point per 1,000 views on Instagram, TikTok and Facebook (2,000 on Threads), and a point per hour watched on Instagram and Facebook.");
   tips.push("Beat your best views for a Personal Record (+10), or get three times your usual views for a Breakout (+5).");
   return tips;
 }
@@ -177,7 +176,7 @@ export const getPostPoints = {
         })),
         note:
           post.total === 0
-            ? `No points yet. Posts earn once they're live on Instagram, Facebook or Threads (published on or after ${new Date(POINTS_START_AT).toISOString().slice(0, 10)}), and stats add points twice a day.`
+            ? "No points yet. Posts earn once they're live on Instagram, TikTok, Facebook or Threads (TikTok posts set to Only me earn nothing), and stats add points twice a day."
             : "Points only go up: they're recalculated twice a day as the post's stats grow.",
       };
     }

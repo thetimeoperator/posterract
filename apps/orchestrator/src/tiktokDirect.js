@@ -2,13 +2,16 @@ import { randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { validateTikTokOptions } from "../../../packages/contract/src/tiktok.ts";
-import { tiktokCreatorInfo, tiktokInitDirect, tiktokDirectStatus, tiktokPostingRestrictionMessage } from "../../web/convex/connectors/tiktokDirect.ts";
+import { tiktokCreatorInfo, tiktokInitDirect, tiktokDirectStatus, tiktokFailureMessage } from "../../web/convex/connectors/tiktokDirect.ts";
 import { tiktokMediaUrl } from "../../api/src/tiktokMedia.js";
 
-/** Short, restart-safe activities. The database is the boundary for all external side effects. */
+/**
+ * Short, restart-safe activities. The database is the boundary for all external side effects.
+ * `onLive` runs once a post goes live (the worker pays its points there); it never fails the post.
+ */
 export function createTikTokDirectActivities({ postgres, r2, environment = process.env, loadProjectionContext,
   accessTokenFor, signedMediaUrl, prepareMedia, creatorInfo = tiktokCreatorInfo,
-  initDirect = tiktokInitDirect, fetchStatus = tiktokDirectStatus }) {
+  initDirect = tiktokInitDirect, fetchStatus = tiktokDirectStatus, onLive = async () => {} }) {
   const sessionFor = async (id) => (await postgres.query("select * from tiktok_publish_sessions where projection_id = $1", [id])).rows[0];
   async function context(id) {
     const row = await loadProjectionContext(id);
@@ -21,10 +24,12 @@ export function createTikTokDirectActivities({ postgres, r2, environment = proce
   }
   async function fail(id, code, category = "platform") {
     code = String(code).replace(/Bearer\s+\S+/gi, "Bearer [redacted]").replace(/(?:access_token|refresh_token)=[^&\s]+/gi, "token=[redacted]");
+    // Validation failures arrive as sentences already written for the creator.
+    const sentence = /\s/.test(code) ? code.slice(0, 300) : undefined;
     const message = category === "ambiguous"
       ? "TikTok may have received this post, but did not return a recoverable publish ID. Automatic re-upload stopped to avoid a duplicate. Check TikTok before creating another post."
-      : tiktokPostingRestrictionMessage(code) ?? (category === "auth" ? `Reconnect the selected TikTok account before retrying (${code}).`
-        : `TikTok could not publish this post: ${String(code).slice(0, 220)}. Review the account and post settings.`);
+      : tiktokFailureMessage(code) ?? sentence ?? (category === "auth" ? `Reconnect the selected TikTok account before retrying (${code}).`
+        : `TikTok could not publish this post (${code.slice(0, 120)}). Review the post and try again.`);
     const status = category === "auth" ? "needs_reauth" : ["config", "ambiguous"].includes(category) ? "blocked" : "failed";
     const result = await postgres.query(`update projections set status = $2, error_category = $3, error_summary = $4,
       next_attempt_at = null, updated_at = now() where id = $1 and status <> 'live' returning *`, [id, status, category, message]);
@@ -51,6 +56,7 @@ export function createTikTokDirectActivities({ postgres, r2, environment = proce
     const postId = result.publicaly_available_post_id?.find((id) => typeof id === "string" && /^\d+$/.test(id));
     const postUrl = postId && session.creator_username ? `https://www.tiktok.com/@${encodeURIComponent(session.creator_username)}/video/${postId}` : null;
     const client = await postgres.connect();
+    let wentLive = false;
     try {
       await client.query("begin");
       const changed = await client.query(`update projections set status = 'live', published_at = coalesce(published_at, now()),
@@ -68,8 +74,11 @@ export function createTikTokDirectActivities({ postgres, r2, environment = proce
         values ($1, $2, $3, 'projection.live', $4)`, [row.workspace_id, row.transmission_id, row.id,
         postUrl ? "Published on TikTok." : "TikTok confirmed publication. A public link is not available yet; private posts may never have one."]);
       await client.query("commit");
+      wentLive = changed.rows.length > 0;
     } catch (error) { await client.query("rollback"); throw error; }
     finally { client.release(); }
+    // Only me posts earn nothing: nobody but the creator sees them.
+    if (wentLive && row.platform_options?.privacyLevel !== "SELF_ONLY") await onLive(row).catch(() => undefined);
     return { status: "live", platformPostId: postId, platformPostUrl: postUrl };
   }
 

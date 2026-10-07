@@ -315,6 +315,8 @@ export async function instagramPostInsights(args: {
   skipRate?: number;
   follows?: number;
   profileViews?: number;
+  /** The post's cover: a Reel's thumbnail, or the photo itself. */
+  thumbnailUrl?: string;
 }> {
   const fetchMetrics = async (metrics: string) => {
     const url = new URL(`${GRAPH}/${API_VERSION}/${args.mediaId}/insights`);
@@ -366,6 +368,18 @@ export async function instagramPostInsights(args: {
   const value = (name: string) => optionalValue(name) ?? 0;
   const watchTime = optionalValue("ig_reels_video_view_total_time");
   const averageWatchTime = optionalValue("ig_reels_avg_watch_time");
+  // The cover for the Points feed; a post without one still reports its numbers.
+  let thumbnailUrl: string | undefined;
+  try {
+    const mediaUrl = new URL(`${GRAPH}/${API_VERSION}/${args.mediaId}`);
+    mediaUrl.searchParams.set("fields", "media_type,thumbnail_url,media_url");
+    mediaUrl.searchParams.set("access_token", args.accessToken);
+    const mediaResponse = await fetch(mediaUrl);
+    const media = (await mediaResponse.json()) as { media_type?: string; thumbnail_url?: string; media_url?: string };
+    if (mediaResponse.ok) thumbnailUrl = media.thumbnail_url ?? (media.media_type === "IMAGE" ? media.media_url : undefined);
+  } catch {
+    // No cover this time; the next refresh asks again.
+  }
   return {
     views: value("views") || value("plays"),
     likes: value("likes"),
@@ -380,6 +394,7 @@ export async function instagramPostInsights(args: {
     skipRate: optionalValue("reels_skip_rate"),
     follows: optionalValue("follows"),
     profileViews: optionalValue("profile_visits"),
+    thumbnailUrl,
   };
 }
 
@@ -394,10 +409,10 @@ export async function instagramListMedia(args: {
   maxPages?: number;
 }): Promise<PlatformPostList> {
   const url = new URL(`${GRAPH}/${API_VERSION}/${args.userId}/media`);
-  url.searchParams.set("fields", "id,timestamp,media_product_type,permalink");
+  url.searchParams.set("fields", "id,timestamp,media_product_type,permalink,caption");
   url.searchParams.set("limit", "50");
   url.searchParams.set("access_token", args.accessToken);
-  type Item = { id?: string; timestamp?: string; media_product_type?: string; permalink?: string };
+  type Item = { id?: string; timestamp?: string; media_product_type?: string; permalink?: string; caption?: string };
   return collectGraphPosts<Item>({
     firstPage: url.toString(),
     since: args.since,
@@ -407,7 +422,13 @@ export async function instagramListMedia(args: {
     toPost: (item) => {
       const publishedAt = parseGraphTime(item.timestamp);
       if (!item.id || !Number.isFinite(publishedAt)) return undefined;
-      return { id: item.id, publishedAt, permalink: item.permalink, kind: item.media_product_type?.toLowerCase() };
+      return {
+        id: item.id,
+        publishedAt,
+        permalink: item.permalink,
+        kind: item.media_product_type?.toLowerCase(),
+        caption: item.caption,
+      };
     },
   });
 }
