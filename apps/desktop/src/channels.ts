@@ -33,6 +33,7 @@ export const MAIN_CHANNELS = {
   AUTH_SIGN_OUT: "auth:sign-out",
   CLOUD_REQUEST: "cloud:request",
   CLOUD_UPLOAD_FILE: "cloud:upload-file",
+  CLOUD_UPLOAD_BYTES: "cloud:upload-bytes",
   AUTH_GET_PENDING_CALLBACK: "auth:get-pending-callback",
   CHECKOUT_GET_PENDING_CALLBACK: "checkout:get-pending-callback",
   WINDOW_IS_FULLSCREEN: "window:is-fullscreen",

@@ -1,8 +1,9 @@
 import { createReadStream } from "node:fs";
 import { spawn } from "node:child_process";
-import { mkdir, open, readFile, stat, unlink } from "node:fs/promises";
+import { mkdir, mkdtemp, open, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { Readable } from "node:stream";
-import { dirname, extname, isAbsolute, join, normalize, resolve, sep } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, normalize, resolve, sep } from "node:path";
 import { randomUUID } from "node:crypto";
 import {
   app,
@@ -679,6 +680,37 @@ function registerHandlers(): void {
       return desktopAuth.uploadFile(path, { contentType, durationMs, width, height, projectId, sceneId, sourceRevision }, (progress) =>
         emit(mainWindow, MAIN_CHANNELS.CLOUD_UPLOAD_PROGRESS, { path, progress }),
       );
+    },
+  );
+  // A video the app made in memory (a rank card's Reel) has no file to upload:
+  // its bytes are written to a private temp folder, uploaded like an export,
+  // and the folder is removed. Progress goes out under the renderer's `key`.
+  handle(
+    MAIN_CHANNELS.CLOUD_UPLOAD_BYTES,
+    async ({ key, name, bytes, contentType, durationMs, width, height }: {
+      key: string;
+      name: string;
+      bytes: Uint8Array;
+      contentType: string;
+      durationMs?: number;
+      width?: number;
+      height?: number;
+    }) => {
+      if (contentType !== "video/mp4") throw new Error("Only an MP4 the app made can be uploaded this way");
+      if (!(bytes instanceof Uint8Array) || bytes.byteLength === 0 || bytes.byteLength > 200 * 1024 * 1024) {
+        throw new Error("The video is empty or too large");
+      }
+      const fileName = basename(String(name || "posterract-card.mp4")).replace(/[^\w.-]+/g, "-").replace(/^[-.]+/, "") || "posterract-card.mp4";
+      const folder = await mkdtemp(join(tmpdir(), "posterract-card-"));
+      const path = join(folder, fileName.toLowerCase().endsWith(".mp4") ? fileName : `${fileName}.mp4`);
+      try {
+        await writeFile(path, bytes);
+        return await desktopAuth.uploadFile(path, { contentType, durationMs, width, height }, (progress) =>
+          emit(mainWindow, MAIN_CHANNELS.CLOUD_UPLOAD_PROGRESS, { path: key, progress }),
+        );
+      } finally {
+        await rm(folder, { recursive: true, force: true });
+      }
     },
   );
   handle(MAIN_CHANNELS.AUTH_GET_PENDING_CALLBACK, () => null);

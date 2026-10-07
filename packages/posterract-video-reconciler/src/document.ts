@@ -2331,7 +2331,11 @@ export class RuntimeDocument implements ProjectDocument<SceneNode> {
 			throw new Error('Text cannot contain children.');
 		}
 
-		const candidate = (!parent.native || parent.tag === 'html' || parent.tag === 'htmlPaint')
+		// The timeline parts of an `<html>` itself — the keyframe track that
+		// drives one of its knobs, an animation, an effect — belong to the
+		// element, not to its page: only DOM goes into the page.
+		const ownPart = node.native && parent.native && (parent.tag === 'html' || parent.tag === 'htmlPaint');
+		const candidate = !ownPart && (!parent.native || parent.tag === 'html' || parent.tag === 'htmlPaint')
 			? parent.element
 			: null;
 		const domContainer = candidate instanceof Element ? candidate : null;
