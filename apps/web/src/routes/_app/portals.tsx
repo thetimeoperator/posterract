@@ -1,28 +1,34 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Building2, Pencil, Plus, Trash2, Unplug, Users } from "lucide-react";
 import clsx from "clsx";
 import { Button, Input, Modal, Panel, PlatformBrandMark, pushSignal } from "@posterract/hyperkit";
 import {
   PLATFORM_CAPABILITIES,
   PLATFORM_IDS,
+  type AccountLimitDTO,
   type BusinessDTO,
   type PlatformId,
   type PortalDTO,
+  type SavagesPlanId,
 } from "@posterract/contract";
 import {
+  fetchSavagesPlans,
+  startSavagesCheckout,
+  useAccountLimit,
   useBusinessActions,
   useBusinesses,
   useEngineActions,
+  useEngineRefresh,
   useOAuth,
   usePortals,
 } from "@/engine/useEngine";
+import { money, toPlans, type SavagesPlans } from "@/lib/savages";
 import { BusinessLogo, logoDataUrl } from "@/components/BusinessLogo";
 import { openExternalUrl } from "@/lib/desktop";
 
 export const Route = createFileRoute("/_app/portals")({ component: Portals });
 
-const MAX_ACCOUNTS_PER_PLATFORM = 10;
 const PLATFORM_ORDER = PLATFORM_IDS as readonly PlatformId[];
 
 function AccountAvatar({ account, size = "md" }: { account: PortalDTO; size?: "sm" | "md" }) {
@@ -124,12 +130,109 @@ function BusinessEditor({ draft, accounts, busy, onChange, onClose, onSave }: {
   );
 }
 
+const UPGRADE_PLANS: Array<{ id: SavagesPlanId; name: string; suffix: string }> = [
+  { id: "monthly", name: "Monthly", suffix: "/mo" },
+  { id: "yearly", name: "Yearly", suffix: "/yr" },
+  { id: "lifetime", name: "Lifetime", suffix: " once" },
+];
+
+/** At the limit. Pro is offered AI FOR SAVAGES (100 accounts): one button per plan, straight to Stripe. */
+function AccountLimitNotice({ limit }: { limit: AccountLimitDTO }) {
+  const [plans, setPlans] = useState<SavagesPlans>();
+  const [busy, setBusy] = useState<SavagesPlanId>();
+  const member = limit.plan === "aiforsavages";
+
+  useEffect(() => {
+    if (member) return;
+    let live = true;
+    void fetchSavagesPlans()
+      .then((result) => {
+        if (live) setPlans(toPlans(result.plans));
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [member]);
+
+  if (member) {
+    return (
+      <p className="mb-3 rounded-[13px] border border-white/[0.08] bg-white/[0.02] px-4 py-3 text-[11px] text-starlight-dim">
+        All {limit.max} of your account slots are in use. Disconnect an account to add another.
+      </p>
+    );
+  }
+
+  const join = async (plan: SavagesPlanId) => {
+    if (busy) return;
+    setBusy(plan);
+    try {
+      const { url } = await startSavagesCheckout(plan);
+      await openExternalUrl(url);
+    } catch (error) {
+      pushSignal({
+        tone: "danger",
+        title: "Couldn’t open checkout",
+        detail: error instanceof Error ? error.message.replaceAll("_", " ") : undefined,
+      });
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
+  return (
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-[14px] border border-[#64d2ff]/25 bg-[#64d2ff]/[0.05] px-4 py-3">
+      <p className="min-w-0 flex-1 text-[12px] text-starlight">
+        All {limit.max} of your Pro account slots are in use.{" "}
+        <span className="text-starlight-faint">Disconnect one to add another, or join AI FOR SAVAGES to connect up to 100.</span>
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {UPGRADE_PLANS.map((item) => {
+          const amount = plans?.[item.id];
+          return (
+            <Button
+              key={item.id}
+              size="sm"
+              variant={item.id === "monthly" ? "primary" : "secondary"}
+              disabled={Boolean(busy)}
+              onClick={() => void join(item.id)}
+            >
+              {busy === item.id ? "Opening…" : amount ? `${money(amount)}${item.suffix}` : item.name}
+            </Button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function Portals() {
   const portals = usePortals();
   const businesses = useBusinesses();
   const businessActions = useBusinessActions();
   const { setPortalStatus } = useEngineActions();
   const oauth = useOAuth();
+  const navigate = useNavigate();
+  const accountLimit = useAccountLimit();
+  const refreshEngine = useEngineRefresh();
+  const atLimit = accountLimit ? accountLimit.used >= accountLimit.max : false;
+
+  // Back from Stripe after joining AI FOR SAVAGES. The membership is usually
+  // in before Stripe redirects (it waits for the webhook); read the new limit
+  // now and twice more in case it was a moment late.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("savages") !== "joined") return;
+    void navigate({ to: "/portals", replace: true });
+    pushSignal({ tone: "success", title: "Welcome to AI FOR SAVAGES", detail: "Your workspace can now connect up to 100 accounts." });
+    void refreshEngine();
+    let tries = 0;
+    const timer = window.setInterval(() => {
+      tries += 1;
+      void refreshEngine();
+      if (tries >= 2) window.clearInterval(timer);
+    }, 3_000);
+    return () => window.clearInterval(timer);
+  }, [navigate, refreshEngine]);
   const [draft, setDraft] = useState<BusinessDraft>();
   const [deleting, setDeleting] = useState<BusinessDTO>();
   // Modal focus initialization depends on onClose; keep it stable while typing.
@@ -219,16 +322,17 @@ function Portals() {
       </Panel>
 
       <div>
-        <div className="mb-3 flex items-end justify-between gap-3 px-1"><div><p className="kicker">Connected identities</p><h2 className="mt-1 font-display text-[17px] font-semibold text-starlight">Up to 10 accounts per network</h2></div><span className="telemetry text-[10px] text-starlight-faint">{connectedAccounts.length} CONNECTED</span></div>
+        <div className="mb-3 flex items-end justify-between gap-3 px-1"><div><p className="kicker">Connected identities</p><h2 className="mt-1 font-display text-[17px] font-semibold text-starlight">{accountLimit ? `${accountLimit.used} of ${accountLimit.max} accounts` : "Your accounts"}</h2></div><span className="telemetry text-[10px] text-starlight-faint">{connectedAccounts.length} CONNECTED</span></div>
+        {atLimit && accountLimit && <AccountLimitNotice limit={accountLimit} />}
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           {PLATFORM_ORDER.map((provider) => {
             const caps = PLATFORM_CAPABILITIES[provider];
             const accounts = actualAccounts.filter((account) => account.provider === provider);
             const connected = accounts.filter((account) => account.status === "connected");
             const supported = oauth.supported.has(provider);
-            const limitReached = connected.length >= MAX_ACCOUNTS_PER_PLATFORM;
+            const limitReached = atLimit;
             return (
-              <Panel key={provider} brackets className={clsx("relative overflow-hidden", connected.length > 0 && "border-neon/20")} actions={<span className="telemetry text-[9px] text-starlight-faint">{connected.length}/{MAX_ACCOUNTS_PER_PLATFORM}</span>}>
+              <Panel key={provider} brackets className={clsx("relative overflow-hidden", connected.length > 0 && "border-neon/20")} actions={<span className="telemetry text-[9px] text-starlight-faint">{connected.length}</span>}>
                 <div className="mb-3 flex items-center gap-3"><span className="flex h-9 w-10 items-center justify-center rounded-[11px] border border-white/[0.08] bg-white/[0.02]"><PlatformBrandMark platform={provider} height={20} /></span><div className="min-w-0 flex-1"><p className="font-display text-[14px] font-semibold text-starlight">{caps.label}</p><p className="text-[10px] text-starlight-faint">{connected.length ? `${connected.length} publishing ${connected.length === 1 ? "identity" : "identities"}` : supported ? "No account connected yet" : "Connection not available yet"}</p></div>{supported && <Button size="sm" variant={connected.length ? "secondary" : "primary"} icon={<Plus size={12} />} disabled={limitReached} onClick={() => void connect(provider)}>{limitReached ? "Limit reached" : connected.length ? "Add account" : "Connect"}</Button>}</div>
                 {accounts.length === 0 ? (
                   <div className="rounded-[13px] border border-dashed border-white/[0.08] px-4 py-5 text-center text-[10px] text-starlight-faint">{supported ? `Connect ${caps.label} to add it to a business.` : `${caps.label} support is reserved for a future release.`}</div>

@@ -35,6 +35,7 @@ import {
   youtubeRevokeToken,
 } from "../../web/convex/connectors/youtube.ts";
 import { decryptSecret, encryptSecret } from "./security.js";
+import { ACCOUNT_LIMITS, AccountLimitError, accountPlanFor, usedAccountSlots } from "./accountLimits.js";
 
 export const OAUTH_PROVIDERS = new Set([
   "instagram",
@@ -451,30 +452,33 @@ export async function refreshAccountProfiles(database, workspaceId, options = {}
 }
 
 export async function saveConnection(database, workspaceId, provider, connection) {
+  // Read before the transaction: if the core schema were unreadable, the
+  // failed query would abort the transaction and the fallback to Pro could
+  // never run.
+  const plan = await accountPlanFor(database, workspaceId);
   const client = await database.connect();
   try {
     await client.query("begin");
     // Serialize account additions within the workspace so concurrent OAuth
-    // callbacks cannot race past the ten-account provider cap.
+    // callbacks cannot race past the workspace's account limit.
     await client.query("select id from workspaces where id = $1 for update", [workspaceId]);
     const existing = await client.query(
-      `select id from social_accounts
+      `select id, status from social_accounts
        where workspace_id = $1 and provider = $2 and provider_account_id = $3
        limit 1 for update`,
       [workspaceId, provider, connection.providerAccountId],
     );
     let accountId = existing.rows[0]?.id;
-    if (!accountId) {
-      const count = await client.query(
-        `select count(*)::int as count from social_accounts
-         where workspace_id = $1 and provider = $2 and status = 'connected'`,
-        [workspaceId, provider],
-      );
-      if (Number(count.rows[0]?.count ?? 0) >= 10) {
-        const error = new Error(`You can connect up to 10 ${provider} accounts.`);
-        error.code = "account_limit_reached";
-        throw error;
+    // Reconnecting an account that already holds a slot is always allowed. A
+    // new account, or a disconnected one coming back, needs a free slot.
+    const holdsSlot = Boolean(existing.rows[0]) && existing.rows[0].status !== "disconnected";
+    if (!holdsSlot) {
+      const used = await usedAccountSlots(client, workspaceId);
+      if (used >= ACCOUNT_LIMITS[plan]) {
+        throw new AccountLimitError({ plan, max: ACCOUNT_LIMITS[plan], used });
       }
+    }
+    if (!accountId) {
       const placeholder = await client.query(
         `select id from social_accounts
          where workspace_id = $1 and provider = $2 and provider_account_id is null
@@ -787,6 +791,9 @@ export function registerOAuthRoutes(app, { postgres, requireScope, requiredWorks
           ok: false,
           returnTo,
           error: error instanceof Error ? error.message : "Connection failed",
+          ...(error instanceof AccountLimitError
+            ? { code: error.code, accountLimit: error.accountLimit }
+            : {}),
         };
       }
     },
@@ -819,18 +826,29 @@ export function registerOAuthRoutes(app, { postgres, requireScope, requiredWorks
       if (!page) {
         return { ok: false, error: "That Page is not available to this connection." };
       }
-      await saveConnection(postgres, workspaceId, "facebook", {
-        handle: page.name,
-        displayName: page.name,
-        providerAccountId: page.id,
-        accessToken: page.accessToken,
-        refreshToken: pending.userAccessToken,
-        expiresAt: pending.expiresAt,
-        providerUserId: page.id,
-        providerAuthUserId: pending.authUserId,
-        avatarUrl: page.avatarUrl,
-        scopes: FACEBOOK_PAGE_SCOPES,
-      });
+      try {
+        await saveConnection(postgres, workspaceId, "facebook", {
+          handle: page.name,
+          displayName: page.name,
+          providerAccountId: page.id,
+          accessToken: page.accessToken,
+          refreshToken: pending.userAccessToken,
+          expiresAt: pending.expiresAt,
+          providerUserId: page.id,
+          providerAuthUserId: pending.authUserId,
+          avatarUrl: page.avatarUrl,
+          scopes: FACEBOOK_PAGE_SCOPES,
+        });
+      } catch (error) {
+        if (!(error instanceof AccountLimitError)) throw error;
+        return {
+          ok: false,
+          error: error.message,
+          code: error.code,
+          accountLimit: error.accountLimit,
+          returnTo: pending.returnTo === "desktop" ? "desktop" : "web",
+        };
+      }
       await postgres.query(
         `delete from pending_facebook_connections
          where state_hash = $1 and workspace_id = $2`,

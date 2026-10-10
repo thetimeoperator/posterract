@@ -76,6 +76,7 @@ function OAuthCallback() {
         ok: boolean;
         handle?: string;
         error?: string;
+        code?: string;
         returnTo?: OAuthReturnTarget;
         selectionRequired?: boolean;
         pages?: FacebookPageChoice[];
@@ -94,7 +95,12 @@ function OAuthCallback() {
             res.returnTo,
           );
         } else {
-          finish("danger", "Connection failed", res.error, res.returnTo);
+          finish(
+            "danger",
+            res.code === "account_limit_reached" ? "Account limit reached" : "Connection failed",
+            res.error,
+            res.returnTo,
+          );
         }
       })
       .catch(() => finish("danger", "Connection failed", "Something went wrong completing the connection."));
@@ -112,7 +118,7 @@ function OAuthCallback() {
         setMessage(result.error ?? "Page connection failed");
         pushSignal({
           tone: "danger",
-          title: "Facebook Page connection failed",
+          title: "code" in result && result.code === "account_limit_reached" ? "Account limit reached" : "Facebook Page connection failed",
           detail: result.error,
         });
         return;

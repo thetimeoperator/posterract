@@ -47,6 +47,10 @@ import {
   resumeMembership,
   handleStripeEvent,
   grantFromLegacySession,
+  createGuestCheckout,
+  guestCheckoutStatus,
+  posterractUrl,
+  publicPlans,
 } from "./billing.js";
 
 export function buildServer() {
@@ -372,6 +376,66 @@ export function buildServer() {
       return reply.send({ granted: true, ...result });
     } catch (error) {
       request.log.error({ err: error }, "legacy purchase bridge failed");
+      return reply.code(500).send({ error: "handler_failed" });
+    }
+  });
+
+  /* ------------------------------------------------------------------ */
+  /* Posterract: service key only. Its API calls these over the VPS's    */
+  /* internal network to sell AI FOR SAVAGES on posterract.app.          */
+  /* ------------------------------------------------------------------ */
+
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  /** The three plans' live prices, for Posterract's landing card. */
+  app.get("/v1/service/posterract/plans", async (request, reply) => {
+    if (!requireService(request, reply)) return;
+    if (!stripe) return reply.code(503).send({ error: "stripe_not_configured" });
+    return reply.send({ plans: await publicPlans() });
+  });
+
+  /**
+   * Stripe Checkout for one plan. With `accountId` (a signed-in Posterract
+   * user, vouched for by the Posterract API) the membership lands on that
+   * person; without it, the email the buyer types on Stripe's page decides
+   * who they are (fulfillGuestCheckout).
+   */
+  app.post("/v1/service/posterract/checkout", async (request, reply) => {
+    if (!requireService(request, reply)) return;
+    if (!stripe) return reply.code(503).send({ error: "stripe_not_configured" });
+    const plan = String(request.body?.plan ?? "");
+    if (!PRICES[plan]) return reply.code(400).send({ error: "unknown_plan" });
+    const accountId = request.body?.accountId;
+    if (accountId !== undefined && !UUID.test(String(accountId))) {
+      return reply.code(400).send({ error: "invalid_account" });
+    }
+    try {
+      const result = accountId
+        ? await createCheckout({
+            accountId,
+            plan,
+            successUrl: posterractUrl("/portals?savages=joined"),
+            cancelUrl: posterractUrl("/portals"),
+          })
+        : await createGuestCheckout({ plan });
+      if (!result.ok) {
+        return reply.code(result.reason === "already_a_member" ? 409 : 400).send({ error: result.reason });
+      }
+      return reply.send({ url: result.url });
+    } catch (error) {
+      request.log.error({ err: error }, "posterract checkout failed");
+      return reply.code(502).send({ error: "stripe_request_failed" });
+    }
+  });
+
+  /** For Posterract's welcome page: records a paid guest checkout if the webhook has not, and says where it stands. */
+  app.post("/v1/service/posterract/checkout-status", async (request, reply) => {
+    if (!requireService(request, reply)) return;
+    if (!stripe) return reply.code(503).send({ error: "stripe_not_configured" });
+    try {
+      return reply.send(await guestCheckoutStatus(request.body?.sessionId));
+    } catch (error) {
+      request.log.error({ err: error }, "guest checkout status failed");
       return reply.code(500).send({ error: "handler_failed" });
     }
   });

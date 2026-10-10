@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as SavagesRouteImport } from './routes/savages'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as GateRouteImport } from './routes/gate'
@@ -40,6 +41,11 @@ import { Route as OauthCallbackProviderRouteImport } from './routes/oauth.callba
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SavagesRoute = SavagesRouteImport.update({
+  id: '/savages',
+  path: '/savages',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -180,6 +186,7 @@ export interface FileRoutesByFullPath {
   '/gate': typeof GateRoute
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/savages': typeof SavagesRoute
   '/terms': typeof TermsRoute
   '/compose': typeof AppComposeRoute
   '/continuum': typeof AppContinuumRoute
@@ -207,6 +214,7 @@ export interface FileRoutesByTo {
   '/gate': typeof GateRoute
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/savages': typeof SavagesRoute
   '/terms': typeof TermsRoute
   '/compose': typeof AppComposeRoute
   '/continuum': typeof AppContinuumRoute
@@ -237,6 +245,7 @@ export interface FileRoutesById {
   '/gate': typeof GateRoute
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/savages': typeof SavagesRoute
   '/terms': typeof TermsRoute
   '/_app/compose': typeof AppComposeRoute
   '/_app/continuum': typeof AppContinuumRoute
@@ -268,6 +277,7 @@ export interface FileRouteTypes {
     | '/gate'
     | '/privacy'
     | '/reset-password'
+    | '/savages'
     | '/terms'
     | '/compose'
     | '/continuum'
@@ -295,6 +305,7 @@ export interface FileRouteTypes {
     | '/gate'
     | '/privacy'
     | '/reset-password'
+    | '/savages'
     | '/terms'
     | '/compose'
     | '/continuum'
@@ -324,6 +335,7 @@ export interface FileRouteTypes {
     | '/gate'
     | '/privacy'
     | '/reset-password'
+    | '/savages'
     | '/terms'
     | '/_app/compose'
     | '/_app/continuum'
@@ -354,6 +366,7 @@ export interface RootRouteChildren {
   GateRoute: typeof GateRoute
   PrivacyRoute: typeof PrivacyRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  SavagesRoute: typeof SavagesRoute
   TermsRoute: typeof TermsRoute
   DesktopAuthorizeRoute: typeof DesktopAuthorizeRoute
   DevCoreRoute: typeof DevCoreRoute
@@ -369,6 +382,13 @@ declare module '@tanstack/react-router' {
       path: '/terms'
       fullPath: '/terms'
       preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/savages': {
+      id: '/savages'
+      path: '/savages'
+      fullPath: '/savages'
+      preLoaderRoute: typeof SavagesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reset-password': {
@@ -600,6 +620,7 @@ const rootRouteChildren: RootRouteChildren = {
   GateRoute: GateRoute,
   PrivacyRoute: PrivacyRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  SavagesRoute: SavagesRoute,
   TermsRoute: TermsRoute,
   DesktopAuthorizeRoute: DesktopAuthorizeRoute,
   DevCoreRoute: DevCoreRoute,

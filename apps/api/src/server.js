@@ -38,6 +38,8 @@ import {
   resendAuthConfigured,
 } from "./email.js";
 import { registerOAuthRoutes } from "./oauth.js";
+import { createHubClient, registerSavagesRoutes } from "./savages.js";
+import { accountLimitFor } from "./accountLimits.js";
 import { registerAiRoutes } from "./ai/routes.js";
 import { loadAccountAnalytics, loadAccountPosts, loadAnalyticsDashboard, loadPeriodStats, periodProblem } from "./analytics.js";
 import { registerMetaRoutes } from "./meta.js";
@@ -673,9 +675,24 @@ async function dispatchOutbox() {
               .signal("reschedulePublication", scheduledFor);
           }
         } else if (event.event_type === "transmission.analytics_index_requested") {
-          await temporalClient.workflow
-            .getHandle("posterract:analytics:continuous")
-            .signal("refreshAnalytics");
+          // Fresh stats for the accounts the post just went to, not every
+          // account: one refresh at a time per account.
+          const accounts = await client.query(
+            `select distinct social_account_id from projections
+             where transmission_id = $1 and status = 'live' and social_account_id is not null`,
+            [event.aggregate_id],
+          );
+          for (const { social_account_id: accountId } of accounts.rows) {
+            await temporalClient.workflow
+              .start("accountAnalyticsNowWorkflow", {
+                taskQueue: env.TEMPORAL_TASK_QUEUE ?? "posterract-publishing",
+                workflowId: `posterract:analytics:account:${accountId}`,
+                args: [accountId],
+              })
+              .catch((error) => {
+                if (error?.name !== "WorkflowExecutionAlreadyStartedError") throw error;
+              });
+          }
         } else if (event.event_type === "account.posts_sync_requested") {
           await temporalClient.workflow.start("accountPostsNowWorkflow", {
             taskQueue: env.TEMPORAL_TASK_QUEUE ?? "posterract-publishing",
@@ -1000,6 +1017,14 @@ app.post(
   },
 );
 
+// AI FOR SAVAGES, sold from Posterract through the Hub (apps/api/src/savages.js).
+registerSavagesRoutes(app, {
+  hub: createHubClient({ environment: env }),
+  redis,
+  clientAddress: contactClientAddress,
+  requireInteractiveSession,
+});
+
 registerDesktopAuthRoutes(app, {
   postgres,
   requireBrowserSession,
@@ -1058,7 +1083,7 @@ app.get("/v1/openapi.json", async () => ({
     "/v1/points/ledger": { get: { summary: "Read the immutable points ledger" } },
     "/v1/leaderboard": { get: { summary: "Rank everyone on the base plan or above by points (period=week|month|all)" } },
     "/v1/mcp": { post: { summary: "MCP server (Streamable HTTP) for AI agents such as Meta Muse: post, schedule, analytics and the points game" } },
-    "/v1/accounts": { get: { summary: "List connected social accounts" } },
+    "/v1/accounts": { get: { summary: "List connected social accounts and the workspace's account limit (accountLimit)" } },
     "/v1/accounts/{accountId}/tiktok/creator-info": {
       get: { summary: "Read a TikTok account's current posting options for Direct Post: who can watch, which interactions are off, and the longest video" },
     },
@@ -1529,16 +1554,20 @@ app.get(
   { preHandler: requireScope("accounts:read") },
   async (request) => {
     const workspaceId = requiredWorkspace(request);
-    const result = await postgres.query(
-      `select id, provider, provider_account_id, handle, display_name,
-              avatar_url, status, scopes, token_expires_at,
-              last_health_check_at, metadata
-       from social_accounts
-       where workspace_id = $1
-       order by array_position($2::text[], provider), created_at asc`,
-      [workspaceId, PLATFORM_IDS],
-    );
+    const [result, accountLimit] = await Promise.all([
+      postgres.query(
+        `select id, provider, provider_account_id, handle, display_name,
+                avatar_url, status, scopes, token_expires_at,
+                last_health_check_at, metadata
+         from social_accounts
+         where workspace_id = $1
+         order by array_position($2::text[], provider), created_at asc`,
+        [workspaceId, PLATFORM_IDS],
+      ),
+      accountLimitFor(postgres, workspaceId),
+    ]);
     return {
+      accountLimit,
       accounts: result.rows.map((row) => ({
         id: row.id,
         provider: row.provider,
@@ -1706,6 +1735,7 @@ app.get(
       accountsResult,
       businesses,
       points,
+      accountLimit,
     ] =
       await Promise.all([
         loadVaultMedia(postgres, workspaceId),
@@ -1736,6 +1766,7 @@ app.get(
         ),
         loadBusinesses(postgres, workspaceId, { publicApiUrl: connectorApiUrl }),
         loadPointsSummary(postgres, workspaceId),
+        accountLimitFor(postgres, workspaceId),
       ]);
 
     const artifacts = await Promise.all(
@@ -1846,6 +1877,7 @@ app.get(
       // Installed desktop apps from before businesses still read this.
       accountSets: [],
       points,
+      accountLimit,
     };
   },
 );

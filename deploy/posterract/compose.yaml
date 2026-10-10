@@ -123,6 +123,10 @@ services:
       STRIPE_PRODUCT_ID: ${STRIPE_PRODUCT_ID:-}
       STRIPE_MONTHLY_PRICE_ID: ${STRIPE_MONTHLY_PRICE_ID:-}
       STRIPE_YEARLY_PRICE_ID: ${STRIPE_YEARLY_PRICE_ID:-}
+      # AI FOR SAVAGES sold from Posterract (apps/api/src/savages.js): the Hub,
+      # reached over posterract-network, and the service key it expects.
+      HUB_INTERNAL_URL: ${HUB_INTERNAL_URL:-http://hub:3003}
+      HUB_SERVICE_KEY: ${HUB_SERVICE_KEY:-}
       OUTBOX_INTERVAL_MS: "1000"
       API_RATE_LIMIT_PER_MINUTE: "120"
     expose:

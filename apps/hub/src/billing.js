@@ -94,15 +94,25 @@ export function siteUrl(candidate, fallbackPath) {
   if (typeof candidate !== "string" || !candidate) return fallback;
   try {
     const url = new URL(candidate);
+    // our own two sites: AI FOR SAVAGES, and Posterract (its upgrade button)
+    const ours = sameSite(url, base) || sameSite(url, posterractUrl(""));
+    return ours ? url.toString() : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function sameSite(url, base) {
+  try {
     const home = new URL(base);
-    const sameSite =
+    return (
       url.protocol === home.protocol &&
       (url.hostname === home.hostname ||
         url.hostname === home.hostname.replace(/^www\./, "") ||
-        `www.${url.hostname}` === home.hostname);
-    return sameSite ? url.toString() : fallback;
+        `www.${url.hostname}` === home.hostname)
+    );
   } catch {
-    return fallback;
+    return false;
   }
 }
 
@@ -279,6 +289,14 @@ export async function handleStripeEvent(event) {
     switch (event.type) {
       /* ---------------------------------------------------------- */
       case "checkout.session.completed": {
+        // A guest checkout from Posterract's landing page: the person comes
+        // from the email typed on Stripe's page (fulfillGuestCheckout).
+        if (object.metadata?.flow === GUEST_FLOW) {
+          const result = await fulfillGuestCheckout(client, object.id);
+          if (!result.ok) return markIgnored(result.reason);
+          return { status: "processed", kind: `guest_${result.status}` };
+        }
+
         const accountId = await accountIdFrom(object);
         if (!accountId) return markIgnored("no_account");
 
@@ -364,7 +382,20 @@ export async function handleStripeEvent(event) {
 
         const accountId =
           (await accountIdFrom(subscription)) ?? (await accountIdFrom(object));
-        if (!accountId) return markIgnored("no_account");
+        if (!accountId) {
+          // A guest checkout whose first payment cleared after its session's
+          // own event (which found it unpaid and was ignored): record it now.
+          if (subscription?.metadata?.flow === GUEST_FLOW) {
+            const sessions = await stripe.checkout.sessions.list({ subscription: subscriptionId, limit: 1 });
+            const sessionId = sessions?.data?.[0]?.id;
+            if (sessionId) {
+              const result = await fulfillGuestCheckout(client, sessionId);
+              if (result.ok) return { status: "processed", kind: `guest_${result.status}` };
+              return markIgnored(result.reason);
+            }
+          }
+          return markIgnored("no_account");
+        }
 
         const { start, end } = periodFromSubscription(subscription);
         await upsertMembership(client, {
@@ -727,4 +758,322 @@ export async function grantFromLegacySession(sessionId, resolveIdentity) {
 
     return { ok: true, status: "granted", accountId, plan };
   });
+}
+
+/* ------------------------------------------------------------------ */
+/* Posterract: AI FOR SAVAGES for a buyer with no account yet          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A checkout opened from Posterract's landing page by someone with no
+ * account. Its session carries metadata.flow = GUEST_FLOW and no account_id:
+ * the email typed on Stripe's page decides who the buyer is, once Stripe says
+ * the money arrived (fulfillGuestCheckout).
+ *
+ * Its metadata must never carry `userId` or `tier` (the old website's
+ * webhook, www.aiforsavages.fyi/api/webhooks/stripe, acts on exactly those
+ * keys) or `workspace_id` (Posterract's webhook acts on that).
+ */
+export const GUEST_FLOW = "posterract_guest";
+
+const SESSION_ID = /^cs_(live|test)_[A-Za-z0-9]{10,200}$/;
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** What each plan's Stripe price must be, so a misconfigured price is never shown. */
+const PLAN_INTERVAL = { monthly: "month", yearly: "year", lifetime: null };
+let plansCache;
+
+/** A page on Posterract's site, for the addresses Stripe sends a buyer back to. */
+export function posterractUrl(path) {
+  const base = String(process.env.POSTERRACT_SITE_URL ?? "https://www.posterract.app").replace(/\/+$/, "");
+  return `${base}${path}`;
+}
+
+/**
+ * The three plans' live prices from Stripe, for Posterract's landing card.
+ * A plan whose price is missing, inactive, or not what its name says is left
+ * out. Cached ten minutes; half a minute when something was missing.
+ */
+export async function publicPlans({ stripeClient = stripe } = {}) {
+  if (plansCache && plansCache.expiresAt > Date.now()) return plansCache.value;
+  const plans = [];
+  for (const [id, priceId] of Object.entries(PRICES)) {
+    if (!priceId) continue;
+    try {
+      const price = await stripeClient.prices.retrieve(priceId);
+      const interval = price.recurring?.interval ?? null;
+      if (price.active === false || price.currency !== "usd") continue;
+      if (!Number.isInteger(price.unit_amount) || interval !== PLAN_INTERVAL[id]) continue;
+      plans.push({ id, amount: price.unit_amount, currency: "usd", interval });
+    } catch {
+      // left out; the card shows what it has
+    }
+  }
+  plansCache = { value: plans, expiresAt: Date.now() + (plans.length === 3 ? 10 * 60_000 : 30_000) };
+  return plans;
+}
+
+/**
+ * Stripe Checkout for someone on Posterract's landing page with no account.
+ * The buyer types their email on Stripe's page; fulfillGuestCheckout turns it
+ * into a person and a membership once the money has arrived.
+ */
+export async function createGuestCheckout({ plan, stripeClient = stripe }) {
+  const price = PRICES[plan];
+  if (!price) return { ok: false, reason: "unknown_plan" };
+  const mode = plan === "lifetime" ? "payment" : "subscription";
+  // product, plan and flow, and nothing else (see GUEST_FLOW)
+  const metadata = { product: PRODUCT_ID, plan, flow: GUEST_FLOW };
+
+  const session = await stripeClient.checkout.sessions.create({
+    mode,
+    // Cards only, as in createCheckout: access is never granted on a promise.
+    payment_method_types: ["card"],
+    line_items: [{ price, quantity: 1 }],
+    metadata,
+    ...(mode === "subscription"
+      ? { subscription_data: { metadata } }
+      : {
+          // a one-time payment makes no Customer unless asked, and refunds
+          // find the person through it
+          customer_creation: "always",
+          payment_intent_data: { metadata },
+        }),
+    custom_text: {
+      submit: {
+        message:
+          mode === "subscription"
+            ? "Use the email you’ll sign in to Posterract with. No refunds, but you can cancel anytime · All sales are final."
+            : "Use the email you’ll sign in to Posterract with. One payment, yours for good · All sales are final.",
+      },
+    },
+    success_url: posterractUrl("/savages?session_id={CHECKOUT_SESSION_ID}"),
+    cancel_url: posterractUrl("/#enter"),
+  });
+  return { ok: true, url: session.url, id: session.id };
+}
+
+/**
+ * Turn a paid guest checkout into a person and a membership, in the caller's
+ * transaction. Safe to call any number of times, even at the same moment, for
+ * one session: the webhook calls it, and so does Posterract's welcome page in
+ * case the webhook is late (Stripe recommends both).
+ *
+ * The person is whoever owns the email typed on Stripe's page. That needs no
+ * verification step here, because a membership only ever reaches someone who
+ * proves the email: Posterract counts it only once its own login has verified
+ * the address (app_users.email_verified), and the AI FOR SAVAGES site only once
+ * Clerk has (resolveAccount). Paying with someone else's address only gives
+ * them a membership.
+ */
+export async function fulfillGuestCheckout(client, sessionId, { session: given, stripeClient = stripe } = {}) {
+  if (typeof sessionId !== "string" || !SESSION_ID.test(sessionId)) {
+    return { ok: false, reason: "invalid_session_id" };
+  }
+
+  // 1. Everything is read back from Stripe; nothing is taken from the caller.
+  let session = given;
+  if (!session) {
+    try {
+      session = await stripeClient.checkout.sessions.retrieve(sessionId, { expand: ["line_items"] });
+    } catch {
+      return { ok: false, reason: "session_not_found" };
+    }
+  }
+  if (session?.id !== sessionId) return { ok: false, reason: "session_not_found" };
+  if (session.metadata?.flow !== GUEST_FLOW || session.metadata?.product !== PRODUCT_ID) {
+    return { ok: false, reason: "not_a_guest_checkout" };
+  }
+  if (session.status !== "complete" || session.payment_status !== "paid") {
+    return { ok: false, reason: "not_paid" };
+  }
+
+  // the price actually charged, never the one the metadata names
+  const priceId = session.line_items?.data?.[0]?.price?.id ?? null;
+  const plan = planForPrice(priceId);
+  if (!plan || (plan === "lifetime") !== (session.mode === "payment")) {
+    return { ok: false, reason: "not_our_price" };
+  }
+
+  const email = normalizeEmail(session.customer_details?.email ?? session.customer_email ?? "");
+  if (!EMAIL.test(email)) {
+    const parked = await client.query(
+      `select 1 from core.review_queue
+        where kind = 'guest_checkout_no_email' and details->>'session_id' = $1
+        limit 1`,
+      [sessionId],
+    );
+    if (!parked.rows[0]) {
+      await queueReview(client, "guest_checkout_no_email", null, { session_id: sessionId });
+    }
+    return { ok: false, reason: "no_email" };
+  }
+
+  const customerId =
+    typeof session.customer === "string" ? session.customer : session.customer?.id ?? null;
+  const subscriptionId =
+    typeof session.subscription === "string" ? session.subscription : session.subscription?.id ?? null;
+
+  let subscription = null;
+  if (session.mode === "subscription") {
+    if (!subscriptionId) return { ok: false, reason: "no_subscription" };
+    subscription = await stripeClient.subscriptions.retrieve(subscriptionId);
+    if (subscription?.items?.data?.[0]?.price?.id !== priceId) {
+      return { ok: false, reason: "not_our_price" };
+    }
+    if (!["active", "trialing"].includes(subscription.status)) {
+      // the first payment is still settling; invoice.paid finishes this later
+      return { ok: false, reason: `subscription_${subscription.status}` };
+    }
+  }
+
+  // 2. Once per session, however many callers arrive and in whatever order.
+  const first = await client.query(
+    `insert into core.billing_events (stripe_event_id, type, livemode, status)
+     values ($1, 'posterract_guest_checkout', $2, 'processed')
+     on conflict (stripe_event_id) do nothing
+     returning stripe_event_id`,
+    [`guest:${sessionId}`, session.livemode === true],
+  );
+  if (first.rowCount === 0) return { ok: true, status: "duplicate", email, plan };
+
+  // 3. The person who owns that email, or a new one with a Posterract workspace.
+  const { accountId, created } = await findOrCreatePerson(client, {
+    email,
+    displayName: session.customer_details?.name ?? null,
+    imageUrl: null,
+  });
+  await client.query(
+    `update core.billing_events set account_id = $2 where stripe_event_id = $1`,
+    [`guest:${sessionId}`, accountId],
+  );
+
+  // 4. Already a member: a second payment. Change nothing and park it for
+  //    Sina. The new Stripe objects stay untagged, so their later events find
+  //    no person and change nothing either.
+  const live = await client.query(
+    `select id from core.memberships
+      where account_id = $1 and product_id = $2 and status in ('active','past_due')
+      limit 1`,
+    [accountId, PRODUCT_ID],
+  );
+  if (live.rows[0]) {
+    await queueReview(client, "guest_checkout_already_member", accountId, {
+      session_id: sessionId,
+      customer_id: customerId,
+      subscription_id: subscriptionId,
+      price_id: priceId,
+    });
+    return { ok: true, status: "already_member", accountId, email, plan, created };
+  }
+
+  // 5. Tag Stripe's objects with the person, so renewals, failed cards,
+  //    cancels and refunds find them the usual way (accountIdFrom).
+  if (customerId) {
+    await stripeClient.customers.update(customerId, {
+      metadata: { account_id: accountId, product: PRODUCT_ID },
+    });
+  }
+  if (subscription) {
+    await stripeClient.subscriptions.update(subscription.id, {
+      metadata: {
+        ...(subscription.metadata ?? {}),
+        account_id: accountId,
+        product: PRODUCT_ID,
+        plan,
+        flow: GUEST_FLOW,
+      },
+    });
+  }
+
+  // 6. The membership.
+  if (subscription) {
+    const { start, end } = periodFromSubscription(subscription);
+    await upsertMembership(client, {
+      accountId,
+      plan,
+      status: "active",
+      source: "stripe_subscription",
+      customerId,
+      subscriptionId,
+      priceId,
+      start,
+      end,
+      cancelAtPeriodEnd: subscription.cancel_at_period_end === true,
+    });
+  } else {
+    await upsertMembership(client, {
+      accountId,
+      plan: "lifetime",
+      status: "active",
+      source: "stripe_one_time",
+      customerId,
+      subscriptionId: null,
+      priceId,
+      start: new Date(),
+      end: null,
+    });
+  }
+  return { ok: true, status: "granted", accountId, email, plan, created };
+}
+
+/**
+ * For Posterract's welcome page: where a guest checkout stands. A paid one is
+ * recorded first if Stripe's webhook has not done it yet.
+ */
+export async function guestCheckoutStatus(
+  sessionId,
+  { stripeClient = stripe, db = postgres, transaction = withTransaction } = {},
+) {
+  if (typeof sessionId !== "string" || !SESSION_ID.test(sessionId)) return { state: "invalid" };
+  let session;
+  try {
+    session = await stripeClient.checkout.sessions.retrieve(sessionId, { expand: ["line_items"] });
+  } catch {
+    return { state: "invalid" };
+  }
+  if (session.metadata?.flow !== GUEST_FLOW || session.metadata?.product !== PRODUCT_ID) {
+    return { state: "invalid" };
+  }
+  const plan = planForPrice(session.line_items?.data?.[0]?.price?.id ?? null);
+  const typed = normalizeEmail(session.customer_details?.email ?? "") || null;
+  if (session.status === "expired") return { state: "invalid" };
+  if (session.status !== "complete" || session.payment_status !== "paid") {
+    return { state: "pending", email: typed, plan };
+  }
+
+  const result = await transaction((client) =>
+    fulfillGuestCheckout(client, sessionId, { session, stripeClient }),
+  );
+  if (!result.ok) {
+    if (result.reason === "no_email") return { state: "needs_help", plan };
+    if (result.reason === "no_subscription" || result.reason.startsWith("subscription_")) {
+      return { state: "pending", email: typed, plan };
+    }
+    return { state: "invalid" };
+  }
+
+  const parked = await db.query(
+    `select 1 from core.review_queue
+      where kind = 'guest_checkout_already_member' and details->>'session_id' = $1
+      limit 1`,
+    [sessionId],
+  );
+  if (parked.rows[0]) return { state: "already_member", email: result.email, plan };
+
+  const person = await db.query(
+    `select id, (auth_user_id is not null) as has_login
+       from app_users where lower(email) = $1 limit 1`,
+    [result.email],
+  );
+  const accountId = person.rows[0]?.id ?? null;
+  const member = accountId
+    ? (await db.query(`select core.has_membership($1, $2) as ok`, [accountId, PRODUCT_ID])).rows[0]?.ok === true
+    : false;
+  return {
+    state: member ? "active" : "pending",
+    email: result.email,
+    plan,
+    hasPosterractLogin: person.rows[0]?.has_login === true,
+  };
 }

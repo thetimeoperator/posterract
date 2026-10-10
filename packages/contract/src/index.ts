@@ -1015,6 +1015,38 @@ export type BillingCheckoutDTO = {
   replayed?: boolean;
 };
 
+/**
+ * How many social accounts a workspace may connect, across every platform:
+ * 10 on Pro, 100 when the workspace owner is an AI FOR SAVAGES member.
+ */
+export type AccountLimitDTO = {
+  plan: "pro" | "aiforsavages";
+  max: number;
+  /** Accounts holding a slot: connected, or waiting for a reconnect. */
+  used: number;
+};
+
+/** AI FOR SAVAGES, sold from Posterract: the three ways to join. */
+export type SavagesPlanId = "monthly" | "yearly" | "lifetime";
+
+/** A plan's live Stripe price in cents. `interval` is null for lifetime. */
+export type SavagesPlanDTO = {
+  id: SavagesPlanId;
+  amount: number;
+  currency: "usd";
+  interval: "month" | "year" | null;
+};
+
+/** Where a checkout from the landing page stands, for the welcome page after Stripe. */
+export type SavagesCheckoutStatusDTO = {
+  state: "pending" | "active" | "already_member" | "needs_help" | "invalid";
+  /** The email typed on Stripe's page. The Posterract login must use it. */
+  email?: string | null;
+  plan?: SavagesPlanId | null;
+  /** That email already has a Posterract login: sign in, don't sign up. */
+  hasPosterractLogin?: boolean;
+};
+
 // ---------------------------------------------------------------------------
 // Retry policy
 // ---------------------------------------------------------------------------

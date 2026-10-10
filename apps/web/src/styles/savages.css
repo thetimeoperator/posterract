@@ -1,0 +1,640 @@
+/* ---------------------------------------------------------------------------
+ * AI FOR SAVAGES inside Posterract: the landing's membership card (.sv-zone)
+ * and the welcome page after paying (.sv-page). Its own look on purpose,
+ * taken from aiforsavages.fyi (Plans.tsx, NeonAuthButton.tsx, apple.css), so
+ * the option stands out from Posterract's green. Only transform and opacity
+ * animate; everything stops for reduced motion, and while the card is off
+ * screen (data-live="off").
+ * ------------------------------------------------------------------------- */
+
+.sv-zone,
+.sv-page {
+  --sv-label: #f5f5f7;
+  --sv-label-2: rgba(235, 235, 245, 0.62);
+  --sv-label-3: rgba(235, 235, 245, 0.34);
+  --sv-tint: #64d2ff;
+  --sv-gold: #ffd76a;
+  --sv-orange: #ff9f0a;
+  --sv-gray: #7d8590;
+  --sv-card: #121214;
+  --sv-font: Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  --sv-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", Inter, "Helvetica Neue", sans-serif;
+  --sv-mono: "Fira Code", var(--font-mono), ui-monospace, monospace;
+  --sv-spring: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+:is(.sv-zone, .sv-page) *,
+:is(.sv-zone, .sv-page) *::before,
+:is(.sv-zone, .sv-page) *::after {
+  box-sizing: border-box;
+}
+
+/* the card, with a light that travels round its edge */
+:is(.sv-zone, .sv-page) .sv-ring {
+  position: relative;
+  isolation: isolate;
+  max-width: 1080px;
+  margin: 22px auto 0;
+  padding: 1.5px;
+  overflow: hidden;
+  border-radius: 32px;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6), 0 0 80px rgba(100, 210, 255, 0.1);
+}
+:is(.sv-zone, .sv-page) .sv-ring::before {
+  content: "";
+  position: absolute;
+  inset: -60%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0 58%,
+    rgba(100, 210, 255, 0.9) 70%,
+    rgba(191, 90, 242, 0.9) 80%,
+    rgba(255, 159, 10, 0.85) 88%,
+    transparent 96%
+  );
+  animation: sv-travel 6s linear infinite;
+  will-change: transform;
+}
+:is(.sv-zone, .sv-page) .sv-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 30.5px;
+  background: var(--sv-card);
+  color: var(--sv-label);
+  font-family: var(--sv-font);
+}
+:is(.sv-zone, .sv-page) .sv-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    radial-gradient(90% 60% at 50% 0%, rgba(100, 210, 255, 0.1), transparent 70%),
+    linear-gradient(180deg, rgba(18, 18, 20, 0.35) 0%, rgba(18, 18, 20, 0.82) 45%, rgba(18, 18, 20, 0.94) 100%);
+  pointer-events: none;
+}
+:is(.sv-zone, .sv-page) .sv-grid {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+  gap: 40px;
+  padding: 36px 38px 34px;
+}
+
+/* name and line */
+:is(.sv-zone, .sv-page) .sv-title {
+  margin: 0;
+  color: #f0f6fc;
+  font: 800 clamp(36px, 4.4vw, 60px) / 0.95 var(--sv-font);
+  letter-spacing: -0.03em;
+  text-transform: uppercase;
+  text-wrap: balance;
+}
+:is(.sv-zone, .sv-page) .sv-lede {
+  max-width: 34ch;
+  margin: 14px 0 0;
+  color: rgba(235, 235, 245, 0.88);
+  font: 600 clamp(17px, 1.5vw, 21px) / 1.3 var(--sv-display);
+  letter-spacing: -0.02em;
+}
+:is(.sv-zone, .sv-page) .sv-lede span {
+  color: var(--sv-tint);
+  font-weight: 800;
+  text-shadow: 0 0 18px rgba(100, 210, 255, 0.6), 0 0 42px rgba(100, 210, 255, 0.25);
+}
+:is(.sv-zone, .sv-page) .sv-lede b {
+  display: block;
+  margin-top: 4px;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+/* the plan switch: one capsule, a thumb that slides between three segments */
+:is(.sv-zone, .sv-page) .sv-switch {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  margin-top: 26px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(120, 120, 128, 0.24);
+}
+:is(.sv-zone, .sv-page) .sv-thumb {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc((100% - 8px) / 3);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.17);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  transform: translateX(calc(var(--sv-index) * 100%));
+  transition: transform 0.45s var(--sv-spring);
+}
+:is(.sv-zone, .sv-page) .sv-seg {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(235, 235, 245, 0.62);
+  font: 600 14.5px/1 var(--sv-font);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.25s ease;
+}
+:is(.sv-zone, .sv-page) .sv-seg[aria-checked="true"] {
+  color: #f5f5f7;
+}
+:is(.sv-zone, .sv-page) .sv-seg:focus-visible {
+  outline: 3px solid rgba(100, 210, 255, 0.55);
+  outline-offset: -1px;
+}
+:is(.sv-zone, .sv-page) .sv-save {
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: rgba(255, 215, 106, 0.18);
+  color: var(--sv-gold);
+  font: 700 10.5px/1 var(--sv-font);
+}
+
+/* the price, re-keyed on every switch so it animates in */
+:is(.sv-zone, .sv-page) .sv-price-block {
+  margin-top: 26px;
+}
+:is(.sv-zone, .sv-page) .sv-price {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  animation: sv-price-in 0.5s var(--sv-spring);
+}
+:is(.sv-zone, .sv-page) .sv-amount {
+  background: linear-gradient(180deg, #ffffff 0%, #e8e8ed 50%, #a1a1a6 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  font: 700 clamp(56px, 6.2vw, 80px) / 1 var(--sv-display);
+  letter-spacing: -0.045em;
+  font-variant-numeric: tabular-nums;
+}
+:is(.sv-zone, .sv-page) .sv-cadence {
+  color: var(--sv-label-2);
+  font: 500 19px/1 var(--sv-font);
+  letter-spacing: -0.01em;
+}
+:is(.sv-zone, .sv-page) .sv-note {
+  min-height: 22px;
+  margin: 10px 0 0;
+  color: var(--sv-label-2);
+  font: 400 16px/1.4 var(--sv-font);
+  letter-spacing: -0.01em;
+  animation: sv-price-in 0.5s var(--sv-spring);
+}
+:is(.sv-zone, .sv-page) .sv-note button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--sv-tint);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* the lit neon cyan button; its glow breathes outside it, so the button can clip its sweep */
+:is(.sv-zone, .sv-page) .sv-cta {
+  position: relative;
+  margin-top: 26px;
+}
+:is(.sv-zone, .sv-page) .sv-cta::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  box-shadow: 0 0 34px rgba(0, 255, 255, 0.75);
+  opacity: 0.35;
+  animation: sv-breathe 2.2s ease-in-out infinite;
+  pointer-events: none;
+}
+:is(.sv-zone, .sv-page) .sv-neon {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  overflow: hidden;
+  padding: 16px 36px;
+  border: 1px solid #00ffff;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #00ffff 0%, #000000 100%);
+  color: #ffffff;
+  font: 600 16px/1 var(--sv-font);
+  letter-spacing: 1px;
+  text-decoration: none;
+  text-transform: uppercase;
+  text-shadow: 0 0 10px rgba(0, 255, 255, 0.85);
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 20px rgba(0, 255, 255, 0.4), inset 0 0 12px rgba(0, 255, 255, 0.22);
+  transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease, background 0.3s ease;
+}
+:is(.sv-zone, .sv-page) .sv-neon::before {
+  /* a hairline of light along the top edge */
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 12%;
+  left: 12%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.9), transparent);
+  pointer-events: none;
+}
+:is(.sv-zone, .sv-page) .sv-neon::after {
+  /* a band of light that crosses every few seconds */
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 45%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  transform: translateX(-160%) skewX(-20deg);
+  animation: sv-sweep 3.4s ease-in-out infinite;
+  pointer-events: none;
+}
+:is(.sv-zone, .sv-page) .sv-neon > * {
+  position: relative;
+  z-index: 1;
+}
+:is(.sv-zone, .sv-page) .sv-neon svg {
+  transition: transform 0.35s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+:is(.sv-zone, .sv-page) .sv-neon:hover:not(:disabled),
+:is(.sv-zone, .sv-page) .sv-neon:focus-visible {
+  border-color: #4ecfff;
+  background: linear-gradient(135deg, #4ecfff 0%, #111111 100%);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.7), 0 0 44px rgba(0, 255, 255, 0.65), inset 0 0 18px rgba(0, 255, 255, 0.35);
+  transform: translateY(-2px);
+}
+:is(.sv-zone, .sv-page) .sv-neon:hover:not(:disabled) svg {
+  transform: translateX(3px);
+}
+:is(.sv-zone, .sv-page) .sv-neon:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 3px;
+}
+:is(.sv-zone, .sv-page) .sv-neon:active:not(:disabled) {
+  transform: translateY(0);
+}
+:is(.sv-zone, .sv-page) .sv-neon:disabled {
+  cursor: progress;
+  opacity: 0.75;
+}
+:is(.sv-zone, .sv-page) .sv-neon:disabled::after {
+  animation: none;
+}
+
+:is(.sv-zone, .sv-page) .sv-error {
+  margin: 12px 0 0;
+  color: var(--sv-orange);
+  font: 500 14px/1.4 var(--sv-font);
+}
+:is(.sv-zone, .sv-page) .sv-fine {
+  margin: 14px 0 0;
+  color: var(--sv-label-3);
+  font: 400 12.5px/1.5 var(--sv-font);
+}
+
+/* Posterract, included: its own little green plate, as on aiforsavages.fyi */
+:is(.sv-zone, .sv-page) .sv-posterract {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 6px 12px;
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: radial-gradient(120% 140% at 0% 0%, rgba(101, 255, 154, 0.16), transparent 60%), #06100b;
+  box-shadow: inset 0 0 0 1px rgba(101, 255, 154, 0.3), 0 0 26px rgba(101, 255, 154, 0.12);
+  color: #eafff3;
+}
+:is(.sv-zone, .sv-page) .sv-posterract-mark {
+  grid-row: span 2;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: #65ff9a;
+  box-shadow: 0 0 10px #65ff9a;
+}
+:is(.sv-zone, .sv-page) .sv-posterract-name {
+  font: 800 12.5px/1 var(--font-display, var(--sv-font));
+  letter-spacing: 0.08em;
+}
+:is(.sv-zone, .sv-page) .sv-posterract-name b {
+  color: #65ff9a;
+  font-weight: 800;
+}
+:is(.sv-zone, .sv-page) .sv-posterract-line {
+  font: 700 clamp(18px, 1.7vw, 22px) / 1.15 var(--sv-display);
+  letter-spacing: -0.02em;
+}
+
+/* what you get: one row per reason, an icon tile, the line, its sub-point */
+:is(.sv-zone, .sv-page) .sv-cap {
+  margin: 24px 0 0;
+  color: var(--sv-label-3);
+  font: 600 12px/1 var(--sv-font);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+:is(.sv-zone, .sv-page) .sv-perks {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+:is(.sv-zone, .sv-page) .sv-perk {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+}
+:is(.sv-zone, .sv-page) .sv-tile {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  color: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+:is(.sv-zone, .sv-page) .sv-tile--amber { background: linear-gradient(180deg, #ffb340, #ff8a00); }
+:is(.sv-zone, .sv-page) .sv-tile--discord { background: linear-gradient(180deg, #7983f5, #5865f2); }
+:is(.sv-zone, .sv-page) .sv-tile--yellow { background: linear-gradient(180deg, #ffe066, #ffc300); color: #1a1400; }
+:is(.sv-zone, .sv-page) .sv-tile--cyan { background: linear-gradient(180deg, #64d2ff, #0a84ff); }
+:is(.sv-zone, .sv-page) .sv-tile--red { background: linear-gradient(180deg, #ff6961, #ff3b30); }
+:is(.sv-zone, .sv-page) .sv-tile--green { background: linear-gradient(180deg, #4cd964, #28a745); }
+:is(.sv-zone, .sv-page) .sv-perk-title {
+  margin: 0;
+  padding-top: 1px;
+  color: var(--sv-label);
+  font: 600 16px/1.35 var(--sv-font);
+  letter-spacing: -0.014em;
+  text-wrap: pretty;
+}
+:is(.sv-zone, .sv-page) .sv-perk-sub {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 6px 0 0;
+  color: var(--sv-label-2);
+  font: 400 14.5px/1.4 var(--sv-font);
+  letter-spacing: -0.01em;
+}
+:is(.sv-zone, .sv-page) .sv-perk-sub::before {
+  content: "↳";
+  flex: none;
+  color: var(--sv-label-3);
+}
+:is(.sv-zone, .sv-page) .sv-perk-sub--live::before {
+  content: none;
+}
+:is(.sv-zone, .sv-page) .sv-perk-sub b {
+  color: #ffffff;
+  font-weight: 700;
+}
+:is(.sv-zone, .sv-page) .sv-live {
+  position: relative;
+  flex: none;
+  align-self: center;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ff3b30;
+}
+:is(.sv-zone, .sv-page) .sv-live::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(255, 59, 48, 0.6);
+  animation: sv-live 1.6s ease-out infinite;
+}
+
+/* the welcome page after Stripe */
+.sv-page {
+  position: relative;
+  min-height: 100vh;
+  padding: 48px 16px 64px;
+  background: #000000;
+  color: var(--sv-label);
+  font-family: var(--sv-font);
+  overflow-x: clip;
+}
+.sv-page .sv-page-sky {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+.sv-page .sv-page-sky img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.6;
+}
+.sv-page .sv-page-column {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  justify-items: center;
+  gap: 22px;
+  width: min(100%, 560px);
+  margin: 0 auto;
+}
+.sv-page .sv-page-brand {
+  color: var(--sv-gray);
+  font: 600 11px/1 var(--sv-mono);
+  letter-spacing: 0.22em;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+.sv-page .sv-page-brand b {
+  color: #65ff9a;
+  font-weight: 600;
+}
+.sv-page .sv-ring {
+  width: 100%;
+  margin: 0;
+}
+.sv-page .sv-welcome {
+  position: relative;
+  z-index: 2;
+  padding: 30px 28px 28px;
+  text-align: center;
+}
+.sv-page .sv-kicker {
+  margin: 0 0 12px;
+  color: var(--sv-gray);
+  font: 500 11px/1.4 var(--sv-mono);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+.sv-page .sv-welcome h1 {
+  margin: 0;
+  background: linear-gradient(180deg, #ffffff 0%, #e8e8ed 48%, #a1a1a6 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  font: 700 clamp(40px, 9vw, 56px) / 1.04 var(--sv-display);
+  letter-spacing: -0.035em;
+}
+.sv-page .sv-welcome p {
+  max-width: 40ch;
+  margin: 12px auto 0;
+  color: var(--sv-label-2);
+  font: 400 16px/1.45 var(--sv-font);
+}
+.sv-page .sv-welcome strong,
+.sv-page .sv-step strong {
+  color: #ffffff;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.sv-page .sv-welcome .sv-posterract {
+  justify-content: center;
+  margin: 18px auto 0;
+  text-align: left;
+}
+.sv-page .sv-spinner {
+  display: block;
+  width: 28px;
+  height: 28px;
+  margin: 18px auto 0;
+  border: 2px solid rgba(100, 210, 255, 0.2);
+  border-top-color: var(--sv-tint);
+  border-radius: 50%;
+  animation: sv-spin 0.9s linear infinite;
+}
+.sv-page .sv-step {
+  width: 100%;
+  padding: 20px 22px;
+  border-radius: 22px;
+  background: rgba(22, 22, 24, 0.88);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.38);
+  text-align: left;
+}
+.sv-page .sv-step h2 {
+  margin: 0;
+  color: var(--sv-label-3);
+  font: 600 12px/1 var(--sv-font);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.sv-page .sv-step p {
+  margin: 8px 0 0;
+  color: var(--sv-label-2);
+  font: 400 15px/1.45 var(--sv-font);
+}
+.sv-page .sv-step .sv-cta {
+  margin-top: 16px;
+}
+.sv-page .sv-auth {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
+}
+
+/* beside Posterract Pro on the landing (EnterTheGame's .g-plans): one
+   column, as tall as the Pro card */
+.g-plans .sv-zone,
+.g-plans .sv-zone .sv-ring {
+  display: grid;
+}
+.g-plans .sv-zone .sv-ring {
+  max-width: none;
+  margin: 0;
+}
+.g-plans .sv-zone .sv-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 30px;
+}
+
+@keyframes sv-travel { to { transform: rotate(360deg); } }
+@keyframes sv-breathe { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+@keyframes sv-sweep {
+  0%, 58% { transform: translateX(-160%) skewX(-20deg); }
+  100% { transform: translateX(330%) skewX(-20deg); }
+}
+@keyframes sv-price-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes sv-live {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(2.75); }
+}
+@keyframes sv-spin { to { transform: rotate(360deg); } }
+
+/* nothing runs while the card is off screen */
+:is(.sv-zone, .sv-page) .sv-ring[data-live="off"]::before,
+:is(.sv-zone, .sv-page) .sv-ring[data-live="off"] .sv-cta::before,
+:is(.sv-zone, .sv-page) .sv-ring[data-live="off"] .sv-neon::after,
+:is(.sv-zone, .sv-page) .sv-ring[data-live="off"] .sv-live::after {
+  animation-play-state: paused;
+}
+
+@media (max-width: 900px) {
+  :is(.sv-zone, .sv-page) .sv-ring { max-width: 640px; }
+  :is(.sv-zone, .sv-page) .sv-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 30px;
+    padding: 28px 26px 26px;
+  }
+}
+
+@media (max-width: 640px) {
+  :is(.sv-zone, .sv-page) .sv-ring { border-radius: 26px; }
+  :is(.sv-zone, .sv-page) .sv-card { border-radius: 24.5px; }
+  :is(.sv-zone, .sv-page) .sv-grid { padding: 22px 18px; }
+  :is(.sv-zone, .sv-page) .sv-seg { font-size: 13.5px; }
+  :is(.sv-zone, .sv-page) .sv-save { display: none; }
+  :is(.sv-zone, .sv-page) .sv-perk-title { font-size: 15px; }
+  :is(.sv-zone, .sv-page) .sv-perk-sub { font-size: 13.5px; }
+  :is(.sv-zone, .sv-page) .sv-neon { padding: 15px 20px; font-size: 15px; }
+  .sv-page .sv-welcome { padding: 24px 18px 22px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is(.sv-zone, .sv-page) .sv-ring::before,
+  :is(.sv-zone, .sv-page) .sv-cta::before,
+  :is(.sv-zone, .sv-page) .sv-neon::after,
+  :is(.sv-zone, .sv-page) .sv-live::after,
+  :is(.sv-zone, .sv-page) .sv-price,
+  :is(.sv-zone, .sv-page) .sv-note,
+  .sv-page .sv-spinner {
+    animation: none;
+  }
+  :is(.sv-zone, .sv-page) .sv-thumb,
+  :is(.sv-zone, .sv-page) .sv-neon,
+  :is(.sv-zone, .sv-page) .sv-neon svg {
+    transition: none;
+  }
+  :is(.sv-zone, .sv-page) .sv-neon:hover:not(:disabled) {
+    transform: none;
+  }
+}

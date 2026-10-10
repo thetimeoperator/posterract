@@ -31,6 +31,8 @@ export type WelcomeAuthMode = "signin" | "signup";
 
 type WelcomeAuthCardProps = {
   initialMode?: WelcomeAuthMode;
+  /** Prefills the email. The AI FOR SAVAGES welcome page passes the email the buyer paid with. */
+  initialEmail?: string;
   onSuccess: () => void;
   onClose?: () => void;
   showClose?: boolean;
@@ -42,6 +44,7 @@ type AuthView = "auth" | "forgot" | "recovery-sent" | "signin-sent" | "verify";
 
 export function WelcomeAuthCard({
   initialMode = "signin",
+  initialEmail = "",
   onSuccess,
   onClose,
   showClose = false,
@@ -50,7 +53,7 @@ export function WelcomeAuthCard({
   const reduceMotion = useReducedMotion();
   const [mode, setMode] = useState<WelcomeAuthMode>(initialMode);
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);

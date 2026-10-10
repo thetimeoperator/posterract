@@ -19,6 +19,9 @@ import type {
   PortalDTO,
   ProjectionDTO,
   TransmissionDTO,
+  AccountLimitDTO,
+  SavagesPlanDTO,
+  SavagesPlanId,
 } from "@posterract/contract";
 import type { AnalyticsScope, BusinessInput, CreateTransmissionInput, PeriodQuery } from "./store";
 import { cloudJson } from "@/lib/cloudRequest";
@@ -39,6 +42,8 @@ type Bootstrap = {
   portals: PortalDTO[];
   businesses: BusinessDTO[];
   points: PointsSummaryDTO;
+  /** How many accounts the workspace may connect (10 on Pro, 100 for an AI FOR SAVAGES member). */
+  accountLimit?: AccountLimitDTO;
 };
 
 type State = Bootstrap & {
@@ -88,6 +93,7 @@ function remember() {
     portals: state.portals,
     businesses: state.businesses,
     points: state.points,
+    accountLimit: state.accountLimit,
   };
   writeCached("engine", cacheUser, { data, pointsDashboard: state.pointsDashboard } satisfies CachedEngine);
 }
@@ -230,6 +236,13 @@ export const useTransmissions = () => usePostgresStore((state) => state.transmis
 export const useProjections = () => usePostgresStore((state) => state.projections);
 export const useEvents = () => usePostgresStore((state) => state.events);
 export const usePortals = () => usePostgresStore((state) => state.portals);
+export const useAccountLimit = () => usePostgresStore((state) => state.accountLimit);
+export const useRefresh = () => usePostgresStore((state) => state.refresh);
+/** AI FOR SAVAGES' three plans, live from Stripe through the Hub. */
+export const fetchSavagesPlans = () => request<{ plans: SavagesPlanDTO[] }>("/v1/savages/plans");
+/** Stripe Checkout for AI FOR SAVAGES, for the signed-in owner. */
+export const startSavagesCheckout = (plan: SavagesPlanId) =>
+  request<{ url: string }>("/v1/savages/checkout/member", { method: "POST", body: JSON.stringify({ plan }) });
 export const useBusinesses = () => usePostgresStore((state) => state.businesses);
 export const usePoints = () => usePostgresStore((state) => state.points);
 /** False until the first load, so nothing shows level 1 before the real points arrive. */
@@ -550,6 +563,7 @@ export function useOAuth() {
         ok: boolean;
         handle?: string;
         error?: string;
+        code?: string;
         returnTo?: "desktop" | "web";
         selectionRequired?: boolean;
         pages?: Array<{ id: string; name: string }>;
@@ -571,6 +585,7 @@ export function useOAuth() {
         ok: boolean;
         handle?: string;
         error?: string;
+        code?: string;
         returnTo?: "desktop" | "web";
       }>(
         "/v1/oauth/facebook/select-page",

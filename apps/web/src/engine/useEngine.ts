@@ -4,7 +4,7 @@
  * (VITE_CONVEX_URL), otherwise the in-browser demo engine (zustand +
  * IndexedDB + simulator), which e2e tests use for deterministic runs.
  */
-import type { PlatformId } from "@posterract/contract";
+import type { AccountLimitDTO, PlatformId, SavagesPlanDTO, SavagesPlanId } from "@posterract/contract";
 import { PLATFORM_CAPABILITIES } from "@posterract/contract";
 import * as localEngine from "./local";
 import * as cloudEngine from "./cloud";
@@ -43,6 +43,21 @@ export const useEngineActions = impl.useEngineActions;
 export const artifactUrl = impl.artifactUrl;
 export const useOAuth = impl.useOAuth;
 export const useBusinessActions = impl.useBusinessActions;
+/** The workspace's account limit. Only the Postgres engine has one; the demo and Convex engines don't. */
+export const useAccountLimit: () => AccountLimitDTO | undefined = POSTGRES
+  ? postgresEngine.useAccountLimit
+  : () => undefined;
+export const useEngineRefresh: () => () => Promise<void> = POSTGRES
+  ? postgresEngine.useRefresh
+  : () => async () => undefined;
+export const fetchSavagesPlans: () => Promise<{ plans: SavagesPlanDTO[] }> = POSTGRES
+  ? postgresEngine.fetchSavagesPlans
+  : async () => ({ plans: [] });
+export const startSavagesCheckout: (plan: SavagesPlanId) => Promise<{ url: string }> = POSTGRES
+  ? postgresEngine.startSavagesCheckout
+  : async () => {
+      throw new Error("AI FOR SAVAGES checkout needs the production API");
+    };
 export const getTikTokCreatorInfo = POSTGRES ? postgresEngine.getTikTokCreatorInfo : CLOUD
   ? async (): Promise<import("@posterract/contract/tiktok").TikTokCreatorInfo> => { throw new Error("TikTok Direct Post requires the production web API."); }
   : localEngine.getTikTokCreatorInfo;
