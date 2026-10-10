@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useReducedMotion } from "framer-motion";
 import { PLATFORM_MARK_SOURCES } from "@posterract/hyperkit";
 import { AGENTS } from "./agents";
@@ -86,12 +86,20 @@ function progressAt(t: number): { index: number; chars: number } {
   return { index, chars };
 }
 
-function Prompt({ text, typing }: { text: string; typing: boolean }) {
+/**
+ * A command line, laid out in full from the start: the part not typed yet
+ * keeps its space unseen, and the cursor takes none, so typing never changes
+ * how tall the window is.
+ */
+function Prompt({ text, typed = text.length, typing, pending = false }: { text: string; typed?: number; typing: boolean; pending?: boolean }) {
   return (
-    <div className="site-ops-cmd">
+    <div className={pending ? "site-ops-cmd site-ops-pending" : "site-ops-cmd"}>
       <span>founder@posterract</span><strong>:</strong><em>~/pages/yourpage</em><strong>$</strong>
-      <code>{text}</code>
-      {typing && <b className="site-terminal-cursor" />}
+      <code>
+        {text.slice(0, typed)}
+        {typing && <span className="site-ops-caret"><b className="site-terminal-cursor" /></span>}
+        {typed < text.length && <span className="site-ops-untyped">{text.slice(typed)}</span>}
+      </code>
     </div>
   );
 }
@@ -103,7 +111,9 @@ export function OpsWindow() {
   const root = useRef<HTMLDivElement>(null);
 
   // The clock only runs while the window is on screen: off screen it holds
-  // where it is, so nothing below the page moves while the reader is elsewhere.
+  // where it is. Every line is laid out from the first frame (unseen until its
+  // turn), so the window is its finished height throughout and the page
+  // never grows while it plays.
   useEffect(() => {
     if (reduceMotion) {
       setProgress({ index: SCRIPT.length, chars: 0 });
@@ -159,20 +169,29 @@ export function OpsWindow() {
 
       <div className="site-ops-body">
         <div className="site-ops-terminal" aria-hidden="true">
-          {SCRIPT.slice(0, progress.index).map((step, index) => {
+          {SCRIPT.map((step, index) => {
+            const shown = index < progress.index;
             const typing = index === progress.index - 1 && !finished;
             if (step.kind === "cmd") {
-              return <Prompt key={index} text={typing ? step.text.slice(0, progress.chars) : step.text} typing={typing} />;
+              return (
+                <Prompt
+                  key={index}
+                  text={step.text}
+                  typed={typing ? progress.chars : shown ? step.text.length : 0}
+                  typing={typing}
+                  pending={!shown}
+                />
+              );
             }
             return (
-              <div className={`site-ops-line site-ops-${step.kind}`} key={index}>
+              <div className={`site-ops-line site-ops-${step.kind}${shown ? "" : " site-ops-pending"}`} key={index}>
                 <i>{step.kind === "ok" ? "✓" : step.kind === "run" ? "→" : "·"}</i>
                 <span>{step.text}</span>
                 {step.kind === "run" && step.agent && <em>{schedule(step.agent)}</em>}
               </div>
             );
           })}
-          {finished && <Prompt text="" typing />}
+          <Prompt text="" typing={finished} pending={!finished} />
         </div>
 
         <div className="site-ops-board">
@@ -184,8 +203,8 @@ export function OpsWindow() {
             <span />
             {DAYS.map((day) => <span className="site-ops-day" key={day}>{day}</span>)}
             {BOARD_PLATFORMS.map((platform) => (
-              <>
-                <span className="site-ops-platform" data-platform={platform.id} key={platform.id}>
+              <Fragment key={platform.id}>
+                <span className="site-ops-platform" data-platform={platform.id}>
                   <img src={PLATFORM_MARK_SOURCES[platform.id]} alt="" /> {platform.name}
                 </span>
                 {DAYS.map((day, dayIndex) => {
@@ -202,7 +221,7 @@ export function OpsWindow() {
                     </span>
                   );
                 })}
-              </>
+              </Fragment>
             ))}
           </div>
         </div>

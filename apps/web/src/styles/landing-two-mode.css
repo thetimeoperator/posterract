@@ -497,6 +497,14 @@
 .site-ops-cmd > strong { margin: 0 5px; color: #627c6d; font-weight: 500; }
 .site-ops-cmd code { padding-left: 4px; font: inherit; white-space: pre-wrap; }
 
+/* Lines not reached yet, and the part of a command not typed yet, keep their
+   space unseen: the window is its finished height from the first frame. The
+   cursor takes no space, so it never moves the line it sits on. */
+.site-ops-pending { visibility: hidden; animation: none; }
+.site-ops-untyped { visibility: hidden; }
+.site-ops-caret { position: relative; }
+.site-ops-caret > .site-terminal-cursor { position: absolute; top: 50%; left: 0; margin-top: -8px; }
+
 .site-ops-line {
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr) auto;

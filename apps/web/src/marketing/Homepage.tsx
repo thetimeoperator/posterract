@@ -1,5 +1,6 @@
 /**
- * The public landing page. The page itself lives in ./Landing: two jobs,
- * "Use the product" and "Work with me", switched by the lever in the hero.
+ * The public landing page: the game for content (./game/GameLanding), with
+ * the lever between "Use the product" and "Work with me". It replaced the
+ * earlier page (./Landing) on Oct 9 2026.
  */
-export { Landing as Homepage } from "@/marketing/Landing";
+export { GameLanding as Homepage } from "@/marketing/game/GameLanding";

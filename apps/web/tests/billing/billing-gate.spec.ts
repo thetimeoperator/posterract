@@ -180,11 +180,12 @@ for (const [plan, name] of [["pro", "Pro"]] as const) {
         checkout = route.request().postDataJSON();
         await route.fulfill({ status: 201, json: { sessionId: "cs_test", url: "http://127.0.0.1:5175/stripe-checkout-test" } });
       });
-      await page.goto("/#pricing");
-      if (interval === "yearly") await page.getByRole("switch", { name: "Yearly billing" }).check();
+      await page.goto("/#enter");
+      const card = page.getByRole("article", { name: `Posterract ${name}` });
+      if (interval === "yearly") await card.getByRole("button", { name: "Yearly", exact: true }).click();
       const amount = interval === "yearly" ? config.creditPlans[plan].yearlyAmount : config.creditPlans[plan].amount;
-      await expect(page.getByLabel(`${name} $${amount / 100} per ${interval === "yearly" ? "year" : "month"}`, { exact: true })).toBeVisible();
-      await page.getByRole("button", { name: `Get ${name}`, exact: true }).click();
+      await expect(card.getByLabel(`${name} $${amount / 100} per ${interval === "yearly" ? "year" : "month"}`, { exact: true })).toBeVisible();
+      await card.getByRole("button", { name: "Start playing" }).click();
       await expect(page.getByRole("dialog", { name: "Welcome to Posterract" })).toBeVisible();
       await expect(page).toHaveURL(new RegExp(`plan=${plan}&interval=${interval}`));
       // Verification and OAuth can return in a new document without any React state.
@@ -213,10 +214,11 @@ test("email signup and Google sign-in receive the selected annual-plan return UR
     googleCallback = route.request().postDataJSON().callbackURL;
     return route.fulfill({ json: { redirect: false } });
   });
-  await page.goto("/#pricing");
-  await page.getByRole("switch", { name: "Yearly billing" }).press("Space");
-  await expect(page.getByRole("switch", { name: "Yearly billing" })).toBeChecked();
-  await page.getByRole("button", { name: "Get Pro", exact: true }).click();
+  await page.goto("/#enter");
+  const card = page.getByRole("article", { name: "Posterract Pro" });
+  await card.getByRole("button", { name: "Yearly", exact: true }).press("Space");
+  await expect(card.getByRole("button", { name: "Yearly", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await card.getByRole("button", { name: "Start playing" }).click();
   await page.getByPlaceholder("What should we call you?").fill("Pricing Test");
   await page.getByPlaceholder("you@example.com").fill("pricing@example.test");
   await page.getByPlaceholder("At least 8 characters").fill("test password only 123");
@@ -224,7 +226,7 @@ test("email signup and Google sign-in receive the selected annual-plan return UR
   await expect(page.getByRole("heading", { name: "Verify your signal." })).toBeVisible();
   expect(emailCallback).toBe("http://127.0.0.1:5175/?plan=pro&interval=yearly");
   await page.getByRole("button", { name: "Close welcome screen" }).click();
-  await page.getByRole("button", { name: "Get Pro", exact: true }).click();
+  await card.getByRole("button", { name: "Start playing" }).click();
   await page.getByRole("button", { name: "Sign up with Google" }).click();
   await expect.poll(() => googleCallback).toBe(emailCallback);
 });
@@ -233,13 +235,14 @@ test("unavailable public prices can be retried and cannot start an unpriced chec
   let available = false;
   await page.route("**/api/auth/get-session", (route) => route.fulfill({ json: null }));
   await page.route("**/v1/billing/config", (route) => route.fulfill({ status: available ? 200 : 503, json: available ? config : { error: "unavailable" } }));
-  await page.goto("/#pricing");
-  await expect(page.getByRole("status")).toContainText("Pricing is temporarily unavailable");
-  await expect(page.getByRole("button", { name: "Get Pro", exact: true })).toBeDisabled();
+  await page.goto("/#enter");
+  const card = page.getByRole("article", { name: "Posterract Pro" });
+  await expect(card.getByText("Pricing is temporarily unavailable.")).toBeVisible();
+  await expect(card.getByRole("button", { name: "Start playing" })).toBeDisabled();
   available = true;
-  await page.getByRole("button", { name: "Try again", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Get Pro", exact: true })).toBeEnabled();
-  await expect(page.getByLabel("Pro $20 per month", { exact: true })).toBeVisible();
+  await card.getByRole("button", { name: "Try again", exact: true }).click();
+  await expect(card.getByRole("button", { name: "Start playing" })).toBeEnabled();
+  await expect(card.getByLabel("Pro $20 per month", { exact: true })).toBeVisible();
 });
 
 test("paid subscribers can manage billing and review a selected plan change", async ({ page }) => {
@@ -293,8 +296,9 @@ test("retired plan links lead to the single Pro checkout while preserving yearly
 test("public pricing shows one plan even against a cached three-plan catalog", async ({ page }) => {
   await page.route("**/api/auth/get-session", route => route.fulfill({ json: null }));
   await page.route("**/v1/billing/config", route => route.fulfill({ json: config }));
-  await page.goto("/#pricing");
-  await expect(page.locator("#pricing article")).toHaveCount(1);
+  await page.goto("/#enter");
+  // Posterract's one plan; the card beside it is AI FOR SAVAGES, sold by the Hub.
+  await expect(page.locator("#enter .g-plan")).toHaveCount(1);
   await expect(page.getByRole("heading", { name: "Posterract Pro" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Get Allstar" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Get Superstar" })).toHaveCount(0);

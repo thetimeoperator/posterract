@@ -1,6 +1,6 @@
 import { motion, useReducedMotion } from "framer-motion";
 
-type RoadmapStatus = "queued" | "expanding" | "audit" | "byok" | "classified";
+type RoadmapStatus = "queued" | "expanding" | "byok" | "classified";
 
 type RoadmapEntry = {
   command: string;
@@ -27,12 +27,6 @@ const ROADMAP: RoadmapEntry[] = [
     detail: "Different content formats for AI agents will be added.",
     status: "expanding",
     statusLabel: "EXPANDING",
-  },
-  {
-    command: "tiktok.directPost.unlock()",
-    detail: "Full TikTok direct posting will be added after platform approval.",
-    status: "audit",
-    statusLabel: "AUDIT PENDING",
   },
   {
     command: "api.youtube.connect()",

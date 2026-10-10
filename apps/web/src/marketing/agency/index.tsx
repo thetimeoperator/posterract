@@ -69,7 +69,7 @@ const STEPS: HoverFeature[] = [
 
 const FAQ = [
   { q: "Who owns the accounts and the content?", a: "You do. The agents run on your Posterract account and post to your connected pages. Everything made is yours, exported and kept in your project." },
-  { q: "Which platforms can they post to today?", a: "Instagram, Facebook and Threads publish directly. TikTok receives drafts in your inbox for you to post. YouTube, X, LinkedIn and Reddit are on the roadmap." },
+  { q: "Which platforms can they post to today?", a: "Instagram, TikTok, Facebook and Threads publish directly. YouTube, X, LinkedIn and Reddit are on the roadmap." },
   { q: "Do I have to approve every post?", a: "Your call. Approve the whole week at once, approve single posts, or delegate approval inside guardrails we set together." },
   { q: "What do you need from me?", a: "Access to the pages, your references (posts you like, people you sound like), product photos or footage if the UGC agent is on the team, and one call." },
   { q: "How fast does it start?", a: "The strategy call is first. The agents are programmed and tuned during the first week, on real posts you see before they go out." },

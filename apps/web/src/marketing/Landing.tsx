@@ -60,7 +60,7 @@ type Platform = {
 
 const PLATFORMS: Platform[] = [
   { id: "youtube", name: "YouTube", mark: PLATFORM_MARK_SOURCES.youtube, phase: "next", capability: "Integration roadmap" },
-  { id: "tiktok", name: "TikTok", mark: PLATFORM_MARK_SOURCES.tiktok, phase: "limited", capability: "Draft delivery / direct pending" },
+  { id: "tiktok", name: "TikTok", mark: PLATFORM_MARK_SOURCES.tiktok, phase: "live", capability: "Publishing + insights" },
   { id: "instagram", name: "Instagram", mark: PLATFORM_MARK_SOURCES.instagram, phase: "live", capability: "Publishing + insights" },
   { id: "facebook", name: "Facebook", mark: PLATFORM_MARK_SOURCES.facebook, phase: "live", capability: "Publishing + insights" },
   { id: "threads", name: "Threads", mark: PLATFORM_MARK_SOURCES.threads, phase: "live", capability: "Publishing + insights" },
