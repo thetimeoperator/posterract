@@ -215,7 +215,7 @@ export async function threadsAccountInsights(args: {
   accessToken: string;
 }): Promise<{
   audience?: number;
-  totalViews?: number;
+  profileViews?: number;
   totalLikes?: number;
   replies?: number;
   reposts?: number;
@@ -235,9 +235,11 @@ export async function threadsAccountInsights(args: {
     const metric = body.data?.find((row) => row.name === name);
     return metric?.total_value?.value ?? metric?.values?.at(-1)?.value;
   };
+  // Threads' account `views` counts views of the profile, not of posts; post
+  // views are only reported post by post.
   return {
     audience: value("followers_count"),
-    totalViews: value("views"),
+    profileViews: value("views"),
     totalLikes: value("likes"),
     replies: value("replies"),
     reposts: value("reposts"),

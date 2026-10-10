@@ -318,9 +318,11 @@ async function loadScoredPosts(database, workspaceId) {
  * platform's post ID, or on Facebook by the video ID in the post's link. A
  * public TikTok that Posterract posted can be listed before TikTok has given
  * its projection the public ID, so TikToks within a day of such a post wait
- * for it (for at most the week TikTok is asked).
+ * for it (for at most the week TikTok is asked). `sinceConnected: false` keeps
+ * the posts from before the account was connected too, which earn nothing
+ * but still count on the Analytics page.
  */
-function postsMadeElsewhereQuery(scope = "") {
+function postsMadeElsewhereQuery(scope = "", { sinceConnected = true } = {}) {
   return `
     with accounts as (
       select a.id, ${CONNECTED_AT} as connected_at
@@ -336,7 +338,7 @@ function postsMadeElsewhereQuery(scope = "") {
       order by pp.provider, pp.platform_post_id, pp.metrics_fetched_at desc nulls last, pp.first_seen_at desc
     )
     select listed.* from listed
-    where listed.published_at >= listed.connected_at
+    where ${sinceConnected ? "listed.published_at >= listed.connected_at" : "true"}
       and not exists (
         select 1 from projections p
         where p.workspace_id = $1 and p.provider = listed.provider and p.status = 'live' and ${VISIBLE_POST}
@@ -358,13 +360,14 @@ async function loadPostsMadeElsewhere(database, workspaceId, now) {
 }
 
 /**
- * The posts on one account that earn as made elsewhere and are recent enough
- * to read numbers for (90 days, as for Posterract's own): what the worker
- * asks the platform about.
+ * The posts on one account made elsewhere that the worker asks the platform
+ * for numbers on: every post the hourly read lists (120 days back), from
+ * before the account was connected too, so the Analytics page counts them.
+ * Only the ones since the connection earn points.
  */
 export async function loadAccountPostsMadeElsewhere(database, { workspaceId, accountId }, now = Date.now()) {
   const result = await database.query(
-    postsMadeElsewhereQuery("and pp.social_account_id = $4 and pp.published_at >= $3::timestamptz - interval '90 days'"),
+    postsMadeElsewhereQuery("and pp.social_account_id = $4 and pp.published_at >= $3::timestamptz - interval '120 days'", { sinceConnected: false }),
     [workspaceId, POINTS_PLATFORMS, new Date(now), accountId],
   );
   return result.rows.map((row) => ({

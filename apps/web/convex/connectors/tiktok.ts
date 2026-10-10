@@ -406,6 +406,71 @@ export async function tiktokUploadVideoDraft(args: {
   }
 }
 
+export type TikTokVideoTotals = {
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  /** Every video read, with its numbers. */
+  videos: TikTokVideoStats[];
+  /** False when the page limit cut the list short: the sums are then not the account's. */
+  complete: boolean;
+};
+
+/**
+ * The views, likes, comments and shares of every video on the account, added
+ * up: TikTok reports no all-time view total for an account, only each
+ * video's. Read from the video list, 20 to a page, newest first.
+ */
+export async function tiktokVideoTotals(accessToken: string, maxPages = 500): Promise<TikTokVideoTotals> {
+  const totals: TikTokVideoTotals = { views: 0, likes: 0, comments: 0, shares: 0, videos: [], complete: false };
+  let cursor: number | undefined;
+  for (let page = 0; page < maxPages; page += 1) {
+    const data = await openApiPost<{
+      videos?: Array<{
+        id?: string;
+        view_count?: number;
+        like_count?: number;
+        comment_count?: number;
+        share_count?: number;
+        duration?: number;
+        create_time?: number;
+        cover_image_url?: string;
+      }>;
+      cursor?: number;
+      has_more?: boolean;
+    }>(
+      "/v2/video/list/?fields=id,view_count,like_count,comment_count,share_count,duration,create_time,cover_image_url",
+      accessToken,
+      cursor === undefined ? { max_count: 20 } : { max_count: 20, cursor },
+    );
+    for (const video of data.videos ?? []) {
+      if (!video.id) continue;
+      const stats: TikTokVideoStats = {
+        id: video.id,
+        views: video.view_count ?? 0,
+        likes: video.like_count ?? 0,
+        comments: video.comment_count ?? 0,
+        shares: video.share_count ?? 0,
+        durationSeconds: video.duration,
+        createdAt: video.create_time,
+        thumbnailUrl: video.cover_image_url,
+      };
+      totals.videos.push(stats);
+      totals.views += stats.views;
+      totals.likes += stats.likes;
+      totals.comments += stats.comments;
+      totals.shares += stats.shares;
+    }
+    if (!data.has_more || data.cursor === undefined) {
+      totals.complete = true;
+      break;
+    }
+    cursor = data.cursor;
+  }
+  return totals;
+}
+
 /**
  * Every public video on the account since `since` (epoch ms), whichever app
  * or tool made it — for the Analytics posting graph. TikTok lists them newest

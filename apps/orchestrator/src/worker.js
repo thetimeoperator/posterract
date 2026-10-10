@@ -10,6 +10,7 @@ import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { Context } from "@temporalio/activity";
 import { NativeConnection, Worker } from "@temporalio/worker";
 import { ApplicationFailure } from "@temporalio/common";
 import { Pool } from "pg";
@@ -50,6 +51,7 @@ import {
   tiktokGetVideoStats,
   tiktokListVideos,
   tiktokUploadVideoDraft,
+  tiktokVideoTotals,
   tiktokRefreshToken,
 } from "../../web/convex/connectors/tiktok.ts";
 import {
@@ -93,10 +95,13 @@ function safeMessage(error, fallback = "Platform publishing failed") {
 
 function errorCategory(error) {
   const message = safeMessage(error).toLowerCase();
+  // Facebook's "Object … does not exist, cannot be loaded due to missing
+  // permissions" names permissions without being about the account: on Oct 8
+  // it came back for a Reel that was live, from a token that had just worked.
   if (
     error?.status === 401 ||
     error?.status === 403 ||
-    /token|oauth|unauthor|permission|reauth|credential/.test(message)
+    (/token|oauth|unauthor|permission|reauth|credential/.test(message) && !/does not exist/.test(message))
   ) {
     return "auth";
   }
@@ -587,8 +592,11 @@ async function applyCumulativeAnalytics(account, summary, videos) {
   const client = await postgres.connect();
   try {
     await client.query("begin");
+    // One refresh of an account writes at a time, so two running together
+    // can't both add the same rise to the day.
+    await client.query("select pg_advisory_xact_lock(hashtext($1))", [`analytics:${account.id}`]);
     const previousAccount = await client.query(
-      `select audience from account_metric_snapshots
+      `select audience, total_views, raw_metrics from account_metric_snapshots
        where social_account_id = $1 order by fetched_at desc, id desc limit 1`,
       [account.id],
     );
@@ -682,6 +690,20 @@ async function applyCumulativeAnalytics(account, summary, videos) {
           JSON.stringify(video),
         ],
       );
+    }
+    // TikTok's sums cover every video on the account, whichever app made
+    // it, so the day gains what those sums rose by since the last read
+    // (Posterract's own videos included). Before two reads with sums, the
+    // day keeps what Posterract's own videos gained.
+    const previousTotals = previousAccount.rows[0];
+    if (account.provider === "tiktok" && summary.totalViews !== undefined && previousTotals?.total_views != null) {
+      const previousRaw = previousTotals.raw_metrics ?? {};
+      deltas.views = Math.max(0, Number(summary.totalViews) - Number(previousTotals.total_views));
+      for (const [key, field] of [["likes", "videoLikes"], ["comments", "videoComments"], ["shares", "videoShares"]]) {
+        if (summary[field] !== undefined && previousRaw[field] != null) {
+          deltas[key] = Math.max(0, Number(summary[field]) - Number(previousRaw[field]));
+        }
+      }
     }
     const previousDaily = await client.query(
       `select raw_metrics
@@ -897,6 +919,7 @@ async function refreshAccountAnalytics(accountId) {
       }
 
       let summary;
+      let tiktokVideos;
       if (account.provider === "instagram") {
         summary = await instagramAccountSummary({
           userId: account.provider_user_id,
@@ -930,11 +953,23 @@ async function refreshAccountAnalytics(accountId) {
             if (projectionId) videos.push({ projectionId, ...metric });
           }
         }
+        // TikTok gives no all-time view total for an account, so it is the
+        // sum of every video's. A list the page limit cut short is not the
+        // account's total and is left out.
+        tiktokVideos = await tiktokVideoTotals(accessToken).catch(() => undefined);
         summary = {
           audience: user.followers,
           following: user.following,
           totalLikes: user.totalLikes,
           publishedVideos: user.videos,
+          ...(tiktokVideos?.complete
+            ? {
+                totalViews: tiktokVideos.views,
+                videoLikes: tiktokVideos.likes,
+                videoComments: tiktokVideos.comments,
+                videoShares: tiktokVideos.shares,
+              }
+            : {}),
         };
       } else {
         await postgres.query(
@@ -949,7 +984,7 @@ async function refreshAccountAnalytics(accountId) {
       // failing leaves the analytics in place; the next refresh scores
       // everything again and pays the rest.
       if (isPointsPlatform(account.provider)) {
-        await refreshPostsMadeElsewhere(account, accessToken).catch(() => undefined);
+        await refreshPostsMadeElsewhere(account, accessToken, tiktokVideos).catch(() => undefined);
         await scoreWorkspacePoints(postgres, account.workspace_id).catch(() => undefined);
       }
     }
@@ -996,10 +1031,12 @@ async function refreshAccountAnalytics(accountId) {
   }
 }
 
-// Posts made in other apps earn points too, from what each refresh reads of
-// them. Fresh posts are read every refresh, older ones less often (a cover
-// URL lasts days, so no post goes long without a new one), and a refresh
-// reads at most POSTS_ELSEWHERE_PER_REFRESH of them, newest and never-read first.
+// Posts made in other apps count on the Analytics page and earn points (from
+// the account's connection on), from what each refresh reads of them. Fresh
+// posts are read every refresh, older ones less often (a cover URL lasts
+// days, so no post goes long without a new one), and a refresh reads at most
+// POSTS_ELSEWHERE_PER_REFRESH of them, newest and never-read first. TikTok's
+// come from the list of every video the refresh has just read.
 const POSTS_ELSEWHERE_PER_REFRESH = 100;
 const HOUR_MS = 3_600_000;
 
@@ -1029,16 +1066,20 @@ async function readPostElsewhere(account, accessToken, post) {
   return undefined;
 }
 
-async function refreshPostsMadeElsewhere(account, accessToken) {
+async function refreshPostsMadeElsewhere(account, accessToken, tiktokVideos) {
   const now = Date.now();
-  const due = (
-    await loadAccountPostsMadeElsewhere(postgres, { workspaceId: account.workspace_id, accountId: account.id }, now)
-  )
+  const posts = await loadAccountPostsMadeElsewhere(postgres, { workspaceId: account.workspace_id, accountId: account.id }, now);
+  const due = posts
     .filter((post) => dueForNumbers(post, now))
     .sort((left, right) => Number(Boolean(left.metricsFetchedAt)) - Number(Boolean(right.metricsFetchedAt)) || right.publishedAt - left.publishedAt)
     .slice(0, POSTS_ELSEWHERE_PER_REFRESH);
   const read = [];
-  if (account.provider === "tiktok") {
+  if (account.provider === "tiktok" && tiktokVideos) {
+    const listed = new Set(posts.map((post) => post.platformPostId));
+    for (const video of tiktokVideos.videos) {
+      if (listed.has(video.id)) read.push({ platformPostId: video.id, ...video });
+    }
+  } else if (account.provider === "tiktok") {
     for (let index = 0; index < due.length; index += 20) {
       try {
         const metrics = await tiktokGetVideoStats(accessToken, due.slice(index, index + 20).map((post) => post.platformPostId));
@@ -1057,30 +1098,73 @@ async function refreshPostsMadeElsewhere(account, accessToken) {
       }
     }
   }
-  for (const metric of read) {
-    const cover = typeof metric.thumbnailUrl === "string" && metric.thumbnailUrl.startsWith("https://") ? metric.thumbnailUrl : null;
-    await postgres.query(
-      `update platform_posts
-       set views = $3, likes = $4, comments = $5, shares = $6,
-           watch_time_seconds = $7, average_view_duration_seconds = $8,
-           duration_seconds = coalesce($9, duration_seconds),
-           thumbnail_url = coalesce($10, thumbnail_url),
-           raw_metrics = $11, metrics_fetched_at = now()
-       where social_account_id = $1 and platform_post_id = $2`,
-      [
-        account.id,
-        metric.platformPostId,
-        Number(metric.views ?? 0),
-        Number(metric.likes ?? 0),
-        Number(metric.comments ?? 0),
-        Number(metric.shares ?? 0),
-        metric.watchTimeSeconds ?? null,
-        metric.averageWatchSeconds ?? null,
-        metric.durationSeconds ?? null,
-        cover,
-        JSON.stringify(metric),
-      ],
+  if (read.length === 0) return 0;
+  // Under the account's analytics lock, so a refresh running beside this one
+  // can't add the same gain to the day twice.
+  const client = await postgres.connect();
+  try {
+    await client.query("begin");
+    await client.query("select pg_advisory_xact_lock(hashtext($1))", [`analytics:${account.id}`]);
+    const before = await client.query(
+      `select platform_post_id, views, likes, comments, shares from platform_posts
+       where social_account_id = $1 and platform_post_id = any($2::text[]) and metrics_fetched_at is not null`,
+      [account.id, read.map((metric) => metric.platformPostId)],
     );
+    const previous = new Map(before.rows.map((row) => [row.platform_post_id, row]));
+    const gained = { views: 0, likes: 0, comments: 0, shares: 0 };
+    for (const metric of read) {
+      const cover = typeof metric.thumbnailUrl === "string" && metric.thumbnailUrl.startsWith("https://") ? metric.thumbnailUrl : null;
+      await client.query(
+        `update platform_posts
+         set views = $3, likes = $4, comments = $5, shares = $6,
+             watch_time_seconds = $7, average_view_duration_seconds = $8,
+             duration_seconds = coalesce($9, duration_seconds),
+             thumbnail_url = coalesce($10, thumbnail_url),
+             raw_metrics = $11, metrics_fetched_at = now()
+         where social_account_id = $1 and platform_post_id = $2`,
+        [
+          account.id,
+          metric.platformPostId,
+          Number(metric.views ?? 0),
+          Number(metric.likes ?? 0),
+          Number(metric.comments ?? 0),
+          Number(metric.shares ?? 0),
+          metric.watchTimeSeconds ?? null,
+          metric.averageWatchSeconds ?? null,
+          metric.durationSeconds ?? null,
+          cover,
+          JSON.stringify(metric),
+        ],
+      );
+      const prior = previous.get(metric.platformPostId);
+      if (!prior) continue;
+      for (const key of Object.keys(gained)) {
+        gained[key] += Math.max(0, Number(metric[key] ?? 0) - Number(prior[key] ?? 0));
+      }
+    }
+    // What these posts gained since they were last read goes into the day's
+    // numbers beside Posterract's own posts. TikTok's day already has it,
+    // from the rise in its account sums.
+    if (account.provider !== "tiktok" && gained.views + gained.likes + gained.comments + gained.shares > 0) {
+      await client.query(
+        `insert into daily_metric_snapshots
+          (social_account_id, workspace_id, provider, metric_date, views, likes, comments, shares, fetched_at)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, now())
+         on conflict (social_account_id, metric_date) do update
+         set views = daily_metric_snapshots.views + excluded.views,
+             likes = daily_metric_snapshots.likes + excluded.likes,
+             comments = daily_metric_snapshots.comments + excluded.comments,
+             shares = daily_metric_snapshots.shares + excluded.shares,
+             fetched_at = now()`,
+        [account.id, account.workspace_id, account.provider, metricDate(), gained.views, gained.likes, gained.comments, gained.shares],
+      );
+    }
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
   }
   return read.length;
 }
@@ -1244,7 +1328,52 @@ async function syncAccountPosts(accountId) {
   }
 }
 
+const BACKGROUND_PROVIDERS = {
+  analytics: ["instagram", "facebook", "threads", "tiktok", "youtube"],
+  posts: ["instagram", "facebook", "threads", "tiktok"],
+};
+
+/**
+ * Works through a batch of accounts one at a time, heartbeating as it goes
+ * (also while one account takes long), so a batch cut off by a restart is
+ * picked up again from the account it had reached. One account failing
+ * never stops the rest.
+ */
+async function eachAccount(accountIds, work) {
+  const context = Context.current();
+  const start = Math.max(0, Number(context.info.heartbeatDetails ?? 0) || 0);
+  for (let index = start; index < accountIds.length; index += 1) {
+    context.heartbeat(index);
+    const beat = setInterval(() => context.heartbeat(index), 30_000);
+    try {
+      await work(accountIds[index]);
+    } catch {
+      // The next pass reads it again.
+    } finally {
+      clearInterval(beat);
+    }
+  }
+  return { accounts: accountIds.length - start };
+}
+
 const activities = {
+  /** A page of connected accounts for a background pass, in ID order after `after`. */
+  async listAccountsPage({ kind, after, limit }) {
+    const result = await postgres.query(
+      `select id from social_accounts
+       where status = 'connected' and provider = any($1::text[])
+         and ($2::uuid is null or id > $2::uuid)
+       order by id
+       limit $3`,
+      [BACKGROUND_PROVIDERS[kind] ?? BACKGROUND_PROVIDERS.analytics, after ?? null, limit],
+    );
+    return result.rows.map((row) => row.id);
+  },
+
+  refreshAnalyticsBatch: (accountIds) => eachAccount(accountIds, refreshAccountAnalytics),
+
+  syncPostsBatch: (accountIds) => eachAccount(accountIds, syncAccountPosts),
+
   async listPostSyncAccounts() {
     const result = await postgres.query(
       `select id from social_accounts
@@ -1572,6 +1701,22 @@ const worker = await Worker.create({
   maxConcurrentWorkflowTaskExecutions: Number(
     env.MAX_CONCURRENT_WORKFLOWS ?? 20,
   ),
+  // The SDK sizes this cache from the heap (about 135 runs at the 432 MB a
+  // 768 MB container gets), and hundreds of scheduled posts filled it past
+  // the container's memory. A run that drops out of the cache is replayed
+  // from its history the next time it wakes, which is rare now that a
+  // scheduled post waits on a single timer.
+  maxCachedWorkflows: Number(env.MAX_CACHED_WORKFLOWS ?? 50),
+});
+
+// Stats refreshes and post-list reads, on slots of their own, so a pass over
+// every account never queues ahead of a post going out.
+const backgroundWorker = await Worker.create({
+  connection,
+  namespace: env.TEMPORAL_NAMESPACE ?? "default",
+  taskQueue: `${env.TEMPORAL_TASK_QUEUE ?? "posterract-publishing"}-background`,
+  activities,
+  maxConcurrentActivityTaskExecutions: Number(env.MAX_BACKGROUND_ACTIVITIES ?? 4),
 });
 
 let healthy = true;
@@ -1586,19 +1731,31 @@ const healthServer = http.createServer((request, response) => {
 });
 healthServer.listen(Number(env.HEALTH_PORT ?? 3002), "0.0.0.0");
 
-async function shutdown() {
+let stopping = false;
+function stopWorkers() {
+  if (stopping) return;
+  stopping = true;
   healthy = false;
-  worker.shutdown();
+  for (const running of [worker, backgroundWorker]) {
+    try {
+      running.shutdown();
+    } catch {
+      // Already stopped.
+    }
+  }
+}
+
+process.on("SIGTERM", stopWorkers);
+process.on("SIGINT", stopWorkers);
+
+// Either worker ending ends the process (and Docker starts it again).
+const runs = [worker.run(), backgroundWorker.run()];
+try {
+  await Promise.race(runs);
+} finally {
+  stopWorkers();
+  await Promise.allSettled(runs);
   healthServer.close();
   await postgres.end();
   await connection.close();
-}
-
-process.on("SIGTERM", () => void shutdown());
-process.on("SIGINT", () => void shutdown());
-
-try {
-  await worker.run();
-} finally {
-  await shutdown();
 }

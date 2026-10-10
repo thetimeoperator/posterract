@@ -22,7 +22,7 @@ const PLATFORM_NOTES = {
     "Posterract never substitutes plays or page activity for unavailable post metrics.",
   ],
   tiktok: [
-    "Approved TikTok scopes provide account totals and public per-video views, likes, comments, and shares.",
+    "Total views add up every video on the account, whichever app made it: TikTok reports views per video, not per account.",
     "TikTok does not expose watch time, retention, traffic sources, or audience demographics through these scopes.",
   ],
   facebook: [
@@ -30,6 +30,7 @@ const PLATFORM_NOTES = {
     "Facebook insight availability varies by Page, media type, and Graph API version.",
   ],
   threads: [
+    "Threads reports no account view total, so views add up the posts' own: every post from the last 120 days, whichever app made it, and every post made through Posterract.",
     "Replies, reposts, and quotes remain separate instead of being collapsed into generic engagement.",
     "Threads does not expose watch-time or retention metrics for video posts here.",
   ],
@@ -276,6 +277,62 @@ export async function loadAccountPosts(postgres, workspaceId) {
   };
 }
 
+/**
+ * Posts made in other apps, as the worker's hourly read lists them (120 days
+ * back), with the numbers it last read: one row a post, the copy with the
+ * newest numbers. Posts Posterract made are left to their projections:
+ * matched by post ID, on Facebook by the video ID in the link, and on TikTok
+ * by the day, for a post whose public ID TikTok never gave its projection.
+ */
+function queryPostsMadeElsewhere(postgres, workspaceId, accountIds = null) {
+  return postgres.query(
+    `select distinct on (pp.provider, pp.platform_post_id)
+            pp.social_account_id, pp.provider, pp.published_at, pp.metrics_fetched_at,
+            pp.views, pp.likes, pp.comments, pp.shares, pp.watch_time_seconds, pp.raw_metrics
+     from platform_posts pp
+     where pp.workspace_id = $1
+       and ($2::uuid[] is null or pp.social_account_id = any($2::uuid[]))
+       and not exists (
+         select 1 from projections p
+         where p.workspace_id = $1 and p.provider = pp.provider and p.status = 'live'
+           and p.platform_post_id in (
+             pp.platform_post_id,
+             case when pp.provider = 'facebook' then coalesce(
+               substring(pp.permalink from '/reels?/([0-9]+)'),
+               substring(pp.permalink from '/videos/([0-9]+)'),
+               substring(pp.permalink from '[?&]v=([0-9]+)')) end)
+       )
+       and not (pp.provider = 'tiktok' and exists (
+         select 1 from projections p
+         where p.workspace_id = $1 and p.provider = 'tiktok' and p.status = 'live'
+           and p.social_account_id = pp.social_account_id
+           and coalesce(p.platform_post_id, '') !~ '^[0-9]+$'
+           and abs(extract(epoch from coalesce(p.published_at, p.created_at) - pp.published_at)) < 86400
+       ))
+     order by pp.provider, pp.platform_post_id, pp.metrics_fetched_at desc nulls last`,
+    [workspaceId, accountIds],
+  );
+}
+
+/** A post made elsewhere, in the shape the period sums add up. */
+function elsewherePost(row) {
+  const raw = rawObject(row.raw_metrics);
+  const watchTimeSeconds = optionalNumber(row.watch_time_seconds);
+  return {
+    views: number(row.views),
+    likes: number(row.likes),
+    comments: number(row.comments),
+    shares: number(row.shares),
+    reach: metric(raw, "reach"),
+    saves: metric(raw, "saves"),
+    replies: metric(raw, "replies"),
+    reposts: metric(raw, "reposts"),
+    quotes: metric(raw, "quotes"),
+    clicks: metric(raw, "clicks"),
+    watchMinutes: watchTimeSeconds === undefined ? undefined : watchTimeSeconds / 60,
+  };
+}
+
 export async function loadAnalyticsDashboard(postgres, workspaceId, rangeDays, { accountIds = null } = {}) {
   const isTotal = rangeDays === "total";
   const cutoffDate = isTotal
@@ -284,7 +341,7 @@ export async function loadAnalyticsDashboard(postgres, workspaceId, rangeDays, {
   const previousCutoffDate = isTotal
     ? null
     : new Date(Date.now() - (rangeDays * 2 - 1) * 86_400_000).toISOString().slice(0, 10);
-  const [accountsResult, dailyResult, postsResult] = await Promise.all([
+  const [accountsResult, dailyResult, postsResult, elsewhereResult] = await Promise.all([
     postgres.query(
       `select a.*,
               m.audience, m.total_views, m.total_likes, m.published_videos,
@@ -341,6 +398,7 @@ export async function loadAnalyticsDashboard(postgres, workspaceId, rangeDays, {
          and ($2::uuid[] is null or p.social_account_id = any($2::uuid[]))`,
       [workspaceId, accountIds],
     ),
+    queryPostsMadeElsewhere(postgres, workspaceId, accountIds),
   ]);
 
   const accountsByProvider = new Map();
@@ -405,6 +463,27 @@ export async function loadAnalyticsDashboard(postgres, workspaceId, rangeDays, {
     target.set(row.provider, posts);
   }
 
+  // Posts made elsewhere count and add their numbers to the sums; the post
+  // list stays Posterract's own, since each of those links to its post.
+  const elsewhereByProvider = new Map();
+  const previousElsewhereByProvider = new Map();
+  for (const row of elsewhereResult.rows) {
+    const publishedDate = new Date(row.published_at).toISOString().slice(0, 10);
+    const isCurrent = isTotal || publishedDate >= cutoffDate;
+    const isPrevious = !isTotal && publishedDate >= previousCutoffDate && publishedDate < cutoffDate;
+    if (isCurrent) {
+      liveCountByProvider.set(row.provider, (liveCountByProvider.get(row.provider) ?? 0) + 1);
+    } else if (isPrevious) {
+      previousLiveCountByProvider.set(row.provider, (previousLiveCountByProvider.get(row.provider) ?? 0) + 1);
+    }
+    if (!row.metrics_fetched_at || (!isCurrent && !isPrevious)) continue;
+    const post = elsewherePost(row);
+    const target = isCurrent ? elsewhereByProvider : previousElsewhereByProvider;
+    const posts = target.get(row.provider) ?? [];
+    posts.push(post);
+    target.set(row.provider, posts);
+  }
+
   const platforms = ANALYTICS_PROVIDERS.map((provider) => {
     const providerAccounts = accountsByProvider.get(provider) ?? [];
     const account = combineAccounts(providerAccounts);
@@ -424,15 +503,16 @@ export async function loadAnalyticsDashboard(postgres, workspaceId, rangeDays, {
       (left, right) => right.views - left.views,
     );
     const connected = account?.status === "connected";
+    const everyPost = [...posts, ...(elsewhereByProvider.get(provider) ?? [])];
     const period = summarizePeriod({
       daily,
-      posts,
+      posts: everyPost,
       audience: optionalNumber(account?.audience),
       publishedPosts: liveCountByProvider.get(provider) ?? 0,
     });
     const allPostTotals = summarizePeriod({
       daily: [],
-      posts,
+      posts: everyPost,
       audience: optionalNumber(account?.audience),
       publishedPosts: liveCountByProvider.get(provider) ?? 0,
     });
@@ -457,7 +537,7 @@ export async function loadAnalyticsDashboard(postgres, workspaceId, rangeDays, {
       : period;
     const previousPeriod = summarizePeriod({
       daily: previousDaily,
-      posts: previousPosts,
+      posts: [...previousPosts, ...(previousElsewhereByProvider.get(provider) ?? [])],
       audience: optionalNumber(account?.previous_audience),
       publishedPosts: previousLiveCountByProvider.get(provider) ?? 0,
     });
@@ -522,13 +602,13 @@ export async function loadAccountAnalytics(postgres, workspaceId, rangeDays, now
   const isTotal = rangeDays === "total";
   const cutoffDate = isTotal ? null : new Date(now - (rangeDays - 1) * DAY_MS).toISOString().slice(0, 10);
   const previousCutoffDate = isTotal ? null : new Date(now - (rangeDays * 2 - 1) * DAY_MS).toISOString().slice(0, 10);
-  const [accountsResult, dailyResult, postsResult, pointsResult, failedResult] = await Promise.all([
+  const [accountsResult, dailyResult, postsResult, pointsResult, failedResult, elsewhereResult] = await Promise.all([
     postgres.query(
       `select a.id, a.provider, a.handle, a.display_name, a.avatar_url, a.status,
-              m.audience, m.fetched_at as metrics_fetched_at, pm.audience as previous_audience
+              m.audience, m.total_views, m.fetched_at as metrics_fetched_at, pm.audience as previous_audience
        from social_accounts a
        left join lateral (
-         select audience, fetched_at from account_metric_snapshots
+         select audience, total_views, fetched_at from account_metric_snapshots
          where social_account_id = a.id order by fetched_at desc, id desc limit 1
        ) m on true
        left join lateral (
@@ -578,6 +658,7 @@ export async function loadAccountAnalytics(postgres, workspaceId, rangeDays, now
        group by social_account_id`,
       [workspaceId, cutoffDate],
     ),
+    queryPostsMadeElsewhere(postgres, workspaceId),
   ]);
 
   const group = (rows) => {
@@ -591,6 +672,7 @@ export async function loadAccountAnalytics(postgres, workspaceId, rangeDays, now
   };
   const dailyByAccount = group(dailyResult.rows);
   const postsByAccount = group(postsResult.rows);
+  const elsewhereByAccount = group(elsewhereResult.rows);
   const pointsByAccount = new Map(pointsResult.rows.map((row) => [row.social_account_id, row]));
   const failedByAccount = new Map(failedResult.rows.map((row) => [row.social_account_id, row.failed]));
   const inCurrent = (date) => isTotal || date >= cutoffDate;
@@ -611,24 +693,33 @@ export async function loadAccountAnalytics(postgres, workspaceId, rangeDays, now
   const accounts = accountsResult.rows.map((account) => {
     const daily = (dailyByAccount.get(account.id) ?? []).map(publicDailyPoint);
     const allPosts = postsByAccount.get(account.id) ?? [];
-    const dated = allPosts.map((row) => ({ row, date: new Date(row.published_at).toISOString().slice(0, 10) }));
+    const elsewhere = elsewhereByAccount.get(account.id) ?? [];
+    const dated = [
+      ...allPosts.map((row) => ({ row, date: new Date(row.published_at).toISOString().slice(0, 10), post: row.views === null ? undefined : postOf(row) })),
+      ...elsewhere.map((row) => ({ row, date: new Date(row.published_at).toISOString().slice(0, 10), post: row.metrics_fetched_at ? elsewherePost(row) : undefined })),
+    ];
     const currentPosts = dated.filter(({ date }) => inCurrent(date));
     const previousPosts = dated.filter(({ date }) => inPrevious(date));
     const current = summarizePeriod({
       daily: daily.filter((point) => inCurrent(point.date)),
-      posts: currentPosts.filter(({ row }) => row.views !== null).map(({ row }) => postOf(row)),
+      posts: currentPosts.flatMap(({ post }) => (post ? [post] : [])),
       audience: optionalNumber(account.audience),
       publishedPosts: currentPosts.length,
     });
+    // TikTok's account total is every video's views added up: all-time
+    // views, whichever app made the videos.
+    if (isTotal && account.provider === "tiktok" && optionalNumber(account.total_views) !== undefined) {
+      current.views = optionalNumber(account.total_views);
+    }
     const previous = isTotal ? undefined : summarizePeriod({
       daily: daily.filter((point) => inPrevious(point.date)),
-      posts: previousPosts.filter(({ row }) => row.views !== null).map(({ row }) => postOf(row)),
+      posts: previousPosts.flatMap(({ post }) => (post ? [post] : [])),
       audience: optionalNumber(account.previous_audience),
       publishedPosts: previousPosts.length,
     });
     const interactions = current.likes + current.comments + current.shares;
     const points = pointsByAccount.get(account.id);
-    const lastPost = allPosts.reduce((latest, row) => Math.max(latest, new Date(row.published_at).getTime()), 0);
+    const lastPost = dated.reduce((latest, { row }) => Math.max(latest, new Date(row.published_at).getTime()), 0);
     return {
       accountId: account.id,
       provider: account.provider,

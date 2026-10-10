@@ -278,6 +278,21 @@ export async function facebookRevokeGrant(userAccessToken: string): Promise<void
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+type GraphError = { message?: string; code?: number; error_subcode?: number };
+
+/** Facebook's "Object with ID … does not exist" (code 100, subcode 33). */
+function isNotFound(error?: GraphError) {
+  return error?.code === 100 && (error.error_subcode === 33 || /does not exist/i.test(error.message ?? ""));
+}
+
+/** A failure from before anything was published, so the whole Reel may be started again later. */
+function retryableError(message: string) {
+  return Object.assign(new Error(message), { retryable: true });
+}
+
+type ReelTiming = { retryWaitMs: number; statusDeadlineMs: number; pollMs: number };
+const REEL_TIMING: ReelTiming = { retryWaitMs: 5_000, statusDeadlineMs: 150_000, pollMs: 4_000 };
+
 export async function facebookPublishReel(args: {
   pageId: string;
   pageAccessToken: string;
@@ -286,7 +301,10 @@ export async function facebookPublishReel(args: {
   description: string;
   onVideoId?: (videoId: string) => Promise<void> | void;
   onProgress?: (stage: string, detail?: string) => Promise<void> | void;
+  /** Shorter waits for tests. */
+  timing?: Partial<ReelTiming>;
 }): Promise<{ videoId: string; permalink?: string }> {
+  const timing = { ...REEL_TIMING, ...args.timing };
   await args.onProgress?.("uploading", "Starting Facebook Reel upload");
   const startResponse = await fetch(`${GRAPH}/${API_VERSION}/me/video_reels`, {
     method: "POST",
@@ -303,54 +321,88 @@ export async function facebookPublishReel(args: {
   }
   await args.onVideoId?.(started.video_id);
 
-  const uploadResponse = await fetch(started.upload_url, {
-    method: "POST",
-    headers: {
-      Authorization: `OAuth ${args.pageAccessToken}`,
-      file_url: args.videoUrl,
-    },
-  });
-  const uploaded = (await uploadResponse.json()) as { success?: boolean; error?: { message?: string } };
-  if (!uploadResponse.ok || uploaded.success !== true) {
-    throw new Error(`Facebook Reel upload failed: ${uploaded.error?.message ?? uploadResponse.status}`);
+  // Facebook's upload server sometimes answers with its own 500 (Oct 8 2026:
+  // one Reel failed that way while the Page's next Reels posted fine). Sending
+  // the same file to the same upload session again is safe: nothing is
+  // published until the finish step below.
+  let uploadResponse: Response | undefined;
+  let uploaded: { success?: boolean; error?: GraphError } = {};
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    uploadResponse = await fetch(started.upload_url, {
+      method: "POST",
+      headers: {
+        Authorization: `OAuth ${args.pageAccessToken}`,
+        file_url: args.videoUrl,
+      },
+    });
+    uploaded = await uploadResponse.json().catch(() => ({}));
+    if ((uploadResponse.ok && uploaded.success === true) || uploadResponse.status < 500) break;
+    if (attempt < 3) await sleep(timing.retryWaitMs * attempt);
+  }
+  if (!uploadResponse?.ok || uploaded.success !== true) {
+    const message = `Facebook Reel upload failed: ${uploaded.error?.message ?? uploadResponse?.status}`;
+    throw (uploadResponse?.status ?? 0) >= 500 ? retryableError(message) : new Error(message);
   }
 
+  // Facebook sometimes refuses the publish with a generic "There was a problem
+  // uploading your video file" a moment after accepting the upload (Oct 8, a
+  // file that was fine). Asking again to publish the same video can't post it
+  // twice: it is one video, whatever the answer.
   await args.onProgress?.("publishing", "Publishing to Facebook");
-  const finishResponse = await fetch(`${GRAPH}/${API_VERSION}/me/video_reels`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      access_token: args.pageAccessToken,
-      video_id: started.video_id,
-      upload_phase: "finish",
-      video_state: "PUBLISHED",
-      description: args.description,
-      title: args.title,
-    }),
-  });
-  const finished = (await finishResponse.json()) as { success?: boolean; error?: { message?: string } };
-  if (!finishResponse.ok || finished.success !== true) {
-    throw new Error(`Facebook Reel publish failed: ${finished.error?.message ?? finishResponse.status}`);
+  let finishResponse: Response | undefined;
+  let finished: { success?: boolean; error?: GraphError } = {};
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    finishResponse = await fetch(`${GRAPH}/${API_VERSION}/me/video_reels`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        access_token: args.pageAccessToken,
+        video_id: started.video_id,
+        upload_phase: "finish",
+        video_state: "PUBLISHED",
+        description: args.description,
+        title: args.title,
+      }),
+    });
+    finished = await finishResponse.json().catch(() => ({}));
+    if (finishResponse.ok && finished.success === true) break;
+    if (attempt < 3) await sleep(timing.retryWaitMs * 2 * attempt);
   }
+  const accepted = finishResponse?.ok === true && finished.success === true;
 
+  // A refused publish is still checked against the Reel itself before it is
+  // called a failure, in case Facebook published it anyway.
   await args.onProgress?.("processing", "Facebook is processing the Reel");
-  const deadline = Date.now() + 150_000;
+  const deadline = Date.now() + (accepted ? timing.statusDeadlineMs : timing.retryWaitMs * 6);
   let permalink: string | undefined;
+  let confirmed = false;
+  let missing = false;
   while (Date.now() < deadline) {
     const statusUrl = new URL(`${GRAPH}/${API_VERSION}/${started.video_id}`);
     statusUrl.searchParams.set("fields", "status,permalink_url");
     statusUrl.searchParams.set("access_token", args.pageAccessToken);
     const response = await fetch(statusUrl);
-    const body = (await response.json()) as {
+    const body = (await response.json().catch(() => ({}))) as {
       permalink_url?: string;
       status?: {
         video_status?: string;
         processing_phase?: { status?: string };
         publishing_phase?: { status?: string };
       };
-      error?: { message?: string };
+      error?: GraphError;
     };
-    if (!response.ok) throw new Error(`Facebook Reel status failed: ${body.error?.message ?? response.status}`);
+    if (!response.ok) {
+      // Right after publishing, Facebook can say the Reel "does not exist" for
+      // a few seconds before it shows up (Oct 8: a Reel that was live all
+      // along). That is not an answer yet: ask again.
+      if (isNotFound(body.error)) {
+        missing = true;
+        await sleep(timing.pollMs);
+        continue;
+      }
+      throw new Error(`Facebook Reel status failed: ${body.error?.message ?? response.status}`);
+    }
+    missing = false;
     permalink = body.permalink_url ?? permalink;
     const videoStatus = body.status?.video_status?.toLowerCase();
     const processing = body.status?.processing_phase?.status?.toLowerCase();
@@ -363,10 +415,22 @@ export async function facebookPublishReel(args: {
       videoStatus === "published" ||
       publishing === "complete" ||
       publishing === "completed"
-    ) break;
-    await sleep(4000);
+    ) {
+      confirmed = true;
+      break;
+    }
+    await sleep(timing.pollMs);
   }
 
+  if (!accepted && !confirmed) {
+    throw new Error(`Facebook Reel publish failed: ${finished.error?.message ?? finishResponse?.status}`);
+  }
+  if (missing) {
+    // Never a retry: it may be live, and posting it again would duplicate it.
+    throw new Error(
+      "Facebook accepted the Reel but hasn't shown it yet. It may still appear on the Page, so check there before posting it again.",
+    );
+  }
   return { videoId: started.video_id, permalink };
 }
 

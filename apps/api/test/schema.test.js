@@ -330,7 +330,9 @@ test("analytics reads normalized PostgreSQL snapshot history", async () => {
   const transmissionId = "00000000-0000-4000-8000-000000000005";
   const projectionId = "00000000-0000-4000-8000-000000000006";
   try {
-    for (const name of ["001-posterract.sql", "002-postgres-cutover.sql", "003-agent-harness.sql", "004-agent-chats.sql", "005-tiktok-draft-status.sql", "006-stripe-billing.sql", "007-welcome-email.sql"]) {
+    // Every migration: the dashboard also reads tables added later (platform_posts).
+    const migrations = (await readdir(migrationDirectory)).filter((name) => /^\d+.*\.sql$/.test(name)).sort();
+    for (const name of migrations) {
       await postgres.exec(await readFile(resolve(migrationDirectory, name), "utf8"));
     }
     await postgres.query(
